@@ -146,8 +146,72 @@ const APP_CONFIG = {
 
     favoritas: {
       title: "Favoritas",
-      items: []
+      items: [
+        { label: "Controles", type: "page", target: "fav_controles" },
+        { label: "Colegiados", type: "page", target: "fav_colegiados" },
+        { label: "Cadastros", type: "page", target: "fav_cadastros" },
+        { label: "Tributos", type: "page", target: "fav_tributos" },
+        { label: "Vitor - Estudos", type: "page", target: "fav_vitorestudos" }
+      ]
     },
+
+    fav_controles: {
+      title: "Controles",
+      items: [
+        { label: "PMF - Tarefas", type: "page", target: "fav_ctrl_pmftarefas" },
+        { label: "PMF - Reuniões", type: "page", target: "fav_ctrl_pmfreunioes" },
+        { label: "Betha – Tarefas", type: "page", target: "fav_ctrl_bethatarefas" },
+        { label: "IPTU - Lançamento Anual", type: "page", target: "fav_ctrl_iptulancamentoanual" },
+        { label: "Pessoal – Tarefas", type: "page", target: "fav_ctrl_pessoaltarefas" }
+      ]
+    },
+    fav_ctrl_pmftarefas: { title: "PMF - Tarefas", items: [] },
+    fav_ctrl_pmfreunioes: { title: "PMF - Reuniões", items: [] },
+    fav_ctrl_bethatarefas: { title: "Betha – Tarefas", items: [] },
+    fav_ctrl_iptulancamentoanual: { title: "IPTU - Lançamento Anual", items: [] },
+    fav_ctrl_pessoaltarefas: { title: "Pessoal – Tarefas", items: [] },
+
+    fav_colegiados: {
+      title: "Colegiados",
+      items: [
+        { label: "TAT – Processos", type: "page", target: "fav_col_tatprocessos" },
+        { label: "TAT – Sessões", type: "page", target: "fav_col_tatsessoes" }
+      ]
+    },
+    fav_col_tatprocessos: { title: "TAT – Processos", items: [] },
+    fav_col_tatsessoes: { title: "TAT – Sessões", items: [] },
+
+    fav_cadastros: {
+      title: "Cadastros",
+      items: [
+        { label: "Contratos", type: "page", target: "fav_cad_contratos" },
+        { label: "Legislações", type: "page", target: "fav_cad_legislacoes" },
+        { label: "IPCA", type: "page", target: "fav_cad_ipca" }
+      ]
+    },
+    fav_cad_contratos: { title: "Contratos", items: [] },
+    fav_cad_legislacoes: { title: "Legislações", items: [] },
+    fav_cad_ipca: { title: "IPCA", items: [] },
+
+    fav_tributos: {
+      title: "Tributos",
+      items: [
+        { label: "TCRS – Valores", type: "page", target: "fav_trib_tcrsvalores" }
+      ]
+    },
+    fav_trib_tcrsvalores: { title: "TCRS – Valores", items: [] },
+
+    fav_vitorestudos: {
+      title: "Vitor - Estudos",
+      items: [
+        { label: "Tarefas Escolares", type: "page", target: "fav_vitor_tarefasescolares" },
+        { label: "Provas", type: "page", target: "fav_vitor_provas" },
+        { label: "Horários", type: "page", target: "fav_vitor_horarios" }
+      ]
+    },
+    fav_vitor_tarefasescolares: { title: "Tarefas Escolares", items: [] },
+    fav_vitor_provas: { title: "Provas", items: [] },
+    fav_vitor_horarios: { title: "Horários", items: [] },
 
     categorias: {
       title: "Categorias",
