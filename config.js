@@ -53,17 +53,23 @@ const APP_CONFIG = {
 
     calendario: {
       title: "Calendário",
-      items: []
+      items: [
+        { label: "Calendário", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Calend-rio-3b60481486dd80299a01f7e5c3d2a321?source=copy_link", icon: "calendar" }
+      ]
     },
 
     listas: {
       title: "Listas",
-      items: []
+      items: [
+        { label: "Listas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Listas-3b60481486dd801ea254cedab932b18e?source=copy_link", icon: "list" }
+      ]
     },
 
     blocos: {
       title: "Blocos",
-      items: []
+      items: [
+        { label: "Blocos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Blocos-3b60481486dd80dba8aacb93d340f685?source=copy_link", icon: "layout-grid" }
+      ]
     },
 
     porformas: {
