@@ -194,22 +194,6 @@ html, body {
   padding: 28px 4px;
   text-align: center;
 }
-.section { margin-bottom: 20px; }
-.section:last-child { margin-bottom: 0; }
-.group-card {
-  background: #f7f7f5;
-  border-radius: 12px;
-  padding: 16px 16px 4px;
-}
-.group-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: #999;
-  margin: 0 0 12px;
-}
-@media (min-width: 640px) { .group-card { padding: 18px 18px 6px; } }
 
 /* item — base = mobile list-with-dividers */
 .item {
@@ -264,6 +248,31 @@ html, body {
   flex-shrink: 0;
 }
 
+/* ---------- grouped pages: visual boxes inside the same page ---------- */
+/* Ex: Favoritas — cada "grupo" (Controles, Colegiados...) vira uma caixa com
+   título, mas os botões dentro ficam acessíveis direto, sem navegação extra. */
+.content.grouped {
+  display: block;
+}
+.group-section {
+  border: 0.5px solid #ececea;
+  border-radius: 12px;
+  background: #fbfbfa;
+  padding: 14px 16px 6px;
+  margin-bottom: 16px;
+}
+.group-section:last-child { margin-bottom: 0; }
+.group-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a86;
+}
+.group-items { }
+.group-items .item:last-child { border-bottom: none; }
+
 /* search dropdown */
 .search-results {
   position: fixed;
@@ -291,7 +300,12 @@ html, body {
 
 /* ---------- tablet: 640px+ = grid tiles, still single-page drill-down ---------- */
 @media (min-width: 640px) {
-  .tile-grid {
+  .content:not(.grouped) {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .content.grouped .group-items {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 12px;
@@ -310,19 +324,22 @@ html, body {
   .item-chevron { position: absolute; top: 14px; right: 14px; }
   .item-icon { font-size: 20px; }
   .item-label { font-size: 14px; white-space: normal; }
+  .group-title { margin-bottom: 12px; }
 }
 
 /* ---------- desktop: 1024px+ = sidebar + full toolbar ---------- */
 @media (min-width: 1024px) {
   .sidebar { display: flex; }
   .mobile-only { display: none !important; }
-  .content { padding: 20px 32px 40px; }
-  .tile-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .content:not(.grouped) { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; padding: 20px 32px 40px; }
+  .content.grouped { padding: 20px 32px 40px; }
+  .content.grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
   .main-header { padding: 16px 32px; }
   .kbd-num { display: flex; }
 }
 @media (min-width: 1600px) {
-  .tile-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .content:not(.grouped) { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .content.grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 }
 @media (max-width: 1023px) {
   .header-search { display: none; }
