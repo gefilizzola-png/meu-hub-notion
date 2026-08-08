@@ -94,8 +94,55 @@ const APP_CONFIG = {
 
     central: {
       title: "Central",
-      items: []
+      items: [
+        { label: "Visualizações", type: "page", target: "visualizacoes", icon: "list-details" },
+        { label: "Pesquisar", type: "page", target: "pesquisar", icon: "search" }
+      ]
     },
+
+    visualizacoes: {
+      title: "Visualizações",
+      items: [
+        { label: "Completa", type: "page", target: "vis_completa", icon: "file-text" },
+        { label: "Por Andamento", type: "page", target: "vis_porandamento", icon: "file-text" },
+        { label: "Por Assuntos", type: "page", target: "vis_porassuntos", icon: "file-text" },
+        { label: "Por Prioridade", type: "page", target: "vis_porprioridade", icon: "file-text" },
+        { label: "Por Data (Prazo)", type: "page", target: "vis_pordataprazo", icon: "file-text" },
+        { label: "Por Data de Criação", type: "page", target: "vis_pordatacriacao", icon: "file-text" },
+        { label: "Por Forma", type: "page", target: "vis_porforma", icon: "file-text" },
+        { label: "Por Origem", type: "page", target: "vis_pororigem", icon: "file-text" },
+        { label: "Por Prazo (fórmula)", type: "page", target: "vis_porprazoformula", icon: "file-text" }
+      ]
+    },
+
+    vis_completa: { title: "Completa", items: [] },
+    vis_porandamento: { title: "Por Andamento", items: [] },
+    vis_porassuntos: { title: "Por Assuntos", items: [] },
+    vis_porprioridade: { title: "Por Prioridade", items: [] },
+    vis_pordataprazo: { title: "Por Data (Prazo)", items: [] },
+    vis_pordatacriacao: { title: "Por Data de Criação", items: [] },
+    vis_porforma: { title: "Por Forma", items: [] },
+    vis_pororigem: { title: "Por Origem", items: [] },
+    vis_porprazoformula: { title: "Por Prazo (fórmula)", items: [] },
+
+    pesquisar: {
+      title: "Pesquisar",
+      items: [
+        { label: "Por Assuntos - Pessoal", type: "page", target: "pesq_porassuntospessoal", icon: "file-text" },
+        { label: "Por Assuntos - PMF", type: "page", target: "pesq_porassuntospmf", icon: "file-text" },
+        { label: "Por Inscrição Imobiliária", type: "page", target: "pesq_porinscricaoimobiliaria", icon: "file-text" },
+        { label: "Por Contribuinte", type: "page", target: "pesq_porcontribuinte", icon: "file-text" },
+        { label: "Por Origem", type: "page", target: "pesq_pororigem", icon: "file-text" },
+        { label: "Por Processo/Chamado", type: "page", target: "pesq_porprocessochamado", icon: "file-text" }
+      ]
+    },
+
+    pesq_porassuntospessoal: { title: "Por Assuntos - Pessoal", items: [] },
+    pesq_porassuntospmf: { title: "Por Assuntos - PMF", items: [] },
+    pesq_porinscricaoimobiliaria: { title: "Por Inscrição Imobiliária", items: [] },
+    pesq_porcontribuinte: { title: "Por Contribuinte", items: [] },
+    pesq_pororigem: { title: "Por Origem", items: [] },
+    pesq_porprocessochamado: { title: "Por Processo/Chamado", items: [] },
 
     favoritas: {
       title: "Favoritas",
