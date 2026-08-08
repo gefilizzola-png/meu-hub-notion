@@ -15,22 +15,6 @@
     return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   }
 
-  // Uma página pode ter "items" (lista simples) OU "groups" (lista de
-  // grupos, cada um com "title" + "items" — usado quando queremos separar
-  // visualmente os botões dentro da MESMA página, sem criar subpáginas).
-  // Esta função devolve sempre a lista plana de items, na ordem em que
-  // aparecem (concatenando os grupos quando existirem).
-  function pageItems(page) {
-    if (page.groups) {
-      var out = [];
-      page.groups.forEach(function (g) {
-        (g.items || []).forEach(function (it) { out.push(it); });
-      });
-      return out;
-    }
-    return page.items || [];
-  }
-
   // ---- build parent map + search index (guards against cycles) ----
   function buildIndex() {
     parentOf = {};
@@ -42,7 +26,7 @@
       visited[pageId] = true;
       var page = cfg.pages[pageId];
       if (!page) return;
-      pageItems(page).forEach(function (item) {
+      (page.items || []).forEach(function (item) {
         flatIndex.push({
           label: item.label,
           type: item.type,
@@ -109,7 +93,7 @@
     visited = Object.assign({}, visited);
     visited[pageId] = true;
 
-    var childItems = pageItems(page);
+    var childItems = (page.items || []);
     var hasChildren = childItems.length > 0;
     var isOpen = !!expandedPages[pageId];
 
@@ -182,8 +166,8 @@
     });
   }
 
-  // ---------------- single button/link element for one item ----------------
-  function buildItemEl(item, idx) {
+  // ---------------- content grid/list ----------------
+  function buildTile(item, idx) {
     var el;
     if (item.type === "notion") {
       el = document.createElement("a");
@@ -226,15 +210,31 @@
     return el;
   }
 
-  // ---------------- content grid/list ----------------
+  // splits a page's items into an "ungrouped" bucket (rendered as a plain
+  // grid) and named groups (rendered as titled cards), preserving the order
+  // groups first appear in. Grouping is purely visual — set `group: "NOME"`
+  // on any item in config.js to place it inside a titled box.
+  function groupItems(items) {
+    var order = [];
+    var buckets = {};
+    var ungrouped = [];
+    items.forEach(function (item, idx) {
+      if (item.group) {
+        if (!buckets[item.group]) { buckets[item.group] = []; order.push(item.group); }
+        buckets[item.group].push({ item: item, idx: idx });
+      } else {
+        ungrouped.push({ item: item, idx: idx });
+      }
+    });
+    return { ungrouped: ungrouped, groups: order.map(function (g) { return { label: g, entries: buckets[g] }; }) };
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
-    container.classList.remove("grouped");
 
-    var items = pageItems(page);
-    if (!items.length) {
+    if (!page.items || page.items.length === 0) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -242,34 +242,31 @@
       return;
     }
 
-    if (page.groups) {
-      // grupos = caixas visuais dentro da MESMA página; os botões ficam
-      // acessíveis direto, sem precisar clicar no título do grupo.
-      container.classList.add("grouped");
-      var globalIdx = 0;
-      page.groups.forEach(function (group) {
-        var groupItems = group.items || [];
-        if (!groupItems.length) return;
-        var section = document.createElement("div");
-        section.className = "group-section";
-        var title = document.createElement("h3");
-        title.className = "group-title";
-        title.textContent = group.title;
-        section.appendChild(title);
-        var itemsWrap = document.createElement("div");
-        itemsWrap.className = "group-items";
-        groupItems.forEach(function (item) {
-          itemsWrap.appendChild(buildItemEl(item, globalIdx));
-          globalIdx++;
-        });
-        section.appendChild(itemsWrap);
-        container.appendChild(section);
-      });
-    } else {
-      items.forEach(function (item, idx) {
-        container.appendChild(buildItemEl(item, idx));
-      });
+    var grouped = groupItems(page.items);
+
+    if (grouped.ungrouped.length) {
+      var section = document.createElement("div");
+      section.className = "section";
+      var grid = document.createElement("div");
+      grid.className = "tile-grid";
+      grouped.ungrouped.forEach(function (entry) { grid.appendChild(buildTile(entry.item, entry.idx)); });
+      section.appendChild(grid);
+      container.appendChild(section);
     }
+
+    grouped.groups.forEach(function (g) {
+      var card = document.createElement("div");
+      card.className = "group-card section";
+      var label = document.createElement("p");
+      label.className = "group-label";
+      label.textContent = g.label;
+      card.appendChild(label);
+      var grid = document.createElement("div");
+      grid.className = "tile-grid";
+      g.entries.forEach(function (entry) { grid.appendChild(buildTile(entry.item, entry.idx)); });
+      card.appendChild(grid);
+      container.appendChild(card);
+    });
   }
 
   // ---------------- page render / navigation ----------------
@@ -303,8 +300,7 @@
   // ---------------- activate an item by index within current page (keyboard 1-9) ----------------
   function activateIndex(i) {
     var page = cfg.pages[currentId];
-    var items = pageItems(page);
-    var item = items[i];
+    var item = page.items && page.items[i];
     if (!item) return;
     if (item.type === "notion") window.open(item.url, "_blank", "noopener");
     else navigate(item.target);
