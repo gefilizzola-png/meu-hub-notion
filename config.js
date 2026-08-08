@@ -19,6 +19,14 @@
      { label: "Calendário", type: "page", target: "calendario", icon: "calendar" }
 
   "startPage" define qual página abre primeiro quando o app é aberto.
+
+  REGRA ADOTADA: quando uma página interna tem um único botão (um único link
+  do Notion, sem mais nada), o botão que leva até ela some — o botão do nível
+  anterior aponta direto para o link do Notion (type: "notion"), evitando
+  clique duplo. A página interna correspondente (ex: "calendario") continua
+  definida abaixo, só não é referenciada por enquanto — assim, se um dia
+  quiser abrir níveis dentro dela (mais de um botão), é só trocar o item do
+  nível anterior de volta para type: "page" apontando pra ela.
 */
 
 const APP_CONFIG = {
@@ -33,7 +41,14 @@ const APP_CONFIG = {
         { label: "Central", type: "page", target: "central", icon: "layout-grid" },
         { label: "Favoritas", type: "page", target: "favoritas", icon: "star" },
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
-        { label: "Recentes", type: "page", target: "recentes", icon: "clock" }
+        { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" }
+      ]
+    },
+
+    biblioteca: {
+      title: "Biblioteca",
+      items: [
+        { label: "Recentes", type: "notion", url: "https://app.notion.com/library/recents?space=georges-filizzola", icon: "clock" }
       ]
     },
 
@@ -44,9 +59,9 @@ const APP_CONFIG = {
     eventos: {
       title: "Eventos",
       items: [
-        { label: "Calendário", type: "page", target: "calendario", icon: "calendar" },
-        { label: "Listas", type: "page", target: "listas", icon: "list" },
-        { label: "Blocos", type: "page", target: "blocos", icon: "layout-grid" },
+        { label: "Calendário", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Calend-rio-3b60481486dd80299a01f7e5c3d2a321?source=copy_link", icon: "calendar" },
+        { label: "Listas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Listas-3b60481486dd801ea254cedab932b18e?source=copy_link", icon: "list" },
+        { label: "Blocos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Blocos-3b60481486dd80dba8aacb93d340f685?source=copy_link", icon: "layout-grid" },
         { label: "Por Formas", type: "page", target: "porformas" }
       ]
     },
@@ -94,7 +109,9 @@ const APP_CONFIG = {
 
     recentes: {
       title: "Recentes",
-      items: []
+      items: [
+        { label: "Recentes", type: "notion", url: "https://app.notion.com/library/recents?space=georges-filizzola", icon: "clock" }
+      ]
     }
   }
 };
