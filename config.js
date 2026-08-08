@@ -38,8 +38,8 @@ const APP_CONFIG = {
       title: "Entrada",
       items: [
         { label: "Eventos", type: "page", target: "eventos", icon: "calendar" },
-        { label: "Central", type: "page", target: "central", icon: "layout-grid" },
         { label: "Favoritas", type: "page", target: "favoritas", icon: "star" },
+        { label: "Central", type: "page", target: "central", icon: "layout-grid" },
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
         { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" }
       ]
