@@ -151,8 +151,192 @@ const APP_CONFIG = {
 
     categorias: {
       title: "Categorias",
-      items: []
+      items: [
+        { label: "Pessoal", type: "page", target: "cat_pessoal" },
+        { label: "Profissional", type: "page", target: "cat_profissional" }
+      ]
     },
+
+    cat_pessoal: { title: "Pessoal", items: [] },
+
+    cat_profissional: {
+      title: "Profissional",
+      items: [
+        { label: "PMF", type: "page", target: "pmf" }
+      ]
+    },
+
+    pmf: {
+      title: "PMF",
+      items: [
+        { label: "Colegiados", type: "page", target: "pmf_colegiados" },
+        { label: "Cadastros", type: "page", target: "pmf_cadastros" },
+        { label: "Controles", type: "page", target: "pmf_controles" },
+        { label: "Funcional", type: "page", target: "pmf_funcional" },
+        { label: "Tributos", type: "page", target: "pmf_tributos" }
+      ]
+    },
+
+    pmf_colegiados: {
+      title: "Colegiados",
+      items: [
+        { label: "ABRASF", type: "page", target: "pmf_col_abrasf" },
+        { label: "COMAT", type: "page", target: "pmf_col_comat" },
+        { label: "JART", type: "page", target: "pmf_col_jart" },
+        { label: "TAT", type: "page", target: "pmf_col_tat" }
+      ]
+    },
+
+    pmf_col_abrasf: {
+      title: "ABRASF",
+      items: [
+        { label: "AGO/CTP", type: "page", target: "pmf_col_abrasf_agoctp" },
+        { label: "Membros de FLN", type: "page", target: "pmf_col_abrasf_membrosfln" },
+        { label: "Reuniões", type: "page", target: "pmf_col_abrasf_reunioes" }
+      ]
+    },
+    pmf_col_abrasf_agoctp: { title: "AGO/CTP", items: [] },
+    pmf_col_abrasf_membrosfln: { title: "Membros de FLN", items: [] },
+    pmf_col_abrasf_reunioes: { title: "Reuniões", items: [] },
+
+    pmf_col_comat: {
+      title: "COMAT",
+      items: [
+        { label: "Processos", type: "page", target: "pmf_col_comat_processos" },
+        { label: "Reuniões", type: "page", target: "pmf_col_comat_reunioes" },
+        { label: "Soluções de Consulta", type: "page", target: "pmf_col_comat_solucoesconsulta" }
+      ]
+    },
+    pmf_col_comat_processos: { title: "Processos", items: [] },
+    pmf_col_comat_reunioes: { title: "Reuniões", items: [] },
+    pmf_col_comat_solucoesconsulta: { title: "Soluções de Consulta", items: [] },
+
+    pmf_col_jart: {
+      title: "JART",
+      items: [
+        { label: "Processos", type: "page", target: "pmf_col_jart_processos" },
+        { label: "Sessões", type: "page", target: "pmf_col_jart_sessoes" },
+        { label: "Jeton", type: "page", target: "pmf_col_jart_jeton" }
+      ]
+    },
+    pmf_col_jart_processos: { title: "Processos", items: [] },
+    pmf_col_jart_sessoes: { title: "Sessões", items: [] },
+    pmf_col_jart_jeton: { title: "Jeton", items: [] },
+
+    pmf_col_tat: {
+      title: "TAT",
+      items: [
+        { label: "Processos", type: "page", target: "pmf_col_tat_processos" },
+        { label: "Sessões", type: "page", target: "pmf_col_tat_sessoes" },
+        { label: "Jeton", type: "page", target: "pmf_col_tat_jeton" }
+      ]
+    },
+    pmf_col_tat_processos: { title: "Processos", items: [] },
+    pmf_col_tat_sessoes: { title: "Sessões", items: [] },
+    pmf_col_tat_jeton: { title: "Jeton", items: [] },
+
+    pmf_cadastros: {
+      title: "Cadastros",
+      items: [
+        { label: "Cargos", type: "page", target: "pmf_cad_cargos" },
+        { label: "Contratos", type: "page", target: "pmf_cad_contratos" },
+        { label: "Convênios", type: "page", target: "pmf_cad_convenios" },
+        { label: "Jurisprudências", type: "page", target: "pmf_cad_jurisprudencias" },
+        { label: "Legislações", type: "page", target: "pmf_cad_legislacoes" },
+        { label: "Nomeações", type: "page", target: "pmf_cad_nomeacoes" }
+      ]
+    },
+    pmf_cad_cargos: { title: "Cargos", items: [] },
+    pmf_cad_contratos: { title: "Contratos", items: [] },
+    pmf_cad_convenios: { title: "Convênios", items: [] },
+    pmf_cad_jurisprudencias: { title: "Jurisprudências", items: [] },
+    pmf_cad_legislacoes: { title: "Legislações", items: [] },
+    pmf_cad_nomeacoes: { title: "Nomeações", items: [] },
+
+    pmf_controles: {
+      title: "Controles",
+      items: [
+        { label: "Betha", type: "page", target: "pmf_ctrl_betha" },
+        { label: "Tarefas", type: "page", target: "pmf_ctrl_tarefas" },
+        { label: "Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
+        { label: "Time Sheet", type: "page", target: "pmf_ctrl_timesheet" }
+      ]
+    },
+
+    pmf_ctrl_betha: {
+      title: "Betha",
+      items: [
+        { label: "Tarefas", type: "page", target: "pmf_ctrl_betha_tarefas" },
+        { label: "Scripts", type: "page", target: "pmf_ctrl_betha_scripts" },
+        { label: "Tabelas", type: "page", target: "pmf_ctrl_betha_tabelas" }
+      ]
+    },
+    pmf_ctrl_betha_tarefas: { title: "Tarefas", items: [] },
+    pmf_ctrl_betha_scripts: { title: "Scripts", items: [] },
+    pmf_ctrl_betha_tabelas: { title: "Tabelas", items: [] },
+
+    pmf_ctrl_tarefas: { title: "Tarefas", items: [] },
+    pmf_ctrl_reunioes: { title: "Reuniões", items: [] },
+    pmf_ctrl_timesheet: { title: "Time Sheet", items: [] },
+
+    pmf_funcional: {
+      title: "Funcional",
+      items: [
+        { label: "AFIFI", type: "page", target: "pmf_func_afifi" },
+        { label: "Diárias", type: "page", target: "pmf_func_diarias" }
+      ]
+    },
+    pmf_func_afifi: {
+      title: "AFIFI",
+      items: [
+        { label: "Jantares", type: "page", target: "pmf_func_afifi_jantares" }
+      ]
+    },
+    pmf_func_afifi_jantares: { title: "Jantares", items: [] },
+    pmf_func_diarias: { title: "Diárias", items: [] },
+
+    pmf_tributos: {
+      title: "Tributos",
+      items: [
+        { label: "Geral", type: "page", target: "pmf_trib_geral" },
+        { label: "IPTU/TCRS", type: "page", target: "pmf_trib_iptutcrs" },
+        { label: "ISSQN", type: "page", target: "pmf_trib_issqn" }
+      ]
+    },
+
+    pmf_trib_geral: {
+      title: "Geral",
+      items: [
+        { label: "IPCA", type: "page", target: "pmf_trib_geral_ipca" },
+        { label: "Valores Lançados", type: "page", target: "pmf_trib_geral_valoreslancados" }
+      ]
+    },
+    pmf_trib_geral_ipca: { title: "IPCA", items: [] },
+    pmf_trib_geral_valoreslancados: { title: "Valores Lançados", items: [] },
+
+    pmf_trib_iptutcrs: {
+      title: "IPTU/TCRS",
+      items: [
+        { label: "Benefícios Fiscais", type: "page", target: "pmf_trib_iptutcrs_beneficiosfiscais" },
+        { label: "Lançamento Anual", type: "page", target: "pmf_trib_iptutcrs_lancamentoanual" },
+        { label: "Resumos", type: "page", target: "pmf_trib_iptutcrs_resumos" },
+        { label: "Tabelas", type: "page", target: "pmf_trib_iptutcrs_tabelas" },
+        { label: "Valores (TCRS)", type: "page", target: "pmf_trib_iptutcrs_valorestcrs" }
+      ]
+    },
+    pmf_trib_iptutcrs_beneficiosfiscais: { title: "Benefícios Fiscais", items: [] },
+    pmf_trib_iptutcrs_lancamentoanual: { title: "Lançamento Anual", items: [] },
+    pmf_trib_iptutcrs_resumos: { title: "Resumos", items: [] },
+    pmf_trib_iptutcrs_tabelas: { title: "Tabelas", items: [] },
+    pmf_trib_iptutcrs_valorestcrs: { title: "Valores (TCRS)", items: [] },
+
+    pmf_trib_issqn: {
+      title: "ISSQN",
+      items: [
+        { label: "Lista de Serviços e Alíquotas", type: "page", target: "pmf_trib_issqn_listaservicosaliquotas" }
+      ]
+    },
+    pmf_trib_issqn_listaservicosaliquotas: { title: "Lista de Serviços e Alíquotas", items: [] },
 
     recentes: {
       title: "Recentes",
