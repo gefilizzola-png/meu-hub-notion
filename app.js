@@ -15,6 +15,22 @@
     return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   }
 
+  // Uma página pode ter "items" (lista simples) OU "groups" (lista de
+  // grupos, cada um com "title" + "items" — usado quando queremos separar
+  // visualmente os botões dentro da MESMA página, sem criar subpáginas).
+  // Esta função devolve sempre a lista plana de items, na ordem em que
+  // aparecem (concatenando os grupos quando existirem).
+  function pageItems(page) {
+    if (page.groups) {
+      var out = [];
+      page.groups.forEach(function (g) {
+        (g.items || []).forEach(function (it) { out.push(it); });
+      });
+      return out;
+    }
+    return page.items || [];
+  }
+
   // ---- build parent map + search index (guards against cycles) ----
   function buildIndex() {
     parentOf = {};
@@ -26,7 +42,7 @@
       visited[pageId] = true;
       var page = cfg.pages[pageId];
       if (!page) return;
-      (page.items || []).forEach(function (item) {
+      pageItems(page).forEach(function (item) {
         flatIndex.push({
           label: item.label,
           type: item.type,
@@ -93,7 +109,7 @@
     visited = Object.assign({}, visited);
     visited[pageId] = true;
 
-    var childItems = (page.items || []);
+    var childItems = pageItems(page);
     var hasChildren = childItems.length > 0;
     var isOpen = !!expandedPages[pageId];
 
@@ -166,13 +182,59 @@
     });
   }
 
+  // ---------------- single button/link element for one item ----------------
+  function buildItemEl(item, idx) {
+    var el;
+    if (item.type === "notion") {
+      el = document.createElement("a");
+      el.href = item.url;
+      el.target = "_blank";
+      el.rel = "noopener";
+    } else {
+      el = document.createElement("button");
+      el.addEventListener("click", function () { navigate(item.target); });
+    }
+    el.className = "item";
+    el.dataset.idx = idx;
+
+    var left = document.createElement("span");
+    left.className = "item-left";
+    var icon = document.createElement("i");
+    icon.className = "item-icon ti " + iconFor(item);
+    var label = document.createElement("span");
+    label.className = "item-label";
+    label.textContent = item.label;
+    left.appendChild(icon);
+    left.appendChild(label);
+
+    var right = document.createElement("span");
+    right.style.display = "flex";
+    right.style.alignItems = "center";
+    right.style.gap = "8px";
+    if (idx < 9) {
+      var kbd = document.createElement("span");
+      kbd.className = "kbd-num";
+      kbd.textContent = String(idx + 1);
+      right.appendChild(kbd);
+    }
+    var chevron = document.createElement("i");
+    chevron.className = "item-chevron ti " + (item.type === "notion" ? "ti-external-link" : "ti-chevron-right");
+    right.appendChild(chevron);
+
+    el.appendChild(left);
+    el.appendChild(right);
+    return el;
+  }
+
   // ---------------- content grid/list ----------------
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
+    container.classList.remove("grouped");
 
-    if (!page.items || page.items.length === 0) {
+    var items = pageItems(page);
+    if (!items.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -180,48 +242,34 @@
       return;
     }
 
-    page.items.forEach(function (item, idx) {
-      var el;
-      if (item.type === "notion") {
-        el = document.createElement("a");
-        el.href = item.url;
-        el.target = "_blank";
-        el.rel = "noopener";
-      } else {
-        el = document.createElement("button");
-        el.addEventListener("click", function () { navigate(item.target); });
-      }
-      el.className = "item";
-      el.dataset.idx = idx;
-
-      var left = document.createElement("span");
-      left.className = "item-left";
-      var icon = document.createElement("i");
-      icon.className = "item-icon ti " + iconFor(item);
-      var label = document.createElement("span");
-      label.className = "item-label";
-      label.textContent = item.label;
-      left.appendChild(icon);
-      left.appendChild(label);
-
-      var right = document.createElement("span");
-      right.style.display = "flex";
-      right.style.alignItems = "center";
-      right.style.gap = "8px";
-      if (idx < 9) {
-        var kbd = document.createElement("span");
-        kbd.className = "kbd-num";
-        kbd.textContent = String(idx + 1);
-        right.appendChild(kbd);
-      }
-      var chevron = document.createElement("i");
-      chevron.className = "item-chevron ti " + (item.type === "notion" ? "ti-external-link" : "ti-chevron-right");
-      right.appendChild(chevron);
-
-      el.appendChild(left);
-      el.appendChild(right);
-      container.appendChild(el);
-    });
+    if (page.groups) {
+      // grupos = caixas visuais dentro da MESMA página; os botões ficam
+      // acessíveis direto, sem precisar clicar no título do grupo.
+      container.classList.add("grouped");
+      var globalIdx = 0;
+      page.groups.forEach(function (group) {
+        var groupItems = group.items || [];
+        if (!groupItems.length) return;
+        var section = document.createElement("div");
+        section.className = "group-section";
+        var title = document.createElement("h3");
+        title.className = "group-title";
+        title.textContent = group.title;
+        section.appendChild(title);
+        var itemsWrap = document.createElement("div");
+        itemsWrap.className = "group-items";
+        groupItems.forEach(function (item) {
+          itemsWrap.appendChild(buildItemEl(item, globalIdx));
+          globalIdx++;
+        });
+        section.appendChild(itemsWrap);
+        container.appendChild(section);
+      });
+    } else {
+      items.forEach(function (item, idx) {
+        container.appendChild(buildItemEl(item, idx));
+      });
+    }
   }
 
   // ---------------- page render / navigation ----------------
@@ -255,7 +303,8 @@
   // ---------------- activate an item by index within current page (keyboard 1-9) ----------------
   function activateIndex(i) {
     var page = cfg.pages[currentId];
-    var item = page.items && page.items[i];
+    var items = pageItems(page);
+    var item = items[i];
     if (!item) return;
     if (item.type === "notion") window.open(item.url, "_blank", "noopener");
     else navigate(item.target);
