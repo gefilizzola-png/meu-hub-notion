@@ -118,7 +118,14 @@ const APP_CONFIG = {
         { label: "Tabela", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Tabela-3b80481486dd80b1a709ddd7b951be58?source=copy_link" }
       ]
     },
-    vis_porassuntos: { title: "Por Assuntos", items: [] },
+    vis_porassuntos: {
+      title: "Por Assuntos",
+      items: [
+        { label: "Lista", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Lista-3b80481486dd804f8339c2458031dc43?source=copy_link" },
+        { label: "Quadro", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Quadro-3b80481486dd805aa11fc917b3c02b09?source=copy_link" },
+        { label: "Tabela", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Tabela-3b80481486dd8038bbdadc89ce958a06?source=copy_link" }
+      ]
+    },
     vis_porprioridade: { title: "Por Prioridade", items: [] },
     vis_pordataprazo: { title: "Por Data (Prazo)", items: [] },
     vis_pordatacriacao: { title: "Por Data de Criação", items: [] },
