@@ -97,7 +97,7 @@ const APP_CONFIG = {
     visualizacoes: {
       title: "Visualizações",
       items: [
-        { label: "Completa", type: "page", target: "vis_completa", icon: "file-text" },
+        { label: "Completa", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Completa-3b60481486dd80998301f8a013f42c8b?source=copy_link", icon: "file-text" },
         { label: "Por Andamento", type: "page", target: "vis_porandamento", icon: "file-text" },
         { label: "Por Assuntos", type: "page", target: "vis_porassuntos", icon: "file-text" },
         { label: "Por Prioridade", type: "page", target: "vis_porprioridade", icon: "file-text" },
@@ -110,7 +110,14 @@ const APP_CONFIG = {
     },
 
     vis_completa: { title: "Completa", items: [] },
-    vis_porandamento: { title: "Por Andamento", items: [] },
+    vis_porandamento: {
+      title: "Por Andamento",
+      items: [
+        { label: "Lista", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Lista-3b60481486dd8000bbf6d7e67ed0e78e?source=copy_link" },
+        { label: "Quadro", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Quadro-3b80481486dd804e9867ffd0fb73357d?source=copy_link" },
+        { label: "Tabela", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Tabela-3b80481486dd80b1a709ddd7b951be58?source=copy_link" }
+      ]
+    },
     vis_porassuntos: { title: "Por Assuntos", items: [] },
     vis_porprioridade: { title: "Por Prioridade", items: [] },
     vis_pordataprazo: { title: "Por Data (Prazo)", items: [] },
