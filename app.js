@@ -120,7 +120,7 @@
       renderTree();
     }));
     var icon = document.createElement("i");
-    icon.className = "ti ti-folder";
+    icon.className = "ti ti-folder" + (hasChildren ? "" : " icon-empty");
     row.appendChild(icon);
     var label = document.createElement("span");
     label.textContent = page.title;

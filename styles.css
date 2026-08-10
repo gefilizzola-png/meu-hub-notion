@@ -95,6 +95,10 @@ html, body {
 .tree-row .ti { font-size: 13px; color: #888; flex-shrink: 0; width: 15px; text-align: center; }
 .tree-row.active .ti { color: #555; }
 .tree-row .ti-external-link { color: #aaa; }
+/* pasta sem nada dentro (nem subpágina, nem link do Notion) — sinaliza que
+   ainda falta preencher */
+.tree-row .ti.icon-empty { color: #cc4b3c; }
+.tree-row.active .ti.icon-empty { color: #cc4b3c; }
 
 .tree-toggle {
   width: 13px;
