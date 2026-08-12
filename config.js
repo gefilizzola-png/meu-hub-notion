@@ -63,18 +63,44 @@ const APP_CONFIG = {
     criar_pmf: {
       title: "PMF",
       items: [
-        { label: "TAT - Sessões", type: "page", target: "criar_pmf_tat_sessoes" }
+        { label: "Colegiados", type: "page", target: "criar_pmf_colegiados" },
+        { label: "Controles", type: "page", target: "criar_pmf_controles" }
       ]
     },
 
-    criar_pmf_tat_sessoes: {
-      title: "TAT - Sessões",
-      items: [
-        { label: "TAT - Sessões - 1ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f87873e8-f9f5-4289-9418-e734f8564352" },
-        { label: "TAT - Sessões - 1ª Câmara (Titulares)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
-        { label: "TAT - Sessões - 2ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "767cb091-3816-4761-a659-8895fb5f98c7" },
-        { label: "TAT - Sessões - 2ª Câmara (Titulares)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "6b9558e7-fea6-4652-b20b-5a1d94d79cba" },
-        { label: "TAT - Sessões - Pleno", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" }
+    // "groups" aqui funciona igual em Favoritas: cada divisória (ex: "Tarefas")
+    // é só uma caixa visual pra indicar de qual base de dados do Notion vêm
+    // aqueles templates — não é um nível extra de navegação.
+    criar_pmf_controles: {
+      title: "Controles",
+      groups: [
+        {
+          title: "Tarefas",
+          items: [
+            { label: "Auditorias — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "f0e058d6-85ce-401f-bb8a-2a7f1513ef10" },
+            { label: "Consultas — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1809e1e4-e069-4251-9345-0ed89c664da3" },
+            { label: "Fiscalização — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1367bf16-71d0-4560-acfa-e7a3d8a2b64e" },
+            { label: "Lançamentos — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "87c65fda-96b0-4e19-afc0-84c8eb87bb39" },
+            { label: "Ofícios — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "6b7c5969-1344-492c-b501-3236fe0733f4" },
+            { label: "Processos — TRIBUTO - PROCESSO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "21111593-0a0c-4e6a-a744-e560879db3e0" }
+          ]
+        }
+      ]
+    },
+
+    criar_pmf_colegiados: {
+      title: "Colegiados",
+      groups: [
+        {
+          title: "TAT",
+          items: [
+            { label: "TAT - Sessões - 1ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f87873e8-f9f5-4289-9418-e734f8564352" },
+            { label: "TAT - Sessões - 1ª Câmara (Titulares)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
+            { label: "TAT - Sessões - 2ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "767cb091-3816-4761-a659-8895fb5f98c7" },
+            { label: "TAT - Sessões - 2ª Câmara (Titulares)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "6b9558e7-fea6-4652-b20b-5a1d94d79cba" },
+            { label: "TAT - Sessões - Pleno", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" }
+          ]
+        }
       ]
     },
 
