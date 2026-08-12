@@ -163,7 +163,6 @@ const APP_CONFIG = {
           title: "CONTROLES - PMF",
           items: [
             { label: "Betha – Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7e1194013472498f884e7b4e759c56bf?v=152de528d7aa40168640b394d3a8458e&source=copy_link" },
-            { label: "IPTU - Lançamento Anual", type: "notion", url: "https://app.notion.com/p/georges-filizzola/4390ef948f0345f1b0a581a152c32f57?v=a379d98f46a547c6bc8f0536c3cae333&source=copy_link" },
             { label: "PMF - Reuniões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link" },
             { label: "PMF - Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" }
           ]
@@ -171,6 +170,7 @@ const APP_CONFIG = {
         {
           title: "Colegiados",
           items: [
+            { label: "COMAT - Consultas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/a27c5f5c7daa4758b7b5d80de6450fda?v=8337729c5a904d23b55ca5ff8b07e49a&source=copy_link" },
             { label: "TAT – Processos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
             { label: "TAT – Sessões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" }
           ]
@@ -189,6 +189,7 @@ const APP_CONFIG = {
         {
           title: "Tributos",
           items: [
+            { label: "IPTU - Lançamento Anual", type: "notion", url: "https://app.notion.com/p/georges-filizzola/4390ef948f0345f1b0a581a152c32f57?v=a379d98f46a547c6bc8f0536c3cae333&source=copy_link" },
             { label: "TCRS – Valores", type: "notion", url: "https://app.notion.com/p/georges-filizzola/57451e2d9853462a9517d7412cda86ec?v=21c10fb52d35481daa4ed9d2d94b5453&source=copy_link" }
           ]
         },
@@ -280,9 +281,9 @@ const APP_CONFIG = {
     pmf_col_abrasf: {
       title: "ABRASF",
       items: [
-        { label: "AGO/CTP", type: "page", target: "pmf_col_abrasf_agoctp" },
-        { label: "Membros de FLN", type: "page", target: "pmf_col_abrasf_membrosfln" },
-        { label: "Reuniões", type: "page", target: "pmf_col_abrasf_reunioes" }
+        { label: "AGO/CTP", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7100481486dd83408ca281e5ae087a92?v=5f40481486dd83f38d9708b3f37b2733&source=copy_link" },
+        { label: "Membros de FLN", type: "notion", url: "https://app.notion.com/p/georges-filizzola/14cc9286f2404e6892db6a232d03b49a?v=fb83c0ee15134001a6fe7e20b4ade1d1&source=copy_link" },
+        { label: "Reuniões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/169e89372a9c441683d8a2786d186b8b?v=0a8323765ff640b19492a5eee2f7decc&source=copy_link" }
       ]
     },
     pmf_col_abrasf_agoctp: { title: "AGO/CTP", items: [] },
@@ -292,9 +293,9 @@ const APP_CONFIG = {
     pmf_col_comat: {
       title: "COMAT",
       items: [
-        { label: "Processos", type: "page", target: "pmf_col_comat_processos" },
-        { label: "Reuniões", type: "page", target: "pmf_col_comat_reunioes" },
-        { label: "Soluções de Consulta", type: "page", target: "pmf_col_comat_solucoesconsulta" }
+        { label: "Consultas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/a27c5f5c7daa4758b7b5d80de6450fda?v=8337729c5a904d23b55ca5ff8b07e49a&source=copy_link" },
+        { label: "Processos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/5fda7ad2aa2148b3b2de62cc0389f8be?v=c8d25b11c6664589b5f79b6d19307cfd&source=copy_link" },
+        { label: "Reuniões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/0672e4ca4c554b5ab1f2ce0ae48e9954?v=ad6046d0fe5f408fa1ad3a9f12da054c&source=copy_link" }
       ]
     },
     pmf_col_comat_processos: { title: "Processos", items: [] },
@@ -304,9 +305,9 @@ const APP_CONFIG = {
     pmf_col_jart: {
       title: "JART",
       items: [
-        { label: "Processos", type: "page", target: "pmf_col_jart_processos" },
-        { label: "Sessões", type: "page", target: "pmf_col_jart_sessoes" },
-        { label: "Jeton", type: "page", target: "pmf_col_jart_jeton" }
+        { label: "Jeton", type: "notion", url: "https://app.notion.com/p/georges-filizzola/3f76609b693c437ea1816d9f3782b9b9?v=cbd83dbec46240e2b46b297110d7bdeb&source=copy_link" },
+        { label: "Processos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/9f1e9961c3e047d1910ea70fdd2291e4?v=8f059312496f45ee93be5413fcb0d438&source=copy_link" },
+        { label: "Sessões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/90ef43ee26604ebd8114610c29b60949?v=d62cf35cdf174a6cb98f01652a387795&source=copy_link" }
       ]
     },
     pmf_col_jart_processos: { title: "Processos", items: [] },
@@ -316,9 +317,9 @@ const APP_CONFIG = {
     pmf_col_tat: {
       title: "TAT",
       items: [
-        { label: "Processos", type: "page", target: "pmf_col_tat_processos" },
-        { label: "Sessões", type: "page", target: "pmf_col_tat_sessoes" },
-        { label: "Jeton", type: "page", target: "pmf_col_tat_jeton" }
+        { label: "Jeton", type: "notion", url: "https://app.notion.com/p/georges-filizzola/bfe39c0d1fb545058538915ab28239c4?v=2a89cc3846ea4364ac2384afa8dec3aa&source=copy_link" },
+        { label: "Processos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
+        { label: "Sessões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" }
       ]
     },
     pmf_col_tat_processos: { title: "Processos", items: [] },
