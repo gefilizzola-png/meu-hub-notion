@@ -75,6 +75,23 @@ const APP_CONFIG = {
       title: "Controles",
       groups: [
         {
+          title: "Betha",
+          items: [
+            { label: "Sistemas - Betha Tributos - Chamados - XXXX", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "09f31cab-7036-42c2-a826-ff51dc854dfb" },
+            { label: "Sistemas - Betha Tributos - Créditos Tributários - XXXX", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "3477be4a-a971-463f-ad75-e3a88de0fbc6" },
+            { label: "Sistemas - Betha Tributos - Fórmulas - XXXX", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "ae170a72-fc41-4fc6-b6e2-38b643fe2380" },
+            { label: "Sistemas - Betha Tributos - Scripts - XXXX", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "782d4983-e7b4-4ca4-810c-3975f2889d6b" },
+            { label: "Sistemas - TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "523e8e2e-06b7-42a2-9902-a33adc3a3f0c" }
+          ]
+        },
+        {
+          title: "Reuniões",
+          items: [
+            { label: "PMF - Reuniões - 2026-09-XX - IPTU 2027 (XXX)", type: "notion-template", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "ea112acd-f975-4d95-a892-83614e3a43e2" },
+            { label: "PMF - Reuniões - 2026-XX-XX - XXX", type: "notion-template", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "7dc2c479-55f9-47a1-bdd4-b565638e5823" }
+          ]
+        },
+        {
           title: "Tarefas",
           items: [
             { label: "Auditorias — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "f0e058d6-85ce-401f-bb8a-2a7f1513ef10" },
@@ -92,8 +109,30 @@ const APP_CONFIG = {
       title: "Colegiados",
       groups: [
         {
+          title: "ABRASF",
+          items: [
+            { label: "PMF - ABRASF - Xª AGO - 2024-XX - XXX (XX)", type: "notion-template", database_id: "3455e80ac9de4d7084613a651a5e72d2", template_id: "71242694-6d75-4a5b-9688-051b6103fbad" }
+          ]
+        },
+        {
+          title: "COMAT",
+          items: [
+            { label: "COMAT - Reuniões - DATA", type: "notion-template", database_id: "0672e4ca4c554b5ab1f2ce0ae48e9954", template_id: "bc90ae45-6388-4b84-9c4e-43bd9c6e4880" },
+            { label: "COMAT - Soluções - NÚM/ANO - ASSUNTO", type: "notion-template", database_id: "a27c5f5c7daa4758b7b5d80de6450fda", template_id: "f3cbcedf-9b31-4cd4-9635-b9a89a095e21" },
+            { label: "PMF - COMAT - Processos - PROCESSO - CONTRIBUINTE", type: "notion-template", database_id: "5fda7ad2aa2148b3b2de62cc0389f8be", template_id: "7254ab2e-c682-443e-9f01-8a4c2c555f56" }
+          ]
+        },
+        {
+          title: "JART",
+          items: [
+            { label: "JART - Sessões - DATA", type: "notion-template", database_id: "90ef43ee26604ebd8114610c29b60949", template_id: "610f5d9f-b8f0-4728-9e35-d9df455d6979" },
+            { label: "PMF - JART - Processos - PROCESSO - CONTRIBUINTE", type: "notion-template", database_id: "9f1e9961c3e047d1910ea70fdd2291e4", template_id: "da508100-9e44-437f-8393-b1cd46b538a1" }
+          ]
+        },
+        {
           title: "TAT",
           items: [
+            { label: "PMF - TAT - Processos - PROCESSO - CONTRIBUINTE", type: "notion-template", database_id: "88435f4ebb9849ac88664da53f13ceb6", template_id: "020ef2bf-1558-484d-b0e1-0f870dd7719a" },
             { label: "TAT - Sessões - 1ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f87873e8-f9f5-4289-9418-e734f8564352" },
             { label: "TAT - Sessões - 1ª Câmara (Titulares)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
             { label: "TAT - Sessões - 2ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "767cb091-3816-4761-a659-8895fb5f98c7" },
