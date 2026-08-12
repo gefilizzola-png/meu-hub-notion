@@ -178,6 +178,7 @@ const APP_CONFIG = {
         {
           title: "Cadastros",
           items: [
+            { label: "Betha - Scripts", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Betha-Scripts-5455bb9ca1984a72b0d1b481feef03e1?source=copy_link" },
             { label: "Cargos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/cecf185362f34b8ebe99daf07727096f?v=17a0481486dd8040befc000c07c349c7&source=copy_link" },
             { label: "Contratos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
             { label: "Convênios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/75bbbc9672b14f2d8dcd51c34f81e3d7?v=47d42a4be70f409ea8bda443c6eae771&source=copy_link" },
@@ -329,12 +330,13 @@ const APP_CONFIG = {
     pmf_cadastros: {
       title: "Cadastros",
       items: [
-        { label: "Cargos", type: "page", target: "pmf_cad_cargos" },
-        { label: "Contratos", type: "page", target: "pmf_cad_contratos" },
-        { label: "Convênios", type: "page", target: "pmf_cad_convenios" },
-        { label: "Jurisprudências", type: "page", target: "pmf_cad_jurisprudencias" },
-        { label: "Legislações", type: "page", target: "pmf_cad_legislacoes" },
-        { label: "Nomeações", type: "page", target: "pmf_cad_nomeacoes" }
+        { label: "Cargos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/cecf185362f34b8ebe99daf07727096f?v=17a0481486dd8040befc000c07c349c7&source=copy_link" },
+        { label: "Contratos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
+        { label: "Convênios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/75bbbc9672b14f2d8dcd51c34f81e3d7?v=47d42a4be70f409ea8bda443c6eae771&source=copy_link" },
+        { label: "Jurisprudências", type: "notion", url: "https://app.notion.com/p/georges-filizzola/24f0481486dd8094a099ec12b3a81bcf?v=24f0481486dd8150aea3000cb171d145&source=copy_link" },
+        { label: "Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
+        { label: "Nomeações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39d30e8b20984607b9710a1b9e7959b8?v=10667ad56cd34b079a664aaa193d7147&source=copy_link" },
+        { label: "Pessoas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/cb26c076639749b798956ff5c690e90f?v=850ea52001d748d08ffeaeb4cb048392&source=copy_link" }
       ]
     },
     pmf_cad_cargos: { title: "Cargos", items: [] },
@@ -348,18 +350,18 @@ const APP_CONFIG = {
       title: "Controles",
       items: [
         { label: "Betha", type: "page", target: "pmf_ctrl_betha" },
-        { label: "Tarefas", type: "page", target: "pmf_ctrl_tarefas" },
-        { label: "Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
-        { label: "Time Sheet", type: "page", target: "pmf_ctrl_timesheet" }
+        { label: "Reuniões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link" },
+        { label: "Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" },
+        { label: "Time Sheet", type: "notion", url: "https://app.notion.com/p/georges-filizzola/95226c82b4aa45c0bc428a3c570ce28d?v=780f9595e978455abf33cce0c934ed8d&source=copy_link" }
       ]
     },
 
     pmf_ctrl_betha: {
       title: "Betha",
       items: [
-        { label: "Tarefas", type: "page", target: "pmf_ctrl_betha_tarefas" },
-        { label: "Scripts", type: "page", target: "pmf_ctrl_betha_scripts" },
-        { label: "Tabelas", type: "page", target: "pmf_ctrl_betha_tabelas" }
+        { label: "Scripts", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Betha-Scripts-5455bb9ca1984a72b0d1b481feef03e1?source=copy_link" },
+        { label: "Tabelas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Betha-Tabelas-a4403e8844a64681a04525d1bcf817fc?source=copy_link" },
+        { label: "Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7e1194013472498f884e7b4e759c56bf?v=152de528d7aa40168640b394d3a8458e&source=copy_link" }
       ]
     },
     pmf_ctrl_betha_tarefas: { title: "Tarefas", items: [] },
@@ -373,8 +375,8 @@ const APP_CONFIG = {
     pmf_funcional: {
       title: "Funcional",
       items: [
-        { label: "AFIFI", type: "page", target: "pmf_func_afifi" },
-        { label: "Diárias", type: "page", target: "pmf_func_diarias" }
+        { label: "AFIFI - Jantares", type: "notion", url: "https://app.notion.com/p/georges-filizzola/13c0481486dd801c93f6e4dc26e718ff?v=ff6456efb9ec448d9c18c665962e5aa0&source=copy_link" },
+        { label: "Diárias", type: "notion", url: "https://app.notion.com/p/georges-filizzola/980aea13aee94b1eb94cdd62267df905?v=d224d2a61e5c4aa9961ba71ffe24b6b7&source=copy_link" }
       ]
     },
     pmf_func_afifi: {
@@ -391,15 +393,15 @@ const APP_CONFIG = {
       items: [
         { label: "Geral", type: "page", target: "pmf_trib_geral" },
         { label: "IPTU/TCRS", type: "page", target: "pmf_trib_iptutcrs" },
-        { label: "ISSQN", type: "page", target: "pmf_trib_issqn" }
+        { label: "ISSQN", type: "notion", url: "https://app.notion.com/p/georges-filizzola/1120481486dd808093dffa5545b4bdee?v=19a68e4f0bc84d388c7b5efe8f9ad6d4&source=copy_link" }
       ]
     },
 
     pmf_trib_geral: {
       title: "Geral",
       items: [
-        { label: "IPCA", type: "page", target: "pmf_trib_geral_ipca" },
-        { label: "Valores Lançados", type: "page", target: "pmf_trib_geral_valoreslancados" }
+        { label: "IPCA", type: "notion", url: "https://app.notion.com/p/georges-filizzola/IPCA-8df0849b030d402e9b1cf507043b3093?source=copy_link" },
+        { label: "Valores Lançados", type: "notion", url: "https://app.notion.com/p/georges-filizzola/a61fe05ad95d4b0397f8c2d87f5fcd22?v=9a3b5eb93a1e4b3bb43b998cca4a1a7f&source=copy_link" }
       ]
     },
     pmf_trib_geral_ipca: { title: "IPCA", items: [] },
@@ -409,10 +411,10 @@ const APP_CONFIG = {
       title: "IPTU/TCRS",
       items: [
         { label: "Benefícios Fiscais", type: "page", target: "pmf_trib_iptutcrs_beneficiosfiscais" },
-        { label: "Lançamento Anual", type: "page", target: "pmf_trib_iptutcrs_lancamentoanual" },
-        { label: "Resumos", type: "page", target: "pmf_trib_iptutcrs_resumos" },
-        { label: "Tabelas", type: "page", target: "pmf_trib_iptutcrs_tabelas" },
-        { label: "Valores (TCRS)", type: "page", target: "pmf_trib_iptutcrs_valorestcrs" }
+        { label: "Lançamento Anual", type: "notion", url: "https://app.notion.com/p/georges-filizzola/4390ef948f0345f1b0a581a152c32f57?v=a87fb3e62a834df89996281daec7c823&source=copy_link" },
+        { label: "Resumos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Resumos-IPTU-dd41797e874b4b1097d363f19038b3cb?source=copy_link" },
+        { label: "Tabelas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Tabelas-IPTU-0dcbb585216f4bc0a6ca416595e2f7fc?source=copy_link" },
+        { label: "Valores (TCRS)", type: "notion", url: "https://app.notion.com/p/georges-filizzola/57451e2d9853462a9517d7412cda86ec?v=21c10fb52d35481daa4ed9d2d94b5453&source=copy_link" }
       ]
     },
     pmf_trib_iptutcrs_beneficiosfiscais: { title: "Benefícios Fiscais", items: [] },
