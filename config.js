@@ -56,6 +56,20 @@ const APP_CONFIG = {
     criar_paginas: {
       title: "Criar páginas",
       items: [
+        { label: "PMF", type: "page", target: "criar_pmf" }
+      ]
+    },
+
+    criar_pmf: {
+      title: "PMF",
+      items: [
+        { label: "TAT - Sessões", type: "page", target: "criar_pmf_tat_sessoes" }
+      ]
+    },
+
+    criar_pmf_tat_sessoes: {
+      title: "TAT - Sessões",
+      items: [
         { label: "TAT - Sessões - 1ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f87873e8-f9f5-4289-9418-e734f8564352" },
         { label: "TAT - Sessões - 1ª Câmara (Titulares)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
         { label: "TAT - Sessões - 2ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "767cb091-3816-4761-a659-8895fb5f98c7" },
