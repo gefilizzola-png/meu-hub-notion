@@ -410,7 +410,7 @@ const APP_CONFIG = {
     pmf_trib_iptutcrs: {
       title: "IPTU/TCRS",
       items: [
-        { label: "Benefícios Fiscais", type: "page", target: "pmf_trib_iptutcrs_beneficiosfiscais" },
+        { label: "Benefícios Fiscais", type: "notion", url: "https://app.notion.com/p/georges-filizzola/2800481486dd809f90c9c5c0bf349601?v=2800481486dd80d9926a000ce937104e&source=copy_link" },
         { label: "Lançamento Anual", type: "notion", url: "https://app.notion.com/p/georges-filizzola/4390ef948f0345f1b0a581a152c32f57?v=a87fb3e62a834df89996281daec7c823&source=copy_link" },
         { label: "Resumos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Resumos-IPTU-dd41797e874b4b1097d363f19038b3cb?source=copy_link" },
         { label: "Tabelas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Tabelas-IPTU-0dcbb585216f4bc0a6ca416595e2f7fc?source=copy_link" },
