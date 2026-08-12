@@ -14,6 +14,12 @@
   2) Botão que abre outra página DESTE app (navegação interna):
      { label: "Nome do botão", type: "page", target: "id_da_pagina" }
 
+  3) Botão que cria uma página nova no Notion a partir de um template
+     (usa o Cloudflare Worker configurado em "templateWorkerUrl" abaixo):
+     { label: "Nome do botão", type: "notion-template", database_id: "...", template_id: "..." }
+     Pra achar o database_id e o template_id de um template, use o endpoint
+     GET <templateWorkerUrl>/templates?database_id=XXXX (veja resumo-projeto.md).
+
   Opcionalmente cada item pode ter um ícone (nome do Tabler Icons, sem o
   prefixo "ti-"). Lista de ícones: https://tabler.io/icons
      { label: "Calendário", type: "page", target: "calendario", icon: "calendar" }
@@ -32,16 +38,29 @@
 const APP_CONFIG = {
   appTitle: "Meu hub",
   startPage: "entrada",
+  templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
   pages: {
     entrada: {
       title: "Entrada",
       items: [
+        { label: "Criar páginas", type: "page", target: "criar_paginas", icon: "file-plus" },
         { label: "Eventos", type: "page", target: "eventos", icon: "calendar" },
         { label: "Favoritas", type: "page", target: "favoritas", icon: "star" },
         { label: "Central", type: "page", target: "central", icon: "layout-grid" },
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
         { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" }
+      ]
+    },
+
+    criar_paginas: {
+      title: "Criar páginas",
+      items: [
+        { label: "TAT - Sessões - 1ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f87873e8-f9f5-4289-9418-e734f8564352" },
+        { label: "TAT - Sessões - 1ª Câmara (Titulares)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
+        { label: "TAT - Sessões - 2ª Câmara (Suplentes)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "767cb091-3816-4761-a659-8895fb5f98c7" },
+        { label: "TAT - Sessões - 2ª Câmara (Titulares)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "6b9558e7-fea6-4652-b20b-5a1d94d79cba" },
+        { label: "TAT - Sessões - Pleno", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" }
       ]
     },
 

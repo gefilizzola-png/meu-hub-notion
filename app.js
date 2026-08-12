@@ -8,7 +8,42 @@
 
   function iconFor(item) {
     if (item.icon) return "ti-" + item.icon;
-    return item.type === "notion" ? "ti-file-text" : "ti-folder";
+    if (item.type === "notion") return "ti-file-text";
+    if (item.type === "notion-template") return "ti-file-plus";
+    return "ti-folder";
+  }
+
+  // ---------------- criação de página via template (Cloudflare Worker) ----------------
+  // Chama o Worker configurado em cfg.templateWorkerUrl, que cria uma página nova no
+  // Notion a partir de um template e devolve a URL da página criada.
+  function requestTemplatePage(item) {
+    return fetch(cfg.templateWorkerUrl + "/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ database_id: item.database_id, template_id: item.template_id })
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error((data && data.error) || "Falha ao criar página");
+        return data.url;
+      });
+    });
+  }
+
+  // versão com feedback visual (troca o texto do botão por "Criando…" enquanto espera)
+  function triggerTemplateCreate(item, containerEl, labelEl) {
+    if (containerEl.dataset.loading === "1") return;
+    containerEl.dataset.loading = "1";
+    var originalText = labelEl ? labelEl.textContent : "";
+    if (labelEl) labelEl.textContent = "Criando…";
+    containerEl.classList.add("loading");
+    requestTemplatePage(item)
+      .then(function (url) { window.open(url, "_blank", "noopener"); })
+      .catch(function (err) { alert("Não foi possível criar a página: " + err.message); })
+      .finally(function () {
+        containerEl.dataset.loading = "";
+        if (labelEl) labelEl.textContent = originalText;
+        containerEl.classList.remove("loading");
+      });
   }
 
   function normalize(s) {
@@ -48,6 +83,8 @@
           type: item.type,
           url: item.url,
           target: item.target,
+          databaseId: item.database_id,
+          templateId: item.template_id,
           icon: iconFor(item),
           ownerPageId: pageId,
           pathTitles: pathTitles.concat([page.title])
@@ -147,6 +184,20 @@
           leafRow.addEventListener("click", function () { window.open(item.url, "_blank", "noopener"); });
           leaf.appendChild(leafRow);
           ul.appendChild(leaf);
+        } else if (item.type === "notion-template") {
+          var tleaf = document.createElement("li");
+          var tleafRow = document.createElement("div");
+          tleafRow.className = "tree-row";
+          tleafRow.appendChild(makeToggle(false, false, function () {}));
+          var tleafIcon = document.createElement("i");
+          tleafIcon.className = "ti ti-file-plus";
+          tleafRow.appendChild(tleafIcon);
+          var tleafLabel = document.createElement("span");
+          tleafLabel.textContent = item.label;
+          tleafRow.appendChild(tleafLabel);
+          tleafRow.addEventListener("click", function () { triggerTemplateCreate(item, tleafRow, tleafLabel); });
+          tleaf.appendChild(tleafRow);
+          ul.appendChild(tleaf);
         }
       });
       li.appendChild(ul);
@@ -190,6 +241,8 @@
       el.href = item.url;
       el.target = "_blank";
       el.rel = "noopener";
+    } else if (item.type === "notion-template") {
+      el = document.createElement("button");
     } else {
       el = document.createElement("button");
       el.addEventListener("click", function () { navigate(item.target); });
@@ -207,6 +260,10 @@
     left.appendChild(icon);
     left.appendChild(label);
 
+    if (item.type === "notion-template") {
+      el.addEventListener("click", function () { triggerTemplateCreate(item, el, label); });
+    }
+
     var right = document.createElement("span");
     right.style.display = "flex";
     right.style.alignItems = "center";
@@ -218,7 +275,10 @@
       right.appendChild(kbd);
     }
     var chevron = document.createElement("i");
-    chevron.className = "item-chevron ti " + (item.type === "notion" ? "ti-external-link" : "ti-chevron-right");
+    chevron.className = "item-chevron ti " + (
+      item.type === "notion" ? "ti-external-link" :
+      item.type === "notion-template" ? "ti-file-plus" : "ti-chevron-right"
+    );
     right.appendChild(chevron);
 
     el.appendChild(left);
@@ -307,6 +367,11 @@
     var item = items[i];
     if (!item) return;
     if (item.type === "notion") window.open(item.url, "_blank", "noopener");
+    else if (item.type === "notion-template") {
+      var el = document.querySelector('.item[data-idx="' + i + '"]');
+      var labelEl = el ? el.querySelector(".item-label") : null;
+      if (el) triggerTemplateCreate(item, el, labelEl);
+    }
     else navigate(item.target);
   }
 
@@ -371,6 +436,11 @@
 
   function activateMatch(m) {
     if (m.type === "notion") window.open(m.url, "_blank", "noopener");
+    else if (m.type === "notion-template") {
+      requestTemplatePage({ database_id: m.databaseId, template_id: m.templateId })
+        .then(function (url) { window.open(url, "_blank", "noopener"); })
+        .catch(function (err) { alert("Não foi possível criar a página: " + err.message); });
+    }
     else navigate(m.target);
     searchInputs.forEach(function (inp) { inp.value = ""; inp.blur(); });
     closeSearch();

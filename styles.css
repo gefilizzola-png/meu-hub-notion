@@ -221,6 +221,7 @@ html, body {
 }
 .item:last-child { border-bottom: none; }
 .item:active { background: #fafaf9; }
+.item.loading { opacity: 0.55; pointer-events: none; cursor: wait; }
 .item-left {
   display: flex;
   align-items: center;
