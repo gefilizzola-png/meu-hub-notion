@@ -108,6 +108,15 @@ const APP_CONFIG = {
       title: "Criar páginas",
       items: [
         { label: "PMF", type: "page", target: "criar_pmf" }
+      ],
+      // "Acesso Rápido" — atalhos pra páginas de template que você cria com
+      // frequência, pra não precisar navegar até a pasta original. Aparece
+      // como uma caixa separada por uma linha, abaixo do item "PMF" acima.
+      groups: [
+        {
+          title: "Acesso Rápido",
+          items: []
+        }
       ]
     },
 
@@ -483,9 +492,24 @@ const APP_CONFIG = {
         { label: "Contratos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
         { label: "Convênios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/75bbbc9672b14f2d8dcd51c34f81e3d7?v=47d42a4be70f409ea8bda443c6eae771&source=copy_link" },
         { label: "Jurisprudências", type: "notion", url: "https://app.notion.com/p/georges-filizzola/24f0481486dd8094a099ec12b3a81bcf?v=24f0481486dd8150aea3000cb171d145&source=copy_link" },
-        { label: "Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
+        { label: "Legislações", type: "page", target: "pmf_cad_legislacoes" },
         { label: "Nomeações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39d30e8b20984607b9710a1b9e7959b8?v=10667ad56cd34b079a664aaa193d7147&source=copy_link" },
         { label: "Pessoas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/cb26c076639749b798956ff5c690e90f?v=850ea52001d748d08ffeaeb4cb048392&source=copy_link" }
+      ]
+    },
+    pmf_cad_legislacoes: {
+      title: "Legislações",
+      groups: [
+        {
+          title: "Completa",
+          items: [
+            { label: "Completa", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" }
+          ]
+        },
+        {
+          title: "Páginas Principais",
+          items: []
+        }
       ]
     },
     pmf_cad_cargos: { title: "Cargos", items: [] },

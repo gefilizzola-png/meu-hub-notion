@@ -50,20 +50,21 @@
     return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   }
 
-  // Uma página pode ter "items" (lista simples) OU "groups" (lista de
-  // grupos, cada um com "title" + "items" — usado quando queremos separar
-  // visualmente os botões dentro da MESMA página, sem criar subpáginas).
+  // Uma página pode ter "items" (lista simples, sem caixa) E/OU "groups"
+  // (lista de grupos, cada um com "title" + "items" — caixa visual dentro
+  // da MESMA página, sem criar subpáginas). Quando os dois existem juntos,
+  // os "items" aparecem soltos no topo e os "groups" aparecem depois, numa
+  // linha separadora (ex: Criar páginas → PMF, com "Acesso Rápido" embaixo).
   // Esta função devolve sempre a lista plana de items, na ordem em que
-  // aparecem (concatenando os grupos quando existirem).
+  // aparecem (items soltos primeiro, depois os grupos concatenados).
   function pageItems(page) {
+    var out = (page.items || []).slice();
     if (page.groups) {
-      var out = [];
       page.groups.forEach(function (g) {
         (g.items || []).forEach(function (it) { out.push(it); });
       });
-      return out;
     }
-    return page.items || [];
+    return out;
   }
 
   // ---- build parent map + search index (guards against cycles) ----
@@ -440,15 +441,16 @@
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
-    container.classList.remove("grouped");
 
     if (page.dynamicQuery) {
       renderDynamicQuery(page, pageId, container);
       return;
     }
 
-    var items = pageItems(page);
-    if (!items.length) {
+    var flatItems = page.items || [];
+    var groups = (page.groups || []).filter(function (g) { return (g.items || []).length > 0; });
+
+    if (!flatItems.length && !groups.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -456,14 +458,31 @@
       return;
     }
 
-    if (page.groups) {
-      // grupos = caixas visuais dentro da MESMA página; os botões ficam
-      // acessíveis direto, sem precisar clicar no título do grupo.
-      container.classList.add("grouped");
-      var globalIdx = 0;
-      page.groups.forEach(function (group) {
-        var groupItems = group.items || [];
-        if (!groupItems.length) return;
+    var globalIdx = 0;
+
+    // "items" soltos (sem caixa) — comportamento de sempre.
+    if (flatItems.length) {
+      var plainWrap = document.createElement("div");
+      plainWrap.className = "content-plain";
+      flatItems.forEach(function (item) {
+        plainWrap.appendChild(buildItemEl(item, globalIdx));
+        globalIdx++;
+      });
+      container.appendChild(plainWrap);
+    }
+
+    // "groups" = caixas visuais dentro da MESMA página; os botões ficam
+    // acessíveis direto, sem precisar clicar no título do grupo. Se também
+    // houver "items" soltos acima, uma linha separa os dois blocos.
+    if (groups.length) {
+      if (flatItems.length) {
+        var divider = document.createElement("hr");
+        divider.className = "content-divider";
+        container.appendChild(divider);
+      }
+      var groupedWrap = document.createElement("div");
+      groupedWrap.className = "content-grouped";
+      groups.forEach(function (group) {
         var section = document.createElement("div");
         section.className = "group-section";
         var title = document.createElement("h3");
@@ -472,17 +491,14 @@
         section.appendChild(title);
         var itemsWrap = document.createElement("div");
         itemsWrap.className = "group-items";
-        groupItems.forEach(function (item) {
+        (group.items || []).forEach(function (item) {
           itemsWrap.appendChild(buildItemEl(item, globalIdx));
           globalIdx++;
         });
         section.appendChild(itemsWrap);
-        container.appendChild(section);
+        groupedWrap.appendChild(section);
       });
-    } else {
-      items.forEach(function (item, idx) {
-        container.appendChild(buildItemEl(item, idx));
-      });
+      container.appendChild(groupedWrap);
     }
   }
 

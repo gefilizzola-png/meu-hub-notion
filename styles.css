@@ -255,9 +255,16 @@ html, body {
 
 /* ---------- grouped pages: visual boxes inside the same page ---------- */
 /* Ex: Favoritas — cada "grupo" (Controles, Colegiados...) vira uma caixa com
-   título, mas os botões dentro ficam acessíveis direto, sem navegação extra. */
-.content.grouped {
+   título, mas os botões dentro ficam acessíveis direto, sem navegação extra.
+   Quando a página também tem "items" soltos (ex: Criar páginas → PMF), eles
+   ficam em ".content-plain" acima, separados por ".content-divider". */
+.content-grouped {
   display: block;
+}
+.content-divider {
+  border: none;
+  border-top: 0.5px solid #ececea;
+  margin: 22px 0;
 }
 .group-section {
   border: 0.5px solid #ececea;
@@ -360,12 +367,12 @@ html, body {
 
 /* ---------- tablet: 640px+ = grid tiles, still single-page drill-down ---------- */
 @media (min-width: 640px) {
-  .content:not(.grouped) {
+  .content-plain {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 12px;
   }
-  .content.grouped .group-items {
+  .content-grouped .group-items {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 8px;
@@ -402,19 +409,19 @@ html, body {
 @media (min-width: 1024px) {
   .sidebar { display: flex; }
   .mobile-only { display: none !important; }
-  .content:not(.grouped) { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; padding: 20px 32px 40px; }
-  .content.grouped {
-    padding: 16px 32px 40px;
+  .content { padding: 18px 32px 40px; }
+  .content-plain { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .content-grouped {
     column-width: 320px;
     column-gap: 16px;
   }
-  .content.grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+  .content-grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
   .main-header { padding: 16px 32px; }
   .kbd-num { display: flex; }
 }
 @media (min-width: 1600px) {
-  .content:not(.grouped) { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-  .content.grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .content-plain { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .content-grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 }
 @media (max-width: 1023px) {
   .header-search { display: none; }
