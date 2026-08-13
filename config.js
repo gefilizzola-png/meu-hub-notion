@@ -348,7 +348,7 @@ const APP_CONFIG = {
             { label: "Convênios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/75bbbc9672b14f2d8dcd51c34f81e3d7?v=47d42a4be70f409ea8bda443c6eae771&source=copy_link" },
             { label: "IPCA", type: "notion", url: "https://app.notion.com/p/georges-filizzola/IPCA-8df0849b030d402e9b1cf507043b3093?source=copy_link" },
             { label: "Jurisprudências", type: "notion", url: "https://app.notion.com/p/georges-filizzola/24f0481486dd8094a099ec12b3a81bcf?v=24f0481486dd8150aea3000cb171d145&source=copy_link" },
-            { label: "Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" }
+            { label: "Legislações", type: "page", target: "pmf_cad_legislacoes" }
           ]
         },
         {
@@ -522,7 +522,6 @@ const APP_CONFIG = {
     pmf_cad_contratos: { title: "Contratos", items: [] },
     pmf_cad_convenios: { title: "Convênios", items: [] },
     pmf_cad_jurisprudencias: { title: "Jurisprudências", items: [] },
-    pmf_cad_legislacoes: { title: "Legislações", items: [] },
     pmf_cad_nomeacoes: { title: "Nomeações", items: [] },
 
     pmf_controles: {
