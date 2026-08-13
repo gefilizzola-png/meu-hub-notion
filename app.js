@@ -157,7 +157,11 @@
       renderTree();
     }));
     var icon = document.createElement("i");
-    icon.className = "ti ti-folder" + (hasChildren ? "" : " icon-empty");
+    if (page.dynamicQuery) {
+      icon.className = "ti ti-calendar-event";
+    } else {
+      icon.className = "ti ti-folder" + (hasChildren ? "" : " icon-empty");
+    }
     row.appendChild(icon);
     var label = document.createElement("span");
     label.textContent = page.title;
@@ -286,12 +290,60 @@
     return el;
   }
 
+  // ---------------- página de busca dinâmica (ex: "Hoje") ----------------
+  // Em vez de "items" fixos no config.js, a página tem um "dynamicQuery" que
+  // busca no Worker (rota /query) as páginas do Notion que baterem com o
+  // filtro (ex: campo de data = hoje). Refaz a busca toda vez que a página é aberta.
+  function renderDynamicQuery(page, pageId, container) {
+    var loading = document.createElement("p");
+    loading.className = "empty";
+    loading.textContent = "Buscando…";
+    container.appendChild(loading);
+
+    var q = page.dynamicQuery;
+    var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(q.database_id) +
+      "&date_property=" + encodeURIComponent(q.date_property) +
+      (q.date ? "&date=" + encodeURIComponent(q.date) : "");
+
+    fetch(url)
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        if (currentId !== pageId) return; // usuário já navegou pra outro lugar enquanto buscava
+        container.innerHTML = "";
+        if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
+        var pages = result.data.pages || [];
+        if (!pages.length) {
+          var empty = document.createElement("p");
+          empty.className = "empty";
+          empty.textContent = "Nada encontrado para hoje.";
+          container.appendChild(empty);
+          return;
+        }
+        pages.forEach(function (p, idx) {
+          container.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url }, idx));
+        });
+      })
+      .catch(function (err) {
+        if (currentId !== pageId) return;
+        container.innerHTML = "";
+        var errEl = document.createElement("p");
+        errEl.className = "empty";
+        errEl.textContent = "Erro ao buscar: " + err.message;
+        container.appendChild(errEl);
+      });
+  }
+
   // ---------------- content grid/list ----------------
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
     container.classList.remove("grouped");
+
+    if (page.dynamicQuery) {
+      renderDynamicQuery(page, pageId, container);
+      return;
+    }
 
     var items = pageItems(page);
     if (!items.length) {

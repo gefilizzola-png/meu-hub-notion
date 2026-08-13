@@ -20,6 +20,12 @@
      Pra achar o database_id e o template_id de um template, use o endpoint
      GET <templateWorkerUrl>/templates?database_id=XXXX (veja resumo-projeto.md).
 
+  Além de "items"/"groups", uma página pode ter "dynamicQuery" no lugar
+  (ex: a página "hoje"): busca ao vivo, toda vez que a página é aberta, as
+  páginas de uma base do Notion cujo campo de data bater com hoje.
+     dynamicQuery: { database_id: "...", date_property: "Nome do campo" }
+     (usa o endpoint GET <templateWorkerUrl>/query?database_id=X&date_property=Y)
+
   Opcionalmente cada item pode ter um ícone (nome do Tabler Icons, sem o
   prefixo "ti-"). Lista de ícones: https://tabler.io/icons
      { label: "Calendário", type: "page", target: "calendario", icon: "calendar" }
@@ -44,6 +50,7 @@ const APP_CONFIG = {
     entrada: {
       title: "Entrada",
       items: [
+        { label: "Hoje", type: "page", target: "hoje", icon: "calendar-event" },
         { label: "Criar páginas", type: "page", target: "criar_paginas", icon: "file-plus" },
         { label: "Eventos", type: "page", target: "eventos", icon: "calendar" },
         { label: "Favoritas", type: "page", target: "favoritas", icon: "star" },
@@ -51,6 +58,17 @@ const APP_CONFIG = {
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
         { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" }
       ]
+    },
+
+    // "dynamicQuery": em vez de "items" fixos, essa página busca ao vivo no
+    // Notion (via Worker) as páginas da base indicada cujo campo de data
+    // bater com a data informada (ou hoje, se "date" não for definido).
+    hoje: {
+      title: "Hoje",
+      dynamicQuery: {
+        database_id: "2310481486dd80079202fe1eaf5e14c4",
+        date_property: "📅 Data/Prazo"
+      }
     },
 
     criar_paginas: {
