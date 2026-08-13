@@ -21,10 +21,21 @@
      GET <templateWorkerUrl>/templates?database_id=XXXX (veja resumo-projeto.md).
 
   Além de "items"/"groups", uma página pode ter "dynamicQuery" no lugar
-  (ex: a página "hoje"): busca ao vivo, toda vez que a página é aberta, as
-  páginas de uma base do Notion cujo campo de data bater com hoje.
-     dynamicQuery: { database_id: "...", date_property: "Nome do campo" }
-     (usa o endpoint GET <templateWorkerUrl>/query?database_id=X&date_property=Y)
+  (ex: a página "hoje"): busca ao vivo, toda vez que a página é aberta (ou
+  quando um filtro na tela muda), as páginas de uma base do Notion que
+  baterem com os filtros indicados.
+     dynamicQuery: {
+       database_id: "...",
+       baseFilters: [ { property: "Nome do campo", type: "date", condition: "equals", value: "today" } ],
+       filters: [   // opcional — vira um dropdown com ícone na tela
+         {
+           property: "Nome do campo", type: "relation" (ou "select"/"multi_select"),
+           condition: "contains" (ou "equals"), label: "Nome do filtro",
+           options: [ { label: "...", pageId/value: "...", icon: "ti-nome-do-icone", color: "#hex" }, ... ]
+         }
+       ]
+     }
+     (usa o endpoint GET <templateWorkerUrl>/query?database_id=X&filters=[...])
 
   Opcionalmente cada item pode ter um ícone (nome do Tabler Icons, sem o
   prefixo "ti-"). Lista de ícones: https://tabler.io/icons
@@ -67,7 +78,29 @@ const APP_CONFIG = {
       title: "Hoje",
       dynamicQuery: {
         database_id: "2310481486dd80079202fe1eaf5e14c4",
-        date_property: "📅 Data/Prazo"
+        // filtro sempre aplicado: Data/Prazo = hoje
+        baseFilters: [
+          { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
+        ],
+        // filtros extras escolhidos na tela (dropdown com ícone)
+        filters: [
+          {
+            property: "🧲 Andamento",
+            type: "relation",
+            condition: "contains",
+            label: "Andamento",
+            options: [
+              { label: "0 - Iniciar agora", pageId: "9ff8db6d456d43f39e70e14786c1fe6d", icon: "ti-player-skip-forward-filled", color: "#4a90d9" },
+              { label: "1 - Em andamento", pageId: "2030481486dd80d386a1cf7522b3deb1", icon: "ti-player-play-filled", color: "#4a90d9" },
+              { label: "2 - Iniciar assim que possível", pageId: "d18f7c0ac312422cbc14a3ae1bc82399", icon: "ti-player-track-next-filled", color: "#4a90d9" },
+              { label: "3 - Aguardando terceiros", pageId: "08cb3ec723ef41b19e6c6472ee9d9a75", icon: "ti-player-pause-filled", color: "#4a90d9" },
+              { label: "4 - Iniciar quando possível", pageId: "959d289339c440a492612c70ea8ed1c9", icon: "ti-arrows-left-right", color: "#4a90d9" },
+              { label: "5 - Agendado", pageId: "4ef9e6737cea4c53ae37efe966013214", icon: "ti-refresh", color: "#4a90d9" },
+              { label: "6 - Concluído", pageId: "d228224dee1d43dabb72744097f10028", icon: "ti-circle-check-filled", color: "#2f9e44" },
+              { label: "9 - Cancelado", pageId: "2410481486dd80a3a8b0d819542a55c5", icon: "ti-circle-x-filled", color: "#e03131" }
+            ]
+          }
+        ]
       }
     },
 

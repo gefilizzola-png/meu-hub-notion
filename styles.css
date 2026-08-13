@@ -280,6 +280,59 @@ html, body {
 .group-items { }
 .group-items .item:last-child { border-bottom: none; }
 
+/* ---------- filtros da página "Hoje" (dropdown customizado com ícone) ---------- */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.filter-dropdown { position: relative; }
+.filter-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #262624;
+}
+.filter-trigger:hover { border-color: #b9b9b3; }
+.filter-trigger .ti { font-size: 14px; }
+.filter-trigger .ti-chevron-down { font-size: 11px; color: #999; margin-left: 2px; }
+.filter-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 240px;
+  background: #fff;
+  border: 0.5px solid #ececea;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  z-index: 20;
+  padding: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.filter-menu.open { display: block; }
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #262624;
+}
+.filter-option:hover { background: #f4f4f2; }
+.filter-option .ti { font-size: 15px; width: 16px; text-align: center; flex-shrink: 0; }
+
 /* search dropdown */
 .search-results {
   position: fixed;

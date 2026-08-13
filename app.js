@@ -290,47 +290,149 @@
     return el;
   }
 
+  // ---------------- dropdown customizado com ícone (select nativo não mostra ícone) ----------------
+  // filterDef: { property, type, condition, label, options: [{label, pageId, icon, color}] }
+  // onChange(value) é chamado com o pageId/valor escolhido, ou "" para "Todos".
+  function buildIconDropdown(filterDef, onChange) {
+    var wrap = document.createElement("div");
+    wrap.className = "filter-dropdown";
+
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "filter-trigger";
+
+    var triggerIcon = document.createElement("i");
+    triggerIcon.className = "ti ti-filter";
+    var triggerLabel = document.createElement("span");
+    triggerLabel.textContent = filterDef.label + ": Todos";
+    var chevron = document.createElement("i");
+    chevron.className = "ti ti-chevron-down";
+
+    trigger.appendChild(triggerIcon);
+    trigger.appendChild(triggerLabel);
+    trigger.appendChild(chevron);
+
+    var menu = document.createElement("div");
+    menu.className = "filter-menu";
+
+    function selectOption(opt) {
+      if (opt) {
+        triggerIcon.className = "ti " + opt.icon;
+        triggerIcon.style.color = opt.color || "";
+        triggerLabel.textContent = filterDef.label + ": " + opt.label;
+      } else {
+        triggerIcon.className = "ti ti-filter";
+        triggerIcon.style.color = "";
+        triggerLabel.textContent = filterDef.label + ": Todos";
+      }
+      menu.classList.remove("open");
+      onChange(opt ? opt.pageId : "");
+    }
+
+    var allRow = document.createElement("div");
+    allRow.className = "filter-option";
+    allRow.textContent = "Todos";
+    allRow.addEventListener("click", function () { selectOption(null); });
+    menu.appendChild(allRow);
+
+    (filterDef.options || []).forEach(function (opt) {
+      var row = document.createElement("div");
+      row.className = "filter-option";
+      var ic = document.createElement("i");
+      ic.className = "ti " + opt.icon;
+      ic.style.color = opt.color || "";
+      var lbl = document.createElement("span");
+      lbl.textContent = opt.label;
+      row.appendChild(ic);
+      row.appendChild(lbl);
+      row.addEventListener("click", function () { selectOption(opt); });
+      menu.appendChild(row);
+    });
+
+    trigger.addEventListener("click", function (e) {
+      e.stopPropagation();
+      menu.classList.toggle("open");
+    });
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    return wrap;
+  }
+
+  document.addEventListener("click", function () {
+    document.querySelectorAll(".filter-menu.open").forEach(function (m) { m.classList.remove("open"); });
+  });
+
   // ---------------- página de busca dinâmica (ex: "Hoje") ----------------
   // Em vez de "items" fixos no config.js, a página tem um "dynamicQuery" que
-  // busca no Worker (rota /query) as páginas do Notion que baterem com o
-  // filtro (ex: campo de data = hoje). Refaz a busca toda vez que a página é aberta.
+  // busca no Worker (rota /query) as páginas do Notion que baterem com os
+  // filtros (ex: campo de data = hoje, + filtros extras escolhidos na tela).
+  // Refaz a busca toda vez que a página é aberta ou um filtro muda.
   function renderDynamicQuery(page, pageId, container) {
-    var loading = document.createElement("p");
-    loading.className = "empty";
-    loading.textContent = "Buscando…";
-    container.appendChild(loading);
-
     var q = page.dynamicQuery;
-    var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(q.database_id) +
-      "&date_property=" + encodeURIComponent(q.date_property) +
-      (q.date ? "&date=" + encodeURIComponent(q.date) : "");
+    var filterState = {}; // property -> { type, condition, value }
 
-    fetch(url)
-      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-      .then(function (result) {
-        if (currentId !== pageId) return; // usuário já navegou pra outro lugar enquanto buscava
-        container.innerHTML = "";
-        if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
-        var pages = result.data.pages || [];
-        if (!pages.length) {
-          var empty = document.createElement("p");
-          empty.className = "empty";
-          empty.textContent = "Nada encontrado para hoje.";
-          container.appendChild(empty);
-          return;
-        }
-        pages.forEach(function (p, idx) {
-          container.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url }, idx));
-        });
-      })
-      .catch(function (err) {
-        if (currentId !== pageId) return;
-        container.innerHTML = "";
-        var errEl = document.createElement("p");
-        errEl.className = "empty";
-        errEl.textContent = "Erro ao buscar: " + err.message;
-        container.appendChild(errEl);
+    if (q.filters && q.filters.length) {
+      var filterBar = document.createElement("div");
+      filterBar.className = "filter-bar";
+      q.filters.forEach(function (f) {
+        filterBar.appendChild(buildIconDropdown(f, function (value) {
+          if (value) filterState[f.property] = { type: f.type, condition: f.condition, value: value };
+          else delete filterState[f.property];
+          runQuery();
+        }));
       });
+      container.appendChild(filterBar);
+    }
+
+    var resultsWrap = document.createElement("div");
+    container.appendChild(resultsWrap);
+
+    function runQuery() {
+      resultsWrap.innerHTML = "";
+      var loading = document.createElement("p");
+      loading.className = "empty";
+      loading.textContent = "Buscando…";
+      resultsWrap.appendChild(loading);
+
+      var filters = (q.baseFilters || []).map(function (f) { return f; });
+      Object.keys(filterState).forEach(function (prop) {
+        var f = filterState[prop];
+        filters.push({ property: prop, type: f.type, condition: f.condition, value: f.value });
+      });
+
+      var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(q.database_id) +
+        "&filters=" + encodeURIComponent(JSON.stringify(filters));
+
+      fetch(url)
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (currentId !== pageId) return; // usuário já navegou pra outro lugar enquanto buscava
+          resultsWrap.innerHTML = "";
+          if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
+          var pages = result.data.pages || [];
+          if (!pages.length) {
+            var empty = document.createElement("p");
+            empty.className = "empty";
+            empty.textContent = "Nada encontrado.";
+            resultsWrap.appendChild(empty);
+            return;
+          }
+          pages.forEach(function (p, idx) {
+            resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url }, idx));
+          });
+        })
+        .catch(function (err) {
+          if (currentId !== pageId) return;
+          resultsWrap.innerHTML = "";
+          var errEl = document.createElement("p");
+          errEl.className = "empty";
+          errEl.textContent = "Erro ao buscar: " + err.message;
+          resultsWrap.appendChild(errEl);
+        });
+    }
+
+    runQuery();
   }
 
   // ---------------- content grid/list ----------------
