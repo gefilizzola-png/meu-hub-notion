@@ -570,6 +570,14 @@ const APP_CONFIG = {
           title: "Cadastro Imobiliário",
           dense: true,
           items: [
+            { label: "Alterações Cadastrais (IN-Conj-001/2023)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-Conj-001-SMF-SMPIU-2023-CAD_IMOB-Procedimentos-de-altera-o-cadastral-1030481486dd8073bdc7e9640fe4fd7c?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
+              { label: "Arquivo", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/f5aa2273-e224-4827-a414-3a22f8cc8ff2/PMF_-_Legislao_-_SMF-SMPIU_-_IN_-_2023_-_001_-_Alteraes_Cadastrais.pdf?table=block&id=10304814-86dd-8092-8f17-c87943980649&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=KMxQgdrvBhUFvJU62JuV3O686Fec_A22tIXZQua-vu0&downloadName=PMF+-+Legisla%C3%A7%C3%A3o+-+SMF-SMPIU+-+IN+-+2023+-+001+-+Altera%C3%A7%C3%B5es+Cadastrais.pdf", icon: "file-type-pdf" }
+            ] },
+            { label: "Cadastramento (IN003/2023)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-03-SMF-2023-CAD_IMOB-Procedimentos-de-altera-o-1030481486dd800bad56f572bebc1865?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
+              { label: "Arquivo", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/4e313e85-89d2-4fec-97c3-44272e145d0d/PMF_-_Legislao_-_SMF_-_IN_-_2023_-_003_-_Alteraes_Cadastrais.pdf?table=block&id=10304814-86dd-80c6-96e8-fdc3efefacfc&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=KlSwOmXmUPyGrXsFDG3Y374oLrApzSYTj9oKMmHj8TI&downloadName=PMF+-+Legisla%C3%A7%C3%A3o+-+SMF+-+IN+-+2023+-+003+-+Altera%C3%A7%C3%B5es+Cadastrais.pdf", icon: "file-type-pdf" }
+            ] },
             { label: "Declaratório - Utilização (D25057/2023)", type: "law-links", links: [
               { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D25057-2023-CAD-IMOB-Utiliza-o-Institui-Autodeclara-o-dcd04ff64e954f6da5350d481ce90cd3?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
               { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2023/25057/decreto-n-25057-2023-dispoe-sobre-a-desburocratizacao-no-procedimento-de-alteracao-cadastral-para-utilizacao-do-imovel-institui-a-autodeclaracao-de-utilizacao-por-meio-de-processo/", icon: "leis-municipais" }

@@ -521,9 +521,10 @@ html, body {
   .main-header { padding: 16px 32px; }
   .kbd-num { display: flex; }
 
-  /* caixas "dense" (leis) precisam de mais espaço pra caber 2-3 colunas de
-     botões legíveis — ocupam a linha toda da grade, mas com largura máxima,
-     pra não esticar de ponta a ponta da tela. */
+  /* caixas "compact" e "dense" (as usadas em Legislações) ocupam a linha
+     toda da grade, com a MESMA largura máxima — assim todas ficam do mesmo
+     tamanho, em vez de uma caixa pequena do lado de caixas bem maiores. */
+  .group-section.compact,
   .group-section.dense {
     grid-column: 1 / -1;
     max-width: 720px;
