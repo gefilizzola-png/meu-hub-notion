@@ -425,7 +425,7 @@
     row.appendChild(label);
     var linksWrap = document.createElement("span");
     linksWrap.className = "law-links";
-    var imgIcons = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png" };
+    var imgIcons = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png" };
     (item.links || []).forEach(function (link) {
       var isImg = !!imgIcons[link.icon];
       var a = document.createElement("a");
