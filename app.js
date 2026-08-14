@@ -148,12 +148,16 @@
     visited[pageId] = true;
 
     var childItems = pageItems(page);
-    var hasChildren = childItems.length > 0;
+    var hasContent = childItems.length > 0;
+    var subfolders = childItems.filter(function (item) {
+      return item.type === "page" && cfg.pages[item.target];
+    });
+    var hasSubfolders = subfolders.length > 0;
     var isOpen = !!expandedPages[pageId];
 
     var row = document.createElement("div");
     row.className = "tree-row" + (pageId === currentId ? " active" : "");
-    row.appendChild(makeToggle(hasChildren, isOpen, function () {
+    row.appendChild(makeToggle(hasSubfolders, isOpen, function () {
       expandedPages[pageId] = !expandedPages[pageId];
       renderTree();
     }));
@@ -161,7 +165,7 @@
     if (page.dynamicQuery) {
       icon.className = "ti ti-calendar-event";
     } else {
-      icon.className = "ti ti-folder" + (hasChildren ? "" : " icon-empty");
+      icon.className = "ti ti-folder" + (hasContent ? "" : " icon-empty");
     }
     row.appendChild(icon);
     var label = document.createElement("span");
@@ -170,40 +174,10 @@
     row.addEventListener("click", function () { navigate(pageId); });
     li.appendChild(row);
 
-    if (hasChildren && isOpen) {
+    if (hasSubfolders && isOpen) {
       var ul = document.createElement("ul");
-      childItems.forEach(function (item) {
-        if (item.type === "page" && cfg.pages[item.target]) {
-          ul.appendChild(buildTreeNode(item.target, visited));
-        } else if (item.type === "notion") {
-          var leaf = document.createElement("li");
-          var leafRow = document.createElement("div");
-          leafRow.className = "tree-row";
-          leafRow.appendChild(makeToggle(false, false, function () {}));
-          var leafIcon = document.createElement("i");
-          leafIcon.className = "ti ti-external-link";
-          leafRow.appendChild(leafIcon);
-          var leafLabel = document.createElement("span");
-          leafLabel.textContent = item.label;
-          leafRow.appendChild(leafLabel);
-          leafRow.addEventListener("click", function () { window.open(item.url, "_blank", "noopener"); });
-          leaf.appendChild(leafRow);
-          ul.appendChild(leaf);
-        } else if (item.type === "notion-template") {
-          var tleaf = document.createElement("li");
-          var tleafRow = document.createElement("div");
-          tleafRow.className = "tree-row";
-          tleafRow.appendChild(makeToggle(false, false, function () {}));
-          var tleafIcon = document.createElement("i");
-          tleafIcon.className = "ti ti-file-plus";
-          tleafRow.appendChild(tleafIcon);
-          var tleafLabel = document.createElement("span");
-          tleafLabel.textContent = item.label;
-          tleafRow.appendChild(tleafLabel);
-          tleafRow.addEventListener("click", function () { triggerTemplateCreate(item, tleafRow, tleafLabel); });
-          tleaf.appendChild(tleafRow);
-          ul.appendChild(tleaf);
-        }
+      subfolders.forEach(function (item) {
+        ul.appendChild(buildTreeNode(item.target, visited));
       });
       li.appendChild(ul);
     }
