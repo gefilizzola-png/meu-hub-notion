@@ -320,9 +320,10 @@ html, body {
    media queries abaixo). */
 .group-section.dense .group-items {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
+.law-row { min-width: 0; }
 .law-row {
   display: flex;
   align-items: center;
@@ -479,7 +480,7 @@ html, body {
   .group-items .item-label { font-size: 12.5px; }
 
   /* zFold aberto / tablet — leis em 2 colunas */
-  .group-section.dense .group-items { grid-template-columns: repeat(2, 1fr); }
+  .group-section.dense .group-items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ---------- desktop: 1024px+ = sidebar + full toolbar ---------- */
@@ -496,15 +497,19 @@ html, body {
   .main-header { padding: 16px 32px; }
   .kbd-num { display: flex; }
 
-  /* monitor 21" / desktop — leis em 3 colunas */
-  .group-section.dense .group-items { grid-template-columns: repeat(3, 1fr); }
+  /* a partir daqui ".content-grouped" vira layout em colunas estreitas
+     (~320px cada, tipo "masonry") pras caixas normais — mas as caixas
+     "dense" (leis) precisam de mais espaço pra caber 3-4 colunas de botões
+     legíveis, então elas pulam fora desse fluxo e ocupam a largura toda. */
+  .group-section.dense { column-span: all; }
+  .group-section.dense .group-items { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (min-width: 1600px) {
   .content-plain { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .content-grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 
   /* monitor wide de casa — leis em 4 colunas */
-  .group-section.dense .group-items { grid-template-columns: repeat(4, 1fr); }
+  .group-section.dense .group-items { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 1023px) {
   .header-search { display: none; }

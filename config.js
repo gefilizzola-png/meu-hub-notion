@@ -550,6 +550,16 @@ const APP_CONFIG = {
           ]
         },
         {
+          title: "COSISP",
+          dense: true,
+          items: [
+            { label: "Instituição (LC790/2026)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-LC-790-2026-COSISP-Institui-o-37a0481486dd803f8129d6c89646ac35?source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2026/790/lei-complementar-n-790-2026-institui-no-mbito-do-municipio-de-florianopolis-a-contribuicao-para-o-custeio-dos-servicos-de-iluminacao-publica-e-de-sistemas-de-monitoramento-para-seguranca-e-preservacao-de-logradouros-publicos-cosisp-e-da-outras/", icon: "gavel" }
+            ] }
+          ]
+        },
+        {
           title: "IPTU",
           dense: true,
           items: [
