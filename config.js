@@ -562,6 +562,9 @@ const APP_CONFIG = {
             { label: "Incentivo à Cultura (L3659/1991)", type: "law-links", links: [
               { label: "Leis Municipais", url: "https://leis.org/municipais/sc/florianopolis/lei/lei-ordinaria/1991/3659/lei-ordinaria-n-3659-1991-dispoe-sobre-incentivo-fiscal-para-a-realizacao-de-projetos-culturais-no-mbito-do-municipio-de", icon: "leis-municipais" }
             ] },
+            { label: "Incentivo à Cultura (Port-11/2025)", type: "law-links", links: [
+              { label: "Diário Oficial", url: "https://edicao.dom.sc.gov.br/2025/12/1766096579_edicao_146_4083_assinada.pdf#page=43", icon: "diario-oficial" }
+            ] },
             { label: "Incentivo à Inovação (D17097/2017)", type: "law-links", links: [
               { label: "Leis Municipais", url: "https://leis.org/municipais/sc/florianopolis/lei/decreto/2017/17097/decreto-n-17097-2017-regulamenta-a-lei-complementar-n-432-de-2012-que-dispoe-sobre-sistemas-mecanismos-e-incentivos-a-atividade-tecnologica-e-inovativa-visando-o-desenvolvimento-sustentavel-do-municipio-de-florianopolis-e-estabelece-outras", icon: "leis-municipais" }
             ] },
@@ -665,7 +668,7 @@ const APP_CONFIG = {
               { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2025/28345/decreto-n-28345-2025-regulamenta-o-incentivo-fiscal-referente-ao-imposto-sobre-a-propriedade-predial-e-territorial-urbana-iptu-previsto-nos-incisos-i-e-ii-do-art-3-da-lei-complementar-n-686-de-2020-e-da-outras/", icon: "leis-municipais" }
             ] },
             { label: "Isenção-Suspensão da Exigibilidade (IN001/2026)", type: "law-links", links: [
-              { label: "Diário Oficial", url: "https://edicao.dom.sc.gov.br/2026/03/1774399817_edicao_146_4143_assinada.pdf#page=48", icon: "news" }
+              { label: "Diário Oficial", url: "https://edicao.dom.sc.gov.br/2026/03/1774399817_edicao_146_4143_assinada.pdf#page=48", icon: "diario-oficial" }
             ] },
             { label: "Isenções/RevVV (D12608/2014)", type: "law-links", links: [
               { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D12608-2014-IPTU-Regulamenta-isen-es-e-RevVV-2800481486dd80be89fdeae8c79c6e40?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
