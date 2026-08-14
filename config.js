@@ -526,6 +526,18 @@ const APP_CONFIG = {
         // Leis Municipais/Arquivo) lado a lado — pensado pra caber bem tanto
         // no celular dobrado quanto no monitor wide.
         {
+          title: "AFTM",
+          dense: true,
+          items: [
+            { label: "Altera Carreira (LC751/2023)", type: "law-links", links: [
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2023/751/lei-complementar-n-751-2023-altera-a-lei-complementar-n-483-de-2014-que-dispoe-sobre-a-organizacao-da-carreira-de-auditoria-da-fazenda-municipal-e-adota-outras", icon: "leis-municipais" }
+            ] },
+            { label: "Cria Carreira (LC483/2014)", type: "law-links", links: [
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2014/483/lei-complementar-n-483-2014-dispoe-sobre-a-organizacao-da-carreira-de-auditoria-da-fazenda-municipal-e-adota-outras/", icon: "leis-municipais" }
+            ] }
+          ]
+        },
+        {
           title: "Arrecadação",
           dense: true,
           items: [
@@ -574,6 +586,18 @@ const APP_CONFIG = {
             { label: "JART - Criação (D25297/2023)", type: "law-links", links: [
               { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D25297-2023-JART-Institui-a-JART-8b2f7d6f2c9a40adb74ee4c55b5d7529?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
               { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2023/25297/decreto-n-25297-2023-institui-e-disciplina-a-junta-de-analise-de-reclamacoes-de-taxa-de-coleta-de-residuos-solidos-jart-do-municipio-de/", icon: "leis-municipais" }
+            ] },
+            { label: "TAT - Criação (LC574/2016)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-LC574-2016-TAT-Institui-o-3203a2b4a4c14fafb0787a9b4e31041d?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2016/574/lei-complementar-n-574-2016-cria-o-tribunal-administrativo-tributario-do-municipio-de-florianopolis-institui-o-programa-de-racionalizacao-da-cobranca-da-divida-ativa-do-municipio-de-florianopolis-autoriza-o-municipio-de-florianopolis-a-participar-do-consorcio-de-informatica-na-gestao-publica-municipal-ciga-altera-os-arts-60-78-os-incisos-i-e-ii-do-art-92-e-os-arts-182-183-184-185-e-186-acrescenta-capitulo-v-a-da-cobranca-da-divida-ativa-e-altera-os-arts-187-188-189-190-240-244-473-e-479-da-lei-complementar-n-007-de-1997-acrescenta-os-arts-189-a-190-a-190-b-190-c-190-d-190-e-190-f-e-190-g-a-lei-complementar-n-007-de-1997-acrescenta-o-paragrafo-unico-ao-art-2-da-lei-n-7083-de-2006-revoga-o-2-do-art-78-os-1-e-2-do-art-123-os-arts-132-a-158-163/", icon: "leis-municipais" }
+            ] },
+            { label: "TAT - Regimento (D16498/2016)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D16498-2016-TAT-Regimento-871eb187f74a4004b9dcfd68509b0eea?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2016/16498/decreto-n-16498-2016-aprova-o-regimento-interno-do-tribunal-administrativo-tributario-do-municipio-de-florianopolis/", icon: "leis-municipais" }
+            ] },
+            { label: "TAT - Suspensão Exigibilidade (IN003/2025)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-003-SMF-2025-TAT-Suspens-o-da-Exigibilidade-1e60481486dd80728d15d01ae03837b8?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
+              { label: "Leis Municipais", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/988248f5-644e-4b69-80f8-2fd1d0f4026e/1745933353_instruo_normativa_n._003.smf.2025.pdf?table=block&id=1e604814-86dd-80b6-bf87-d1ba00e5bc22&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=hWp1VOi2TYtBI0RRCTH5NkdSJ5J8oBCNWhgWff6VoOI&downloadName=1745933353_instruo_normativa_n._003.smf.2025.pdf", icon: "leis-municipais" }
             ] }
           ]
         },
@@ -608,6 +632,10 @@ const APP_CONFIG = {
               { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-LC230-2006-IPTU-Crit-rios-de-Apura-o-e-IPCA-c1a9164632524765b6d9cf1b31650cb3?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
               { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2006/230/lei-complementar-n-230-2006-altera-dispositivo-da-lei-complementar-n-007-de-1997-relativamente-ao-imposto-sobre-a-propriedade-predial-e-territorial-urbana-iptu-e-da-outras/", icon: "leis-municipais" }
             ] },
+            { label: "Imunidade-Locado para Templos - Declaratório (D25272/2023)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D25272-2023-IPTU-Imunidade-Locado-para-templos-Procedimento-autodeclarat--33389a13d0e946f4b5767039006df733?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
+              { label: "Leis Municipais", url: "https://leis.org/municipais/sc/florianopolis/lei/decreto/2023/25272/decreto-n-25272-2023-estabelece-a-autodeclaracao-de-nao-incidencia-do-iptu-e-de-isencao-da-tcrs-para-imovel-locado-por-entidade-religiosa-visando-garantir-seguranca-juridica-e-agilidade-no", icon: "leis-municipais" }
+            ] },
             { label: "Isenção-Adoção - Declaratório (IN004/2025)", type: "law-links", links: [
               { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-004-SMF-GAB-2025-IPTU-Isen-Ado-o-Procedimento-declarat-rio-2500481486dd8035b24bfa29a188e211?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
               { label: "Arquivo", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/450e4ce9-0581-4624-8382-2f75af8b8c5a/IN-004-SMF-GAB-2025_-_IPTU-Isen-Adoo_-_Procedimento_Declaratrio.pdf?table=block&id=25004814-86dd-805d-8804-c2e791e0c4fb&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=yGJ7zMFE0BukTG1JVNkCqHJDBW3HG3SeEzmsCu0q2iQ&downloadName=IN-004-SMF-GAB-2025+-+IPTU-Isen-Ado%C3%A7%C3%A3o+-+Procedimento+Declarat%C3%B3rio.pdf", icon: "file-type-pdf" }
@@ -619,6 +647,9 @@ const APP_CONFIG = {
             { label: "Isenção-Economia Criativa - Declaratório (D28345/2025)", type: "law-links", links: [
               { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D28345-2025-IPTU-Isen-o-Economia-Criativa-23f0481486dd807aafeef1dacbd24913?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
               { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2025/28345/decreto-n-28345-2025-regulamenta-o-incentivo-fiscal-referente-ao-imposto-sobre-a-propriedade-predial-e-territorial-urbana-iptu-previsto-nos-incisos-i-e-ii-do-art-3-da-lei-complementar-n-686-de-2020-e-da-outras/", icon: "leis-municipais" }
+            ] },
+            { label: "Isenção-Suspensão da Exigibilidade (IN001/2026)", type: "law-links", links: [
+              { label: "Diário Oficial", url: "https://edicao.dom.sc.gov.br/2026/03/1774399817_edicao_146_4143_assinada.pdf#page=48", icon: "news" }
             ] },
             { label: "Isenções/RevVV (D12608/2014)", type: "law-links", links: [
               { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D12608-2014-IPTU-Regulamenta-isen-es-e-RevVV-2800481486dd80be89fdeae8c79c6e40?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" },
