@@ -728,7 +728,33 @@ const APP_CONFIG = {
             ] }
           ]
         }
-      ]
+      ],
+      // Busca ao vivo na base "Legislações" — só consulta o Notion (GET),
+      // nunca escreve nada. Dispara quando o usuário digita no campo "Nome"
+      // e/ou escolhe um "Tipo"; se os dois estiverem vazios, não busca.
+      search: {
+        title: "Pesquisar",
+        placeholder: "Buscar por nome...",
+        database_id: "39f8d5dfde534e378a108521c1978e21",
+        nameField: { property: "Nome", type: "title", condition: "contains" },
+        filters: [
+          {
+            property: "Tipo", type: "select", condition: "equals", label: "Tipo",
+            options: [
+              { label: "Decreto", pageId: "Decreto", icon: "ti-tag", color: "#ad1a72" },
+              { label: "Edital", pageId: "Edital", icon: "ti-tag", color: "#6940a5" },
+              { label: "Emenda Constitucional", pageId: "Emenda Constitucional", icon: "ti-tag", color: "#64473a" },
+              { label: "Instrução Normativa", pageId: "Instrução Normativa", icon: "ti-tag", color: "#0b6e99" },
+              { label: "Lei Complementar Municipal", pageId: "Lei Complementar Municipal", icon: "ti-tag", color: "#e03e3e" },
+              { label: "Lei Complementar Nacional", pageId: "Lei Complementar Nacional", icon: "ti-tag", color: "#787774" },
+              { label: "Lei Ordinária", pageId: "Lei Ordinária", icon: "ti-tag", color: "#dfab01" },
+              { label: "Lei Promulgada", pageId: "Lei Promulgada", icon: "ti-tag", color: "#9b9a97" },
+              { label: "Portaria", pageId: "Portaria", icon: "ti-tag", color: "#0f7b6c" },
+              { label: "Resolução", pageId: "Resolução", icon: "ti-tag", color: "#d9730d" }
+            ]
+          }
+        ]
+      }
     },
     pmf_cad_cargos: { title: "Cargos", items: [] },
     pmf_cad_contratos: { title: "Contratos", items: [] },

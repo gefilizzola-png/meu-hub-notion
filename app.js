@@ -454,6 +454,122 @@
     return row;
   }
 
+  // ---------------- caixa de busca "search" (texto livre + filtro opcional) ----------------
+  // Diferente do "dynamicQuery" (que busca sozinho assim que a página abre),
+  // o "search" só dispara uma consulta quando o usuário digita algo ou
+  // escolhe um filtro — nunca traz a base inteira de uma vez. Sempre GET
+  // /query no Worker — nunca escreve nada no Notion.
+  function renderSearchBlock(page, container) {
+    var s = page.search;
+    var state = { text: "", filterValue: "", filterProp: null };
+    var debounceTimer = null;
+    var requestSeq = 0;
+
+    var section = document.createElement("div");
+    section.className = "search-block";
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = s.title || "Pesquisar";
+    section.appendChild(title);
+
+    var row = document.createElement("div");
+    row.className = "search-block-row";
+
+    var inputWrap = document.createElement("div");
+    inputWrap.className = "search-field-wrap search-block-input-wrap";
+    var searchIcon = document.createElement("i");
+    searchIcon.className = "ti ti-search";
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "search-block-input";
+    input.placeholder = s.placeholder || "Buscar…";
+    inputWrap.appendChild(searchIcon);
+    inputWrap.appendChild(input);
+    row.appendChild(inputWrap);
+
+    if (s.filters && s.filters.length) {
+      var filterBar = document.createElement("div");
+      filterBar.className = "filter-bar search-block-filter-bar";
+      s.filters.forEach(function (f) {
+        filterBar.appendChild(buildIconDropdown(f, function (value) {
+          state.filterValue = value;
+          state.filterProp = f;
+          runQuery();
+        }));
+      });
+      row.appendChild(filterBar);
+    }
+
+    section.appendChild(row);
+
+    var resultsWrap = document.createElement("div");
+    resultsWrap.className = "content-plain search-block-results";
+    section.appendChild(resultsWrap);
+
+    input.addEventListener("input", function () {
+      state.text = input.value;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(runQuery, 350);
+    });
+
+    function runQuery() {
+      var filters = [];
+      if (state.text.trim()) {
+        filters.push({
+          property: s.nameField.property, type: s.nameField.type,
+          condition: s.nameField.condition, value: state.text.trim()
+        });
+      }
+      if (state.filterValue && state.filterProp) {
+        filters.push({
+          property: state.filterProp.property, type: state.filterProp.type,
+          condition: state.filterProp.condition, value: state.filterValue
+        });
+      }
+      var mySeq = ++requestSeq;
+      resultsWrap.innerHTML = "";
+      if (!filters.length) return; // nada digitado/selecionado ainda — não busca
+
+      var loading = document.createElement("p");
+      loading.className = "empty";
+      loading.textContent = "Buscando…";
+      resultsWrap.appendChild(loading);
+
+      var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(s.database_id) +
+        "&filters=" + encodeURIComponent(JSON.stringify(filters));
+
+      fetch(url)
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (mySeq !== requestSeq) return; // resposta desatualizada (usuário já digitou outra coisa)
+          resultsWrap.innerHTML = "";
+          if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
+          var pages = result.data.pages || [];
+          if (!pages.length) {
+            var empty = document.createElement("p");
+            empty.className = "empty";
+            empty.textContent = "Nada encontrado.";
+            resultsWrap.appendChild(empty);
+            return;
+          }
+          pages.forEach(function (p) {
+            // idx alto só pra não ativar os atalhos de teclado 1-9 da página
+            resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url }, 100));
+          });
+        })
+        .catch(function (err) {
+          if (mySeq !== requestSeq) return;
+          resultsWrap.innerHTML = "";
+          var errEl = document.createElement("p");
+          errEl.className = "empty";
+          errEl.textContent = "Erro ao buscar: " + err.message;
+          resultsWrap.appendChild(errEl);
+        });
+    }
+
+    container.appendChild(section);
+  }
+
   // ---------------- content grid/list ----------------
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
@@ -468,7 +584,7 @@
     var flatItems = page.items || [];
     var groups = (page.groups || []).filter(function (g) { return (g.items || []).length > 0; });
 
-    if (!flatItems.length && !groups.length) {
+    if (!flatItems.length && !groups.length && !page.search) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -521,6 +637,17 @@
         groupedWrap.appendChild(section);
       });
       container.appendChild(groupedWrap);
+    }
+
+    // "search" = caixa de busca ao vivo (opcional), sempre por último na
+    // página. Só consulta o Notion quando o usuário digita/filtra algo.
+    if (page.search) {
+      if (flatItems.length || groups.length) {
+        var divider2 = document.createElement("hr");
+        divider2.className = "content-divider";
+        container.appendChild(divider2);
+      }
+      renderSearchBlock(page, container);
     }
   }
 
