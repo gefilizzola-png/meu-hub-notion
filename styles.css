@@ -314,6 +314,53 @@ html, body {
   line-height: 1.25;
 }
 
+/* "dense: true" num grupo — uma linha por item (ex: cada lei), com o nome
+   e botõezinhos de ícone (um por link: Notion, Leis Municipais, Arquivo...)
+   lado a lado. 1 coluna no celular, mais colunas em telas maiores (ver
+   media queries abaixo). */
+.group-section.dense .group-items {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.law-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0.5px solid #ececea;
+  border-radius: 8px;
+  background: #fff;
+}
+.law-label {
+  font-size: 12.5px;
+  color: #262624;
+  line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.law-links {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.law-link-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 0.5px solid #dcdcd8;
+  background: #f7f7f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.law-link-btn:hover { background: #eaeae6; border-color: #b9b9b3; color: #262624; }
+.law-link-btn .ti { font-size: 15px; }
+
 /* ---------- filtros da página "Hoje" (dropdown customizado com ícone) ---------- */
 .filter-bar {
   display: flex;
@@ -430,6 +477,9 @@ html, body {
   .group-items .item-chevron { top: 9px; right: 9px; font-size: 13px; }
   .group-items .item-icon { font-size: 15px; }
   .group-items .item-label { font-size: 12.5px; }
+
+  /* zFold aberto / tablet — leis em 2 colunas */
+  .group-section.dense .group-items { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ---------- desktop: 1024px+ = sidebar + full toolbar ---------- */
@@ -445,10 +495,16 @@ html, body {
   .content-grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
   .main-header { padding: 16px 32px; }
   .kbd-num { display: flex; }
+
+  /* monitor 21" / desktop — leis em 3 colunas */
+  .group-section.dense .group-items { grid-template-columns: repeat(3, 1fr); }
 }
 @media (min-width: 1600px) {
   .content-plain { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .content-grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+
+  /* monitor wide de casa — leis em 4 colunas */
+  .group-section.dense .group-items { grid-template-columns: repeat(4, 1fr); }
 }
 @media (max-width: 1023px) {
   .header-search { display: none; }

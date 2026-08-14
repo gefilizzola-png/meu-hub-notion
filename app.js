@@ -10,6 +10,7 @@
     if (item.icon) return "ti-" + item.icon;
     if (item.type === "notion") return "ti-file-text";
     if (item.type === "notion-template") return "ti-file-plus";
+    if (item.type === "law-links") return "ti-scale";
     return "ti-folder";
   }
 
@@ -86,6 +87,7 @@
           target: item.target,
           databaseId: item.database_id,
           templateId: item.template_id,
+          links: item.links,
           icon: iconFor(item),
           ownerPageId: pageId,
           pathTitles: pathTitles.concat([page.title])
@@ -410,6 +412,35 @@
     runQuery();
   }
 
+  // "law-links": linha densa com o nome da lei + um botãozinho de ícone pra
+  // cada link (Notion, Leis Municipais, Arquivo...). Usado em grupos com
+  // "dense: true" — ex: as leis mais comuns em Legislações, organizadas por
+  // assunto. Cada botão abre seu link numa aba nova.
+  function buildLawRow(item) {
+    var row = document.createElement("div");
+    row.className = "law-row";
+    var label = document.createElement("span");
+    label.className = "law-label";
+    label.textContent = item.label;
+    row.appendChild(label);
+    var linksWrap = document.createElement("span");
+    linksWrap.className = "law-links";
+    (item.links || []).forEach(function (link) {
+      var a = document.createElement("a");
+      a.className = "law-link-btn";
+      a.href = link.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.title = link.label;
+      var i = document.createElement("i");
+      i.className = "ti ti-" + (link.icon || "external-link");
+      a.appendChild(i);
+      linksWrap.appendChild(a);
+    });
+    row.appendChild(linksWrap);
+    return row;
+  }
+
   // ---------------- content grid/list ----------------
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
@@ -458,7 +489,7 @@
       groupedWrap.className = "content-grouped";
       groups.forEach(function (group) {
         var section = document.createElement("div");
-        section.className = "group-section" + (group.compact ? " compact" : "");
+        section.className = "group-section" + (group.compact ? " compact" : "") + (group.dense ? " dense" : "");
         var title = document.createElement("h3");
         title.className = "group-title";
         title.textContent = group.title;
@@ -466,7 +497,11 @@
         var itemsWrap = document.createElement("div");
         itemsWrap.className = "group-items";
         (group.items || []).forEach(function (item) {
-          itemsWrap.appendChild(buildItemEl(item, globalIdx));
+          if (group.dense && item.type === "law-links") {
+            itemsWrap.appendChild(buildLawRow(item));
+          } else {
+            itemsWrap.appendChild(buildItemEl(item, globalIdx));
+          }
           globalIdx++;
         });
         section.appendChild(itemsWrap);
@@ -515,6 +550,9 @@
       var el = document.querySelector('.item[data-idx="' + i + '"]');
       var labelEl = el ? el.querySelector(".item-label") : null;
       if (el) triggerTemplateCreate(item, el, labelEl);
+    }
+    else if (item.type === "law-links") {
+      if (item.links && item.links[0]) window.open(item.links[0].url, "_blank", "noopener");
     }
     else navigate(item.target);
   }
@@ -584,6 +622,9 @@
       requestTemplatePage({ database_id: m.databaseId, template_id: m.templateId })
         .then(function (url) { window.open(url, "_blank", "noopener"); })
         .catch(function (err) { alert("Não foi possível criar a página: " + err.message); });
+    }
+    else if (m.type === "law-links") {
+      if (m.links && m.links[0]) window.open(m.links[0].url, "_blank", "noopener");
     }
     else navigate(m.target);
     searchInputs.forEach(function (inp) { inp.value = ""; inp.blur(); });

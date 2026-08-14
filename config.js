@@ -520,9 +520,112 @@ const APP_CONFIG = {
             { label: "Central - Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link" }
           ]
         },
+        // A partir daqui: divisórias por ASSUNTO (ordem alfabética), cada uma
+        // com as leis mais usadas daquele assunto. "dense: true" faz cada lei
+        // virar uma linha só, com o nome e os botõezinhos de link (Notion +
+        // Leis Municipais/Arquivo) lado a lado — pensado pra caber bem tanto
+        // no celular dobrado quanto no monitor wide.
         {
-          title: "Páginas Principais",
-          items: []
+          title: "Cadastro Imobiliário",
+          dense: true,
+          items: [
+            { label: "Declaratório - Utilização (D25057/2023)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D25057-2023-CAD-IMOB-Utiliza-o-Institui-Autodeclara-o-dcd04ff64e954f6da5350d481ce90cd3?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2023/25057/decreto-n-25057-2023-dispoe-sobre-a-desburocratizacao-no-procedimento-de-alteracao-cadastral-para-utilizacao-do-imovel-institui-a-autodeclaracao-de-utilizacao-por-meio-de-processo/", icon: "gavel" }
+            ] }
+          ]
+        },
+        {
+          title: "Colegiados",
+          dense: true,
+          items: [
+            { label: "COMAT - Estrutura (D23206/2021)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D23206-2021-COMAT-Estrutura-d10b9774b0f042ed937e0ea73a0fcd43?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2021/23206/decreto-n-23206-2021-dispoe-sobre-a-estrutura-da-comissao-municipal-de-assuntos-tributarios-comat-e-estabelece-a-rotina-administrativa-para-formalizacao-de-consultas-sobre-a-interpretacao-e-a-aplicacao-da-legislacao-tributaria/", icon: "gavel" }
+            ] },
+            { label: "JART - Criação (D25297/2023)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D25297-2023-JART-Institui-a-JART-8b2f7d6f2c9a40adb74ee4c55b5d7529?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2023/25297/decreto-n-25297-2023-institui-e-disciplina-a-junta-de-analise-de-reclamacoes-de-taxa-de-coleta-de-residuos-solidos-jart-do-municipio-de/", icon: "gavel" }
+            ] }
+          ]
+        },
+        {
+          title: "IPTU",
+          dense: true,
+          items: [
+            { label: "Apuração e IPCA (LC230/2006)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-LC230-2006-IPTU-Crit-rios-de-Apura-o-e-IPCA-c1a9164632524765b6d9cf1b31650cb3?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2006/230/lei-complementar-n-230-2006-altera-dispositivo-da-lei-complementar-n-007-de-1997-relativamente-ao-imposto-sobre-a-propriedade-predial-e-territorial-urbana-iptu-e-da-outras/", icon: "gavel" }
+            ] },
+            { label: "Isenção-Adoção - Declaratório (IN004/2025)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-004-SMF-GAB-2025-IPTU-Isen-Ado-o-Procedimento-declarat-rio-2500481486dd8035b24bfa29a188e211?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Arquivo", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/450e4ce9-0581-4624-8382-2f75af8b8c5a/IN-004-SMF-GAB-2025_-_IPTU-Isen-Adoo_-_Procedimento_Declaratrio.pdf?table=block&id=25004814-86dd-805d-8804-c2e791e0c4fb&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=yGJ7zMFE0BukTG1JVNkCqHJDBW3HG3SeEzmsCu0q2iQ&downloadName=IN-004-SMF-GAB-2025+-+IPTU-Isen-Ado%C3%A7%C3%A3o+-+Procedimento+Declarat%C3%B3rio.pdf", icon: "file-type-pdf" }
+            ] },
+            { label: "Isenção-Economia Criativa - Criação (LC686/2020)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-LC686-2020-IPTU-ISSQN-Isen-o-Economia-Criativa-Start-up-Inova-o-1260481486dd80269face91cd3169ae7?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2020/686/lei-complementar-n-686-2020-dispoe-sobre-a-concessao-de-incentivos-fiscais-no-municipio-de-florianopolis-as-empresas-enquadradas-como/", icon: "gavel" }
+            ] },
+            { label: "Isenção-Economia Criativa - Declaratório (D28345/2025)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D28345-2025-IPTU-Isen-o-Economia-Criativa-23f0481486dd807aafeef1dacbd24913?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2025/28345/decreto-n-28345-2025-regulamenta-o-incentivo-fiscal-referente-ao-imposto-sobre-a-propriedade-predial-e-territorial-urbana-iptu-previsto-nos-incisos-i-e-ii-do-art-3-da-lei-complementar-n-686-de-2020-e-da-outras/", icon: "gavel" }
+            ] },
+            { label: "Isenções/RevVV (D12608/2014)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D12608-2014-IPTU-Regulamenta-isen-es-e-RevVV-2800481486dd80be89fdeae8c79c6e40?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2014/12608/decreto-n-12608-2014-regulamenta-os-incisos-vi-x-xi-xii-e-xiii-do-artigo-225-1-2-3-e-4-e-do-artigo-244-da-lei-complementar-n-007-de-1997-com-as-alteracoes-da-lei-complementar-n-480-de-2013-que-dispoem-sobre-as-hipoteses-de-isencao-do-imposto-sobre-a-propriedade-predial-e-territorial-urbana-iptu-e-sobre-o-desconto-para-edificacoes-de-uso/", icon: "gavel" }
+            ] },
+            { label: "Nova PGV (LC480/2013)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-LC480-2013-IPTU-Nova-PGV-IPTU-Social-ITBI-Al-quotas-4c3b3f05b3d6460297de2f594c75de19?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2013/480/lei-complementar-n-480-2013-altera-o-anexo-i-do-art-233-e-da-nova-redacao-aos-arts-225-240-244-ao-inciso-iv-do-art-279-aos-arts-280-285-aos-incisos-iii-e-iv-do-art-288-aos-arts-479-e-507-e-inclui-o-4-ao-art-56-a-lei-complementar-n-007-de-06-de-janeiro-de-1997-e-da-outras/", icon: "gavel" }
+            ] },
+            { label: "Regulamento Cad e IPTU (D5156/2007)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D5156-2007-Regulamento-CAD_IMOB-e-IPTU-2800481486dd800e9c40ea068a1d1b81?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2007/5156/decreto-n-5156-2007-aprova-o-regulamento-do-cadastro-imobiliario-e-do-imposto-sobre-a-propriedade-predial-e-territorial/", icon: "gavel" }
+            ] }
+          ]
+        },
+        {
+          title: "ITBI",
+          dense: true,
+          items: [
+            { label: "Imunidade-Recíproca - Declaratório (IN002/2021)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-02-SMF-GAB-2021-ITBI-Imunidade-Rec-proca-3210481486dd807595fdee6d7bc3e878?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Arquivo", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/9c821c32-447f-4206-b3aa-1bea9642f2ed/1_-_ITBI-Imun-Recip_-_Instruo_Normativa_(ass_SMF).pdf?table=block&id=32104814-86dd-8080-8e47-e1a2fca883e5&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=qyhwgaW9Os6r_aoAL8lBjv3kBqtCfc0nZ9s1Xtfm39Y&downloadName=1+-+ITBI-Imun-Recip+-+Instru%C3%A7%C3%A3o+Normativa+%28ass+SMF%29.pdf", icon: "file-type-pdf" }
+            ] },
+            { label: "Imunidade-Templos - Declaratório (IN004/2021)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-04-SMF-GAB-2021-ITBI-Imunidade-Templos-3210481486dd8044a49eeabd16eba50d?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Arquivo", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/ae421c5e-3fa0-43c2-86ab-32fb041de1e7/ITBI-Imun-Templos_-_Instruo_Normativa_(assinada).pdf?table=block&id=32104814-86dd-8035-8536-cb183fec6b22&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=4IdxTDzXDwOMpOrnuguQbZERazP08yi-5HxI7fI2jqA&downloadName=ITBI-Imun-Templos+-+Instru%C3%A7%C3%A3o+Normativa+%28assinada%29.pdf", icon: "file-type-pdf" }
+            ] },
+            { label: "Informações DOI (D25228/2023)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D25228-2023-ITBI-Transfer-ncias-Registro-de-Im-veis-d28a45d7ec864f7abefe6e00ad6cc616?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2023/25228/decreto-n-25228-2023-regulamenta-o-art-291-da-lei-complementar-n-007-de-1997-que-dispoe-sobre-o-envio-ao-orgao-fazendario-municipal-da-relacao-de-imoveis-transmitidos-ou/", icon: "gavel" }
+            ] },
+            { label: "NI-IntCS e demais - Declaratório (IN001/2021)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-01-SMF-GAB-2021-ITBI-N-o-incid-ncia-Institui-Autodeclara-o-07d5a4954747480687c4bd291254d16c?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Arquivo", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/7d76197a-4101-4f59-a19a-03a6839aa213/1_-ITBI-NI-Instruo_Normativa(ass_SMF).pdf?table=block&id=282a0398-4020-4b15-bfe7-c723c8bb6af4&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=6FM38DaaIX5W1IRht7o5LEwsPJ6VeAgSrYbwEvaf7n8&downloadName=1+-+ITBI-NI+-+Instru%C3%A7%C3%A3o+Normativa+%28ass+SMF%29.pdf", icon: "file-type-pdf" }
+            ] },
+            { label: "NI-Marinha(Ocup)/Posse - Dispensa (IN002/2022)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-IN-002-SMF-GAB-2022-ITBI-N-o-incid-ncia-Marinha-ocup-e-posse-2f1e0e4eba6e47bf9380ec9e12e0595e?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Arquivo", url: "https://file.notion.com/f/f/cc15729f-b8f1-4e73-a2a1-42531da36a54/aeaa5b07-e69a-4c87-9c02-0eaf6a99ee19/ITBI-NI-Posse_e_Marinha_-Instruo_Normativa(DOEM).pdf?table=block&id=146ea615-bf81-41ee-af84-6f8ea12d1a76&spaceId=cc15729f-b8f1-4e73-a2a1-42531da36a54&expirationTimestamp=1786701600000&signature=tqghw9G8bL6yvrEQjXBBAh-bN8KkRGraUwvlOXbZk-M&downloadName=ITBI-NI-Posse+e+Marinha+-+Instru%C3%A7%C3%A3o+Normativa+%28DOEM%29.pdf", icon: "file-type-pdf" }
+            ] }
+          ]
+        },
+        {
+          title: "TCRS",
+          dense: true,
+          items: [
+            { label: "Apuração (LC132/2003)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-LC132-2003-TCRS-Crit-rios-de-Apura-o-b44d4375c3fe4b71b8ec9b35fb0beedd?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2003/132/lei-complementar-n-132-2003-altera-dispositivos-da-lei-complementar-n-007-97-relativamente-a-taxa-de-coleta-de-residuos-solidos-e-da-outras/", icon: "gavel" }
+            ] },
+            { label: "Limitador (LC136/2004)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-LC136-2004-TCRS-Limitador-de-Aumento-f4d4bd1e9efb4ebabc1f77694501377f?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/lei-complementar/2004/136/lei-complementar-n-136-2004-dispoe-sobre-o-lancamento-da-taxa-de-coleta-de-residuos-solidos-a-ser-paga-pelas-unidades-produtivas-ou-institucionais-e-da-outras/", icon: "gavel" }
+            ] },
+            { label: "Redutor (D2215/2004)", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Legisla-o-PMF-D2215-2004-TCRS-Redutor-ff979c7db99746e2b30fce3552a5b219?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notes" },
+              { label: "Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis/lei/decreto/2004/2215/decreto-n-2215-2004-determina-providencias-quanto-a-cobranca-da-taxa-de-que-trata-o-artigo-315-da-consolidacao-das-leis-tributarias-aprovada-pela-lei-complementar-n-007-97-com-alteracoes-no-exercicio-de/", icon: "gavel" }
+            ] }
+          ]
         }
       ]
     },
