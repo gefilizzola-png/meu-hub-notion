@@ -512,13 +512,20 @@ const APP_CONFIG = {
       groups: [
         {
           title: "Link direto",
-          // "compact: true" deixa os botões deste separador menores/lado a
-          // lado (2 colunas), pensado pra caixas com poucos links diretos.
-          compact: true,
+          // "dense: true" usa o mesmo padrão de linha (nome + botãozinho de
+          // ícone) das demais divisórias da página, pra manter tudo com a
+          // mesma cara.
+          dense: true,
           items: [
-            { label: "Central - Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link" },
-            { label: "Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
-            { label: "Leis Municipais", type: "notion", url: "https://leis.org/prefeitura/sc/florianopolis" }
+            { label: "Central - Legislações", type: "law-links", links: [
+              { label: "Abrir no Notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link", icon: "notion" }
+            ] },
+            { label: "Legislações", type: "law-links", links: [
+              { label: "Abrir no Notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" }
+            ] },
+            { label: "Leis Municipais", type: "law-links", links: [
+              { label: "Abrir no Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis", icon: "leis-municipais" }
+            ] }
           ]
         },
         // A partir daqui: divisórias por ASSUNTO (ordem alfabética), cada uma
