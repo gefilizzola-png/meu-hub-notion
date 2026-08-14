@@ -362,6 +362,23 @@ html, body {
 .law-link-btn:hover { background: #eaeae6; border-color: #b9b9b3; color: #262624; }
 .law-link-btn .ti { font-size: 15px; }
 
+/* botões com o logo real (Notion, Leis Municipais) — só o símbolo, sem
+   fundo/borda de botão. */
+.law-link-btn.icon-img {
+  background: none;
+  border: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.law-link-btn.icon-img:hover { background: none; border: none; opacity: 0.65; }
+.law-link-btn.icon-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 /* ---------- filtros da página "Hoje" (dropdown customizado com ícone) ---------- */
 .filter-bar {
   display: flex;
@@ -489,27 +506,31 @@ html, body {
   .mobile-only { display: none !important; }
   .content { padding: 18px 32px 40px; }
   .content-plain { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  /* grade de caixas (não mais "masonry" de colunas soltas — cada caixa vira
+     uma célula da grade, todas alinhadas em linhas normais). */
   .content-grouped {
-    column-width: 320px;
-    column-gap: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    align-items: start;
   }
+  .content-grouped .group-section { margin-bottom: 0; }
   .content-grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
   .main-header { padding: 16px 32px; }
   .kbd-num { display: flex; }
 
-  /* a partir daqui ".content-grouped" vira layout em colunas estreitas
-     (~320px cada, tipo "masonry") pras caixas normais — mas as caixas
-     "dense" (leis) precisam de mais espaço pra caber 3-4 colunas de botões
-     legíveis, então elas pulam fora desse fluxo e ocupam a largura toda. */
-  .group-section.dense { column-span: all; }
+  /* caixas "dense" (leis) precisam de mais espaço pra caber 2-3 colunas de
+     botões legíveis — ocupam a linha toda da grade, mas com largura máxima,
+     pra não esticar de ponta a ponta da tela. */
+  .group-section.dense {
+    grid-column: 1 / -1;
+    max-width: 720px;
+  }
   .group-section.dense .group-items { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (min-width: 1600px) {
   .content-plain { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .content-grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-
-  /* monitor wide de casa — leis em 4 colunas */
-  .group-section.dense .group-items { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 1023px) {
   .header-search { display: none; }

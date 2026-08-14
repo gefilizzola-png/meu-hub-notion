@@ -425,16 +425,25 @@
     row.appendChild(label);
     var linksWrap = document.createElement("span");
     linksWrap.className = "law-links";
+    var imgIcons = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png" };
     (item.links || []).forEach(function (link) {
+      var isImg = !!imgIcons[link.icon];
       var a = document.createElement("a");
-      a.className = "law-link-btn";
+      a.className = "law-link-btn" + (isImg ? " icon-img" : "");
       a.href = link.url;
       a.target = "_blank";
       a.rel = "noopener";
       a.title = link.label;
-      var i = document.createElement("i");
-      i.className = "ti ti-" + (link.icon || "external-link");
-      a.appendChild(i);
+      if (isImg) {
+        var img = document.createElement("img");
+        img.src = imgIcons[link.icon];
+        img.alt = link.label;
+        a.appendChild(img);
+      } else {
+        var i = document.createElement("i");
+        i.className = "ti ti-" + (link.icon || "external-link");
+        a.appendChild(i);
+      }
       linksWrap.appendChild(a);
     });
     row.appendChild(linksWrap);
