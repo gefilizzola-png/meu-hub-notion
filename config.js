@@ -516,8 +516,9 @@ const APP_CONFIG = {
           // lado (2 colunas), pensado pra caixas com poucos links diretos.
           compact: true,
           items: [
+            { label: "Central - Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link" },
             { label: "Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
-            { label: "Central - Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link" }
+            { label: "Leis Municipais", type: "notion", url: "https://leis.org/prefeitura/sc/florianopolis" }
           ]
         },
         // A partir daqui: divisórias por ASSUNTO (ordem alfabética), cada uma

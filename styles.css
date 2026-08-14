@@ -367,14 +367,16 @@ html, body {
 .law-link-btn.icon-img {
   background: none;
   border: none;
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   padding: 0;
 }
 .law-link-btn.icon-img:hover { background: none; border: none; opacity: 0.65; }
 .law-link-btn.icon-img img {
-  width: 100%;
-  height: 100%;
+  width: 18px;
+  height: 18px;
+  max-width: 18px;
+  max-height: 18px;
   object-fit: contain;
   display: block;
 }

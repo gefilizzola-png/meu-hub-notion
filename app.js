@@ -438,6 +438,10 @@
         var img = document.createElement("img");
         img.src = imgIcons[link.icon];
         img.alt = link.label;
+        // largura/altura fixas no próprio elemento — assim o ícone não fica
+        // gigante mesmo se o styles.css não tiver carregado a versão nova.
+        img.width = 18;
+        img.height = 18;
         a.appendChild(img);
       } else {
         var i = document.createElement("i");
