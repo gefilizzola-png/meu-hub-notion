@@ -458,7 +458,7 @@
       groupedWrap.className = "content-grouped";
       groups.forEach(function (group) {
         var section = document.createElement("div");
-        section.className = "group-section";
+        section.className = "group-section" + (group.compact ? " compact" : "");
         var title = document.createElement("h3");
         title.className = "group-title";
         title.textContent = group.title;

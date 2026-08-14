@@ -41,6 +41,10 @@
   prefixo "ti-"). Lista de ícones: https://tabler.io/icons
      { label: "Calendário", type: "page", target: "calendario", icon: "calendar" }
 
+  Cada grupo dentro de "groups" pode ter "compact: true", que deixa os
+  botões daquele separador menores e lado a lado (2 colunas) — bom pra
+  caixas com poucos links diretos (ex: "Link direto" em Legislações).
+
   "startPage" define qual página abre primeiro quando o app é aberto.
 
   REGRA ADOTADA: quando uma página interna tem um único botão (um único link
@@ -507,9 +511,13 @@ const APP_CONFIG = {
       title: "Legislações",
       groups: [
         {
-          title: "Completa",
+          title: "Link direto",
+          // "compact: true" deixa os botões deste separador menores/lado a
+          // lado (2 colunas), pensado pra caixas com poucos links diretos.
+          compact: true,
           items: [
-            { label: "Completa", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" }
+            { label: "Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
+            { label: "Central - Legislações", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link" }
           ]
         },
         {

@@ -287,6 +287,33 @@ html, body {
 .group-items { }
 .group-items .item:last-child { border-bottom: none; }
 
+/* "compact: true" num grupo — botões pequenos, lado a lado (2 colunas),
+   pra caber vários links diretos numa caixa só sem ocupar muito espaço. */
+.group-section.compact .group-items {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.group-section.compact .item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  border: 0.5px solid #ececea;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fff;
+}
+.group-section.compact .item:last-child { border-bottom: 0.5px solid #ececea; }
+.group-section.compact .item:hover { border-color: #d6d6d2; background: #fafaf9; }
+.group-section.compact .item-chevron { display: none; }
+.group-section.compact .item-icon { font-size: 14px; width: 16px; }
+.group-section.compact .item-label {
+  font-size: 12px;
+  white-space: normal;
+  line-height: 1.25;
+}
+
 /* ---------- filtros da página "Hoje" (dropdown customizado com ícone) ---------- */
 .filter-bar {
   display: flex;
