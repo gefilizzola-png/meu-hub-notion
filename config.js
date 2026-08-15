@@ -652,13 +652,102 @@ const APP_CONFIG = {
     pmf_col_jart_sessoes: { title: "Sessões", items: [] },
     pmf_col_jart_jeton: { title: "Jeton", items: [] },
 
+    // Sessões e Processos do TAT seguem o mesmo padrão de Reuniões/Tarefas:
+    // 📅 Data/Prazo e 🧲 Andamento vêm da Central (rollup via a relação
+    // "Central"), não são campos nativos de "TAT - Sessões"/"TAT -
+    // Processos" — por isso as exibições consultam a Central diretamente,
+    // filtrando por "📚 Página de Origem". Só leitura (GET /query).
     pmf_col_tat: {
       title: "TAT",
+      itemsCompact: true,
       items: [
-        { label: "Jeton", type: "notion", url: "https://app.notion.com/p/georges-filizzola/bfe39c0d1fb545058538915ab28239c4?v=2a89cc3846ea4364ac2384afa8dec3aa&source=copy_link" },
-        { label: "Processos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
-        { label: "Sessões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" }
-      ]
+        { label: "Jeton", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/bfe39c0d1fb545058538915ab28239c4?v=2a89cc3846ea4364ac2384afa8dec3aa&source=copy_link" },
+        { label: "Processos", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
+        { label: "Sessões", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" }
+      ],
+      dynamicQueries: [
+        {
+          title: "Sessões pendentes",
+          bg: "#fdf6e3",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - TAT - Sessões" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          // ordem por data crescente já traz os atrasados (data mais antiga)
+          // pro topo — "pendente" aqui inclui atrasado, sem exibição separada.
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [ANDAMENTO_FILTER],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+          ]
+        },
+        {
+          title: "Sessões concluídas",
+          bg: "#eaf7ed",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - TAT - Sessões" },
+            { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
+          ],
+          sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
+          filters: [ANDAMENTO_FILTER],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+          ]
+        },
+        {
+          title: "Processos pendentes",
+          bg: "#fdf6e3",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - TAT - Processos" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [ANDAMENTO_FILTER],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+          ]
+        },
+        {
+          title: "Processos concluídos",
+          bg: "#eaf7ed",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - TAT - Processos" },
+            { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
+          ],
+          sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
+          filters: [ANDAMENTO_FILTER],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+          ]
+        }
+      ],
+      // busca ao vivo por nome, sempre por último — cobre Sessões E
+      // Processos juntos (orPairs = "ou" entre as duas origens).
+      search: {
+        title: "Pesquisar",
+        placeholder: "Buscar por nome...",
+        database_id: "2310481486dd80079202fe1eaf5e14c4",
+        nameField: { property: "Nome", type: "title", condition: "contains" },
+        baseFilters: [
+          {
+            property: "📚 Página de Origem", type: "select",
+            orPairs: [
+              { condition: "equals", value: "PMF - TAT - Sessões" },
+              { condition: "equals", value: "PMF - TAT - Processos" }
+            ]
+          }
+        ]
+      }
     },
     pmf_col_tat_processos: { title: "Processos", items: [] },
     pmf_col_tat_sessoes: { title: "Sessões", items: [] },
