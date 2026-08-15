@@ -385,13 +385,21 @@ html, body {
    items-compact no topo de uma página (ex: "Abrir no Notion" / "Criar no
    Notion" em Reuniões/Tarefas/TAT). Bem mais leve que ".group-section"
    (usado em Favoritas etc.) — só uma borda fina e um respiro pequeno, sem
-   virar um cartão grande. */
+   virar um cartão grande.
+   Igual aos botões lá dentro, as caixinhas também são dinâmicas: cada uma
+   quer ~260px, mas cresce pra dividir o espaço quando cabe mais de uma
+   lado a lado (esticando pra mesma altura da vizinha nessa linha) — e cai
+   pra própria linha, ocupando a largura toda, quando não sobra espaço (aí
+   os botões de dentro quebram entre si, como já acontecia). */
 .items-compact-groups {
   display: flex;
-  flex-direction: column;
+  flex-flow: row wrap;
+  align-items: stretch;
   gap: 10px;
 }
 .items-compact-group {
+  flex: 1 1 260px;
+  min-width: 0;
   border: 0.5px solid #ececea;
   border-radius: 10px;
   background: #fbfbfa;
