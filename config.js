@@ -1205,9 +1205,8 @@ const APP_CONFIG = {
       // padrão), mas não custa deixar explícito.
       itemsCompact: true,
       // botões fixos no topo, divididos em subgrupos rotulados (caixinha
-      // fina ao redor de cada um) — aqui só tem "Abrir no Notion" porque
-      // Reuniões ainda não tem nenhum botão de criar página. Usam o logo
-      // real do Notion (icon: "notion"), igual ao padrão de Legislações.
+      // fina ao redor de cada um). Usam o logo real do Notion (icon:
+      // "notion"), igual ao padrão de Legislações.
       itemGroups: [
         {
           title: "Abrir no Notion",
@@ -1216,6 +1215,15 @@ const APP_CONFIG = {
             { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=202117a77040409083c02dde7da355f2&source=copy_link" },
             { label: "Concluídas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=728edc021780475eb43ddc8a1c97f955&source=copy_link" },
             { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" }
+          ]
+        },
+        {
+          title: "Criar no Notion",
+          // mesmos templates já usados em Criar Páginas → Entrada/Criar
+          // páginas/PMF/Controles → divisória "Reuniões" (POST /create).
+          items: [
+            { label: "PMF - Reuniões - 2026-09-XX - IPTU 2027 (XXX) - Criar", type: "notion-template", icon: "notion", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "ea112acd-f975-4d95-a892-83614e3a43e2" },
+            { label: "PMF - Reuniões - 2026-XX-XX - XXX - Criar", type: "notion-template", icon: "notion", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "7dc2c479-55f9-47a1-bdd4-b565638e5823" }
           ]
         }
       ],
