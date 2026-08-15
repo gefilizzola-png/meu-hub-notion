@@ -18,7 +18,7 @@
   // mesma lista usada nas linhas densas de Legislações (buildLawRow). Um
   // "item" normal usa isso quando item.icon bate com uma destas chaves (ex:
   // botões de link direto pro Notion usam icon: "notion").
-  var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png", florianopolis: "icon-florianopolis.png", planalto: "icon-planalto.png", tce: "icon-tce.png" };
+  var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png", florianopolis: "icon-florianopolis.png", planalto: "icon-planalto.png", tce: "icon-tce.png", pmf: "icon-pmf.png" };
 
   // ---------------- chamadas ao Worker, sempre com o login anexado ----------------
   // Todo fetch pro Worker passa por aqui — acrescenta "Authorization: Bearer

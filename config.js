@@ -365,7 +365,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-15 18:49",
+  appVersion: "2026-08-15 18:57",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -1194,10 +1194,7 @@ const APP_CONFIG = {
             // clicável) até você me passar o link certo.
             { label: "Central", type: "notion", icon: "notion", url: "" },
             { label: "Contratos", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
-            // PMF - Licitações: ainda sem ícone da PMF (não achei nenhum
-            // arquivo assim já usado no app) — usando um ícone genérico de
-            // prédio público por enquanto até você mandar a imagem certa.
-            { label: "PMF - Licitações", type: "notion", icon: "ti-building-bank", url: "https://wbc.pmf.sc.gov.br/portal/Mural.aspx" },
+            { label: "PMF - Licitações", type: "notion", icon: "pmf", url: "https://wbc.pmf.sc.gov.br/portal/Mural.aspx" },
             { label: "TCE - Farol", type: "notion", icon: "tce", url: "https://paineistransparencia.tce.sc.gov.br/extensions/AppLicitacoesExterno/index.html" }
           ]
         },
