@@ -819,8 +819,16 @@
       }))
         .then(function () {
           if (currentId !== ownerPageId) return; // já navegou pra outro lugar enquanto buscava
+          // insere no lugar EXATO do placeholder (container.insertBefore),
+          // em vez de container.appendChild — que jogaria a exibição pro
+          // fim de "container", depois de blocos que já tinham sido
+          // desenhados de forma síncrona nesse meio-tempo (ex: "groups"/
+          // "groupsSectionTitle" logo abaixo, em renderContent). Sem isso,
+          // a ordem na tela dependia de quão rápido o /schema respondia —
+          // 1ª visita (busca de verdade) caía embaixo, revisita na mesma
+          // sessão (opções já em cache no filtro) ficava no lugar certo.
+          renderDynamicQueryBlockReady(qDef, ownerPageId, container, placeholder);
           container.removeChild(placeholder);
-          renderDynamicQueryBlockReady(qDef, ownerPageId, container);
         })
         .catch(function (err) {
           if (currentId !== ownerPageId) return;
@@ -835,17 +843,25 @@
     renderDynamicQueryBlockReady(qDef, ownerPageId, container);
   }
 
-  function renderDynamicQueryBlockReady(qDef, ownerPageId, container) {
+  function renderDynamicQueryBlockReady(qDef, ownerPageId, container, beforeNode) {
     // envolve a exibição inteira (título + filtros + resultados) numa caixa
     // própria — permite colorir o fundo por exibição via "qDef.bg" (ex:
     // Pendentes/Atrasadas/Concluídas em Tarefas, cada uma com uma cor).
     var section = document.createElement("div");
     section.className = "query-block";
     if (qDef.bg) section.style.background = qDef.bg;
-    container.appendChild(section);
+    // "beforeNode" (opcional) — quando vem do caminho assíncrono acima,
+    // insere no lugar do placeholder em vez de ir pro fim de "container".
+    if (beforeNode) container.insertBefore(section, beforeNode);
+    else container.appendChild(section);
 
     var title = document.createElement("h3");
-    title.className = "group-title";
+    // exibição com "nameSearch" funciona como um bloco de seção inteiro na
+    // página (ex: "Todas as legislações"), não uma caixinha de exibição
+    // dentro de outra seção (ex: "Pendentes" em Tarefas) — usa o mesmo
+    // estilo maior de ".content-section-title" (ver "groupsSectionTitle"
+    // em renderContent) pra manter o mesmo padrão visual entre os dois.
+    title.className = qDef.nameSearch ? "content-section-title" : "group-title";
     title.textContent = qDef.title;
     section.appendChild(title);
 

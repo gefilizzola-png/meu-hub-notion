@@ -379,6 +379,11 @@ html, body {
   margin-bottom: 4px;
 }
 .query-block .group-title { margin-bottom: 8px; }
+/* título de exibição com "nameSearch" (ex: "Todas as legislações") usa
+   ".content-section-title" (mesmo padrão de "groupsSectionTitle") — zera a
+   margem de cima aqui dentro, já que o "padding" do .query-block já dá o
+   respiro sozinho. */
+.query-block .content-section-title { margin: 0 0 8px; }
 .query-block .filter-bar { margin-bottom: 12px; }
 
 /* "itemGroups" — pequenas caixinhas ao redor de subgrupos de botões

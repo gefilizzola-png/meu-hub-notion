@@ -889,10 +889,10 @@ const APP_CONFIG = {
     pmf_cad_legislacoes: {
       title: "Legislações",
       itemsCompact: true,
-      // "Abrir no Notion" — mesmo padrão das demais páginas (Reuniões/
-      // Tarefas/TAT/Betha): caixinha rotulada no topo. Ainda sem "Criar no
-      // Notion" ao lado — entra quando o link do template for enviado; por
-      // enquanto só tem 1 subgrupo (igual Reuniões antes de ganhar o dela).
+      // "Abrir no Notion" + "Criar no Notion" — mesmo padrão das demais
+      // páginas (Reuniões/Tarefas/TAT/Betha). "Criar no Notion" usa o
+      // template padrão de Legislações (POST /create — única exceção que
+      // escreve no Notion, igual nas outras páginas).
       itemGroups: [
         {
           title: "Abrir no Notion",
@@ -900,6 +900,12 @@ const APP_CONFIG = {
             { label: "Central - Legislações", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link" },
             { label: "Legislações", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
             { label: "Leis Municipais", type: "notion", icon: "leis-municipais", url: "https://leis.org/prefeitura/sc/florianopolis" }
+          ]
+        },
+        {
+          title: "Criar no Notion",
+          items: [
+            { label: "Legislação", type: "notion-template", icon: "notion", database_id: "39f8d5dfde534e378a108521c1978e21", template_id: "b5a81d35-7544-40db-9d01-4381d829d3dd" }
           ]
         }
       ],
