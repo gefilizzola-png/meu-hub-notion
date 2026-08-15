@@ -15,6 +15,15 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<!-- tela de login — escondida por padrão via CSS (#loginGate), auth.js
+     mostra/esconde na inicialização. Ver auth.js pra ativar de verdade. -->
+<div id="loginGate">
+  <img src="icon-192.png" alt="" width="56" height="56">
+  <h1>Meu hub</h1>
+  <p>Faça login com sua conta do Google pra continuar.</p>
+  <div id="g_id_signin_btn"></div>
+</div>
+
 <div id="shell">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header" id="sidebarTitle">Meu hub</div>
@@ -38,6 +47,10 @@
           <input class="header-search-input js-search-input" placeholder="Buscar" autocomplete="off">
         </div>
       </div>
+      <div class="auth-user" id="authUser">
+        <span id="authUserLabel"></span>
+        <button type="button" id="authSignOutBtn">Sair</button>
+      </div>
     </header>
     <main class="content" id="content"></main>
   </div>
@@ -45,6 +58,8 @@
 
 <div class="search-results" id="searchResults"></div>
 
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="auth.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>

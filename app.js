@@ -20,16 +20,32 @@
   // botões de link direto pro Notion usam icon: "notion").
   var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png" };
 
+  // ---------------- chamadas ao Worker, sempre com o login anexado ----------------
+  // Todo fetch pro Worker passa por aqui — acrescenta "Authorization: Bearer
+  // <token do Google>" (ver auth.js) em cima dos headers que já existirem.
+  // O Worker confere esse token antes de fazer qualquer coisa no Notion;
+  // sem ele (ou com ele expirado/errado), a resposta vem 401.
+  function authFetch(url, options) {
+    options = options || {};
+    var headers = {};
+    Object.keys(options.headers || {}).forEach(function (k) { headers[k] = options.headers[k]; });
+    var authHeader = (window.Auth && Auth.authHeader()) || {};
+    Object.keys(authHeader).forEach(function (k) { headers[k] = authHeader[k]; });
+    options.headers = headers;
+    return fetch(url, options);
+  }
+
   // ---------------- criação de página via template (Cloudflare Worker) ----------------
   // Chama o Worker configurado em cfg.templateWorkerUrl, que cria uma página nova no
   // Notion a partir de um template e devolve a URL da página criada.
   function requestTemplatePage(item) {
-    return fetch(cfg.templateWorkerUrl + "/create", {
+    return authFetch(cfg.templateWorkerUrl + "/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ database_id: item.database_id, template_id: item.template_id })
     }).then(function (res) {
       return res.json().then(function (data) {
+        if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
         if (!res.ok) throw new Error((data && data.error) || "Falha ao criar página");
         return data.url;
       });
@@ -547,11 +563,14 @@
       var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(q.database_id) +
         "&filters=" + encodeURIComponent(JSON.stringify(filters));
 
-      fetch(url)
-        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      authFetch(url)
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
         .then(function (result) {
           if (currentId !== pageId) return; // usuário já navegou pra outro lugar enquanto buscava
           resultsWrap.innerHTML = "";
+          // login expirado/inválido — volta pra tela de login em vez de
+          // mostrar "falha ao buscar" (que pareceria um erro de rede).
+          if (result.status === 401 && window.Auth) { Auth.signOut(); return; }
           if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
           var pages = result.data.pages || [];
           if (!pages.length) {
@@ -759,11 +778,14 @@
         url += "&extra=" + encodeURIComponent(JSON.stringify(extraProps));
       }
 
-      fetch(url)
-        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      authFetch(url)
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
         .then(function (result) {
           if (currentId !== ownerPageId) return; // usuário já navegou pra outro lugar enquanto buscava
           resultsWrap.innerHTML = "";
+          // login expirado/inválido — volta pra tela de login em vez de
+          // mostrar "falha ao buscar" (que pareceria um erro de rede).
+          if (result.status === 401 && window.Auth) { Auth.signOut(); return; }
           if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
           var pages = result.data.pages || [];
           if (!pages.length) {
@@ -918,11 +940,14 @@
       var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(s.database_id) +
         "&filters=" + encodeURIComponent(JSON.stringify(filters));
 
-      fetch(url)
-        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      authFetch(url)
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
         .then(function (result) {
           if (mySeq !== requestSeq) return; // resposta desatualizada (usuário já digitou outra coisa)
           resultsWrap.innerHTML = "";
+          // login expirado/inválido — volta pra tela de login em vez de
+          // mostrar "falha ao buscar" (que pareceria um erro de rede).
+          if (result.status === 401 && window.Auth) { Auth.signOut(); return; }
           if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
           var pages = result.data.pages || [];
           if (!pages.length) {
@@ -1217,12 +1242,25 @@
   });
 
   // ---------------- boot ----------------
-  var titleEl = document.getElementById("sidebarTitle");
-  if (titleEl) titleEl.textContent = cfg.appTitle;
+  // Só roda de verdade depois de confirmar login (Auth.init chama esta
+  // função quando já tem um token do Google válido — ver auth.js). Sem
+  // isso, o app nem monta a árvore/conteúdo até a pessoa logar.
+  function boot() {
+    var titleEl = document.getElementById("sidebarTitle");
+    if (titleEl) titleEl.textContent = cfg.appTitle;
 
-  buildIndex();
-  collectSearchInputs();
-  var initial = location.hash.replace("#", "") || cfg.startPage;
-  history.replaceState({ pageId: initial }, "", "#" + initial);
-  render(initial, false);
+    buildIndex();
+    collectSearchInputs();
+    var initial = location.hash.replace("#", "") || cfg.startPage;
+    history.replaceState({ pageId: initial }, "", "#" + initial);
+    render(initial, false);
+  }
+
+  if (window.Auth) {
+    Auth.init(boot);
+  } else {
+    // auth.js não carregou por algum motivo — não trava o app, só avisa.
+    console.warn("auth.js não encontrado; abrindo sem exigir login.");
+    boot();
+  }
 })();

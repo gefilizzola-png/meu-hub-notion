@@ -8,10 +8,58 @@ html, body {
   height: 100%;
 }
 
+/* começa escondido — auth.js decide se mostra a tela de login (#loginGate)
+   ou o app (#shell) assim que sabe se já tem um login válido. Evita um
+   flash do app inteiro antes da checagem rodar. */
 #shell {
-  display: flex;
+  display: none;
   min-height: 100vh;
 }
+
+/* ---------- tela de login (Sign In With Google) ---------- */
+#loginGate {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+}
+#loginGate img { border-radius: 14px; margin-bottom: 6px; }
+#loginGate h1 { font-size: 18px; font-weight: 600; margin: 0; }
+#loginGate p { font-size: 13px; color: #777; margin: 0 0 8px; max-width: 300px; }
+#g_id_signin_btn { min-height: 40px; }
+
+/* ---------- indicador de quem está logado (cabeçalho) ---------- */
+.auth-user {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: #999;
+  margin-left: 8px;
+}
+.auth-user #authUserLabel {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-user button {
+  border: none;
+  background: none;
+  color: #999;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  text-decoration: underline;
+  padding: 0;
+  flex-shrink: 0;
+}
+.auth-user button:hover { color: #666; }
 
 /* ---------- sidebar (desktop only) ---------- */
 .sidebar {
@@ -663,4 +711,7 @@ html, body {
 }
 @media (max-width: 1023px) {
   .header-search { display: none; }
+  /* cabeçalho mobile já é apertado (botão voltar + breadcrumb) — o
+     "logado como X · Sair" fica só no desktop. */
+  .auth-user { display: none !important; }
 }
