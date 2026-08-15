@@ -239,7 +239,30 @@
     label.className = "item-label";
     label.textContent = item.label;
     left.appendChild(icon);
-    left.appendChild(label);
+
+    // "item.sub" (opcional) — lista de badges pra mostrar numa linha abaixo
+    // do label (ex: data/hora da reunião, status de andamento colorido).
+    // Usado pelos resultados de "dynamicQuery"/"dynamicQueries" com
+    // "cardFields" configurado — nunca vem de "items" normais do config.js.
+    if (item.sub && item.sub.length) {
+      var textCol = document.createElement("span");
+      textCol.className = "item-text";
+      textCol.appendChild(label);
+      var subRow = document.createElement("span");
+      subRow.className = "item-sub";
+      item.sub.forEach(function (s) {
+        var badge = document.createElement("span");
+        badge.className = "item-sub-badge";
+        if (s.color) badge.style.color = s.color;
+        badge.textContent = s.text;
+        subRow.appendChild(badge);
+      });
+      textCol.appendChild(subRow);
+      left.appendChild(textCol);
+      el.classList.add("has-sub");
+    } else {
+      left.appendChild(label);
+    }
 
     if (item.type === "notion-template") {
       el.addEventListener("click", function () { triggerTemplateCreate(item, el, label); });
@@ -417,6 +440,63 @@
     runQuery();
   }
 
+  // ---------------- "cardFields": subtítulo (data/hora, status) nos cards de resultado ----------------
+  // Transforma o "extra" que o Worker devolve (valores crus de propriedades
+  // do Notion) em texto pronto pra exibir. Só leitura — nada disso escreve
+  // no Notion, é só formatação do que já veio na busca.
+
+  // formata um valor de campo "date" do Notion (extra) como "dd/mm hh:mm →
+  // hh:mm" — mostra hora só se o campo realmente tiver hora (não só data).
+  // Campo só com data (sem "T" na string) é tratado como UTC na formatação
+  // (em vez do fuso de São Paulo) — datas "soltas" do Notion não têm hora
+  // de verdade, então convertê-las pro fuso de SP às vezes "volta um dia"
+  // (ex: meia-noite UTC vira 21h do dia anterior em SP).
+  function formatDateRangeExtra(val) {
+    if (!val || !val.start) return null;
+    var startHasTime = val.start.indexOf("T") !== -1;
+    var fmtDateTZ = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+    var fmtTimeTZ = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    var fmtDateUTC = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit" });
+    var start = new Date(val.start);
+    var text = startHasTime ? fmtDateTZ.format(start) : fmtDateUTC.format(start);
+    if (startHasTime) text += " " + fmtTimeTZ.format(start);
+    if (val.end) {
+      var end = new Date(val.end);
+      var endHasTime = val.end.indexOf("T") !== -1;
+      if (endHasTime) text += " → " + fmtTimeTZ.format(end);
+    }
+    return text;
+  }
+
+  // acha, na lista mestre cfg.andamentoOptions, o status que bate com os
+  // ids devolvidos por um campo "relation" (extra) — pra pegar rótulo/cor.
+  function findAndamentoOption(ids) {
+    if (!ids || !ids.length) return null;
+    var list = cfg.andamentoOptions || [];
+    for (var i = 0; i < list.length; i++) {
+      if (ids.indexOf(list[i].pageId) !== -1) return list[i];
+    }
+    return null;
+  }
+
+  // monta a lista "sub" (badges) de um card a partir de qDef.cardFields +
+  // p.extra (devolvido pelo Worker quando a busca pede "extra=[...]").
+  function buildCardSub(cardFields, extra) {
+    var sub = [];
+    if (!cardFields || !extra) return sub;
+    cardFields.forEach(function (cf) {
+      var raw = extra[cf.property];
+      if (cf.type === "date") {
+        var text = formatDateRangeExtra(raw);
+        if (text) sub.push({ text: text });
+      } else if (cf.type === "relation" && cf.lookup === "andamento") {
+        var opt = findAndamentoOption(raw);
+        if (opt) sub.push({ text: opt.label, color: opt.color });
+      }
+    });
+    return sub;
+  }
+
   // ---------------- várias exibições fixas numa página (ex: Reuniões) ----------------
   // Diferente de "dynamicQuery" (uma busca só, com filtros escolhidos na
   // tela), "dynamicQueries" é uma LISTA de buscas prontas (baseFilters +
@@ -469,6 +549,10 @@
       if (qDef.sorts && qDef.sorts.length) {
         url += "&sorts=" + encodeURIComponent(JSON.stringify(qDef.sorts));
       }
+      if (qDef.cardFields && qDef.cardFields.length) {
+        var extraProps = qDef.cardFields.map(function (cf) { return cf.property; });
+        url += "&extra=" + encodeURIComponent(JSON.stringify(extraProps));
+      }
 
       fetch(url)
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
@@ -485,7 +569,8 @@
             return;
           }
           pages.forEach(function (p) {
-            resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url }, 100));
+            var sub = buildCardSub(qDef.cardFields, p.extra);
+            resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url, sub: sub }, 100));
           });
         })
         .catch(function (err) {

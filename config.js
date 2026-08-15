@@ -50,7 +50,13 @@
   "Reuniões", com "Próximas Reuniões"/"Últimas Reuniões"/"Andamento
   pendente"), cada uma com seu próprio title/database_id/baseFilters/sorts e,
   opcionalmente, seu próprio "filters" (mesmo formato do "dynamicQuery" acima
-  — vira um dropdown só daquela exibição).
+  — vira um dropdown só daquela exibição), e opcionalmente "cardFields":
+  uma lista de propriedades da base pra mostrar como subtítulo em cada card
+  de resultado (ex: data/hora, status). Cada entrada é
+  { property, type: "date"|"relation", lookup: "andamento" (opcional) } —
+  "date" formata como "dd/mm hh:mm → hh:mm"; "relation" com
+  lookup:"andamento" mostra o rótulo/cor de "andamentoOptions" (lista mestre
+  lá em cima). Sempre só leitura (Worker: /query?...&extra=[...]).
 
   Opcionalmente cada item pode ter um ícone (nome do Tabler Icons, sem o
   prefixo "ti-"). Lista de ícones: https://tabler.io/icons
@@ -75,6 +81,23 @@ const APP_CONFIG = {
   appTitle: "Meu hub",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
+
+  // Lista mestre dos status de "🧲 Andamento" (id da página no Notion +
+  // rótulo + cor) — usada pra colorir o selo de status que aparece no
+  // subtítulo de cada card de resultado (via "cardFields" com
+  // lookup:"andamento"). Os dropdowns de filtro (Hoje, Reuniões) têm sua
+  // própria lista de opções — se um status mudar de nome/cor no Notion,
+  // atualize aqui e nos dropdowns também.
+  andamentoOptions: [
+    { pageId: "9ff8db6d456d43f39e70e14786c1fe6d", label: "0 - Iniciar agora", color: "#4a90d9" },
+    { pageId: "2030481486dd80d386a1cf7522b3deb1", label: "1 - Em andamento", color: "#4a90d9" },
+    { pageId: "d18f7c0ac312422cbc14a3ae1bc82399", label: "2 - Iniciar assim que possível", color: "#4a90d9" },
+    { pageId: "08cb3ec723ef41b19e6c6472ee9d9a75", label: "3 - Aguardando terceiros", color: "#4a90d9" },
+    { pageId: "959d289339c440a492612c70ea8ed1c9", label: "4 - Iniciar quando possível", color: "#4a90d9" },
+    { pageId: "4ef9e6737cea4c53ae37efe966013214", label: "5 - Agendado", color: "#4a90d9" },
+    { pageId: "d228224dee1d43dabb72744097f10028", label: "6 - Concluído", color: "#2f9e44" },
+    { pageId: "2410481486dd80a3a8b0d819542a55c5", label: "9 - Cancelado", color: "#e03131" }
+  ],
 
   pages: {
     entrada: {
@@ -833,6 +856,13 @@ const APP_CONFIG = {
                 { label: "Este mês", pageId: "next_month", condition: "next_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
               ]
             }
+          ],
+          // campos extras mostrados como subtítulo em cada card de resultado
+          // (data/hora + status de andamento) — só leitura, vem junto da
+          // própria busca (Worker: /query?...&extra=[...])
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
           ]
         },
         {
@@ -856,6 +886,10 @@ const APP_CONFIG = {
                 { label: "Último mês", pageId: "past_month", condition: "past_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
               ]
             }
+          ],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
           ]
         },
         {
@@ -884,6 +918,10 @@ const APP_CONFIG = {
                 { label: "5 - Agendado", pageId: "4ef9e6737cea4c53ae37efe966013214", icon: "ti-refresh", color: "#4a90d9" }
               ]
             }
+          ],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
           ]
         }
       ]
