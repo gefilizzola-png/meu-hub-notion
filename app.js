@@ -569,11 +569,23 @@
     container.appendChild(title);
 
     var filterState = {}; // property -> { type, condition, value }
+    // "type: 'limit'" é diferente dos outros filtros — não é uma condição do
+    // Notion, é só quantos cards mostrar. Nunca entra em "filters" enviado
+    // ao Worker; corta o array de resultados no cliente, depois de buscar.
+    var displayLimit = null;
 
     if (qDef.filters && qDef.filters.length) {
       var filterBar = document.createElement("div");
       filterBar.className = "filter-bar";
       qDef.filters.forEach(function (f) {
+        if (f.type === "limit") {
+          filterBar.appendChild(buildIconDropdown(f, function (opt) {
+            displayLimit = opt ? parseInt(opt.pageId, 10) : null;
+            runQuery();
+          }));
+          if (f.default) displayLimit = parseInt(f.default, 10);
+          return;
+        }
         filterBar.appendChild(buildIconDropdown(f, function (opt) {
           if (opt) filterState[f.property] = { type: f.type, condition: opt.condition || f.condition, value: opt.value !== undefined ? opt.value : opt.pageId };
           else delete filterState[f.property];
@@ -631,6 +643,7 @@
             resultsWrap.appendChild(empty);
             return;
           }
+          if (displayLimit) pages = pages.slice(0, displayLimit);
           pages.forEach(function (p) {
             var sub = buildCardSub(qDef.cardFields, p.extra);
             resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url, sub: sub }, 100));

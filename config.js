@@ -164,6 +164,19 @@ var ORIGEM_FILTER = {
   ]
 };
 
+// "Exibir" — não é um filtro do Notion, é só quantos cards mostrar (corta
+// a lista no próprio app, depois de buscar). "type: 'limit'" avisa o app.js
+// pra NÃO mandar isso como filtro pro Worker. Começa em 10 ("default").
+var LIMIT_FILTER = {
+  property: "__limit__", type: "limit", label: "Exibir", default: "10",
+  options: [
+    { label: "5", pageId: "5", icon: "ti-list-numbers", color: "#4a90d9" },
+    { label: "10", pageId: "10", icon: "ti-list-numbers", color: "#4a90d9" },
+    { label: "20", pageId: "20", icon: "ti-list-numbers", color: "#4a90d9" },
+    { label: "50", pageId: "50", icon: "ti-list-numbers", color: "#4a90d9" }
+  ]
+};
+
 // cardFields comuns às 3 exibições de Tarefas — data, andamento, origem e
 // prioridade abaixo do nome de cada card.
 var TAREFAS_CARD_FIELDS = [
@@ -943,7 +956,8 @@ const APP_CONFIG = {
       items: [
         { label: "Geral", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link" },
         { label: "Ofícios", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a080ebe059b5481aa628966a9baacfc1&source=copy_link" },
-        { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" }
+        { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" },
+        { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd8071bdef000c3f7ae805&source=copy_link" }
       ],
       dynamicQueries: [
         {
@@ -955,7 +969,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         },
         {
@@ -968,7 +982,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         },
         {
@@ -979,7 +993,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
           ],
           sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         }
       ],
