@@ -32,6 +32,13 @@ var GOOGLE_CLIENT_ID = "900562279481-h40rkjbkk92958ivcrjfa27d24fj6t3h.apps.googl
 
 var Auth = (function () {
   var STORAGE_KEY = "meuhub_google_id_token";
+  // localStorage (não sessionStorage) — sessionStorage é isolado POR ABA,
+  // então uma aba nova (ex: Ctrl+clique num link) sempre nascia sem o token
+  // e pedia login de novo, mesmo já logado em outra aba do mesmo navegador.
+  // localStorage é compartilhado entre todas as abas da mesma origem, então
+  // uma aba nova já nasce logada se alguma outra aba (do mesmo navegador)
+  // tiver um login válido guardado. Continua expirando sozinho (isExpired)
+  // e sendo apagado no "Sair" — só passou a valer pra TODAS as abas juntas.
   var token = null;
   var pendingReady = null;
   var initedGis = false;
@@ -97,7 +104,7 @@ var Auth = (function () {
 
   function setToken(t) {
     token = t;
-    try { sessionStorage.setItem(STORAGE_KEY, t); } catch (e) { /* modo privado etc — segue sem persistir */ }
+    try { localStorage.setItem(STORAGE_KEY, t); } catch (e) { /* modo privado etc — segue sem persistir */ }
     hideGate();
     paintUserLabel();
     if (pendingReady) {
@@ -112,7 +119,7 @@ var Auth = (function () {
   }
 
   function signOut() {
-    try { sessionStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     token = null;
     paintUserLabel();
     if (window.google && google.accounts && google.accounts.id) {
@@ -155,11 +162,11 @@ var Auth = (function () {
     pendingReady = onReady;
 
     var saved = null;
-    try { saved = sessionStorage.getItem(STORAGE_KEY); } catch (e) {}
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
     if (saved && !isExpired(saved)) {
       token = saved;
     } else if (saved) {
-      try { sessionStorage.removeItem(STORAGE_KEY); } catch (e) {}
+      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     }
 
     ensureGisReady(function () {
@@ -188,6 +195,25 @@ var Auth = (function () {
 
     var signOutBtn = document.getElementById("authSignOutBtn");
     if (signOutBtn) signOutBtn.addEventListener("click", signOut);
+
+    // Sincroniza abas já abertas entre si: o evento "storage" dispara nas
+    // OUTRAS abas (nunca na que fez a mudança) sempre que o localStorage
+    // muda. Assim, se você clicar "Sair" numa aba, as outras já abertas
+    // também voltam pra tela de login sozinhas — sem esperar um F5.
+    window.addEventListener("storage", function (e) {
+      if (e.key !== STORAGE_KEY) return;
+      if (e.newValue && !isExpired(e.newValue)) {
+        token = e.newValue;
+        hideGate();
+        paintUserLabel();
+        if (pendingReady) { var cb = pendingReady; pendingReady = null; cb(); }
+      } else {
+        token = null;
+        paintUserLabel();
+        showGate();
+        renderSignInButton();
+      }
+    });
   }
 
   function authHeader() {
