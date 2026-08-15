@@ -338,11 +338,16 @@ var LEGISLACOES_ASSUNTOS_FILTER = {
 };
 
 // "📖 Contrato" — mesmo esquema do Assuntos acima (rollup multi_select da
-// relação "Central" em Contratos), usado só na página de Contratos.
+// relação "Central" em Contratos), usado só na página de Contratos. O NOME
+// do filtro ("property") é o apelido do rollup em Contratos ("📖 Contrato"),
+// mas o campo de origem na própria Central se chama "📖 Processo/Chamado"
+// (mesmo campo já usado em BETHA_CARD_FIELDS) — confirmado consultando o
+// schema da Central direto; "optionsFrom" tem que apontar pro nome de lá,
+// senão a lista de opções vem vazia (era o que estava quebrando o filtro).
 var CONTRATOS_CONTRATO_FILTER = {
   property: "📖 Contrato", type: "rollup", rollupTargetType: "multi_select", condition: "contains", label: "Contrato",
   searchable: true,
-  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📖 Contrato" }
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📖 Processo/Chamado" }
 };
 
 // "Situação" é campo nativo (select) da própria base Contratos — cores
@@ -368,7 +373,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-15 19:03",
+  appVersion: "2026-08-15 19:31",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
