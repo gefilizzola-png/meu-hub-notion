@@ -35,6 +35,29 @@
     return fetch(url, options);
   }
 
+  // ---------------- opções de filtro carregadas ao vivo do Notion ----------------
+  // Pra filtros de propriedades com uma lista de opções que cresce com o
+  // tempo (ex: "🏷️ Assuntos (PMF)", já com 90+ tags e crescendo) não dá pra
+  // fixar as opções no config.js — ficaria desatualizado. Em vez disso, um
+  // filtro pode ter "optionsFrom: { database_id, property }" (em vez de
+  // "options" fixo): busca a lista de opções (nome + cor) direto do Notion
+  // via GET /schema (só leitura) toda vez que a página abre.
+  function fetchSchemaOptions(databaseId, propertyName) {
+    var url = cfg.templateWorkerUrl + "/schema?database_id=" + encodeURIComponent(databaseId);
+    return authFetch(url)
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
+      .then(function (result) {
+        if (result.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+        if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar opções");
+        var props = (result.data && result.data.properties) || [];
+        var propDef = props.filter(function (p) { return p.name === propertyName; })[0];
+        var rawOptions = (propDef && propDef.options) || [];
+        return rawOptions
+          .map(function (o) { return { label: o.name, pageId: o.name, icon: "ti-tag", color: NOTION_COLOR[o.color] || "" }; })
+          .sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+      });
+  }
+
   // ---------------- criação de página via template (Cloudflare Worker) ----------------
   // Chama o Worker configurado em cfg.templateWorkerUrl, que cria uma página nova no
   // Notion a partir de um template e devolve a URL da página criada.
@@ -512,10 +535,17 @@
   // vira "orPairs" (o Worker combina com "or").
 
   // opts vazio/null → null (remove o filtro); senão → { type, pairs }
+  // "formulaType"/"rollupTargetType" (quando o filtro tiver) são copiados
+  // aqui pra sobreviverem até virar a entrada mandada pro Worker — sem isso,
+  // filtros de fórmula/rollup até funcionam por coincidência (o worker.js
+  // usa "string"/"multi_select" como padrão), mas quebrariam silenciosamente
+  // pra qualquer fórmula/rollup de outro tipo.
   function filterStateFromOpts(f, opts) {
     if (!opts || !opts.length) return null;
     return {
       type: f.type,
+      formulaType: f.formulaType,
+      rollupTargetType: f.rollupTargetType,
       pairs: opts.map(function (o) {
         return { condition: o.condition || f.condition, value: o.value !== undefined ? o.value : o.pageId };
       })
@@ -524,10 +554,16 @@
 
   // { type, pairs } de uma propriedade → entrada da lista "filters" do Worker
   function filterStateToFilterEntry(property, fs) {
+    var out = { property: property, type: fs.type };
+    if (fs.formulaType) out.formulaType = fs.formulaType;
+    if (fs.rollupTargetType) out.rollupTargetType = fs.rollupTargetType;
     if (fs.pairs.length === 1) {
-      return { property: property, type: fs.type, condition: fs.pairs[0].condition, value: fs.pairs[0].value };
+      out.condition = fs.pairs[0].condition;
+      out.value = fs.pairs[0].value;
+    } else {
+      out.orPairs = fs.pairs;
     }
-    return { property: property, type: fs.type, orPairs: fs.pairs };
+    return out;
   }
 
   // ---------------- página de busca dinâmica (ex: "Hoje") ----------------
@@ -680,21 +716,25 @@
       } else if (cf.type === "select") {
         if (raw && raw.name) sub.push({ text: raw.name, color: NOTION_COLOR[raw.color] || "" });
       } else if (cf.type === "rollup") {
-        // rollup de relação (ex: "Providência TAT - Sessões"/"...Processos")
-        // — vem como array (0..N itens relacionados). Cada item pode ser um
-        // valor "select" direto ({name,color}) OU, se o campo de origem for
-        // "multi_select" (caso de "Providência TAT - Sessões" — descoberto
-        // só agora, é diferente de "...Processos" que é "select"), vem como
-        // um array aninhado de {name,color}. Achata os dois formatos e
-        // mostra o primeiro valor não vazio, igual a um badge de "select".
+        // rollup de relação (ex: "Providência TAT - Sessões"/"...Processos",
+        // "🏷️ Assuntos (PMF)") — vem como array (0..N itens relacionados).
+        // Cada item pode ser um valor "select" direto ({name,color}) OU, se
+        // o campo de origem for "multi_select" (ex: "Providência TAT -
+        // Sessões", ou "🏷️ Assuntos (PMF)" — cada Legislação pode ter várias
+        // tags), vem como um array aninhado de {name,color}. Achata os dois
+        // formatos e junta TODOS os valores não vazios num badge só (igual
+        // ao badge de "multi_select" abaixo) — mostrar só o 1º bastava pra
+        // Providência TAT (sempre 1 valor na prática), mas não pra Assuntos.
         var ruArr = Array.isArray(raw) ? raw : (raw ? [raw] : []);
         var ruFlat = [];
         ruArr.forEach(function (v) {
           if (Array.isArray(v)) ruFlat = ruFlat.concat(v);
           else if (v) ruFlat.push(v);
         });
-        var ruVal = ruFlat[0];
-        if (ruVal && ruVal.name) sub.push({ text: ruVal.name, color: NOTION_COLOR[ruVal.color] || "" });
+        if (ruFlat.length) {
+          var ruNames = ruFlat.map(function (v) { return v.name; }).filter(Boolean).join(", ");
+          if (ruNames) sub.push({ text: ruNames, color: NOTION_COLOR[ruFlat[0].color] || "" });
+        }
       } else if (cf.type === "multi_select") {
         // ex: "📖 Processo/Chamado" em Betha — array de {name,color}; junta
         // todas as tags marcadas num badge só (na prática quase sempre só
@@ -717,7 +757,49 @@
   // Cada opção do dropdown pode sobrescrever a condition/value do filtro
   // (ex: "Esta semana" usa condition "next_week" com value {} em vez de uma
   // data específica). Sempre GET /query — nunca escreve nada no Notion.
+  //
+  // Se algum filtro tiver "optionsFrom" (em vez de "options" fixo — ver
+  // fetchSchemaOptions acima), busca a lista de opções ao vivo ANTES de
+  // montar a exibição (mostra "Carregando filtros…" nesse meio-tempo).
+  // Sem isso, filtrar teria que ficar preso a uma lista fixa no config.js —
+  // inviável pra campos com dezenas/centenas de opções que crescem com o
+  // tempo (ex: "🏷️ Assuntos (PMF)").
   function renderDynamicQueryBlock(qDef, ownerPageId, container) {
+    var pending = (qDef.filters || []).filter(function (f) { return f.optionsFrom && !f.options; });
+    if (pending.length) {
+      var placeholder = document.createElement("div");
+      placeholder.className = "query-block";
+      if (qDef.bg) placeholder.style.background = qDef.bg;
+      var loadingMsg = document.createElement("p");
+      loadingMsg.className = "empty";
+      loadingMsg.textContent = "Carregando filtros…";
+      placeholder.appendChild(loadingMsg);
+      container.appendChild(placeholder);
+
+      Promise.all(pending.map(function (f) {
+        return fetchSchemaOptions(f.optionsFrom.database_id, f.optionsFrom.property).then(function (opts) {
+          f.options = opts;
+        });
+      }))
+        .then(function () {
+          if (currentId !== ownerPageId) return; // já navegou pra outro lugar enquanto buscava
+          container.removeChild(placeholder);
+          renderDynamicQueryBlockReady(qDef, ownerPageId, container);
+        })
+        .catch(function (err) {
+          if (currentId !== ownerPageId) return;
+          placeholder.innerHTML = "";
+          var errEl = document.createElement("p");
+          errEl.className = "empty";
+          errEl.textContent = "Não foi possível carregar os filtros: " + err.message;
+          placeholder.appendChild(errEl);
+        });
+      return;
+    }
+    renderDynamicQueryBlockReady(qDef, ownerPageId, container);
+  }
+
+  function renderDynamicQueryBlockReady(qDef, ownerPageId, container) {
     // envolve a exibição inteira (título + filtros + resultados) numa caixa
     // própria — permite colorir o fundo por exibição via "qDef.bg" (ex:
     // Pendentes/Atrasadas/Concluídas em Tarefas, cada uma com uma cor).

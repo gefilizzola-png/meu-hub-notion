@@ -72,6 +72,20 @@
   "Última semana" em vez de "Todos"). Se quiser voltar a "Todos" ou trocar,
   é só clicar no filtro na tela — o "default" só define o estado inicial.
 
+  Um filtro normalmente tem "options" fixo no config.js. Mas quando o campo
+  do Notion tem uma lista de opções grande/crescente (ex: "🏷️ Assuntos
+  (PMF)", com 90+ tags) fixar no config.js ficaria desatualizado — nesse
+  caso use "optionsFrom: { database_id, property }" no lugar de "options":
+  o app.js busca a lista ao vivo (nome + cor de cada opção) via GET /schema
+  (só leitura) toda vez que a exibição abre, mostrando "Carregando
+  filtros…" nesse meio-tempo (só implementado em "dynamicQueries" por
+  enquanto, não em "dynamicQuery"/"search"). Propriedades do tipo "rollup"
+  (que não são campo nativo da base, tipo "🏷️ Assuntos (PMF)" em
+  Legislações — é rollup da relação "Central") usam type:"rollup" +
+  "rollupTargetType" (o tipo do campo de origem do rollup, ex:
+  "multi_select" — o worker.js monta o filtro aninhado
+  {rollup:{any:{multi_select:{...}}}} que o Notion exige).
+
   Uma página também pode ter "items" (botões fixos) JUNTO com "dynamicQuery"/
   "dynamicQueries"/"search" na mesma página — nesse caso "items" aparece no
   topo (ex: Reuniões: botões de link direto pras visualizações do Notion,
@@ -275,6 +289,39 @@ var BETHA_CATEGORIA_FILTER = {
     { label: "Relatórios", pageId: "Relatórios", icon: "ti-tag", color: "#9065b0" },
     { label: "Scripts", pageId: "Scripts", icon: "ti-tag", color: "#d9730d" }
   ]
+};
+
+// Tipo (campo "select" nativo de Legislações) — mesma lista usada tanto na
+// busca ao final da página "Legislações" quanto no filtro da visualização
+// "Todas as legislações" (reaproveitada pra não duplicar as 10 opções).
+var LEGISLACOES_TIPO_FILTER = {
+  property: "Tipo", type: "select", condition: "equals", label: "Tipo",
+  options: [
+    { label: "Decreto", pageId: "Decreto", icon: "ti-tag", color: "#ad1a72" },
+    { label: "Edital", pageId: "Edital", icon: "ti-tag", color: "#6940a5" },
+    { label: "Emenda Constitucional", pageId: "Emenda Constitucional", icon: "ti-tag", color: "#64473a" },
+    { label: "Instrução Normativa", pageId: "Instrução Normativa", icon: "ti-tag", color: "#0b6e99" },
+    { label: "Lei Complementar Municipal", pageId: "Lei Complementar Municipal", icon: "ti-tag", color: "#e03e3e" },
+    { label: "Lei Complementar Nacional", pageId: "Lei Complementar Nacional", icon: "ti-tag", color: "#787774" },
+    { label: "Lei Ordinária", pageId: "Lei Ordinária", icon: "ti-tag", color: "#dfab01" },
+    { label: "Lei Promulgada", pageId: "Lei Promulgada", icon: "ti-tag", color: "#9b9a97" },
+    { label: "Portaria", pageId: "Portaria", icon: "ti-tag", color: "#0f7b6c" },
+    { label: "Resolução", pageId: "Resolução", icon: "ti-tag", color: "#d9730d" }
+  ]
+};
+
+// Assuntos (🏷️ Assuntos (PMF)) — NÃO é campo nativo de Legislações, é um
+// rollup da relação "Central" (confirmado via consulta direta: em
+// Legislações o schema mostra type "rollup"/targetPropertyType
+// "multi_select"; na própria Central é o multi_select de verdade, com 90+
+// tags já cadastradas e crescendo). Uma lista dessas não dá pra fixar aqui
+// (ficaria desatualizada) — "optionsFrom" busca as opções ao vivo (GET
+// /schema, só leitura) na base Central toda vez que a página abre, em vez
+// de "options" fixo. "rollupTargetType" avisa o worker.js que o filtro
+// precisa do formato aninhado {rollup:{any:{multi_select:{...}}}}.
+var LEGISLACOES_ASSUNTOS_FILTER = {
+  property: "🏷️ Assuntos (PMF)", type: "rollup", rollupTargetType: "multi_select", condition: "contains", label: "Assuntos",
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "🏷️ Assuntos (PMF)" }
 };
 
 const APP_CONFIG = {
@@ -1057,6 +1104,28 @@ const APP_CONFIG = {
           ]
         }
       ],
+      // Visualização única com TODOS os itens da base "Legislações" (não só
+      // os atalhos das divisórias por assunto acima) — filtráveis por Tipo
+      // e por Assuntos (🏷️ Assuntos (PMF), multi-select). "baseFilters" usa
+      // "Nome" (título) "is_not_empty" só pra ter um filtro sempre-verdadeiro
+      // (o Worker exige pelo menos 1 filtro em "/query") — na prática mostra
+      // todas as legislações, sem excluir nada por padrão.
+      dynamicQueries: [
+        {
+          title: "Todas as legislações",
+          database_id: "39f8d5dfde534e378a108521c1978e21",
+          baseFilters: [
+            { property: "Nome", type: "title", condition: "is_not_empty", value: true }
+          ],
+          sorts: [{ property: "Nome", direction: "ascending" }],
+          filters: [LEGISLACOES_TIPO_FILTER, LEGISLACOES_ASSUNTOS_FILTER, LIMIT_FILTER],
+          cardFields: [
+            { property: "Tipo", type: "select" },
+            { property: "Situação", type: "select" },
+            { property: "🏷️ Assuntos (PMF)", type: "rollup" }
+          ]
+        }
+      ],
       // Busca ao vivo na base "Legislações" — só consulta o Notion (GET),
       // nunca escreve nada. Dispara quando o usuário digita no campo "Nome"
       // e/ou escolhe um "Tipo"; se os dois estiverem vazios, não busca.
@@ -1065,23 +1134,7 @@ const APP_CONFIG = {
         placeholder: "Buscar por nome...",
         database_id: "39f8d5dfde534e378a108521c1978e21",
         nameField: { property: "Nome", type: "title", condition: "contains" },
-        filters: [
-          {
-            property: "Tipo", type: "select", condition: "equals", label: "Tipo",
-            options: [
-              { label: "Decreto", pageId: "Decreto", icon: "ti-tag", color: "#ad1a72" },
-              { label: "Edital", pageId: "Edital", icon: "ti-tag", color: "#6940a5" },
-              { label: "Emenda Constitucional", pageId: "Emenda Constitucional", icon: "ti-tag", color: "#64473a" },
-              { label: "Instrução Normativa", pageId: "Instrução Normativa", icon: "ti-tag", color: "#0b6e99" },
-              { label: "Lei Complementar Municipal", pageId: "Lei Complementar Municipal", icon: "ti-tag", color: "#e03e3e" },
-              { label: "Lei Complementar Nacional", pageId: "Lei Complementar Nacional", icon: "ti-tag", color: "#787774" },
-              { label: "Lei Ordinária", pageId: "Lei Ordinária", icon: "ti-tag", color: "#dfab01" },
-              { label: "Lei Promulgada", pageId: "Lei Promulgada", icon: "ti-tag", color: "#9b9a97" },
-              { label: "Portaria", pageId: "Portaria", icon: "ti-tag", color: "#0f7b6c" },
-              { label: "Resolução", pageId: "Resolução", icon: "ti-tag", color: "#d9730d" }
-            ]
-          }
-        ]
+        filters: [LEGISLACOES_TIPO_FILTER]
       }
     },
     pmf_cad_cargos: { title: "Cargos", items: [] },

@@ -734,12 +734,11 @@ html, body {
   .kbd-num { display: flex; }
 
   /* caixas "compact" e "dense" (as usadas em Legislações) ocupam a linha
-     toda da grade, com a MESMA largura máxima — assim todas ficam do mesmo
-     tamanho, em vez de uma caixa pequena do lado de caixas bem maiores. */
+     toda da grade — usa toda a largura disponível da tela em vez de ficar
+     travada numa largura máxima fixa. */
   .group-section.compact,
   .group-section.dense {
     grid-column: 1 / -1;
-    max-width: 720px;
   }
   .group-section.dense .group-items { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
