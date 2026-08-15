@@ -337,6 +337,27 @@ var LEGISLACOES_ASSUNTOS_FILTER = {
   optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "🏷️ Assuntos (PMF)" }
 };
 
+// "📖 Contrato" — mesmo esquema do Assuntos acima (rollup multi_select da
+// relação "Central" em Contratos), usado só na página de Contratos.
+var CONTRATOS_CONTRATO_FILTER = {
+  property: "📖 Contrato", type: "rollup", rollupTargetType: "multi_select", condition: "contains", label: "Contrato",
+  searchable: true,
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📖 Contrato" }
+};
+
+// "Situação" é campo nativo (select) da própria base Contratos — cores
+// exatas conferidas no schema (Em licitação=pink, Expirado=brown,
+// Revogado=yellow, Vigente=green).
+var CONTRATOS_SITUACAO_FILTER = {
+  property: "Situação", type: "select", condition: "equals", label: "Situação",
+  options: [
+    { label: "Em licitação", pageId: "Em licitação", icon: "ti-tag", color: "#c14c8a" },
+    { label: "Expirado", pageId: "Expirado", icon: "ti-tag", color: "#8d6e5c" },
+    { label: "Revogado", pageId: "Revogado", icon: "ti-tag", color: "#cb9a08" },
+    { label: "Vigente", pageId: "Vigente", icon: "ti-tag", color: "#448361" }
+  ]
+};
+
 const APP_CONFIG = {
   appTitle: "Meu hub",
   // Carimbo de "quando esse config.js foi editado por último" (data + hora,
@@ -344,7 +365,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-15 16:55",
+  appVersion: "2026-08-15 18:49",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -628,7 +649,7 @@ const APP_CONFIG = {
           title: "Cadastros",
           items: [
             { label: "Cargos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/cecf185362f34b8ebe99daf07727096f?v=17a0481486dd8040befc000c07c349c7&source=copy_link" },
-            { label: "Contratos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
+            { label: "Contratos", type: "page", target: "pmf_cad_contratos" },
             { label: "Convênios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/75bbbc9672b14f2d8dcd51c34f81e3d7?v=47d42a4be70f409ea8bda443c6eae771&source=copy_link" },
             { label: "IPCA", type: "notion", url: "https://app.notion.com/p/georges-filizzola/IPCA-8df0849b030d402e9b1cf507043b3093?source=copy_link" },
             { label: "Jurisprudências", type: "notion", url: "https://app.notion.com/p/georges-filizzola/24f0481486dd8094a099ec12b3a81bcf?v=24f0481486dd8150aea3000cb171d145&source=copy_link" },
@@ -893,7 +914,7 @@ const APP_CONFIG = {
       title: "Cadastros",
       items: [
         { label: "Cargos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/cecf185362f34b8ebe99daf07727096f?v=17a0481486dd8040befc000c07c349c7&source=copy_link" },
-        { label: "Contratos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
+        { label: "Contratos", type: "page", target: "pmf_cad_contratos" },
         { label: "Convênios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/75bbbc9672b14f2d8dcd51c34f81e3d7?v=47d42a4be70f409ea8bda443c6eae771&source=copy_link" },
         { label: "Jurisprudências", type: "notion", url: "https://app.notion.com/p/georges-filizzola/24f0481486dd8094a099ec12b3a81bcf?v=24f0481486dd8150aea3000cb171d145&source=copy_link" },
         { label: "Legislações", type: "page", target: "pmf_cad_legislacoes" },
@@ -1161,7 +1182,92 @@ const APP_CONFIG = {
       ]
     },
     pmf_cad_cargos: { title: "Cargos", items: [] },
-    pmf_cad_contratos: { title: "Contratos", items: [] },
+    pmf_cad_contratos: {
+      title: "Contratos",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir",
+          items: [
+            // "Central" ainda sem link — botão fica visível mas apagado
+            // (ver app.js: item sem "url" vira um botão "reservado", não
+            // clicável) até você me passar o link certo.
+            { label: "Central", type: "notion", icon: "notion", url: "" },
+            { label: "Contratos", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
+            // PMF - Licitações: ainda sem ícone da PMF (não achei nenhum
+            // arquivo assim já usado no app) — usando um ícone genérico de
+            // prédio público por enquanto até você mandar a imagem certa.
+            { label: "PMF - Licitações", type: "notion", icon: "ti-building-bank", url: "https://wbc.pmf.sc.gov.br/portal/Mural.aspx" },
+            { label: "TCE - Farol", type: "notion", icon: "tce", url: "https://paineistransparencia.tce.sc.gov.br/extensions/AppLicitacoesExterno/index.html" }
+          ]
+        },
+        {
+          title: "Criar no Notion",
+          items: [
+            { label: "Contrato", type: "notion-template", icon: "notion", database_id: "23ccd4efa7074deab954fc3fc6625f8c", template_id: "f1b6abf0-cf92-4a38-8045-c865e4ed9860" }
+          ]
+        }
+      ],
+      dynamicQueries: [
+        {
+          title: "Todos os Contratos",
+          database_id: "23ccd4efa7074deab954fc3fc6625f8c",
+          baseFilters: [
+            { property: "Nome", type: "title", condition: "is_not_empty", value: true }
+          ],
+          sorts: [{ property: "Nome", direction: "ascending" }],
+          nameSearch: { property: "Nome", type: "title", condition: "contains", placeholder: "Buscar por nome..." },
+          filters: [LEGISLACOES_ASSUNTOS_FILTER, CONTRATOS_CONTRATO_FILTER, CONTRATOS_SITUACAO_FILTER, LIMIT_FILTER],
+          cardFields: [
+            { property: "📖 Contrato", type: "rollup" },
+            { property: "Prazo Inicial", property2: "Prazo Final", type: "date-range-pair" },
+            { property: "Situação", type: "select" }
+          ]
+        }
+      ],
+      groupsSectionTitle: "Contratos por assunto",
+      groups: [
+        {
+          title: "Sistemas",
+          dense: true,
+          items: [
+            { label: "Tributário - Betha - 356/SMF/2026", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2026-SMF-356-Sistemas-Gest-o-Tribut-ria-Betha-Sistemas-Ltda-2460481486dd8060bf29ef2e83b659bb?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] },
+            { label: "Tributário - Pública - 307/SMF/2023", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2023-SMF-307-Sistemas-Gest-o-Tribut-ria-SEFINNet-NFPS-e-P-blica-097fd089ab514161bba96260d879bdf7?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] },
+            { label: "Tributário - Betha - 87/SMF/2021", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2021-SMF-87-Sistemas-Gest-o-Tribut-ria-Betha-Sistemas-Ltda-e2c1779262c54a7b86ed80d597d49a79?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] },
+            { label: "SOLAR - Softplan - 361/SMA/2023", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2023-SMA-361-Sistemas-Gest-o-de-Processos-SOLAR-Softplan-1000481486dd80d9bdb2c6464e3403a8?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] },
+            { label: "Geoprocessamento - Engefoto - 1066/IPUF/2019", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2019-IPUF-1066-Sistemas-Geoprocessamento-Engefoto-759ee0104630499682e8c3922e5cccb3?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] },
+            { label: "G-SIMPLES - Ciga - 1/SMF/2023", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2023-SMF-1-Sistemas-G-Simples-CIGA-1230481486dd8084843de7657d51dea2?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] }
+          ]
+        },
+        {
+          title: "Serviços diversos",
+          dense: true,
+          items: [
+            { label: "Gráfica - Postmix - 794/SMFPO/2022", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2022-SMFPO-794-Impress-o-Gr-fica-Carn-s-IPTU-MEI-TLP-Postmix-4f3f78bd11604cf98e2234e4bb6622dc?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] },
+            { label: "Postagens - Correios - 980/SMA/2018", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2018-SMA-980-Servi-os-Postais-Correios-44247565ead542b7b693f034be9fc627?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] },
+            { label: "Instituições Financeiras - CEF - 750/SMF/2023", type: "law-links", links: [
+              { label: "Notion", url: "https://app.notion.com/p/georges-filizzola/Contratos-2023-SMF-750-Institui-o-Financeira-Arrecada-o-FP-CEF-a27ed235cb9e4361837aaf84ac99d4f5?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link", icon: "notion" }
+            ] }
+          ]
+        }
+      ]
+    },
     pmf_cad_convenios: { title: "Convênios", items: [] },
     pmf_cad_jurisprudencias: { title: "Jurisprudências", items: [] },
     pmf_cad_nomeacoes: { title: "Nomeações", items: [] },

@@ -18,7 +18,7 @@
   // mesma lista usada nas linhas densas de Legislações (buildLawRow). Um
   // "item" normal usa isso quando item.icon bate com uma destas chaves (ex:
   // botões de link direto pro Notion usam icon: "notion").
-  var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png", florianopolis: "icon-florianopolis.png", planalto: "icon-planalto.png" };
+  var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png", florianopolis: "icon-florianopolis.png", planalto: "icon-planalto.png", tce: "icon-tce.png" };
 
   // ---------------- chamadas ao Worker, sempre com o login anexado ----------------
   // Todo fetch pro Worker passa por aqui — acrescenta "Authorization: Bearer
@@ -296,9 +296,19 @@
     var el;
     if (item.type === "notion") {
       el = document.createElement("a");
-      el.href = item.url;
-      el.target = "_blank";
-      el.rel = "noopener";
+      if (item.url) {
+        el.href = item.url;
+        el.target = "_blank";
+        el.rel = "noopener";
+      } else {
+        // botão "reservado" pra um link que ainda vai ser preenchido (ex:
+        // "Central" em Contratos) — fica visível na tela, mas sem clicar
+        // em nada, em vez de virar um link quebrado ou recarregar a página.
+        el.href = "#";
+        el.classList.add("item-pending");
+        el.title = "Link ainda não definido";
+        el.addEventListener("click", function (e) { e.preventDefault(); });
+      }
     } else if (item.type === "notion-template") {
       el = document.createElement("button");
     } else {
@@ -720,6 +730,17 @@
     }
     return null;
   }
+  // formata só a data (dia/mês/ANO) de um valor { start, end } — usado pra
+  // juntar DUAS propriedades de data separadas num intervalo só (ex: "Prazo
+  // Inicial" + "Prazo Final" de um Contrato), diferente de
+  // formatDateRangeExtra (que mostra dia/mês só, pensado pra prazos dentro
+  // do mesmo ano — aqui o intervalo pode passar de um ano pro outro).
+  function formatDateOnlyExtra(val) {
+    if (!val || !val.start) return null;
+    var fmt = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" });
+    return fmt.format(new Date(val.start));
+  }
+
   function findAndamentoOption(ids) { return findRelationOption(ids, cfg.andamentoOptions); }
   function findPrioridadeOption(ids) { return findRelationOption(ids, cfg.prioridadeOptions); }
 
@@ -743,6 +764,16 @@
       if (cf.type === "date") {
         var text = formatDateRangeExtra(raw);
         if (text) sub.push({ text: text });
+      } else if (cf.type === "date-range-pair") {
+        // junta DUAS propriedades de data (cf.property = início, cf.property2
+        // = fim) num badge só "dd/mm/aaaa - dd/mm/aaaa" — ex: "Prazo Inicial"
+        // + "Prazo Final" de um Contrato (datas separadas no Notion, não um
+        // único campo de intervalo).
+        var d1 = formatDateOnlyExtra(raw);
+        var d2 = formatDateOnlyExtra(extra[cf.property2]);
+        if (d1 && d2) sub.push({ text: d1 + " - " + d2 });
+        else if (d1) sub.push({ text: d1 });
+        else if (d2) sub.push({ text: d2 });
       } else if (cf.type === "relation" && cf.lookup === "andamento") {
         var opt = findAndamentoOption(raw);
         if (opt) sub.push({ text: opt.label, color: opt.color });
@@ -969,7 +1000,11 @@
         url += "&sorts=" + encodeURIComponent(JSON.stringify(qDef.sorts));
       }
       if (qDef.cardFields && qDef.cardFields.length) {
-        var extraProps = qDef.cardFields.map(function (cf) { return cf.property; });
+        var extraProps = [];
+        qDef.cardFields.forEach(function (cf) {
+          extraProps.push(cf.property);
+          if (cf.property2) extraProps.push(cf.property2); // ex: "date-range-pair" (Prazo Inicial + Prazo Final)
+        });
         url += "&extra=" + encodeURIComponent(JSON.stringify(extraProps));
       }
 

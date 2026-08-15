@@ -272,6 +272,13 @@ html, body {
 }
 
 /* item — base = mobile list-with-dividers */
+/* botão "reservado" (ex: "Central" em Contratos, enquanto o link não é
+   definido) — mesmo espaço/posição do botão normal, só com aparência
+   apagada e cursor indicando que não tem pra onde ir ainda. */
+.item-pending {
+  opacity: 0.45;
+  cursor: default;
+}
 .item {
   display: flex;
   align-items: center;
