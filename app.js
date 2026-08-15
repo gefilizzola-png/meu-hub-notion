@@ -502,22 +502,33 @@
     return text;
   }
 
-  // acha, na lista mestre cfg.andamentoOptions, o status que bate com os
-  // ids devolvidos por um campo "relation" (extra) — pra pegar rótulo/cor.
-  // O Notion devolve o id de uma relação SEMPRE com hífen (formato UUID),
-  // mas os "pageId" salvos em config.js vieram sem hífen (copiados da URL
-  // do Notion, que omite os hífens) — por isso compara sem hífen dos dois
-  // lados, senão nunca bate.
+  // acha, numa lista mestre (cfg.andamentoOptions, cfg.prioridadeOptions...),
+  // o status que bate com os ids devolvidos por um campo "relation" (extra)
+  // — pra pegar rótulo/cor. O Notion devolve o id de uma relação SEMPRE com
+  // hífen (formato UUID), mas os "pageId" salvos em config.js vieram sem
+  // hífen (copiados da URL do Notion, que omite os hífens) — por isso
+  // compara sem hífen dos dois lados, senão nunca bate.
   function stripDashes(id) { return (id || "").replace(/-/g, ""); }
-  function findAndamentoOption(ids) {
-    if (!ids || !ids.length) return null;
+  function findRelationOption(ids, list) {
+    if (!ids || !ids.length || !list) return null;
     var normIds = ids.map(stripDashes);
-    var list = cfg.andamentoOptions || [];
     for (var i = 0; i < list.length; i++) {
       if (normIds.indexOf(stripDashes(list[i].pageId)) !== -1) return list[i];
     }
     return null;
   }
+  function findAndamentoOption(ids) { return findRelationOption(ids, cfg.andamentoOptions); }
+  function findPrioridadeOption(ids) { return findRelationOption(ids, cfg.prioridadeOptions); }
+
+  // cores nomeadas do Notion (campos "select"/"multi_select") traduzidas
+  // pra hex — usado só pra colorir o selo de um cardField tipo "select"
+  // (ex: "🧾 Origem"), já que a API do Notion devolve o NOME da cor, não o
+  // valor hex.
+  var NOTION_COLOR = {
+    default: "#8a8a86", gray: "#9b9a97", brown: "#8d6e5c", orange: "#d9730d",
+    yellow: "#cb9a08", green: "#448361", blue: "#3b82c4", purple: "#9065b0",
+    pink: "#c14c8a", red: "#d44c47"
+  };
 
   // monta a lista "sub" (badges) de um card a partir de qDef.cardFields +
   // p.extra (devolvido pelo Worker quando a busca pede "extra=[...]").
@@ -532,6 +543,11 @@
       } else if (cf.type === "relation" && cf.lookup === "andamento") {
         var opt = findAndamentoOption(raw);
         if (opt) sub.push({ text: opt.label, color: opt.color });
+      } else if (cf.type === "relation" && cf.lookup === "prioridade") {
+        var pOpt = findPrioridadeOption(raw);
+        if (pOpt) sub.push({ text: pOpt.label, color: pOpt.color });
+      } else if (cf.type === "select") {
+        if (raw && raw.name) sub.push({ text: raw.name, color: NOTION_COLOR[raw.color] || "" });
       }
     });
     return sub;

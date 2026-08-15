@@ -100,6 +100,79 @@
   nível anterior de volta para type: "page" apontando pra ela.
 */
 
+// Definições de filtro reaproveitadas em mais de uma exibição (ex: as 3
+// exibições de Tarefas usam os MESMOS 3 dropdowns) — evita repetir a mesma
+// lista de opções várias vezes. São só descrições (lidas, nunca alteradas
+// pelo app), então é seguro compartilhar o mesmo objeto entre exibições.
+
+// Andamento — os mesmos 8 status usados em Hoje/Reuniões.
+var ANDAMENTO_FILTER = {
+  property: "🧲 Andamento", type: "relation", condition: "contains", label: "Andamento",
+  options: [
+    { label: "0 - Iniciar agora", pageId: "9ff8db6d456d43f39e70e14786c1fe6d", icon: "ti-player-skip-forward-filled", color: "#4a90d9" },
+    { label: "1 - Em andamento", pageId: "2030481486dd80d386a1cf7522b3deb1", icon: "ti-player-play-filled", color: "#4a90d9" },
+    { label: "2 - Iniciar assim que possível", pageId: "d18f7c0ac312422cbc14a3ae1bc82399", icon: "ti-player-track-next-filled", color: "#4a90d9" },
+    { label: "3 - Aguardando terceiros", pageId: "08cb3ec723ef41b19e6c6472ee9d9a75", icon: "ti-player-pause-filled", color: "#4a90d9" },
+    { label: "4 - Iniciar quando possível", pageId: "959d289339c440a492612c70ea8ed1c9", icon: "ti-arrows-left-right", color: "#4a90d9" },
+    { label: "5 - Agendado", pageId: "4ef9e6737cea4c53ae37efe966013214", icon: "ti-refresh", color: "#4a90d9" },
+    { label: "6 - Concluído", pageId: "d228224dee1d43dabb72744097f10028", icon: "ti-circle-check-filled", color: "#2f9e44" },
+    { label: "9 - Cancelado", pageId: "2410481486dd80a3a8b0d819542a55c5", icon: "ti-circle-x-filled", color: "#e03131" }
+  ]
+};
+
+// Prioridade — relação com a base "Prioridade" (6 níveis, 1 = mais urgente).
+var PRIORIDADE_FILTER = {
+  property: " 🚩 Prioridade", type: "relation", condition: "contains", label: "Prioridade",
+  options: [
+    { label: "1 - Imediato", pageId: "2460481486dd80b19d7edb3a9eccba08", icon: "ti-flame", color: "#e03131" },
+    { label: "2 - Urgente", pageId: "2330481486dd801981efc913350a8034", icon: "ti-alert-triangle", color: "#e8590c" },
+    { label: "3 - Alta", pageId: "2330481486dd807e9f21c4ed2c3c8e88", icon: "ti-arrow-up", color: "#f08c00" },
+    { label: "4 - Média", pageId: "2330481486dd80ef94f9dae36b42b39f", icon: "ti-minus", color: "#4a90d9" },
+    { label: "5 - Baixa", pageId: "2330481486dd80029cb6e049f84b8198", icon: "ti-arrow-down", color: "#868e96" },
+    { label: "6 - Sem prioridade", pageId: "2330481486dd80d2bc15f5017684326f", icon: "ti-circle-dashed", color: "#c4c4c0" }
+  ]
+};
+
+// Origem — campo "select" (não relação): o "pageId" de cada opção é o
+// próprio texto da opção no Notion (é o valor usado no filtro "equals").
+var ORIGEM_FILTER = {
+  property: "🧾 Origem", type: "select", condition: "equals", label: "Origem",
+  options: [
+    { label: "ABRASF", pageId: "ABRASF", icon: "ti-tag", color: "#3b82c4" },
+    { label: "AFIFI", pageId: "AFIFI", icon: "ti-tag", color: "#8d6e5c" },
+    { label: "Aniversários", pageId: "Aniversários", icon: "ti-tag", color: "#d44c47" },
+    { label: "Atendimentos", pageId: "Atendimentos", icon: "ti-tag", color: "#c14c8a" },
+    { label: "Auditorias", pageId: "Auditorias", icon: "ti-tag", color: "#cb9a08" },
+    { label: "Betha", pageId: "Betha", icon: "ti-tag", color: "#448361" },
+    { label: "Consultas", pageId: "Consultas", icon: "ti-tag", color: "#cb9a08" },
+    { label: "Contratos e Convênios", pageId: "Contratos e Convênios", icon: "ti-tag", color: "#d44c47" },
+    { label: "Fiscalização", pageId: "Fiscalização", icon: "ti-tag", color: "#d9730d" },
+    { label: "Funcional", pageId: "Funcional", icon: "ti-tag", color: "#cb9a08" },
+    { label: "JART", pageId: "JART", icon: "ti-tag", color: "#d44c47" },
+    { label: "Jurisprudências", pageId: "Jurisprudências", icon: "ti-tag", color: "#d9730d" },
+    { label: "Lançamentos", pageId: "Lançamentos", icon: "ti-tag", color: "#8d6e5c" },
+    { label: "Legislação", pageId: "Legislação", icon: "ti-tag", color: "#cb9a08" },
+    { label: "Letícia", pageId: "Letícia", icon: "ti-tag", color: "#d44c47" },
+    { label: "Ofícios", pageId: "Ofícios", icon: "ti-tag", color: "#9065b0" },
+    { label: "Pessoal", pageId: "Pessoal", icon: "ti-tag", color: "#8a8a86" },
+    { label: "Processos", pageId: "Processos", icon: "ti-tag", color: "#3b82c4" },
+    { label: "Reuniões", pageId: "Reuniões", icon: "ti-tag", color: "#448361" },
+    { label: "Sistemas", pageId: "Sistemas", icon: "ti-tag", color: "#c14c8a" },
+    { label: "TAT", pageId: "TAT", icon: "ti-tag", color: "#3b82c4" },
+    { label: "Vitor", pageId: "Vitor", icon: "ti-tag", color: "#9b9a97" },
+    { label: "Saúde", pageId: "Saúde", icon: "ti-tag", color: "#8a8a86" }
+  ]
+};
+
+// cardFields comuns às 3 exibições de Tarefas — data, andamento, origem e
+// prioridade abaixo do nome de cada card.
+var TAREFAS_CARD_FIELDS = [
+  { property: "📅 Data/Prazo", type: "date" },
+  { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+  { property: "🧾 Origem", type: "select" },
+  { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" }
+];
+
 const APP_CONFIG = {
   appTitle: "Meu hub",
   startPage: "entrada",
@@ -120,6 +193,17 @@ const APP_CONFIG = {
     { pageId: "4ef9e6737cea4c53ae37efe966013214", label: "5 - Agendado", color: "#4a90d9" },
     { pageId: "d228224dee1d43dabb72744097f10028", label: "6 - Concluído", color: "#2f9e44" },
     { pageId: "2410481486dd80a3a8b0d819542a55c5", label: "9 - Cancelado", color: "#e03131" }
+  ],
+
+  // Lista mestre dos 6 níveis de "🚩 Prioridade" — mesmo papel de
+  // "andamentoOptions" acima, mas pro selo de prioridade nos cards.
+  prioridadeOptions: [
+    { pageId: "2460481486dd80b19d7edb3a9eccba08", label: "1 - Imediato", color: "#e03131" },
+    { pageId: "2330481486dd801981efc913350a8034", label: "2 - Urgente", color: "#e8590c" },
+    { pageId: "2330481486dd807e9f21c4ed2c3c8e88", label: "3 - Alta", color: "#f08c00" },
+    { pageId: "2330481486dd80ef94f9dae36b42b39f", label: "4 - Média", color: "#4a90d9" },
+    { pageId: "2330481486dd80029cb6e049f84b8198", label: "5 - Baixa", color: "#868e96" },
+    { pageId: "2330481486dd80d2bc15f5017684326f", label: "6 - Sem prioridade", color: "#c4c4c0" }
   ],
 
   pages: {
@@ -393,7 +477,7 @@ const APP_CONFIG = {
           items: [
             { label: "Betha – Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7e1194013472498f884e7b4e759c56bf?v=152de528d7aa40168640b394d3a8458e&source=copy_link" },
             { label: "PMF - Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
-            { label: "PMF - Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" }
+            { label: "PMF - Tarefas", type: "page", target: "pmf_ctrl_tarefas" }
           ]
         },
         {
@@ -828,7 +912,7 @@ const APP_CONFIG = {
       items: [
         { label: "Betha", type: "page", target: "pmf_ctrl_betha" },
         { label: "Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
-        { label: "Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" },
+        { label: "Tarefas", type: "page", target: "pmf_ctrl_tarefas" },
         { label: "Time Sheet", type: "notion", url: "https://app.notion.com/p/georges-filizzola/95226c82b4aa45c0bc428a3c570ce28d?v=780f9595e978455abf33cce0c934ed8d&source=copy_link" }
       ]
     },
@@ -845,7 +929,72 @@ const APP_CONFIG = {
     pmf_ctrl_betha_scripts: { title: "Scripts", items: [] },
     pmf_ctrl_betha_tabelas: { title: "Tabelas", items: [] },
 
-    pmf_ctrl_tarefas: { title: "Tarefas", items: [] },
+    // "PMF - Tarefas" segue o mesmo padrão de Reuniões: 📅 Data/Prazo,
+    // 🧲 Andamento, 🧾 Origem e 🚩 Prioridade são todos ROLLUPS (vêm da
+    // Central via a relação "Central"), não campos nativos da base
+    // "PMF - Tarefas" — por isso as exibições consultam a Central
+    // diretamente, filtrando por "📚 Página de Origem" = "PMF - Tarefas".
+    // Só leitura (GET /query) — nunca escreve nada no Notion.
+    pmf_ctrl_tarefas: {
+      title: "Tarefas",
+      itemsCompact: true,
+      // botões fixos no topo — links diretos pras visualizações já prontas
+      // no Notion (mesma base "PMF - Tarefas").
+      items: [
+        { label: "Geral", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link" },
+        { label: "Ofícios", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a080ebe059b5481aa628966a9baacfc1&source=copy_link" },
+        { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" }
+      ],
+      dynamicQueries: [
+        {
+          title: "Pendentes",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Tarefas" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER],
+          cardFields: TAREFAS_CARD_FIELDS
+        },
+        {
+          title: "Atrasadas",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Tarefas" },
+            { property: "📅 Data/Prazo", type: "date", condition: "before", value: "today" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER],
+          cardFields: TAREFAS_CARD_FIELDS
+        },
+        {
+          title: "Concluídas",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Tarefas" },
+            { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
+          ],
+          sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER],
+          cardFields: TAREFAS_CARD_FIELDS
+        }
+      ],
+      // busca ao vivo por nome, sempre por último na página — igual à de
+      // Legislações/Reuniões.
+      search: {
+        title: "Pesquisar",
+        placeholder: "Buscar tarefa por nome...",
+        database_id: "2310481486dd80079202fe1eaf5e14c4",
+        nameField: { property: "Nome", type: "title", condition: "contains" },
+        baseFilters: [
+          { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Tarefas" }
+        ]
+      }
+    },
     // "dynamicQueries" — várias exibições fixas (baseFilters + sorts) numa
     // página só, cada uma buscando sozinha ao abrir. Todas consultam a base
     // Central (mesma da página "Hoje"), filtrando por
