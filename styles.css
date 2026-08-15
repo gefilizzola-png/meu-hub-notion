@@ -399,7 +399,12 @@ html, body {
 .items-compact-groups {
   display: flex;
   flex-flow: row wrap;
-  align-items: stretch;
+  /* "flex-start" (não "stretch") — cada caixinha fica na SUA própria altura
+     de conteúdo, em vez de todas serem esticadas pra bater com a mais alta.
+     Evita uma caixa com só 1 botão (ex: "Criar no Notion" em Legislações)
+     ficar cheia de espaço vazio só pra igualar uma caixa vizinha com bem
+     mais itens (ex: "Abrir", com 6). */
+  align-items: flex-start;
   gap: 10px;
 }
 .items-compact-group {
