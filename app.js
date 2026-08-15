@@ -619,6 +619,12 @@
         if (pOpt) sub.push({ text: pOpt.label, color: pOpt.color });
       } else if (cf.type === "select") {
         if (raw && raw.name) sub.push({ text: raw.name, color: NOTION_COLOR[raw.color] || "" });
+      } else if (cf.type === "rollup") {
+        // rollup de relação (ex: "Providência TAT - Sessões"/"...Processos")
+        // — vem como array (0..N itens relacionados); o card mostra o
+        // primeiro valor não vazio, igual a um badge de "select" comum.
+        var ruVal = Array.isArray(raw) ? raw[0] : raw;
+        if (ruVal && ruVal.name) sub.push({ text: ruVal.name, color: NOTION_COLOR[ruVal.color] || "" });
       }
     });
     return sub;

@@ -508,8 +508,7 @@ const APP_CONFIG = {
           title: "Colegiados",
           items: [
             { label: "COMAT - Consultas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/a27c5f5c7daa4758b7b5d80de6450fda?v=8337729c5a904d23b55ca5ff8b07e49a&source=copy_link" },
-            { label: "TAT – Processos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
-            { label: "TAT – Sessões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" }
+            { label: "TAT", type: "page", target: "pmf_col_tat" }
           ]
         },
         {
@@ -560,16 +559,16 @@ const APP_CONFIG = {
     },
 
     // Folhas de Favoritas — ainda vazias, aguardando os links do Notion.
-    // (fav_ctrl_pmftarefas, fav_ctrl_pmfreunioes, fav_col_tatprocessos etc.
-    // saíram daqui porque já viraram link direto lá em cima, seguindo a
-    // REGRA ADOTADA — ficam sem uso por enquanto.)
+    // (fav_ctrl_pmftarefas, fav_ctrl_pmfreunioes etc. saíram daqui porque já
+    // viraram link direto/pasta lá em cima, seguindo a REGRA ADOTADA —
+    // ficam sem uso por enquanto. TAT também deixou de usar
+    // fav_col_tatprocessos/fav_col_tatsessoes: virou um único link pra
+    // pmf_col_tat, removidos.)
     fav_ctrl_pmftarefas: { title: "PMF - Tarefas", items: [] },
     fav_ctrl_pmfreunioes: { title: "PMF - Reuniões", items: [] },
     fav_ctrl_bethatarefas: { title: "Betha – Tarefas", items: [] },
     fav_ctrl_iptulancamentoanual: { title: "IPTU - Lançamento Anual", items: [] },
     fav_ctrl_pessoaltarefas: { title: "Pessoal – Tarefas", items: [] },
-    fav_col_tatprocessos: { title: "TAT – Processos", items: [] },
-    fav_col_tatsessoes: { title: "TAT – Sessões", items: [] },
     fav_cad_contratos: { title: "Contratos", items: [] },
     fav_cad_legislacoes: { title: "Legislações", items: [] },
     fav_cad_ipca: { title: "IPCA", items: [] },
@@ -665,6 +664,10 @@ const APP_CONFIG = {
         { label: "Processos", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
         { label: "Sessões", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" }
       ],
+      // Ordem: as duas exibições PENDENTES primeiro (Sessões, depois
+      // Processos), pra ficarem mais visíveis no topo, e só depois as duas
+      // CONCLUÍDAS — por pedido do usuário, pra facilitar visualização do
+      // que ainda está em aberto.
       dynamicQueries: [
         {
           title: "Sessões pendentes",
@@ -678,25 +681,11 @@ const APP_CONFIG = {
           // ordem por data crescente já traz os atrasados (data mais antiga)
           // pro topo — "pendente" aqui inclui atrasado, sem exibição separada.
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER],
+          filters: [ANDAMENTO_FILTER, LIMIT_FILTER],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
-            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
-          ]
-        },
-        {
-          title: "Sessões concluídas",
-          bg: "#eaf7ed",
-          database_id: "2310481486dd80079202fe1eaf5e14c4",
-          baseFilters: [
-            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - TAT - Sessões" },
-            { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
-          ],
-          sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
-          filters: [ANDAMENTO_FILTER],
-          cardFields: [
-            { property: "📅 Data/Prazo", type: "date" },
-            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: "Providência TAT - Sessões", type: "rollup" }
           ]
         },
         {
@@ -709,10 +698,27 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER],
+          filters: [ANDAMENTO_FILTER, LIMIT_FILTER],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
-            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: "Providência TAT - Processos", type: "rollup" }
+          ]
+        },
+        {
+          title: "Sessões concluídas",
+          bg: "#eaf7ed",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - TAT - Sessões" },
+            { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
+          ],
+          sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
+          filters: [ANDAMENTO_FILTER, LIMIT_FILTER],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: "Providência TAT - Sessões", type: "rollup" }
           ]
         },
         {
@@ -724,10 +730,11 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
           ],
           sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
-          filters: [ANDAMENTO_FILTER],
+          filters: [ANDAMENTO_FILTER, LIMIT_FILTER],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
-            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: "Providência TAT - Processos", type: "rollup" }
           ]
         }
       ],
@@ -1134,6 +1141,7 @@ const APP_CONFIG = {
       dynamicQueries: [
         {
           title: "Próximas Reuniões",
+          bg: "#eaf2fb",
           database_id: "2310481486dd80079202fe1eaf5e14c4",
           baseFilters: [
             { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
@@ -1168,6 +1176,7 @@ const APP_CONFIG = {
         },
         {
           title: "Últimas Reuniões",
+          bg: "#eaf7ed",
           database_id: "2310481486dd80079202fe1eaf5e14c4",
           baseFilters: [
             { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
@@ -1198,6 +1207,7 @@ const APP_CONFIG = {
         },
         {
           title: "Andamento pendente",
+          bg: "#fdf6e3",
           database_id: "2310481486dd80079202fe1eaf5e14c4",
           baseFilters: [
             { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
