@@ -677,12 +677,23 @@ html, body {
 
   /* "items-compact" — botões baixos, numa linha (ícone + texto), em vez do
      cartão alto padrão. Usado nos botões fixos de link direto no topo de
-     uma página (ex: Geral/Pendentes/Concluídas/Central em Reuniões). */
+     uma página (ex: Geral/Pendentes/Concluídas/Central em Reuniões).
+     "flex-wrap" em vez de "grid" de propósito: cada botão fica do tamanho
+     do próprio conteúdo (rótulo curto = botão estreito, rótulo longo =
+     botão largo, sem quebrar o texto em 2 linhas) — só pula pra linha de
+     baixo o botão inteiro que não couber mais na largura disponível. Um
+     grid com colunas de largura igual (o que tinha antes) forçava rótulos
+     longos tipo "Sessão - Criar (1ª Câmara)" a quebrar em 2 linhas dentro
+     da mesma largura estreita dos outros, ficando mais alto que os vizinhos. */
   .content-plain.items-compact {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .content-plain.items-compact .item {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 110px;
     flex-direction: row;
     align-items: center;
     justify-content: flex-start;
@@ -692,7 +703,7 @@ html, body {
   }
   .content-plain.items-compact .item-chevron { display: none; }
   .content-plain.items-compact .item-icon { font-size: 15px; }
-  .content-plain.items-compact .item-label { font-size: 12.5px; white-space: normal; }
+  .content-plain.items-compact .item-label { font-size: 12.5px; }
 }
 
 /* ---------- desktop: 1024px+ = sidebar + full toolbar ---------- */
