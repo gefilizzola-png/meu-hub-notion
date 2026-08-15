@@ -339,6 +339,12 @@ var LEGISLACOES_ASSUNTOS_FILTER = {
 
 const APP_CONFIG = {
   appTitle: "Meu hub",
+  // Carimbo de "quando esse config.js foi editado por último" (data + hora,
+  // fuso de SP), atualizado à mão a cada entrega — aparece pequeno do lado
+  // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
+  // GitHub Pages já está servindo a versão mais recente depois de um push
+  // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
+  appVersion: "2026-08-15 16:55",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 

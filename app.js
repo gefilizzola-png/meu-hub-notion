@@ -1482,7 +1482,18 @@
   // isso, o app nem monta a árvore/conteúdo até a pessoa logar.
   function boot() {
     var titleEl = document.getElementById("sidebarTitle");
-    if (titleEl) titleEl.textContent = cfg.appTitle;
+    if (titleEl) {
+      titleEl.textContent = cfg.appTitle;
+      // Carimbo pequeno do lado do título — só pra dar pra conferir, com uma
+      // olhada rápida, se o navegador já está servindo o último push feito
+      // no GitHub (o valor vem de config.js, atualizado a cada entrega).
+      if (cfg.appVersion) {
+        var v = document.createElement("span");
+        v.className = "app-version";
+        v.textContent = cfg.appVersion;
+        titleEl.appendChild(v);
+      }
+    }
 
     buildIndex();
     collectSearchInputs();

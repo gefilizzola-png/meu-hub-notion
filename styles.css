@@ -74,6 +74,14 @@ html, body {
   top: 0;
   overflow-y: auto;
 }
+.app-version {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: #b5b3ae;
+}
 .sidebar-header {
   padding: 20px 20px 14px;
   font-size: 15px;
