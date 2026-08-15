@@ -88,11 +88,33 @@
   prefixo "ti-"). Lista de ícones: https://tabler.io/icons
      { label: "Calendário", type: "page", target: "calendario", icon: "calendar" }
 
-  Pra um botão de link direto pro Notion (type: "notion"), use
-  icon: "notion" pra mostrar o logo real do Notion em vez de um ícone Tabler
-  genérico (mesmo tratamento visual usado em Legislações) — é o padrão a
-  seguir sempre que criarmos um botão assim. Outras chaves de logo real
-  disponíveis: "leis-municipais", "diario-oficial", "file-type-pdf".
+  Pra um botão de link direto pro Notion (type: "notion") OU de criação de
+  página (type: "notion-template"), use icon: "notion" pra mostrar o logo
+  real do Notion em vez de um ícone Tabler genérico (mesmo tratamento visual
+  usado em Legislações) — é o padrão a seguir sempre que criarmos um botão
+  assim, dos dois tipos (fácil de esquecer no "notion-template" já que ele
+  tem seu próprio ícone de chevron "file-plus" à direita — mas o ícone da
+  esquerda também deve ser o logo do Notion, igual aos botões de link).
+  Outras chaves de logo real disponíveis: "leis-municipais",
+  "diario-oficial", "file-type-pdf".
+
+  LEIAUTE PADRÃO das páginas "funcionais" (uma base do Notion com view no
+  app) que criarmos/mudarmos daqui pra frente — ex: Reuniões, Tarefas, TAT:
+    1) topo: "items" com itemsCompact:true — botões de link direto pro
+       Notion (type:"notion") e, quando fizer sentido, atalhos de criação
+       de página (type:"notion-template") pros templates mais usados
+       daquela base — ambos com icon:"notion".
+    2) meio: "dynamicQueries" — uma exibição por status/categoria relevante
+       (ex: Pendentes/Concluídas), cada uma com "bg" (cor de fundo clara:
+       amarelo pra pendente/em aberto, verde pra concluído, vermelho pra
+       atrasado quando for uma exibição própria, azul claro pra "próximas"/
+       agendado), filtro de Andamento (e outros que fizerem sentido: Origem,
+       Prioridade...) sempre multi-select, e LIMIT_FILTER ("Exibir: 5/10/
+       20/50") pra controlar quantos cards aparecem. Pendentes/em aberto
+       primeiro, concluídas depois (mais relevante pra cima).
+    3) final: "search" — busca por nome, com baseFilters escopando pra base
+       certa (e "orPairs" quando a busca precisar cobrir mais de uma origem
+       ao mesmo tempo, como em TAT: Sessões + Processos juntos).
 
   Cada grupo dentro de "groups" pode ter "compact: true", que deixa os
   botões daquele separador menores e lado a lado (2 colunas) — bom pra
@@ -1071,7 +1093,16 @@ const APP_CONFIG = {
         { label: "Geral", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link" },
         { label: "Ofícios", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a080ebe059b5481aa628966a9baacfc1&source=copy_link" },
         { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" },
-        { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd8071bdef000c3f7ae805&source=copy_link" }
+        { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd8071bdef000c3f7ae805&source=copy_link" },
+        // botões de criação — mesmos templates já usados em Criar Páginas
+        // (Entrada/Criar páginas/PMF/Controles, divisória "Tarefas"), agora
+        // como atalho de 1 clique aqui também (POST /create).
+        { label: "Auditorias - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "f0e058d6-85ce-401f-bb8a-2a7f1513ef10" },
+        { label: "Consultas - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1809e1e4-e069-4251-9345-0ed89c664da3" },
+        { label: "Fiscalização - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1367bf16-71d0-4560-acfa-e7a3d8a2b64e" },
+        { label: "Lançamentos - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "87c65fda-96b0-4e19-afc0-84c8eb87bb39" },
+        { label: "Ofícios - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "6b7c5969-1344-492c-b501-3236fe0733f4" },
+        { label: "Processos - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "21111593-0a0c-4e6a-a744-e560879db3e0" }
       ],
       dynamicQueries: [
         {
