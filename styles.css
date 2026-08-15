@@ -562,6 +562,25 @@ html, body {
 
   /* zFold aberto / tablet — leis em 2 colunas */
   .group-section.dense .group-items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* "items-compact" — botões baixos, numa linha (ícone + texto), em vez do
+     cartão alto padrão. Usado nos botões fixos de link direto no topo de
+     uma página (ex: Geral/Pendentes/Concluídas/Central em Reuniões). */
+  .content-plain.items-compact {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .content-plain.items-compact .item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 9px 10px;
+    border-radius: 8px;
+  }
+  .content-plain.items-compact .item-chevron { display: none; }
+  .content-plain.items-compact .item-icon { font-size: 15px; }
+  .content-plain.items-compact .item-label { font-size: 12.5px; white-space: normal; }
 }
 
 /* ---------- desktop: 1024px+ = sidebar + full toolbar ---------- */

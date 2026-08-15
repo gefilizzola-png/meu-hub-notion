@@ -66,7 +66,9 @@
   Uma página também pode ter "items" (botões fixos) JUNTO com "dynamicQuery"/
   "dynamicQueries"/"search" na mesma página — nesse caso "items" aparece no
   topo (ex: Reuniões: botões de link direto pras visualizações do Notion,
-  depois as exibições ao vivo, depois a busca).
+  depois as exibições ao vivo, depois a busca). Nesse caso normalmente vale
+  a pena usar "itemsCompact: true" na página, senão os botões ficam altos
+  demais (cartão de desktop) pra só um link direto.
 
   "search" (mesmo formato usado em Legislações) também aceita "baseFilters"
   (opcional): filtro sempre aplicado à busca (ex: escopar a base Central só
@@ -851,6 +853,9 @@ const APP_CONFIG = {
     // Só leitura (GET /query) — nunca escreve nada no Notion.
     pmf_ctrl_reunioes: {
       title: "Reuniões",
+      // "itemsCompact" — deixa os botões abaixo baixos (ícone + texto numa
+      // linha), em vez do cartão alto padrão do desktop/tablet.
+      itemsCompact: true,
       // botões fixos no topo — links diretos pras visualizações já prontas
       // no Notion (mesma base "PMF - Reuniões"). Usam o logo real do Notion
       // (icon: "notion"), igual ao padrão adotado em Legislações.

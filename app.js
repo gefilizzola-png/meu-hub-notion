@@ -825,7 +825,9 @@
     // links diretos pras visualizações do Notion).
     if (flatItems.length) {
       var plainWrap = document.createElement("div");
-      plainWrap.className = "content-plain";
+      // "page.itemsCompact" (opcional) — botões baixos em vez do cartão alto
+      // padrão (ex: os 4 links de visualização no topo de Reuniões).
+      plainWrap.className = "content-plain" + (page.itemsCompact ? " items-compact" : "");
       flatItems.forEach(function (item) {
         plainWrap.appendChild(buildItemEl(item, globalIdx));
         globalIdx++;
