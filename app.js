@@ -309,9 +309,15 @@
   }
 
   // ---------------- dropdown customizado com ícone (select nativo não mostra ícone) ----------------
-  // filterDef: { property, type, condition, label, options: [{label, pageId, icon, color}] }
-  // onChange(value) é chamado com o pageId/valor escolhido, ou "" para "Todos".
+  // filterDef: { property, type, condition, label, options: [{label, pageId, icon, color}],
+  //              multi (opcional, default true), default (opcional, pageId de 1 opção) }
+  // Por padrão permite marcar VÁRIAS opções ao mesmo tempo (clique liga/desliga
+  // e o menu continua aberto) — onChange(opts) é sempre chamado com a LISTA de
+  // opções marcadas (array vazio = "Todos"). Use "multi: false" pra voltar ao
+  // comportamento de seleção única (1 clique escolhe e fecha o menu) — é o
+  // caso do LIMIT_FILTER, onde marcar mais de um valor não faz sentido.
   function buildIconDropdown(filterDef, onChange) {
+    var multi = filterDef.multi !== false;
     var wrap = document.createElement("div");
     wrap.className = "filter-dropdown";
 
@@ -333,36 +339,54 @@
     var menu = document.createElement("div");
     menu.className = "filter-menu";
 
-    // só atualiza a aparência do botão (ícone/cor/texto) — separado de
-    // selectOption pra poder marcar uma opção padrão já selecionada ao abrir
-    // a página, sem disparar onChange (quem chama já cuida do estado inicial).
-    function updateTriggerUI(opt) {
-      if (opt) {
-        triggerIcon.className = "ti " + opt.icon;
-        triggerIcon.style.color = opt.color || "";
-        triggerLabel.textContent = filterDef.label + ": " + opt.label;
-      } else {
+    var selected = []; // opções marcadas no momento
+    var rowEntries = []; // [{ opt, row }] — pra marcar/desmarcar visualmente
+
+    // só atualiza a aparência do botão (ícone/cor/texto): nenhuma marcada =
+    // "Todos"; 1 marcada = ícone/cor/label dela; 2+ marcadas = "N selecionados"
+    // (não dá pra mostrar um ícone/cor só quando são de status diferentes).
+    function updateTriggerUI() {
+      if (!selected.length) {
         triggerIcon.className = "ti ti-filter";
         triggerIcon.style.color = "";
         triggerLabel.textContent = filterDef.label + ": Todos";
+      } else if (selected.length === 1) {
+        triggerIcon.className = "ti " + selected[0].icon;
+        triggerIcon.style.color = selected[0].color || "";
+        triggerLabel.textContent = filterDef.label + ": " + selected[0].label;
+      } else {
+        triggerIcon.className = "ti ti-filter";
+        triggerIcon.style.color = "";
+        triggerLabel.textContent = filterDef.label + ": " + selected.length + " selecionados";
       }
     }
 
-    function selectOption(opt) {
-      updateTriggerUI(opt);
-      menu.classList.remove("open");
-      // manda a opção inteira (não só o pageId) — assim quem escuta pode
-      // usar opt.condition/opt.value pra sobrescrever o filtro padrão
-      // (necessário pros filtros de data relativa: cada opção tem sua
-      // própria condition, ex: "equals" pra Hoje/Amanhã, "next_week" pra
-      // Esta semana).
-      onChange(opt || null);
+    function updateRowsUI() {
+      rowEntries.forEach(function (entry) {
+        entry.row.classList.toggle("selected", selected.indexOf(entry.opt) !== -1);
+      });
+    }
+
+    function setSelected(next) {
+      selected = next;
+      updateTriggerUI();
+      updateRowsUI();
+      // manda a lista de opções inteira (não só o pageId) — assim quem
+      // escuta pode usar opt.condition/opt.value pra sobrescrever o filtro
+      // padrão (necessário pros filtros de data relativa: cada opção tem
+      // sua própria condition, ex: "equals" pra Hoje/Amanhã, "next_week"
+      // pra Esta semana).
+      onChange(selected.slice());
     }
 
     var allRow = document.createElement("div");
-    allRow.className = "filter-option";
+    allRow.className = "filter-option filter-option-all";
     allRow.textContent = "Todos";
-    allRow.addEventListener("click", function () { selectOption(null); });
+    allRow.addEventListener("click", function (e) {
+      e.stopPropagation(); // não deixa o listener global (fecha menus abertos) atrapalhar
+      menu.classList.remove("open");
+      setSelected([]);
+    });
     menu.appendChild(allRow);
 
     (filterDef.options || []).forEach(function (opt) {
@@ -375,17 +399,35 @@
       lbl.textContent = opt.label;
       row.appendChild(ic);
       row.appendChild(lbl);
-      row.addEventListener("click", function () { selectOption(opt); });
+      if (multi) {
+        var check = document.createElement("i");
+        check.className = "ti ti-check filter-option-check";
+        row.appendChild(check);
+      }
+      row.addEventListener("click", function (e) {
+        e.stopPropagation(); // não deixa o listener global (fecha menus abertos) atrapalhar
+        if (multi) {
+          var idx = selected.indexOf(opt);
+          var next = selected.slice();
+          if (idx === -1) next.push(opt); else next.splice(idx, 1);
+          setSelected(next);
+          // menu continua aberto — dá pra marcar mais de uma opção seguida
+        } else {
+          menu.classList.remove("open");
+          setSelected([opt]);
+        }
+      });
       menu.appendChild(row);
+      rowEntries.push({ opt: opt, row: row });
     });
 
     // "filterDef.default" (opcional) — pageId de uma opção pra já vir
-    // marcada/selecionada visualmente quando a página abre (ex: "Últimas
-    // Reuniões" já abrir com "Última semana"). Só atualiza a aparência aqui
-    // — quem chama essa função já seeda o filtro real antes da 1ª busca.
+    // marcada quando a página abre (ex: "Últimas Reuniões" já abrir com
+    // "Última semana"). Só atualiza a aparência aqui — quem chama essa
+    // função já seeda o filtro real antes da 1ª busca.
     if (filterDef.default) {
       var defOpt = (filterDef.options || []).filter(function (o) { return o.pageId === filterDef.default; })[0];
-      if (defOpt) updateTriggerUI(defOpt);
+      if (defOpt) { selected = [defOpt]; updateTriggerUI(); updateRowsUI(); }
     }
 
     trigger.addEventListener("click", function (e) {
@@ -402,6 +444,32 @@
     document.querySelectorAll(".filter-menu.open").forEach(function (m) { m.classList.remove("open"); });
   });
 
+  // ---------------- helpers pra montar filtros a partir de um buildIconDropdown ----------------
+  // buildIconDropdown sempre devolve a LISTA de opções marcadas (0, 1 ou
+  // várias). Esses dois helpers convertem essa lista no formato guardado no
+  // filterState de cada página (property -> { type, pairs }) e depois no
+  // formato de filtro mandado ao Worker — 1 par vira um filtro simples, 2+
+  // vira "orPairs" (o Worker combina com "or").
+
+  // opts vazio/null → null (remove o filtro); senão → { type, pairs }
+  function filterStateFromOpts(f, opts) {
+    if (!opts || !opts.length) return null;
+    return {
+      type: f.type,
+      pairs: opts.map(function (o) {
+        return { condition: o.condition || f.condition, value: o.value !== undefined ? o.value : o.pageId };
+      })
+    };
+  }
+
+  // { type, pairs } de uma propriedade → entrada da lista "filters" do Worker
+  function filterStateToFilterEntry(property, fs) {
+    if (fs.pairs.length === 1) {
+      return { property: property, type: fs.type, condition: fs.pairs[0].condition, value: fs.pairs[0].value };
+    }
+    return { property: property, type: fs.type, orPairs: fs.pairs };
+  }
+
   // ---------------- página de busca dinâmica (ex: "Hoje") ----------------
   // Em vez de "items" fixos no config.js, a página tem um "dynamicQuery" que
   // busca no Worker (rota /query) as páginas do Notion que baterem com os
@@ -409,14 +477,15 @@
   // Refaz a busca toda vez que a página é aberta ou um filtro muda.
   function renderDynamicQuery(page, pageId, container) {
     var q = page.dynamicQuery;
-    var filterState = {}; // property -> { type, condition, value }
+    var filterState = {}; // property -> { type, pairs: [{condition,value}, ...] }
 
     if (q.filters && q.filters.length) {
       var filterBar = document.createElement("div");
       filterBar.className = "filter-bar";
       q.filters.forEach(function (f) {
-        filterBar.appendChild(buildIconDropdown(f, function (opt) {
-          if (opt) filterState[f.property] = { type: f.type, condition: opt.condition || f.condition, value: opt.value !== undefined ? opt.value : opt.pageId };
+        filterBar.appendChild(buildIconDropdown(f, function (opts) {
+          var fs = filterStateFromOpts(f, opts);
+          if (fs) filterState[f.property] = fs;
           else delete filterState[f.property];
           runQuery();
         }));
@@ -436,8 +505,7 @@
 
       var filters = (q.baseFilters || []).map(function (f) { return f; });
       Object.keys(filterState).forEach(function (prop) {
-        var f = filterState[prop];
-        filters.push({ property: prop, type: f.type, condition: f.condition, value: f.value });
+        filters.push(filterStateToFilterEntry(prop, filterState[prop]));
       });
 
       var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(q.database_id) +
@@ -568,10 +636,11 @@
     title.textContent = qDef.title;
     container.appendChild(title);
 
-    var filterState = {}; // property -> { type, condition, value }
+    var filterState = {}; // property -> { type, pairs: [{condition,value}, ...] }
     // "type: 'limit'" é diferente dos outros filtros — não é uma condição do
     // Notion, é só quantos cards mostrar. Nunca entra em "filters" enviado
     // ao Worker; corta o array de resultados no cliente, depois de buscar.
+    // Sempre single-select (config.js marca "multi: false" nele).
     var displayLimit = null;
 
     if (qDef.filters && qDef.filters.length) {
@@ -579,15 +648,17 @@
       filterBar.className = "filter-bar";
       qDef.filters.forEach(function (f) {
         if (f.type === "limit") {
-          filterBar.appendChild(buildIconDropdown(f, function (opt) {
+          filterBar.appendChild(buildIconDropdown(f, function (opts) {
+            var opt = opts && opts[0];
             displayLimit = opt ? parseInt(opt.pageId, 10) : null;
             runQuery();
           }));
           if (f.default) displayLimit = parseInt(f.default, 10);
           return;
         }
-        filterBar.appendChild(buildIconDropdown(f, function (opt) {
-          if (opt) filterState[f.property] = { type: f.type, condition: opt.condition || f.condition, value: opt.value !== undefined ? opt.value : opt.pageId };
+        filterBar.appendChild(buildIconDropdown(f, function (opts) {
+          var fs = filterStateFromOpts(f, opts);
+          if (fs) filterState[f.property] = fs;
           else delete filterState[f.property];
           runQuery();
         }));
@@ -596,7 +667,7 @@
         // Reuniões" abre já em "Última semana", sem precisar clicar).
         if (f.default) {
           var defOpt = (f.options || []).filter(function (o) { return o.pageId === f.default; })[0];
-          if (defOpt) filterState[f.property] = { type: f.type, condition: defOpt.condition || f.condition, value: defOpt.value !== undefined ? defOpt.value : defOpt.pageId };
+          if (defOpt) filterState[f.property] = filterStateFromOpts(f, [defOpt]);
         }
       });
       container.appendChild(filterBar);
@@ -615,8 +686,7 @@
 
       var filters = (qDef.baseFilters || []).map(function (f) { return f; });
       Object.keys(filterState).forEach(function (prop) {
-        var f = filterState[prop];
-        filters.push({ property: prop, type: f.type, condition: f.condition, value: f.value });
+        filters.push(filterStateToFilterEntry(prop, filterState[prop]));
       });
 
       var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(qDef.database_id) +
@@ -710,7 +780,7 @@
   // /query no Worker — nunca escreve nada no Notion.
   function renderSearchBlock(page, container) {
     var s = page.search;
-    var state = { text: "", filterValue: "", filterProp: null };
+    var state = { text: "", filterState: null, filterProp: null }; // filterState: null | { type, pairs }
     var debounceTimer = null;
     var requestSeq = 0;
 
@@ -740,8 +810,8 @@
       var filterBar = document.createElement("div");
       filterBar.className = "filter-bar search-block-filter-bar";
       s.filters.forEach(function (f) {
-        filterBar.appendChild(buildIconDropdown(f, function (opt) {
-          state.filterValue = opt ? opt.pageId : "";
+        filterBar.appendChild(buildIconDropdown(f, function (opts) {
+          state.filterState = filterStateFromOpts(f, opts);
           state.filterProp = f;
           runQuery();
         }));
@@ -765,7 +835,7 @@
       // "hasInput" decide se busca ou não — independente de "s.baseFilters"
       // (filtro fixo sempre aplicado, ex: escopar a base inteira só aos
       // registros de "PMF - Reuniões"), que sozinho não conta como busca.
-      var hasInput = !!state.text.trim() || !!(state.filterValue && state.filterProp);
+      var hasInput = !!state.text.trim() || !!(state.filterState && state.filterProp);
       var filters = (s.baseFilters || []).map(function (f) { return f; });
       if (state.text.trim()) {
         filters.push({
@@ -773,11 +843,8 @@
           condition: s.nameField.condition, value: state.text.trim()
         });
       }
-      if (state.filterValue && state.filterProp) {
-        filters.push({
-          property: state.filterProp.property, type: state.filterProp.type,
-          condition: state.filterProp.condition, value: state.filterValue
-        });
+      if (state.filterState && state.filterProp) {
+        filters.push(filterStateToFilterEntry(state.filterProp.property, state.filterState));
       }
       var mySeq = ++requestSeq;
       resultsWrap.innerHTML = "";

@@ -495,6 +495,19 @@ html, body {
 }
 .filter-option:hover { background: #f4f4f2; }
 .filter-option .ti { font-size: 15px; width: 16px; text-align: center; flex-shrink: 0; }
+.filter-option > span { flex: 1; min-width: 0; }
+/* seleção múltipla — linha marcada fica com fundo leve, e o "check" à
+   direita (invisível por padrão) aparece. "Todos" ganha uma linha separando
+   das opções, já que sempre reseta tudo (não é "mais uma opção"). */
+.filter-option.selected { background: #eef5fb; }
+.filter-option-check { opacity: 0; color: #4a90d9 !important; flex-shrink: 0; margin-left: auto; }
+.filter-option.selected .filter-option-check { opacity: 1; }
+.filter-option-all {
+  font-weight: 500;
+  border-bottom: 0.5px solid #ececea;
+  margin-bottom: 2px;
+  padding-bottom: 9px;
+}
 
 /* search dropdown */
 .search-results {

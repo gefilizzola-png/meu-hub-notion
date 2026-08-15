@@ -37,6 +37,13 @@
      }
      (usa o endpoint GET <templateWorkerUrl>/query?database_id=X&filters=[...])
 
+     Por padrão, todo filtro permite marcar VÁRIAS opções ao mesmo tempo
+     (clique liga/desliga, sem fechar o menu) — as opções marcadas viram um
+     "ou" entre si (ex: Andamento = A OU Andamento = B), combinado com "e"
+     junto dos outros filtros/baseFilters. Pra voltar a permitir só 1 opção
+     por vez, adicione "multi: false" no filtro (ex: o "LIMIT_FILTER" de
+     Tarefas, onde marcar "5 e 20" ao mesmo tempo não faz sentido).
+
      Numa opção de filtro, "pageId" é o valor padrão (junto com a "condition"
      do filtro). Pra sobrescrever ambos numa opção específica, use "condition"
      e "value" direto na opção — usado nos filtros de data relativa (ex: "Esta
@@ -169,6 +176,8 @@ var ORIGEM_FILTER = {
 // pra NÃO mandar isso como filtro pro Worker. Começa em 10 ("default").
 var LIMIT_FILTER = {
   property: "__limit__", type: "limit", label: "Exibir", default: "10",
+  // seleção única — não faz sentido marcar "5 e 20" ao mesmo tempo.
+  multi: false,
   options: [
     { label: "5", pageId: "5", icon: "ti-list-numbers", color: "#4a90d9" },
     { label: "10", pageId: "10", icon: "ti-list-numbers", color: "#4a90d9" },
