@@ -755,9 +755,9 @@ const APP_CONFIG = {
           // usa o template de Titulares (existe também um de Suplentes em
           // Criar Páginas, não usado aqui).
           items: [
-            { label: "Sessão - Criar (1ª Câmara)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
-            { label: "Sessão - Criar (Pleno)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" },
-            { label: "Processo - Criar", type: "notion-template", icon: "notion", database_id: "88435f4ebb9849ac88664da53f13ceb6", template_id: "020ef2bf-1558-484d-b0e1-0f870dd7719a" }
+            { label: "Sessão (1ª Câmara)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
+            { label: "Sessão (Pleno)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" },
+            { label: "Processo", type: "notion-template", icon: "notion", database_id: "88435f4ebb9849ac88664da53f13ceb6", template_id: "020ef2bf-1558-484d-b0e1-0f870dd7719a" }
           ]
         }
       ],
@@ -1158,10 +1158,10 @@ const APP_CONFIG = {
           // páginas/PMF/Controles → divisória "Betha" — exceto "Sistemas -
           // TRIBUTO - ASSUNTO - CONTRIBUINTE", deixado de fora por pedido.
           items: [
-            { label: "Chamados - Criar", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "09f31cab-7036-42c2-a826-ff51dc854dfb" },
-            { label: "Créditos Tributários - Criar", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "3477be4a-a971-463f-ad75-e3a88de0fbc6" },
-            { label: "Fórmulas - Criar", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "ae170a72-fc41-4fc6-b6e2-38b643fe2380" },
-            { label: "Scripts - Criar", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "782d4983-e7b4-4ca4-810c-3975f2889d6b" }
+            { label: "Chamados", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "09f31cab-7036-42c2-a826-ff51dc854dfb" },
+            { label: "Créditos Tributários", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "3477be4a-a971-463f-ad75-e3a88de0fbc6" },
+            { label: "Fórmulas", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "ae170a72-fc41-4fc6-b6e2-38b643fe2380" },
+            { label: "Scripts", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "782d4983-e7b4-4ca4-810c-3975f2889d6b" }
           ]
         }
       ],
@@ -1247,12 +1247,12 @@ const APP_CONFIG = {
         {
           title: "Criar no Notion",
           items: [
-            { label: "Auditorias - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "f0e058d6-85ce-401f-bb8a-2a7f1513ef10" },
-            { label: "Consultas - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1809e1e4-e069-4251-9345-0ed89c664da3" },
-            { label: "Fiscalização - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1367bf16-71d0-4560-acfa-e7a3d8a2b64e" },
-            { label: "Lançamentos - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "87c65fda-96b0-4e19-afc0-84c8eb87bb39" },
-            { label: "Ofícios - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "6b7c5969-1344-492c-b501-3236fe0733f4" },
-            { label: "Processos - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "21111593-0a0c-4e6a-a744-e560879db3e0" }
+            { label: "Auditorias", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "f0e058d6-85ce-401f-bb8a-2a7f1513ef10" },
+            { label: "Consultas", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1809e1e4-e069-4251-9345-0ed89c664da3" },
+            { label: "Fiscalização", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1367bf16-71d0-4560-acfa-e7a3d8a2b64e" },
+            { label: "Lançamentos", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "87c65fda-96b0-4e19-afc0-84c8eb87bb39" },
+            { label: "Ofícios", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "6b7c5969-1344-492c-b501-3236fe0733f4" },
+            { label: "Processos", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "21111593-0a0c-4e6a-a744-e560879db3e0" }
           ]
         }
       ],
@@ -1339,8 +1339,8 @@ const APP_CONFIG = {
           // mesmos templates já usados em Criar Páginas → Entrada/Criar
           // páginas/PMF/Controles → divisória "Reuniões" (POST /create).
           items: [
-            { label: "PMF - Reuniões - 2026-09-XX - IPTU 2027 (XXX) - Criar", type: "notion-template", icon: "notion", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "ea112acd-f975-4d95-a892-83614e3a43e2" },
-            { label: "PMF - Reuniões - 2026-XX-XX - XXX - Criar", type: "notion-template", icon: "notion", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "7dc2c479-55f9-47a1-bdd4-b565638e5823" }
+            { label: "2026-09-XX - IPTU 2027 (XXX)", type: "notion-template", icon: "notion", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "ea112acd-f975-4d95-a892-83614e3a43e2" },
+            { label: "2026-XX-XX - XXX", type: "notion-template", icon: "notion", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "7dc2c479-55f9-47a1-bdd4-b565638e5823" }
           ]
         }
       ],
