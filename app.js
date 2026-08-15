@@ -621,9 +621,19 @@
         if (raw && raw.name) sub.push({ text: raw.name, color: NOTION_COLOR[raw.color] || "" });
       } else if (cf.type === "rollup") {
         // rollup de relação (ex: "Providência TAT - Sessões"/"...Processos")
-        // — vem como array (0..N itens relacionados); o card mostra o
-        // primeiro valor não vazio, igual a um badge de "select" comum.
-        var ruVal = Array.isArray(raw) ? raw[0] : raw;
+        // — vem como array (0..N itens relacionados). Cada item pode ser um
+        // valor "select" direto ({name,color}) OU, se o campo de origem for
+        // "multi_select" (caso de "Providência TAT - Sessões" — descoberto
+        // só agora, é diferente de "...Processos" que é "select"), vem como
+        // um array aninhado de {name,color}. Achata os dois formatos e
+        // mostra o primeiro valor não vazio, igual a um badge de "select".
+        var ruArr = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+        var ruFlat = [];
+        ruArr.forEach(function (v) {
+          if (Array.isArray(v)) ruFlat = ruFlat.concat(v);
+          else if (v) ruFlat.push(v);
+        });
+        var ruVal = ruFlat[0];
         if (ruVal && ruVal.name) sub.push({ text: ruVal.name, color: NOTION_COLOR[ruVal.color] || "" });
       }
     });
