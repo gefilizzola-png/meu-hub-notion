@@ -379,48 +379,15 @@ const APP_CONFIG = {
       ]
     },
 
+    // "Controles" saiu daqui — cada base (Betha/Reuniões/Tarefas) já tem sua
+    // própria página funcional com botões de criar (pmf_ctrl_betha/
+    // pmf_ctrl_reunioes/pmf_ctrl_tarefas), então essa lista redundante de
+    // templates foi removida. Ideia é ir esvaziando "Criar páginas" assim,
+    // um Controle/Colegiado de cada vez, até poder tirar a página inteira.
     criar_pmf: {
       title: "PMF",
       items: [
-        { label: "Colegiados", type: "page", target: "criar_pmf_colegiados" },
-        { label: "Controles", type: "page", target: "criar_pmf_controles" }
-      ]
-    },
-
-    // "groups" aqui funciona igual em Favoritas: cada divisória (ex: "Tarefas")
-    // é só uma caixa visual pra indicar de qual base de dados do Notion vêm
-    // aqueles templates — não é um nível extra de navegação.
-    criar_pmf_controles: {
-      title: "Controles",
-      groups: [
-        {
-          title: "Betha",
-          items: [
-            { label: "Sistemas - Betha Tributos - Chamados - XXXX", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "09f31cab-7036-42c2-a826-ff51dc854dfb" },
-            { label: "Sistemas - Betha Tributos - Créditos Tributários - XXXX", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "3477be4a-a971-463f-ad75-e3a88de0fbc6" },
-            { label: "Sistemas - Betha Tributos - Fórmulas - XXXX", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "ae170a72-fc41-4fc6-b6e2-38b643fe2380" },
-            { label: "Sistemas - Betha Tributos - Scripts - XXXX", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "782d4983-e7b4-4ca4-810c-3975f2889d6b" },
-            { label: "Sistemas - TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "523e8e2e-06b7-42a2-9902-a33adc3a3f0c" }
-          ]
-        },
-        {
-          title: "Reuniões",
-          items: [
-            { label: "PMF - Reuniões - 2026-09-XX - IPTU 2027 (XXX)", type: "notion-template", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "ea112acd-f975-4d95-a892-83614e3a43e2" },
-            { label: "PMF - Reuniões - 2026-XX-XX - XXX", type: "notion-template", database_id: "af1ec75c4a2b4b02a2f6880e78bc8e61", template_id: "7dc2c479-55f9-47a1-bdd4-b565638e5823" }
-          ]
-        },
-        {
-          title: "Tarefas",
-          items: [
-            { label: "Auditorias — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "f0e058d6-85ce-401f-bb8a-2a7f1513ef10" },
-            { label: "Consultas — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1809e1e4-e069-4251-9345-0ed89c664da3" },
-            { label: "Fiscalização — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1367bf16-71d0-4560-acfa-e7a3d8a2b64e" },
-            { label: "Lançamentos — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "87c65fda-96b0-4e19-afc0-84c8eb87bb39" },
-            { label: "Ofícios — TRIBUTO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "6b7c5969-1344-492c-b501-3236fe0733f4" },
-            { label: "Processos — TRIBUTO - PROCESSO - ASSUNTO - CONTRIBUINTE", type: "notion-template", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "21111593-0a0c-4e6a-a744-e560879db3e0" }
-          ]
-        }
+        { label: "Colegiados", type: "page", target: "criar_pmf_colegiados" }
       ]
     },
 
@@ -579,7 +546,7 @@ const APP_CONFIG = {
         {
           title: "CONTROLES - PMF",
           items: [
-            { label: "Betha – Tarefas", type: "page", target: "pmf_ctrl_betha" },
+            { label: "Betha", type: "page", target: "pmf_ctrl_betha" },
             { label: "PMF - Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
             { label: "PMF - Tarefas", type: "page", target: "pmf_ctrl_tarefas" }
           ]
@@ -594,7 +561,6 @@ const APP_CONFIG = {
         {
           title: "Cadastros",
           items: [
-            { label: "Betha - Scripts", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Betha-Scripts-5455bb9ca1984a72b0d1b481feef03e1?source=copy_link" },
             { label: "Cargos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/cecf185362f34b8ebe99daf07727096f?v=17a0481486dd8040befc000c07c349c7&source=copy_link" },
             { label: "Contratos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
             { label: "Convênios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/75bbbc9672b14f2d8dcd51c34f81e3d7?v=47d42a4be70f409ea8bda443c6eae771&source=copy_link" },
