@@ -695,6 +695,14 @@
         });
         var ruVal = ruFlat[0];
         if (ruVal && ruVal.name) sub.push({ text: ruVal.name, color: NOTION_COLOR[ruVal.color] || "" });
+      } else if (cf.type === "multi_select") {
+        // ex: "📖 Processo/Chamado" em Betha — array de {name,color}; junta
+        // todas as tags marcadas num badge só (na prática quase sempre só
+        // 1), com a cor da primeira.
+        if (raw && raw.length) {
+          var names = raw.map(function (v) { return v.name; }).filter(Boolean).join(", ");
+          if (names) sub.push({ text: names, color: NOTION_COLOR[raw[0].color] || "" });
+        }
       }
     });
     return sub;

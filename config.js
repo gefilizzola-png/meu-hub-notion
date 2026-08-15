@@ -234,6 +234,49 @@ var TAREFAS_CARD_FIELDS = [
   { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" }
 ];
 
+// cardFields das 3 exibições de Betha — igual Tarefas, mas sem Origem e
+// trazendo "📖 Processo/Chamado" no lugar (é multi_select — confirmado por
+// consulta direta na Central, mesmo tendo sempre 1 só valor na prática).
+var BETHA_CARD_FIELDS = [
+  { property: "📅 Data/Prazo", type: "date" },
+  { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+  { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
+  { property: "📖 Processo/Chamado", type: "multi_select" }
+];
+
+// Focus — fórmula da Central (⭐ Focus) que combina Andamento + Prazo/
+// Prioridade/Importância do Pointer num rótulo só. É "formula" (não
+// select/relation), então o filtro usa "formulaType: 'string'" (ver
+// worker.js: filtro de fórmula precisa do formato aninhado
+// {formula:{string:{...}}}). Os 3 rótulos abaixo são exatamente os que a
+// fórmula devolve (fora eles, só devolve texto vazio — sem opção "vazio"
+// aqui, não faz sentido filtrar "por nada"). Reaproveitado nas exibições
+// de Tarefas, Reuniões e Betha.
+var FOCUS_FILTER = {
+  property: "⭐ Focus", type: "formula", formulaType: "string", condition: "equals", label: "Focus",
+  options: [
+    { label: "⭐ 1 - Focus", pageId: "⭐ 1 - Focus", icon: "ti-star-filled", color: "#f08c00" },
+    { label: "⚠️ 2 - Atenção", pageId: "⚠️ 2 - Atenção", icon: "ti-alert-triangle", color: "#e8590c" },
+    { label: "📅 3 - Verificar prazo", pageId: "📅 3 - Verificar prazo", icon: "ti-calendar-exclamation", color: "#4a90d9" }
+  ]
+};
+
+// Categoria (só em Betha) — não é um campo do Notion, é um filtro por
+// TRECHO do nome da tarefa (title "contains"), pra separar os 4 padrões de
+// nomenclatura usados em "PMF - Betha - Tarefas" (ex: "Sistemas - Betha
+// Tributos - Chamados - Arrecadação - PIX" bate com "Chamados"). Confirmado
+// por consulta direta na Central que os 4 padrões batem com tarefas reais
+// (Chamados: 41, Créditos Tributários: 6, Relatórios: 7, Scripts: 28).
+var BETHA_CATEGORIA_FILTER = {
+  property: "Nome", type: "title", condition: "contains", label: "Categoria",
+  options: [
+    { label: "Chamados", pageId: "Chamados", icon: "ti-tag", color: "#4a90d9" },
+    { label: "Créditos Tributários", pageId: "Créditos Tributários", icon: "ti-tag", color: "#448361" },
+    { label: "Relatórios", pageId: "Relatórios", icon: "ti-tag", color: "#9065b0" },
+    { label: "Scripts", pageId: "Scripts", icon: "ti-tag", color: "#d9730d" }
+  ]
+};
+
 const APP_CONFIG = {
   appTitle: "Meu hub",
   startPage: "entrada",
@@ -536,7 +579,7 @@ const APP_CONFIG = {
         {
           title: "CONTROLES - PMF",
           items: [
-            { label: "Betha – Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7e1194013472498f884e7b4e759c56bf?v=152de528d7aa40168640b394d3a8458e&source=copy_link" },
+            { label: "Betha – Tarefas", type: "page", target: "pmf_ctrl_betha" },
             { label: "PMF - Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
             { label: "PMF - Tarefas", type: "page", target: "pmf_ctrl_tarefas" }
           ]
@@ -1091,13 +1134,87 @@ const APP_CONFIG = {
       ]
     },
 
+    // Igual Tarefas: 📅 Data/Prazo, 🧲 Andamento, 🚩 Prioridade, ⭐ Focus e
+    // 📖 Processo/Chamado não são campos nativos de "PMF - Betha - Tarefas"
+    // — as exibições consultam a Central direto, filtrando por "📚 Página
+    // de Origem". Só leitura (GET /query) nas exibições/busca; os botões de
+    // "Criar no Notion" continuam sendo a única exceção que escreve
+    // (POST /create), igual em Tarefas/TAT.
     pmf_ctrl_betha: {
       title: "Betha",
-      items: [
-        { label: "Scripts", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Betha-Scripts-5455bb9ca1984a72b0d1b481feef03e1?source=copy_link" },
-        { label: "Tabelas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Betha-Tabelas-a4403e8844a64681a04525d1bcf817fc?source=copy_link" },
-        { label: "Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7e1194013472498f884e7b4e759c56bf?v=152de528d7aa40168640b394d3a8458e&source=copy_link" }
-      ]
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir no Notion",
+          items: [
+            { label: "Tarefas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/7e1194013472498f884e7b4e759c56bf?v=152de528d7aa40168640b394d3a8458e&source=copy_link" },
+            { label: "Scripts", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/Betha-Scripts-5455bb9ca1984a72b0d1b481feef03e1?source=copy_link" },
+            { label: "Tabelas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/Betha-Tabelas-a4403e8844a64681a04525d1bcf817fc?source=copy_link" }
+          ]
+        },
+        {
+          title: "Criar no Notion",
+          // mesmos templates já usados em Criar Páginas → Entrada/Criar
+          // páginas/PMF/Controles → divisória "Betha" — exceto "Sistemas -
+          // TRIBUTO - ASSUNTO - CONTRIBUINTE", deixado de fora por pedido.
+          items: [
+            { label: "Chamados - Criar", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "09f31cab-7036-42c2-a826-ff51dc854dfb" },
+            { label: "Créditos Tributários - Criar", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "3477be4a-a971-463f-ad75-e3a88de0fbc6" },
+            { label: "Fórmulas - Criar", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "ae170a72-fc41-4fc6-b6e2-38b643fe2380" },
+            { label: "Scripts - Criar", type: "notion-template", icon: "notion", database_id: "7e1194013472498f884e7b4e759c56bf", template_id: "782d4983-e7b4-4ca4-810c-3975f2889d6b" }
+          ]
+        }
+      ],
+      dynamicQueries: [
+        {
+          title: "Pendentes",
+          bg: "#fdf6e3",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Betha - Tarefas" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          cardFields: BETHA_CARD_FIELDS
+        },
+        {
+          title: "Atrasadas",
+          bg: "#fdecea",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Betha - Tarefas" },
+            { property: "📅 Data/Prazo", type: "date", condition: "before", value: "today" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          cardFields: BETHA_CARD_FIELDS
+        },
+        {
+          title: "Concluídas",
+          bg: "#eaf7ed",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Betha - Tarefas" },
+            { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
+          ],
+          sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          cardFields: BETHA_CARD_FIELDS
+        }
+      ],
+      search: {
+        title: "Pesquisar",
+        placeholder: "Buscar tarefa por nome...",
+        database_id: "2310481486dd80079202fe1eaf5e14c4",
+        nameField: { property: "Nome", type: "title", condition: "contains" },
+        baseFilters: [
+          { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Betha - Tarefas" }
+        ]
+      }
     },
     pmf_ctrl_betha_tarefas: { title: "Tarefas", items: [] },
     pmf_ctrl_betha_scripts: { title: "Scripts", items: [] },
@@ -1150,7 +1267,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         },
         {
@@ -1164,7 +1281,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         },
         {
@@ -1176,7 +1293,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
           ],
           sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         }
       ],
@@ -1253,7 +1370,8 @@ const APP_CONFIG = {
                 { label: "Esta semana", pageId: "next_week", condition: "next_week", value: {}, icon: "ti-calendar-week", color: "#4a90d9" },
                 { label: "Este mês", pageId: "next_month", condition: "next_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
               ]
-            }
+            },
+            FOCUS_FILTER
           ],
           // campos extras mostrados como subtítulo em cada card de resultado
           // (data/hora + status de andamento) — só leitura, vem junto da
@@ -1287,7 +1405,8 @@ const APP_CONFIG = {
                 { label: "Última semana", pageId: "past_week", condition: "past_week", value: {}, icon: "ti-calendar-week", color: "#4a90d9" },
                 { label: "Último mês", pageId: "past_month", condition: "past_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
               ]
-            }
+            },
+            FOCUS_FILTER
           ],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
@@ -1320,7 +1439,8 @@ const APP_CONFIG = {
                 { label: "4 - Iniciar quando possível", pageId: "959d289339c440a492612c70ea8ed1c9", icon: "ti-arrows-left-right", color: "#4a90d9" },
                 { label: "5 - Agendado", pageId: "4ef9e6737cea4c53ae37efe966013214", icon: "ti-refresh", color: "#4a90d9" }
               ]
-            }
+            },
+            FOCUS_FILTER
           ],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
