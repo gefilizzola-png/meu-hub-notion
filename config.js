@@ -266,8 +266,17 @@ var BETHA_CARD_FIELDS = [
 // fórmula devolve (fora eles, só devolve texto vazio — sem opção "vazio"
 // aqui, não faz sentido filtrar "por nada"). Reaproveitado nas exibições
 // de Tarefas, Reuniões e Betha.
+// "condition: 'contains'" (não "equals") de propósito: a fórmula usa
+// style(...) pra colorir o texto no Notion, e não dá pra confirmar (com as
+// ferramentas disponíveis pra consultar o Notion nesta conversa) se o valor
+// que a API devolve pra filtro é exatamente igual ao texto visível ou se
+// carrega algum metadado extra de formatação junto. "contains" é uma
+// combinação estritamente mais permissiva que "equals" pros mesmos 3
+// rótulos (bem específicos, sem risco de bater com outra coisa por engano)
+// — se o valor real tiver algo além do texto puro, "contains" ainda
+// encontra; "equals" não encontraria.
 var FOCUS_FILTER = {
-  property: "⭐ Focus", type: "formula", formulaType: "string", condition: "equals", label: "Focus",
+  property: "⭐ Focus", type: "formula", formulaType: "string", condition: "contains", label: "Focus",
   options: [
     { label: "⭐ 1 - Focus", pageId: "⭐ 1 - Focus", icon: "ti-star-filled", color: "#f08c00" },
     { label: "⚠️ 2 - Atenção", pageId: "⚠️ 2 - Atenção", icon: "ti-alert-triangle", color: "#e8590c" },
