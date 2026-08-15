@@ -425,6 +425,18 @@ html, body {
   text-transform: uppercase;
   color: #8a8a86;
 }
+/* "page.groupsSectionTitle" — rótulo maior acima de um bloco inteiro de
+   "groups" (ex: "LEGISLAÇÃO POR ASSUNTO"), pra separar visualmente de uma
+   busca/exibição que venha antes na mesma página. Mais forte que
+   ".group-title" (que é só o rótulo de cada caixinha individual). */
+.content-section-title {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #57534e;
+}
 .group-items { }
 .group-items .item:last-child { border-bottom: none; }
 
@@ -615,6 +627,30 @@ html, body {
   margin-bottom: 2px;
   padding-bottom: 9px;
 }
+
+/* "filterDef.searchable" — caixa de texto no topo do dropdown, pra filtros
+   com muitas opções (ex: Assuntos, 90+ tags) que não cabem só rolando. */
+.filter-search-wrap { position: relative; margin: 2px 2px 6px; }
+.filter-search-wrap .ti-search {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #999;
+  font-size: 13px;
+}
+.filter-search-input {
+  width: 100%;
+  height: 30px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  padding: 0 8px 0 28px;
+  font-size: 12.5px;
+  outline: none;
+  box-sizing: border-box;
+}
+.filter-search-input:focus { border-color: #b9b9b3; }
 
 /* search dropdown */
 .search-results {

@@ -462,6 +462,37 @@
       onChange(selected.slice());
     }
 
+    // "filterDef.searchable" (opcional) — pra filtros com MUITAS opções (ex:
+    // "Assuntos", 90+ tags), mostra uma caixa de texto no topo do dropdown
+    // que esconde/mostra as linhas conforme o usuário digita (comparação
+    // sem acento/maiúscula, igual a busca geral do app). Depois de marcar
+    // uma opção, a caixa limpa sozinha e a lista volta a mostrar tudo — pra
+    // digitar o próximo termo sem precisar apagar o anterior na mão.
+    var searchBox = null;
+    if (filterDef.searchable) {
+      var searchWrap = document.createElement("div");
+      searchWrap.className = "filter-search-wrap";
+      var searchIcon2 = document.createElement("i");
+      searchIcon2.className = "ti ti-search";
+      searchBox = document.createElement("input");
+      searchBox.type = "text";
+      searchBox.className = "filter-search-input";
+      searchBox.placeholder = "Buscar " + (filterDef.label || "").toLowerCase() + "…";
+      searchWrap.appendChild(searchIcon2);
+      searchWrap.appendChild(searchBox);
+      menu.appendChild(searchWrap);
+      searchBox.addEventListener("click", function (e) { e.stopPropagation(); });
+      searchBox.addEventListener("input", function () { filterRows(searchBox.value); });
+    }
+
+    function filterRows(query) {
+      var nq = normalize(query).trim();
+      rowEntries.forEach(function (entry) {
+        var match = !nq || normalize(entry.opt.label).indexOf(nq) !== -1;
+        entry.row.style.display = match ? "" : "none";
+      });
+    }
+
     var allRow = document.createElement("div");
     allRow.className = "filter-option filter-option-all";
     allRow.textContent = "Todos";
@@ -495,6 +526,11 @@
           if (idx === -1) next.push(opt); else next.splice(idx, 1);
           setSelected(next);
           // menu continua aberto — dá pra marcar mais de uma opção seguida
+          if (searchBox) {
+            searchBox.value = "";
+            filterRows("");
+            searchBox.focus();
+          }
         } else {
           menu.classList.remove("open");
           setSelected([opt]);
@@ -820,9 +856,48 @@
     // Sempre single-select (config.js marca "multi: false" nele).
     var displayLimit = null;
 
+    // "qDef.nameSearch" (opcional) — junta uma caixa de texto (igual ao
+    // "search" de sempre) NA MESMA exibição, em vez de uma caixa de busca
+    // separada no fim da página. Fica na mesma linha dos botões de filtro
+    // (reaproveita o layout de ".search-block-row") — texto e filtros
+    // combinam entre si (E lógico), cumulativo ou alternativo, e a
+    // exibição já mostra tudo mesmo sem nada digitado/filtrado (graças ao
+    // "baseFilters" sempre-verdadeiro).
+    var nameText = "";
+    var nameDebounce = null;
+    // só cria a linha combinada (".search-block-row") quando a exibição tem
+    // "nameSearch" — nas demais páginas (Tarefas/Reuniões/Betha/TAT, sem
+    // nameSearch) o filterBar continua exatamente como antes, direto dentro
+    // de "section", sem essa caixa extra.
+    var row = qDef.nameSearch ? (function () {
+      var r = document.createElement("div");
+      r.className = "search-block-row";
+      section.appendChild(r);
+      return r;
+    })() : section;
+
+    if (qDef.nameSearch) {
+      var nameWrap = document.createElement("div");
+      nameWrap.className = "search-field-wrap search-block-input-wrap";
+      var nameIcon = document.createElement("i");
+      nameIcon.className = "ti ti-search";
+      var nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "search-block-input";
+      nameInput.placeholder = qDef.nameSearch.placeholder || "Buscar por nome...";
+      nameWrap.appendChild(nameIcon);
+      nameWrap.appendChild(nameInput);
+      row.appendChild(nameWrap);
+      nameInput.addEventListener("input", function () {
+        nameText = nameInput.value;
+        clearTimeout(nameDebounce);
+        nameDebounce = setTimeout(runQuery, 350);
+      });
+    }
+
     if (qDef.filters && qDef.filters.length) {
       var filterBar = document.createElement("div");
-      filterBar.className = "filter-bar";
+      filterBar.className = "filter-bar" + (qDef.nameSearch ? " search-block-filter-bar" : "");
       qDef.filters.forEach(function (f) {
         if (f.type === "limit") {
           filterBar.appendChild(buildIconDropdown(f, function (opts) {
@@ -847,7 +922,7 @@
           if (defOpt) filterState[f.property] = filterStateFromOpts(f, [defOpt]);
         }
       });
-      section.appendChild(filterBar);
+      row.appendChild(filterBar);
     }
 
     var resultsWrap = document.createElement("div");
@@ -862,6 +937,12 @@
       resultsWrap.appendChild(loading);
 
       var filters = (qDef.baseFilters || []).map(function (f) { return f; });
+      if (qDef.nameSearch && nameText.trim()) {
+        filters.push({
+          property: qDef.nameSearch.property, type: qDef.nameSearch.type,
+          condition: qDef.nameSearch.condition, value: nameText.trim()
+        });
+      }
       Object.keys(filterState).forEach(function (prop) {
         filters.push(filterStateToFilterEntry(prop, filterState[prop]));
       });
@@ -1172,6 +1253,16 @@
         var divider = document.createElement("hr");
         divider.className = "content-divider";
         container.appendChild(divider);
+      }
+      // "page.groupsSectionTitle" (opcional) — rótulo maior acima da grade
+      // de "groups" (ex: "LEGISLAÇÃO POR ASSUNTO" em Legislações), pra
+      // separar visualmente esse bloco do que vem antes (busca/exibições)
+      // sem precisar aninhar mais um nível de página.
+      if (page.groupsSectionTitle) {
+        var sectionTitle = document.createElement("h2");
+        sectionTitle.className = "content-section-title";
+        sectionTitle.textContent = page.groupsSectionTitle;
+        container.appendChild(sectionTitle);
       }
       var groupedWrap = document.createElement("div");
       groupedWrap.className = "content-grouped";

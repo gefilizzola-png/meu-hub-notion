@@ -319,8 +319,12 @@ var LEGISLACOES_TIPO_FILTER = {
 // /schema, só leitura) na base Central toda vez que a página abre, em vez
 // de "options" fixo. "rollupTargetType" avisa o worker.js que o filtro
 // precisa do formato aninhado {rollup:{any:{multi_select:{...}}}}.
+// "searchable: true" — mostra uma caixa de texto dentro do próprio dropdown
+// pra filtrar as opções visíveis (90+ tags não cabem só rolando); depois de
+// marcar uma, a caixa limpa sozinha pra já digitar o próximo termo.
 var LEGISLACOES_ASSUNTOS_FILTER = {
   property: "🏷️ Assuntos (PMF)", type: "rollup", rollupTargetType: "multi_select", condition: "contains", label: "Assuntos",
+  searchable: true,
   optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "🏷️ Assuntos (PMF)" }
 };
 
@@ -884,25 +888,51 @@ const APP_CONFIG = {
     },
     pmf_cad_legislacoes: {
       title: "Legislações",
-      groups: [
+      itemsCompact: true,
+      // "Abrir no Notion" — mesmo padrão das demais páginas (Reuniões/
+      // Tarefas/TAT/Betha): caixinha rotulada no topo. Ainda sem "Criar no
+      // Notion" ao lado — entra quando o link do template for enviado; por
+      // enquanto só tem 1 subgrupo (igual Reuniões antes de ganhar o dela).
+      itemGroups: [
         {
-          title: "Link direto",
-          // "dense: true" usa o mesmo padrão de linha (nome + botãozinho de
-          // ícone) das demais divisórias da página, pra manter tudo com a
-          // mesma cara.
-          dense: true,
+          title: "Abrir no Notion",
           items: [
-            { label: "Central - Legislações", type: "law-links", links: [
-              { label: "Abrir no Notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link", icon: "notion" }
-            ] },
-            { label: "Legislações", type: "law-links", links: [
-              { label: "Abrir no Notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link", icon: "notion" }
-            ] },
-            { label: "Leis Municipais", type: "law-links", links: [
-              { label: "Abrir no Leis Municipais", url: "https://leis.org/prefeitura/sc/florianopolis", icon: "leis-municipais" }
-            ] }
+            { label: "Central - Legislações", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link" },
+            { label: "Legislações", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
+            { label: "Leis Municipais", type: "notion", icon: "leis-municipais", url: "https://leis.org/prefeitura/sc/florianopolis" }
           ]
-        },
+        }
+      ],
+      // Visualização única com TODOS os itens da base "Legislações",
+      // unindo a busca por nome com a visualização/filtros na MESMA caixa
+      // (em vez de duas seções separadas) — texto e filtros (Tipo,
+      // Assuntos) combinam entre si, cumulativo ou alternativo, e a
+      // exibição já mostra tudo mesmo com a caixa de texto vazia. Fica
+      // ACIMA das divisórias por assunto (ver "groupsSectionTitle" abaixo).
+      // "baseFilters" usa "Nome" (título) "is_not_empty" só pra ter um
+      // filtro sempre-verdadeiro (o Worker exige pelo menos 1 filtro em
+      // "/query") — na prática mostra tudo, sem excluir nada por padrão.
+      dynamicQueries: [
+        {
+          title: "Todas as legislações",
+          database_id: "39f8d5dfde534e378a108521c1978e21",
+          baseFilters: [
+            { property: "Nome", type: "title", condition: "is_not_empty", value: true }
+          ],
+          sorts: [{ property: "Nome", direction: "ascending" }],
+          nameSearch: { property: "Nome", type: "title", condition: "contains", placeholder: "Buscar por nome..." },
+          filters: [LEGISLACOES_TIPO_FILTER, LEGISLACOES_ASSUNTOS_FILTER, LIMIT_FILTER],
+          cardFields: [
+            { property: "Tipo", type: "select" },
+            { property: "Situação", type: "select" },
+            { property: "🏷️ Assuntos (PMF)", type: "rollup" }
+          ]
+        }
+      ],
+      // "groupsSectionTitle" — rótulo acima do bloco de divisórias por
+      // assunto abaixo, separando visualmente da busca/visualização acima.
+      groupsSectionTitle: "Legislação por assunto",
+      groups: [
         // A partir daqui: divisórias por ASSUNTO (ordem alfabética), cada uma
         // com as leis mais usadas daquele assunto. "dense: true" faz cada lei
         // virar uma linha só, com o nome e os botõezinhos de link (Notion +
@@ -1103,39 +1133,7 @@ const APP_CONFIG = {
             ] }
           ]
         }
-      ],
-      // Visualização única com TODOS os itens da base "Legislações" (não só
-      // os atalhos das divisórias por assunto acima) — filtráveis por Tipo
-      // e por Assuntos (🏷️ Assuntos (PMF), multi-select). "baseFilters" usa
-      // "Nome" (título) "is_not_empty" só pra ter um filtro sempre-verdadeiro
-      // (o Worker exige pelo menos 1 filtro em "/query") — na prática mostra
-      // todas as legislações, sem excluir nada por padrão.
-      dynamicQueries: [
-        {
-          title: "Todas as legislações",
-          database_id: "39f8d5dfde534e378a108521c1978e21",
-          baseFilters: [
-            { property: "Nome", type: "title", condition: "is_not_empty", value: true }
-          ],
-          sorts: [{ property: "Nome", direction: "ascending" }],
-          filters: [LEGISLACOES_TIPO_FILTER, LEGISLACOES_ASSUNTOS_FILTER, LIMIT_FILTER],
-          cardFields: [
-            { property: "Tipo", type: "select" },
-            { property: "Situação", type: "select" },
-            { property: "🏷️ Assuntos (PMF)", type: "rollup" }
-          ]
-        }
-      ],
-      // Busca ao vivo na base "Legislações" — só consulta o Notion (GET),
-      // nunca escreve nada. Dispara quando o usuário digita no campo "Nome"
-      // e/ou escolhe um "Tipo"; se os dois estiverem vazios, não busca.
-      search: {
-        title: "Pesquisar",
-        placeholder: "Buscar por nome...",
-        database_id: "39f8d5dfde534e378a108521c1978e21",
-        nameField: { property: "Nome", type: "title", condition: "contains" },
-        filters: [LEGISLACOES_TIPO_FILTER]
-      }
+      ]
     },
     pmf_cad_cargos: { title: "Cargos", items: [] },
     pmf_cad_contratos: { title: "Contratos", items: [] },
