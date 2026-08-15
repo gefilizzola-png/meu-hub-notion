@@ -303,7 +303,12 @@
         triggerLabel.textContent = filterDef.label + ": Todos";
       }
       menu.classList.remove("open");
-      onChange(opt ? opt.pageId : "");
+      // manda a opção inteira (não só o pageId) — assim quem escuta pode
+      // usar opt.condition/opt.value pra sobrescrever o filtro padrão
+      // (necessário pros filtros de data relativa: cada opção tem sua
+      // própria condition, ex: "equals" pra Hoje/Amanhã, "next_week" pra
+      // Esta semana).
+      onChange(opt || null);
     }
 
     var allRow = document.createElement("div");
@@ -353,8 +358,8 @@
       var filterBar = document.createElement("div");
       filterBar.className = "filter-bar";
       q.filters.forEach(function (f) {
-        filterBar.appendChild(buildIconDropdown(f, function (value) {
-          if (value) filterState[f.property] = { type: f.type, condition: f.condition, value: value };
+        filterBar.appendChild(buildIconDropdown(f, function (opt) {
+          if (opt) filterState[f.property] = { type: f.type, condition: opt.condition || f.condition, value: opt.value !== undefined ? opt.value : opt.pageId };
           else delete filterState[f.property];
           runQuery();
         }));
@@ -415,55 +420,85 @@
   // ---------------- várias exibições fixas numa página (ex: Reuniões) ----------------
   // Diferente de "dynamicQuery" (uma busca só, com filtros escolhidos na
   // tela), "dynamicQueries" é uma LISTA de buscas prontas (baseFilters +
-  // sorts fixos), cada uma com seu título — todas buscam sozinhas assim que
-  // a página abre. Sempre GET /query — nunca escreve nada no Notion.
+  // sorts fixos), cada uma com seu título. Cada exibição pode opcionalmente
+  // ter seu próprio "filters" (dropdown com ícone, igual ao de "dynamicQuery")
+  // — ex: um filtro de intervalo de data em "Próximas/Últimas Reuniões".
+  // Cada opção do dropdown pode sobrescrever a condition/value do filtro
+  // (ex: "Esta semana" usa condition "next_week" com value {} em vez de uma
+  // data específica). Sempre GET /query — nunca escreve nada no Notion.
   function renderDynamicQueryBlock(qDef, ownerPageId, container) {
     var title = document.createElement("h3");
     title.className = "group-title";
     title.textContent = qDef.title;
     container.appendChild(title);
 
+    var filterState = {}; // property -> { type, condition, value }
+
+    if (qDef.filters && qDef.filters.length) {
+      var filterBar = document.createElement("div");
+      filterBar.className = "filter-bar";
+      qDef.filters.forEach(function (f) {
+        filterBar.appendChild(buildIconDropdown(f, function (opt) {
+          if (opt) filterState[f.property] = { type: f.type, condition: opt.condition || f.condition, value: opt.value !== undefined ? opt.value : opt.pageId };
+          else delete filterState[f.property];
+          runQuery();
+        }));
+      });
+      container.appendChild(filterBar);
+    }
+
     var resultsWrap = document.createElement("div");
     resultsWrap.className = "content-plain";
     container.appendChild(resultsWrap);
 
-    var loading = document.createElement("p");
-    loading.className = "empty";
-    loading.textContent = "Buscando…";
-    resultsWrap.appendChild(loading);
+    function runQuery() {
+      resultsWrap.innerHTML = "";
+      var loading = document.createElement("p");
+      loading.className = "empty";
+      loading.textContent = "Buscando…";
+      resultsWrap.appendChild(loading);
 
-    var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(qDef.database_id) +
-      "&filters=" + encodeURIComponent(JSON.stringify(qDef.baseFilters || []));
-    if (qDef.sorts && qDef.sorts.length) {
-      url += "&sorts=" + encodeURIComponent(JSON.stringify(qDef.sorts));
+      var filters = (qDef.baseFilters || []).map(function (f) { return f; });
+      Object.keys(filterState).forEach(function (prop) {
+        var f = filterState[prop];
+        filters.push({ property: prop, type: f.type, condition: f.condition, value: f.value });
+      });
+
+      var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(qDef.database_id) +
+        "&filters=" + encodeURIComponent(JSON.stringify(filters));
+      if (qDef.sorts && qDef.sorts.length) {
+        url += "&sorts=" + encodeURIComponent(JSON.stringify(qDef.sorts));
+      }
+
+      fetch(url)
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (currentId !== ownerPageId) return; // usuário já navegou pra outro lugar enquanto buscava
+          resultsWrap.innerHTML = "";
+          if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
+          var pages = result.data.pages || [];
+          if (!pages.length) {
+            var empty = document.createElement("p");
+            empty.className = "empty";
+            empty.textContent = "Nada encontrado.";
+            resultsWrap.appendChild(empty);
+            return;
+          }
+          pages.forEach(function (p) {
+            resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url }, 100));
+          });
+        })
+        .catch(function (err) {
+          if (currentId !== ownerPageId) return;
+          resultsWrap.innerHTML = "";
+          var errEl = document.createElement("p");
+          errEl.className = "empty";
+          errEl.textContent = "Erro ao buscar: " + err.message;
+          resultsWrap.appendChild(errEl);
+        });
     }
 
-    fetch(url)
-      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-      .then(function (result) {
-        if (currentId !== ownerPageId) return; // usuário já navegou pra outro lugar enquanto buscava
-        resultsWrap.innerHTML = "";
-        if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
-        var pages = result.data.pages || [];
-        if (!pages.length) {
-          var empty = document.createElement("p");
-          empty.className = "empty";
-          empty.textContent = "Nada encontrado.";
-          resultsWrap.appendChild(empty);
-          return;
-        }
-        pages.forEach(function (p) {
-          resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url }, 100));
-        });
-      })
-      .catch(function (err) {
-        if (currentId !== ownerPageId) return;
-        resultsWrap.innerHTML = "";
-        var errEl = document.createElement("p");
-        errEl.className = "empty";
-        errEl.textContent = "Erro ao buscar: " + err.message;
-        resultsWrap.appendChild(errEl);
-      });
+    runQuery();
   }
 
   // "law-links": linha densa com o nome da lei + um botãozinho de ícone pra
@@ -545,8 +580,8 @@
       var filterBar = document.createElement("div");
       filterBar.className = "filter-bar search-block-filter-bar";
       s.filters.forEach(function (f) {
-        filterBar.appendChild(buildIconDropdown(f, function (value) {
-          state.filterValue = value;
+        filterBar.appendChild(buildIconDropdown(f, function (opt) {
+          state.filterValue = opt ? opt.pageId : "";
           state.filterProp = f;
           runQuery();
         }));

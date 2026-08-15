@@ -37,6 +37,21 @@
      }
      (usa o endpoint GET <templateWorkerUrl>/query?database_id=X&filters=[...])
 
+     Numa opção de filtro, "pageId" é o valor padrão (junto com a "condition"
+     do filtro). Pra sobrescrever ambos numa opção específica, use "condition"
+     e "value" direto na opção — usado nos filtros de data relativa (ex: "Esta
+     semana" usa condition:"next_week", value:{}, em vez de comparar com uma
+     data exata). Pra campos "date", "value"/"pageId" também aceita as
+     palavras especiais "today"/"tomorrow"/"yesterday" (o Worker resolve pra
+     data exata no fuso de São Paulo).
+
+  Uma página também pode ter "dynamicQueries" (no plural) em vez de
+  "dynamicQuery": uma LISTA de exibições fixas na mesma página (ex: a página
+  "Reuniões", com "Próximas Reuniões"/"Últimas Reuniões"/"Andamento
+  pendente"), cada uma com seu próprio title/database_id/baseFilters/sorts e,
+  opcionalmente, seu próprio "filters" (mesmo formato do "dynamicQuery" acima
+  — vira um dropdown só daquela exibição).
+
   Opcionalmente cada item pode ter um ícone (nome do Tabler Icons, sem o
   prefixo "ti-"). Lista de ícones: https://tabler.io/icons
      { label: "Calendário", type: "page", target: "calendario", icon: "calendar" }
@@ -800,7 +815,25 @@ const APP_CONFIG = {
             { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
             { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" }
           ],
-          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }]
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          // filtro extra de intervalo — cada opção pode sobrescrever a
+          // condition/value do filtro padrão (ex: "Esta semana" usa a
+          // condição relativa nativa do Notion "next_week", com value {}
+          // em vez de uma data específica)
+          filters: [
+            {
+              property: "📅 Data/Prazo",
+              type: "date",
+              condition: "equals",
+              label: "Quando",
+              options: [
+                { label: "Hoje", pageId: "today", condition: "equals", icon: "ti-calendar-event", color: "#4a90d9" },
+                { label: "Amanhã", pageId: "tomorrow", condition: "equals", icon: "ti-calendar-plus", color: "#4a90d9" },
+                { label: "Esta semana", pageId: "next_week", condition: "next_week", value: {}, icon: "ti-calendar-week", color: "#4a90d9" },
+                { label: "Este mês", pageId: "next_month", condition: "next_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
+              ]
+            }
+          ]
         },
         {
           title: "Últimas Reuniões",
@@ -809,7 +842,21 @@ const APP_CONFIG = {
             { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
             { property: "📅 Data/Prazo", type: "date", condition: "before", value: "today" }
           ],
-          sorts: [{ property: "📅 Data/Prazo", direction: "descending" }]
+          sorts: [{ property: "📅 Data/Prazo", direction: "descending" }],
+          filters: [
+            {
+              property: "📅 Data/Prazo",
+              type: "date",
+              condition: "equals",
+              label: "Quando",
+              options: [
+                { label: "Hoje", pageId: "today", condition: "equals", icon: "ti-calendar-event", color: "#4a90d9" },
+                { label: "Ontem", pageId: "yesterday", condition: "equals", icon: "ti-calendar-minus", color: "#4a90d9" },
+                { label: "Última semana", pageId: "past_week", condition: "past_week", value: {}, icon: "ti-calendar-week", color: "#4a90d9" },
+                { label: "Último mês", pageId: "past_month", condition: "past_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
+              ]
+            }
+          ]
         },
         {
           title: "Andamento pendente",
@@ -819,7 +866,25 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
-          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }]
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          // filtro extra pra ver só um status específico (dentro dos que já
+          // não são Concluído/Cancelado, já excluídos acima)
+          filters: [
+            {
+              property: "🧲 Andamento",
+              type: "relation",
+              condition: "contains",
+              label: "Andamento",
+              options: [
+                { label: "0 - Iniciar agora", pageId: "9ff8db6d456d43f39e70e14786c1fe6d", icon: "ti-player-skip-forward-filled", color: "#4a90d9" },
+                { label: "1 - Em andamento", pageId: "2030481486dd80d386a1cf7522b3deb1", icon: "ti-player-play-filled", color: "#4a90d9" },
+                { label: "2 - Iniciar assim que possível", pageId: "d18f7c0ac312422cbc14a3ae1bc82399", icon: "ti-player-track-next-filled", color: "#4a90d9" },
+                { label: "3 - Aguardando terceiros", pageId: "08cb3ec723ef41b19e6c6472ee9d9a75", icon: "ti-player-pause-filled", color: "#4a90d9" },
+                { label: "4 - Iniciar quando possível", pageId: "959d289339c440a492612c70ea8ed1c9", icon: "ti-arrows-left-right", color: "#4a90d9" },
+                { label: "5 - Agendado", pageId: "4ef9e6737cea4c53ae37efe966013214", icon: "ti-refresh", color: "#4a90d9" }
+              ]
+            }
+          ]
         }
       ]
     },
