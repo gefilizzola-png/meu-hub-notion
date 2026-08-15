@@ -58,9 +58,30 @@
   lookup:"andamento" mostra o rótulo/cor de "andamentoOptions" (lista mestre
   lá em cima). Sempre só leitura (Worker: /query?...&extra=[...]).
 
+  Um "filters" (de "dynamicQuery" ou "dynamicQueries") pode ter "default":
+  o "pageId" de uma opção pra já vir selecionada quando a página abre (ex:
+  "Última semana" em vez de "Todos"). Se quiser voltar a "Todos" ou trocar,
+  é só clicar no filtro na tela — o "default" só define o estado inicial.
+
+  Uma página também pode ter "items" (botões fixos) JUNTO com "dynamicQuery"/
+  "dynamicQueries"/"search" na mesma página — nesse caso "items" aparece no
+  topo (ex: Reuniões: botões de link direto pras visualizações do Notion,
+  depois as exibições ao vivo, depois a busca).
+
+  "search" (mesmo formato usado em Legislações) também aceita "baseFilters"
+  (opcional): filtro sempre aplicado à busca (ex: escopar a base Central só
+  aos registros de "PMF - Reuniões"), sem contar como "algo digitado" — a
+  busca só dispara de verdade quando o usuário digita ou escolhe um filtro.
+
   Opcionalmente cada item pode ter um ícone (nome do Tabler Icons, sem o
   prefixo "ti-"). Lista de ícones: https://tabler.io/icons
      { label: "Calendário", type: "page", target: "calendario", icon: "calendar" }
+
+  Pra um botão de link direto pro Notion (type: "notion"), use
+  icon: "notion" pra mostrar o logo real do Notion em vez de um ícone Tabler
+  genérico (mesmo tratamento visual usado em Legislações) — é o padrão a
+  seguir sempre que criarmos um botão assim. Outras chaves de logo real
+  disponíveis: "leis-municipais", "diario-oficial", "file-type-pdf".
 
   Cada grupo dentro de "groups" pode ter "compact: true", que deixa os
   botões daquele separador menores e lado a lado (2 colunas) — bom pra
@@ -369,7 +390,7 @@ const APP_CONFIG = {
           title: "CONTROLES - PMF",
           items: [
             { label: "Betha – Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7e1194013472498f884e7b4e759c56bf?v=152de528d7aa40168640b394d3a8458e&source=copy_link" },
-            { label: "PMF - Reuniões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link" },
+            { label: "PMF - Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
             { label: "PMF - Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" }
           ]
         },
@@ -830,6 +851,15 @@ const APP_CONFIG = {
     // Só leitura (GET /query) — nunca escreve nada no Notion.
     pmf_ctrl_reunioes: {
       title: "Reuniões",
+      // botões fixos no topo — links diretos pras visualizações já prontas
+      // no Notion (mesma base "PMF - Reuniões"). Usam o logo real do Notion
+      // (icon: "notion"), igual ao padrão adotado em Legislações.
+      items: [
+        { label: "Geral", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link" },
+        { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=202117a77040409083c02dde7da355f2&source=copy_link" },
+        { label: "Concluídas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=728edc021780475eb43ddc8a1c97f955&source=copy_link" },
+        { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" }
+      ],
       dynamicQueries: [
         {
           title: "Próximas Reuniões",
@@ -879,6 +909,9 @@ const APP_CONFIG = {
               type: "date",
               condition: "equals",
               label: "Quando",
+              // já abre filtrado em "Última semana" — clique no filtro pra
+              // trocar (ex: voltar pra "Todos", "Ontem"...)
+              default: "past_week",
               options: [
                 { label: "Hoje", pageId: "today", condition: "equals", icon: "ti-calendar-event", color: "#4a90d9" },
                 { label: "Ontem", pageId: "yesterday", condition: "equals", icon: "ti-calendar-minus", color: "#4a90d9" },
@@ -924,7 +957,20 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
           ]
         }
-      ]
+      ],
+      // busca ao vivo por nome, sempre por último na página — igual à de
+      // Legislações. "baseFilters" fica sempre aplicado (escopa a base
+      // Central inteira só aos registros de "PMF - Reuniões"), mas só busca
+      // quando o usuário digita algo.
+      search: {
+        title: "Pesquisar",
+        placeholder: "Buscar reunião por nome...",
+        database_id: "2310481486dd80079202fe1eaf5e14c4",
+        nameField: { property: "Nome", type: "title", condition: "contains" },
+        baseFilters: [
+          { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" }
+        ]
+      }
     },
     pmf_ctrl_timesheet: { title: "Time Sheet", items: [] },
 

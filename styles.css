@@ -235,6 +235,14 @@ html, body {
   width: 20px;
   text-align: center;
 }
+/* logo real (ex: cubo do Notion) no lugar do ícone Tabler — mesmo espaço
+   reservado do .item-icon, pra não desalinhar o botão. */
+.item-icon-img {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
 .item-label {
   font-size: 14.5px;
   color: #262624;

@@ -14,6 +14,12 @@
     return "ti-folder";
   }
 
+  // logos reais (sem fundo) usados no lugar de um ícone genérico Tabler —
+  // mesma lista usada nas linhas densas de Legislações (buildLawRow). Um
+  // "item" normal usa isso quando item.icon bate com uma destas chaves (ex:
+  // botões de link direto pro Notion usam icon: "notion").
+  var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png" };
+
   // ---------------- criação de página via template (Cloudflare Worker) ----------------
   // Chama o Worker configurado em cfg.templateWorkerUrl, que cria uma página nova no
   // Notion a partir de um template e devolve a URL da página criada.
@@ -233,8 +239,20 @@
 
     var left = document.createElement("span");
     left.className = "item-left";
-    var icon = document.createElement("i");
-    icon.className = "item-icon ti " + iconFor(item);
+    var icon;
+    if (item.icon && IMG_ICONS[item.icon]) {
+      // logo real (ex: cubo do Notion) em vez de um ícone Tabler genérico —
+      // mesmo tratamento visual usado nos botões de Legislações.
+      icon = document.createElement("img");
+      icon.className = "item-icon-img";
+      icon.src = IMG_ICONS[item.icon];
+      icon.alt = "";
+      icon.width = 18;
+      icon.height = 18;
+    } else {
+      icon = document.createElement("i");
+      icon.className = "item-icon ti " + iconFor(item);
+    }
     var label = document.createElement("span");
     label.className = "item-label";
     label.textContent = item.label;
@@ -315,7 +333,10 @@
     var menu = document.createElement("div");
     menu.className = "filter-menu";
 
-    function selectOption(opt) {
+    // só atualiza a aparência do botão (ícone/cor/texto) — separado de
+    // selectOption pra poder marcar uma opção padrão já selecionada ao abrir
+    // a página, sem disparar onChange (quem chama já cuida do estado inicial).
+    function updateTriggerUI(opt) {
       if (opt) {
         triggerIcon.className = "ti " + opt.icon;
         triggerIcon.style.color = opt.color || "";
@@ -325,6 +346,10 @@
         triggerIcon.style.color = "";
         triggerLabel.textContent = filterDef.label + ": Todos";
       }
+    }
+
+    function selectOption(opt) {
+      updateTriggerUI(opt);
       menu.classList.remove("open");
       // manda a opção inteira (não só o pageId) — assim quem escuta pode
       // usar opt.condition/opt.value pra sobrescrever o filtro padrão
@@ -353,6 +378,15 @@
       row.addEventListener("click", function () { selectOption(opt); });
       menu.appendChild(row);
     });
+
+    // "filterDef.default" (opcional) — pageId de uma opção pra já vir
+    // marcada/selecionada visualmente quando a página abre (ex: "Últimas
+    // Reuniões" já abrir com "Última semana"). Só atualiza a aparência aqui
+    // — quem chama essa função já seeda o filtro real antes da 1ª busca.
+    if (filterDef.default) {
+      var defOpt = (filterDef.options || []).filter(function (o) { return o.pageId === filterDef.default; })[0];
+      if (defOpt) updateTriggerUI(defOpt);
+    }
 
     trigger.addEventListener("click", function (e) {
       e.stopPropagation();
@@ -470,11 +504,17 @@
 
   // acha, na lista mestre cfg.andamentoOptions, o status que bate com os
   // ids devolvidos por um campo "relation" (extra) — pra pegar rótulo/cor.
+  // O Notion devolve o id de uma relação SEMPRE com hífen (formato UUID),
+  // mas os "pageId" salvos em config.js vieram sem hífen (copiados da URL
+  // do Notion, que omite os hífens) — por isso compara sem hífen dos dois
+  // lados, senão nunca bate.
+  function stripDashes(id) { return (id || "").replace(/-/g, ""); }
   function findAndamentoOption(ids) {
     if (!ids || !ids.length) return null;
+    var normIds = ids.map(stripDashes);
     var list = cfg.andamentoOptions || [];
     for (var i = 0; i < list.length; i++) {
-      if (ids.indexOf(list[i].pageId) !== -1) return list[i];
+      if (normIds.indexOf(stripDashes(list[i].pageId)) !== -1) return list[i];
     }
     return null;
   }
@@ -523,6 +563,13 @@
           else delete filterState[f.property];
           runQuery();
         }));
+        // "f.default" (opcional) — já seeda o filtro real ANTES da 1ª busca,
+        // pra a página abrir direto com esse filtro aplicado (ex: "Últimas
+        // Reuniões" abre já em "Última semana", sem precisar clicar).
+        if (f.default) {
+          var defOpt = (f.options || []).filter(function (o) { return o.pageId === f.default; })[0];
+          if (defOpt) filterState[f.property] = { type: f.type, condition: defOpt.condition || f.condition, value: defOpt.value !== undefined ? defOpt.value : defOpt.pageId };
+        }
       });
       container.appendChild(filterBar);
     }
@@ -599,9 +646,8 @@
     row.appendChild(label);
     var linksWrap = document.createElement("span");
     linksWrap.className = "law-links";
-    var imgIcons = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png" };
     (item.links || []).forEach(function (link) {
-      var isImg = !!imgIcons[link.icon];
+      var isImg = !!IMG_ICONS[link.icon];
       var a = document.createElement("a");
       a.className = "law-link-btn" + (isImg ? " icon-img" : "");
       a.href = link.url;
@@ -610,7 +656,7 @@
       a.title = link.label;
       if (isImg) {
         var img = document.createElement("img");
-        img.src = imgIcons[link.icon];
+        img.src = IMG_ICONS[link.icon];
         img.alt = link.label;
         // largura/altura fixas no próprio elemento — assim o ícone não fica
         // gigante mesmo se o styles.css não tiver carregado a versão nova.
@@ -687,7 +733,11 @@
     });
 
     function runQuery() {
-      var filters = [];
+      // "hasInput" decide se busca ou não — independente de "s.baseFilters"
+      // (filtro fixo sempre aplicado, ex: escopar a base inteira só aos
+      // registros de "PMF - Reuniões"), que sozinho não conta como busca.
+      var hasInput = !!state.text.trim() || !!(state.filterValue && state.filterProp);
+      var filters = (s.baseFilters || []).map(function (f) { return f; });
       if (state.text.trim()) {
         filters.push({
           property: s.nameField.property, type: s.nameField.type,
@@ -702,7 +752,7 @@
       }
       var mySeq = ++requestSeq;
       resultsWrap.innerHTML = "";
-      if (!filters.length) return; // nada digitado/selecionado ainda — não busca
+      if (!hasInput) return; // nada digitado/selecionado ainda — não busca
 
       var loading = document.createElement("p");
       loading.className = "empty";
@@ -755,22 +805,11 @@
       return;
     }
 
-    if (page.dynamicQueries) {
-      page.dynamicQueries.forEach(function (qDef, i) {
-        if (i > 0) {
-          var divider0 = document.createElement("hr");
-          divider0.className = "content-divider";
-          container.appendChild(divider0);
-        }
-        renderDynamicQueryBlock(qDef, pageId, container);
-      });
-      return;
-    }
-
     var flatItems = page.items || [];
     var groups = (page.groups || []).filter(function (g) { return (g.items || []).length > 0; });
+    var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
 
-    if (!flatItems.length && !groups.length && !page.search) {
+    if (!flatItems.length && !groups.length && !page.search && !hasDynamicQueries) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -779,8 +818,11 @@
     }
 
     var globalIdx = 0;
+    var renderedSomething = false;
 
-    // "items" soltos (sem caixa) — comportamento de sempre.
+    // "items" soltos (sem caixa) — comportamento de sempre. Numa página com
+    // "dynamicQueries" (ex: Reuniões), serve pra botões fixos no topo (ex:
+    // links diretos pras visualizações do Notion).
     if (flatItems.length) {
       var plainWrap = document.createElement("div");
       plainWrap.className = "content-plain";
@@ -789,13 +831,33 @@
         globalIdx++;
       });
       container.appendChild(plainWrap);
+      renderedSomething = true;
+    }
+
+    // "dynamicQueries" — várias exibições fixas (baseFilters + sorts), cada
+    // uma buscando sozinha ao abrir a página. Só leitura (GET /query).
+    if (hasDynamicQueries) {
+      if (renderedSomething) {
+        var dividerDQ = document.createElement("hr");
+        dividerDQ.className = "content-divider";
+        container.appendChild(dividerDQ);
+      }
+      page.dynamicQueries.forEach(function (qDef, i) {
+        if (i > 0) {
+          var divider0 = document.createElement("hr");
+          divider0.className = "content-divider";
+          container.appendChild(divider0);
+        }
+        renderDynamicQueryBlock(qDef, pageId, container);
+      });
+      renderedSomething = true;
     }
 
     // "groups" = caixas visuais dentro da MESMA página; os botões ficam
-    // acessíveis direto, sem precisar clicar no título do grupo. Se também
-    // houver "items" soltos acima, uma linha separa os dois blocos.
+    // acessíveis direto, sem precisar clicar no título do grupo. Se já
+    // houver algo acima, uma linha separa os blocos.
     if (groups.length) {
-      if (flatItems.length) {
+      if (renderedSomething) {
         var divider = document.createElement("hr");
         divider.className = "content-divider";
         container.appendChild(divider);
@@ -823,12 +885,13 @@
         groupedWrap.appendChild(section);
       });
       container.appendChild(groupedWrap);
+      renderedSomething = true;
     }
 
     // "search" = caixa de busca ao vivo (opcional), sempre por último na
     // página. Só consulta o Notion quando o usuário digita/filtra algo.
     if (page.search) {
-      if (flatItems.length || groups.length) {
+      if (renderedSomething) {
         var divider2 = document.createElement("hr");
         divider2.className = "content-divider";
         container.appendChild(divider2);
