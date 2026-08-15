@@ -667,9 +667,9 @@ const APP_CONFIG = {
         // /create via database_id+template_id), confirmado com o usuário.
         // "1ª Câmara" usa o template de Titulares (existe também um de
         // Suplentes em Criar Páginas, não usado aqui).
-        { label: "Sessão - Criar (1ª Câmara)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
-        { label: "Sessão - Criar (Pleno)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" },
-        { label: "Processo - Criar", type: "notion-template", database_id: "88435f4ebb9849ac88664da53f13ceb6", template_id: "020ef2bf-1558-484d-b0e1-0f870dd7719a" }
+        { label: "Sessão - Criar (1ª Câmara)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
+        { label: "Sessão - Criar (Pleno)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" },
+        { label: "Processo - Criar", type: "notion-template", icon: "notion", database_id: "88435f4ebb9849ac88664da53f13ceb6", template_id: "020ef2bf-1558-484d-b0e1-0f870dd7719a" }
       ],
       // Ordem: as duas exibições PENDENTES primeiro (Sessões, depois
       // Processos), pra ficarem mais visíveis no topo, e só depois as duas
