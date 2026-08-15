@@ -273,6 +273,9 @@
         badge.className = "item-sub-badge";
         if (s.color) badge.style.color = s.color;
         badge.textContent = s.text;
+        // se o texto for cortado (ellipsis) por ser muito longo, o título
+        // completo ainda aparece passando o mouse por cima.
+        badge.title = s.text;
         subRow.appendChild(badge);
       });
       textCol.appendChild(subRow);
@@ -631,10 +634,18 @@
   // (ex: "Esta semana" usa condition "next_week" com value {} em vez de uma
   // data específica). Sempre GET /query — nunca escreve nada no Notion.
   function renderDynamicQueryBlock(qDef, ownerPageId, container) {
+    // envolve a exibição inteira (título + filtros + resultados) numa caixa
+    // própria — permite colorir o fundo por exibição via "qDef.bg" (ex:
+    // Pendentes/Atrasadas/Concluídas em Tarefas, cada uma com uma cor).
+    var section = document.createElement("div");
+    section.className = "query-block";
+    if (qDef.bg) section.style.background = qDef.bg;
+    container.appendChild(section);
+
     var title = document.createElement("h3");
     title.className = "group-title";
     title.textContent = qDef.title;
-    container.appendChild(title);
+    section.appendChild(title);
 
     var filterState = {}; // property -> { type, pairs: [{condition,value}, ...] }
     // "type: 'limit'" é diferente dos outros filtros — não é uma condição do
@@ -670,12 +681,12 @@
           if (defOpt) filterState[f.property] = filterStateFromOpts(f, [defOpt]);
         }
       });
-      container.appendChild(filterBar);
+      section.appendChild(filterBar);
     }
 
     var resultsWrap = document.createElement("div");
     resultsWrap.className = "content-plain";
-    container.appendChild(resultsWrap);
+    section.appendChild(resultsWrap);
 
     function runQuery() {
       resultsWrap.innerHTML = "";

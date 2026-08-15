@@ -57,7 +57,9 @@
   "Reuniões", com "Próximas Reuniões"/"Últimas Reuniões"/"Andamento
   pendente"), cada uma com seu próprio title/database_id/baseFilters/sorts e,
   opcionalmente, seu próprio "filters" (mesmo formato do "dynamicQuery" acima
-  — vira um dropdown só daquela exibição), e opcionalmente "cardFields":
+  — vira um dropdown só daquela exibição), opcionalmente "bg" (cor de fundo
+  em hex pra caixa inteira daquela exibição — ex: um vermelho bem claro pra
+  "Atrasadas"; sem "bg" fica sem fundo, igual antes), e opcionalmente "cardFields":
   uma lista de propriedades da base pra mostrar como subtítulo em cada card
   de resultado (ex: data/hora, status). Cada entrada é
   { property, type: "date"|"relation", lookup: "andamento" (opcional) } —
@@ -971,6 +973,7 @@ const APP_CONFIG = {
       dynamicQueries: [
         {
           title: "Pendentes",
+          bg: "#fdf6e3",
           database_id: "2310481486dd80079202fe1eaf5e14c4",
           baseFilters: [
             { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Tarefas" },
@@ -983,6 +986,7 @@ const APP_CONFIG = {
         },
         {
           title: "Atrasadas",
+          bg: "#fdecea",
           database_id: "2310481486dd80079202fe1eaf5e14c4",
           baseFilters: [
             { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Tarefas" },
@@ -996,6 +1000,7 @@ const APP_CONFIG = {
         },
         {
           title: "Concluídas",
+          bg: "#eaf7ed",
           database_id: "2310481486dd80079202fe1eaf5e14c4",
           baseFilters: [
             { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Tarefas" },
