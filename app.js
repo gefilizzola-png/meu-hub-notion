@@ -164,7 +164,7 @@
       renderTree();
     }));
     var icon = document.createElement("i");
-    if (page.dynamicQuery) {
+    if (page.dynamicQuery || page.dynamicQueries) {
       icon.className = "ti ti-calendar-event";
     } else {
       icon.className = "ti ti-folder" + (hasContent ? "" : " icon-empty");
@@ -412,6 +412,60 @@
     runQuery();
   }
 
+  // ---------------- várias exibições fixas numa página (ex: Reuniões) ----------------
+  // Diferente de "dynamicQuery" (uma busca só, com filtros escolhidos na
+  // tela), "dynamicQueries" é uma LISTA de buscas prontas (baseFilters +
+  // sorts fixos), cada uma com seu título — todas buscam sozinhas assim que
+  // a página abre. Sempre GET /query — nunca escreve nada no Notion.
+  function renderDynamicQueryBlock(qDef, ownerPageId, container) {
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = qDef.title;
+    container.appendChild(title);
+
+    var resultsWrap = document.createElement("div");
+    resultsWrap.className = "content-plain";
+    container.appendChild(resultsWrap);
+
+    var loading = document.createElement("p");
+    loading.className = "empty";
+    loading.textContent = "Buscando…";
+    resultsWrap.appendChild(loading);
+
+    var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(qDef.database_id) +
+      "&filters=" + encodeURIComponent(JSON.stringify(qDef.baseFilters || []));
+    if (qDef.sorts && qDef.sorts.length) {
+      url += "&sorts=" + encodeURIComponent(JSON.stringify(qDef.sorts));
+    }
+
+    fetch(url)
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        if (currentId !== ownerPageId) return; // usuário já navegou pra outro lugar enquanto buscava
+        resultsWrap.innerHTML = "";
+        if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
+        var pages = result.data.pages || [];
+        if (!pages.length) {
+          var empty = document.createElement("p");
+          empty.className = "empty";
+          empty.textContent = "Nada encontrado.";
+          resultsWrap.appendChild(empty);
+          return;
+        }
+        pages.forEach(function (p) {
+          resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url }, 100));
+        });
+      })
+      .catch(function (err) {
+        if (currentId !== ownerPageId) return;
+        resultsWrap.innerHTML = "";
+        var errEl = document.createElement("p");
+        errEl.className = "empty";
+        errEl.textContent = "Erro ao buscar: " + err.message;
+        resultsWrap.appendChild(errEl);
+      });
+  }
+
   // "law-links": linha densa com o nome da lei + um botãozinho de ícone pra
   // cada link (Notion, Leis Municipais, Arquivo...). Usado em grupos com
   // "dense: true" — ex: as leis mais comuns em Legislações, organizadas por
@@ -578,6 +632,18 @@
 
     if (page.dynamicQuery) {
       renderDynamicQuery(page, pageId, container);
+      return;
+    }
+
+    if (page.dynamicQueries) {
+      page.dynamicQueries.forEach(function (qDef, i) {
+        if (i > 0) {
+          var divider0 = document.createElement("hr");
+          divider0.className = "content-divider";
+          container.appendChild(divider0);
+        }
+        renderDynamicQueryBlock(qDef, pageId, container);
+      });
       return;
     }
 

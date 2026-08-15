@@ -766,7 +766,7 @@ const APP_CONFIG = {
       title: "Controles",
       items: [
         { label: "Betha", type: "page", target: "pmf_ctrl_betha" },
-        { label: "Reuniões", type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link" },
+        { label: "Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
         { label: "Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" },
         { label: "Time Sheet", type: "notion", url: "https://app.notion.com/p/georges-filizzola/95226c82b4aa45c0bc428a3c570ce28d?v=780f9595e978455abf33cce0c934ed8d&source=copy_link" }
       ]
@@ -785,7 +785,44 @@ const APP_CONFIG = {
     pmf_ctrl_betha_tabelas: { title: "Tabelas", items: [] },
 
     pmf_ctrl_tarefas: { title: "Tarefas", items: [] },
-    pmf_ctrl_reunioes: { title: "Reuniões", items: [] },
+    // "dynamicQueries" — várias exibições fixas (baseFilters + sorts) numa
+    // página só, cada uma buscando sozinha ao abrir. Todas consultam a base
+    // Central (mesma da página "Hoje"), filtrando por
+    // "📚 Página de Origem" = "PMF - Reuniões" pra trazer só as reuniões.
+    // Só leitura (GET /query) — nunca escreve nada no Notion.
+    pmf_ctrl_reunioes: {
+      title: "Reuniões",
+      dynamicQueries: [
+        {
+          title: "Próximas Reuniões",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
+            { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }]
+        },
+        {
+          title: "Últimas Reuniões",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
+            { property: "📅 Data/Prazo", type: "date", condition: "before", value: "today" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "descending" }]
+        },
+        {
+          title: "Andamento pendente",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }]
+        }
+      ]
+    },
     pmf_ctrl_timesheet: { title: "Time Sheet", items: [] },
 
     pmf_funcional: {
