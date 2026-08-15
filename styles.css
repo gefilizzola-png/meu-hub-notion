@@ -380,6 +380,25 @@ html, body {
 }
 .query-block .group-title { margin-bottom: 8px; }
 .query-block .filter-bar { margin-bottom: 12px; }
+
+/* "itemGroups" — pequenas caixinhas ao redor de subgrupos de botões
+   items-compact no topo de uma página (ex: "Abrir no Notion" / "Criar no
+   Notion" em Reuniões/Tarefas/TAT). Bem mais leve que ".group-section"
+   (usado em Favoritas etc.) — só uma borda fina e um respiro pequeno, sem
+   virar um cartão grande. */
+.items-compact-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.items-compact-group {
+  border: 0.5px solid #ececea;
+  border-radius: 10px;
+  background: #fbfbfa;
+  padding: 8px 10px 10px;
+}
+.items-compact-group .group-title { margin-bottom: 6px; }
+.items-compact-group .content-plain.items-compact { margin: 0; }
 .group-section {
   border: 0.5px solid #ececea;
   border-radius: 10px;

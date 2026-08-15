@@ -79,6 +79,20 @@
   a pena usar "itemsCompact: true" na página, senão os botões ficam altos
   demais (cartão de desktop) pra só um link direto.
 
+  "itemGroups" é uma variação de "items" pro mesmo lugar (topo da página),
+  só que divide os botões em pequenos subgrupos com um rótulo cada — uma
+  caixinha fina ao redor, bem mais leve que "groups" (que é pra caixas
+  maiores, tipo Favoritas). Cada entrada é { title, items: [...] } e os
+  itens dentro sempre saem no estilo "items-compact" (não depende de
+  "page.itemsCompact"). Usado pra separar visualmente "Abrir no Notion"
+  (type:"notion") de "Criar no Notion" (type:"notion-template") no topo de
+  Reuniões/Tarefas/TAT — se uma página só tem um dos dois tipos, é só criar
+  um subgrupo só (ex: Reuniões, que ainda não tem nenhum "Criar no Notion").
+     itemGroups: [
+       { title: "Abrir no Notion", items: [ { label:"...", type:"notion", icon:"notion", url:"..." } ] },
+       { title: "Criar no Notion", items: [ { label:"...", type:"notion-template", icon:"notion", database_id:"...", template_id:"..." } ] }
+     ]
+
   "search" (mesmo formato usado em Legislações) também aceita "baseFilters"
   (opcional): filtro sempre aplicado à busca (ex: escopar a base Central só
   aos registros de "PMF - Reuniões"), sem contar como "algo digitado" — a
@@ -100,10 +114,11 @@
 
   LEIAUTE PADRÃO das páginas "funcionais" (uma base do Notion com view no
   app) que criarmos/mudarmos daqui pra frente — ex: Reuniões, Tarefas, TAT:
-    1) topo: "items" com itemsCompact:true — botões de link direto pro
-       Notion (type:"notion") e, quando fizer sentido, atalhos de criação
-       de página (type:"notion-template") pros templates mais usados
-       daquela base — ambos com icon:"notion".
+    1) topo: "itemGroups" (ver abaixo) — botões de link direto pro Notion
+       (type:"notion") e, quando fizer sentido, atalhos de criação de
+       página (type:"notion-template") pros templates mais usados daquela
+       base — ambos com icon:"notion", cada tipo no seu próprio subgrupo
+       ("Abrir no Notion" / "Criar no Notion").
     2) meio: "dynamicQueries" — uma exibição por status/categoria relevante
        (ex: Pendentes/Concluídas), cada uma com "bg" (cor de fundo clara:
        amarelo pra pendente/em aberto, verde pra concluído, vermelho pra
@@ -681,17 +696,27 @@ const APP_CONFIG = {
     pmf_col_tat: {
       title: "TAT",
       itemsCompact: true,
-      items: [
-        { label: "Jeton", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/bfe39c0d1fb545058538915ab28239c4?v=2a89cc3846ea4364ac2384afa8dec3aa&source=copy_link" },
-        { label: "Processos", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
-        { label: "Sessões", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" },
-        // botões de criação — mesmo mecanismo de "Criar Páginas" (POST
-        // /create via database_id+template_id), confirmado com o usuário.
-        // "1ª Câmara" usa o template de Titulares (existe também um de
-        // Suplentes em Criar Páginas, não usado aqui).
-        { label: "Sessão - Criar (1ª Câmara)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
-        { label: "Sessão - Criar (Pleno)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" },
-        { label: "Processo - Criar", type: "notion-template", icon: "notion", database_id: "88435f4ebb9849ac88664da53f13ceb6", template_id: "020ef2bf-1558-484d-b0e1-0f870dd7719a" }
+      itemGroups: [
+        {
+          title: "Abrir no Notion",
+          items: [
+            { label: "Jeton", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/bfe39c0d1fb545058538915ab28239c4?v=2a89cc3846ea4364ac2384afa8dec3aa&source=copy_link" },
+            { label: "Processos", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
+            { label: "Sessões", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" }
+          ]
+        },
+        {
+          title: "Criar no Notion",
+          // mesmo mecanismo de "Criar Páginas" (POST /create via
+          // database_id+template_id), confirmado com o usuário. "1ª Câmara"
+          // usa o template de Titulares (existe também um de Suplentes em
+          // Criar Páginas, não usado aqui).
+          items: [
+            { label: "Sessão - Criar (1ª Câmara)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
+            { label: "Sessão - Criar (Pleno)", type: "notion-template", icon: "notion", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" },
+            { label: "Processo - Criar", type: "notion-template", icon: "notion", database_id: "88435f4ebb9849ac88664da53f13ceb6", template_id: "020ef2bf-1558-484d-b0e1-0f870dd7719a" }
+          ]
+        }
       ],
       // Ordem: as duas exibições PENDENTES primeiro (Sessões, depois
       // Processos), pra ficarem mais visíveis no topo, e só depois as duas
@@ -1087,22 +1112,32 @@ const APP_CONFIG = {
     pmf_ctrl_tarefas: {
       title: "Tarefas",
       itemsCompact: true,
-      // botões fixos no topo — links diretos pras visualizações já prontas
-      // no Notion (mesma base "PMF - Tarefas").
-      items: [
-        { label: "Geral", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link" },
-        { label: "Ofícios", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a080ebe059b5481aa628966a9baacfc1&source=copy_link" },
-        { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" },
-        { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd8071bdef000c3f7ae805&source=copy_link" },
-        // botões de criação — mesmos templates já usados em Criar Páginas
-        // (Entrada/Criar páginas/PMF/Controles, divisória "Tarefas"), agora
-        // como atalho de 1 clique aqui também (POST /create).
-        { label: "Auditorias - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "f0e058d6-85ce-401f-bb8a-2a7f1513ef10" },
-        { label: "Consultas - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1809e1e4-e069-4251-9345-0ed89c664da3" },
-        { label: "Fiscalização - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1367bf16-71d0-4560-acfa-e7a3d8a2b64e" },
-        { label: "Lançamentos - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "87c65fda-96b0-4e19-afc0-84c8eb87bb39" },
-        { label: "Ofícios - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "6b7c5969-1344-492c-b501-3236fe0733f4" },
-        { label: "Processos - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "21111593-0a0c-4e6a-a744-e560879db3e0" }
+      // botões fixos no topo, divididos em 2 subgrupos (caixinha fina ao
+      // redor de cada um): links diretos pras visualizações já prontas no
+      // Notion, e atalhos de criação de página (mesmos templates já usados
+      // em Criar Páginas → Entrada/Criar páginas/PMF/Controles → divisória
+      // "Tarefas", agora com 1 clique aqui também via POST /create).
+      itemGroups: [
+        {
+          title: "Abrir no Notion",
+          items: [
+            { label: "Geral", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link" },
+            { label: "Ofícios", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a080ebe059b5481aa628966a9baacfc1&source=copy_link" },
+            { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=e18cf9bf95e946b09c5878eb53c87c50&source=copy_link" },
+            { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd8071bdef000c3f7ae805&source=copy_link" }
+          ]
+        },
+        {
+          title: "Criar no Notion",
+          items: [
+            { label: "Auditorias - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "f0e058d6-85ce-401f-bb8a-2a7f1513ef10" },
+            { label: "Consultas - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1809e1e4-e069-4251-9345-0ed89c664da3" },
+            { label: "Fiscalização - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "1367bf16-71d0-4560-acfa-e7a3d8a2b64e" },
+            { label: "Lançamentos - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "87c65fda-96b0-4e19-afc0-84c8eb87bb39" },
+            { label: "Ofícios - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "6b7c5969-1344-492c-b501-3236fe0733f4" },
+            { label: "Processos - Criar", type: "notion-template", icon: "notion", database_id: "72d4cab7152b4580b88c1350c53b1a05", template_id: "21111593-0a0c-4e6a-a744-e560879db3e0" }
+          ]
+        }
       ],
       dynamicQueries: [
         {
@@ -1165,16 +1200,24 @@ const APP_CONFIG = {
     pmf_ctrl_reunioes: {
       title: "Reuniões",
       // "itemsCompact" — deixa os botões abaixo baixos (ícone + texto numa
-      // linha), em vez do cartão alto padrão do desktop/tablet.
+      // linha), em vez do cartão alto padrão do desktop/tablet. Continua
+      // valendo mesmo usando "itemGroups" abaixo (que já é compact por
+      // padrão), mas não custa deixar explícito.
       itemsCompact: true,
-      // botões fixos no topo — links diretos pras visualizações já prontas
-      // no Notion (mesma base "PMF - Reuniões"). Usam o logo real do Notion
-      // (icon: "notion"), igual ao padrão adotado em Legislações.
-      items: [
-        { label: "Geral", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link" },
-        { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=202117a77040409083c02dde7da355f2&source=copy_link" },
-        { label: "Concluídas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=728edc021780475eb43ddc8a1c97f955&source=copy_link" },
-        { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" }
+      // botões fixos no topo, divididos em subgrupos rotulados (caixinha
+      // fina ao redor de cada um) — aqui só tem "Abrir no Notion" porque
+      // Reuniões ainda não tem nenhum botão de criar página. Usam o logo
+      // real do Notion (icon: "notion"), igual ao padrão de Legislações.
+      itemGroups: [
+        {
+          title: "Abrir no Notion",
+          items: [
+            { label: "Geral", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link" },
+            { label: "Pendentes", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=202117a77040409083c02dde7da355f2&source=copy_link" },
+            { label: "Concluídas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=728edc021780475eb43ddc8a1c97f955&source=copy_link" },
+            { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" }
+          ]
+        }
       ],
       dynamicQueries: [
         {

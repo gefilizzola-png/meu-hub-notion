@@ -82,6 +82,14 @@
   // aparecem (items soltos primeiro, depois os grupos concatenados).
   function pageItems(page) {
     var out = (page.items || []).slice();
+    // "itemGroups" (opcional) — mesma ideia de "items" soltos no topo, só
+    // que divididos em pequenos subgrupos rotulados (ex: "Abrir no Notion"
+    // / "Criar no Notion"). Entra na indexação igual a "items"/"groups".
+    if (page.itemGroups) {
+      page.itemGroups.forEach(function (g) {
+        (g.items || []).forEach(function (it) { out.push(it); });
+      });
+    }
     if (page.groups) {
       page.groups.forEach(function (g) {
         (g.items || []).forEach(function (it) { out.push(it); });
@@ -987,10 +995,11 @@
     }
 
     var flatItems = page.items || [];
+    var itemGroups = (page.itemGroups || []).filter(function (g) { return (g.items || []).length > 0; });
     var groups = (page.groups || []).filter(function (g) { return (g.items || []).length > 0; });
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
 
-    if (!flatItems.length && !groups.length && !page.search && !hasDynamicQueries) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -1014,6 +1023,35 @@
         globalIdx++;
       });
       container.appendChild(plainWrap);
+      renderedSomething = true;
+    }
+
+    // "itemGroups" — igual "items" soltos, só que divididos em pequenas
+    // caixinhas rotuladas (ex: "Abrir no Notion" / "Criar no Notion"), pra
+    // separar visualmente botões de tipos diferentes no topo de uma página
+    // sem o peso visual de "groups" (que é pra caixas maiores, tipo
+    // Favoritas). Sempre no estilo "items-compact" (linha baixa, ícone +
+    // texto) — não depende de "page.itemsCompact".
+    if (itemGroups.length) {
+      var itemGroupsWrap = document.createElement("div");
+      itemGroupsWrap.className = "items-compact-groups";
+      itemGroups.forEach(function (g) {
+        var box = document.createElement("div");
+        box.className = "items-compact-group";
+        var boxTitle = document.createElement("h4");
+        boxTitle.className = "group-title";
+        boxTitle.textContent = g.title;
+        box.appendChild(boxTitle);
+        var boxItems = document.createElement("div");
+        boxItems.className = "content-plain items-compact";
+        g.items.forEach(function (item) {
+          boxItems.appendChild(buildItemEl(item, globalIdx));
+          globalIdx++;
+        });
+        box.appendChild(boxItems);
+        itemGroupsWrap.appendChild(box);
+      });
+      container.appendChild(itemGroupsWrap);
       renderedSomething = true;
     }
 
