@@ -662,7 +662,14 @@ const APP_CONFIG = {
       items: [
         { label: "Jeton", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/bfe39c0d1fb545058538915ab28239c4?v=2a89cc3846ea4364ac2384afa8dec3aa&source=copy_link" },
         { label: "Processos", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
-        { label: "Sessões", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" }
+        { label: "Sessões", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" },
+        // botões de criação — mesmo mecanismo de "Criar Páginas" (POST
+        // /create via database_id+template_id), confirmado com o usuário.
+        // "1ª Câmara" usa o template de Titulares (existe também um de
+        // Suplentes em Criar Páginas, não usado aqui).
+        { label: "Sessão - Criar (1ª Câmara)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "9e4c63cf-97cf-4991-9934-9881f8da114a" },
+        { label: "Sessão - Criar (Pleno)", type: "notion-template", database_id: "8cfdb6aa51e14988930a98dd0793c7bf", template_id: "f36660bf-2d5c-43e8-ac9b-673206d53634" },
+        { label: "Processo - Criar", type: "notion-template", database_id: "88435f4ebb9849ac88664da53f13ceb6", template_id: "020ef2bf-1558-484d-b0e1-0f870dd7719a" }
       ],
       // Ordem: as duas exibições PENDENTES primeiro (Sessões, depois
       // Processos), pra ficarem mais visíveis no topo, e só depois as duas

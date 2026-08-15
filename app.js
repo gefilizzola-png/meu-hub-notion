@@ -169,17 +169,30 @@
       expandedPages[pageId] = !expandedPages[pageId];
       renderTree();
     }));
+    // o nome da pasta é um <a href="#pageId"> de verdade (não uma div/botão
+    // com só onclick) — assim o navegador trata nativamente Ctrl/Cmd+clique,
+    // clique do meio e "Abrir link em nova aba" do menu de botão direito.
+    // Clique normal (botão esquerdo, sem modificador) continua fazendo a
+    // navegação client-side de sempre, via preventDefault + navigate().
+    var link = document.createElement("a");
+    link.className = "tree-row-link";
+    link.href = "#" + pageId;
     var icon = document.createElement("i");
     if (page.dynamicQuery || page.dynamicQueries) {
       icon.className = "ti ti-calendar-event";
     } else {
       icon.className = "ti ti-folder" + (hasContent ? "" : " icon-empty");
     }
-    row.appendChild(icon);
+    link.appendChild(icon);
     var label = document.createElement("span");
     label.textContent = page.title;
-    row.appendChild(label);
-    row.addEventListener("click", function () { navigate(pageId); });
+    link.appendChild(label);
+    link.addEventListener("click", function (e) {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      navigate(pageId);
+    });
+    row.appendChild(link);
     li.appendChild(row);
 
     if (hasSubfolders && isOpen) {
@@ -206,10 +219,21 @@
     chain.forEach(function (id, i) {
       var page = cfg.pages[id];
       if (!page) return;
-      var span = document.createElement("span");
-      span.className = "crumb" + (i === chain.length - 1 ? " current" : "");
+      var isLast = i === chain.length - 1;
+      // o item atual (último) não é link (não tem pra onde ir); os
+      // anteriores viram <a href="#id"> de verdade, mesmo motivo do
+      // menu lateral — permite Ctrl/Cmd+clique abrir em nova aba.
+      var span = document.createElement(isLast ? "span" : "a");
+      span.className = "crumb" + (isLast ? " current" : "");
       span.textContent = page.title;
-      if (i !== chain.length - 1) span.addEventListener("click", function () { navigate(id); });
+      if (!isLast) {
+        span.href = "#" + id;
+        span.addEventListener("click", function (e) {
+          if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          navigate(id);
+        });
+      }
       el.appendChild(span);
       if (i !== chain.length - 1) {
         var sep = document.createElement("span");
@@ -231,8 +255,17 @@
     } else if (item.type === "notion-template") {
       el = document.createElement("button");
     } else {
-      el = document.createElement("button");
-      el.addEventListener("click", function () { navigate(item.target); });
+      // botão de pasta/subpágina interna — <a href="#target"> de verdade
+      // (mesmo motivo do menu lateral): clique normal continua SPA, mas
+      // Ctrl/Cmd+clique, clique do meio e "abrir em nova aba" passam a
+      // funcionar nativamente.
+      el = document.createElement("a");
+      el.href = "#" + item.target;
+      el.addEventListener("click", function (e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate(item.target);
+      });
     }
     el.className = "item";
     el.dataset.idx = idx;
