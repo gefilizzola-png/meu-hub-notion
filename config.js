@@ -908,11 +908,11 @@ const APP_CONFIG = {
           title: "Abrir",
           items: [
             { label: "Central - Legislações", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/Visualiza-o-Central-3bc0481486dd807293eae2ca01616fcc?source=copy_link" },
-            { label: "CMF - Legislação", type: "notion", icon: "scale", url: "https://www.cmf.sc.gov.br/proposicoes/Leis-Complementares/2026" },
-            { label: "CMF - Proposições", type: "notion", icon: "scale", url: "https://www.cmf.sc.gov.br/proposicoes/Projetos-de-Leis-Complementares/2026" },
+            { label: "CMF - Legislação", type: "notion", icon: "florianopolis", url: "https://www.cmf.sc.gov.br/proposicoes/Leis-Complementares/2026" },
+            { label: "CMF - Proposições", type: "notion", icon: "florianopolis", url: "https://www.cmf.sc.gov.br/proposicoes/Projetos-de-Leis-Complementares/2026" },
             { label: "Legislações", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
             { label: "Leis Municipais", type: "notion", icon: "leis-municipais", url: "https://leis.org/prefeitura/sc/florianopolis" },
-            { label: "Planalto", type: "notion", icon: "scale", url: "https://legislacao.presidencia.gov.br/" }
+            { label: "Planalto", type: "notion", icon: "planalto", url: "https://legislacao.presidencia.gov.br/" }
           ]
         },
         {

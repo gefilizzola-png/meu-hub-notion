@@ -401,6 +401,9 @@ html, body {
   flex-flow: row wrap;
   /* "flex-start" (não "stretch") — cada caixinha fica na SUA própria altura
      de conteúdo, em vez de todas serem esticadas pra bater com a mais alta.
+     Idem no eixo principal (largura): a caixinha some com a LARGURA do
+     próprio conteúdo, então "Criar no Notion" (1 botão) não fica esticada
+     ao lado de "Abrir" (6 botões) — ver .items-compact-group abaixo.
      Evita uma caixa com só 1 botão (ex: "Criar no Notion" em Legislações)
      ficar cheia de espaço vazio só pra igualar uma caixa vizinha com bem
      mais itens (ex: "Abrir", com 6). */
@@ -408,8 +411,15 @@ html, body {
   gap: 10px;
 }
 .items-compact-group {
-  flex: 1 1 260px;
-  min-width: 0;
+  /* "0 1 auto" (não "1 1 260px") — a largura nasce do CONTEÚDO (os botões
+     de dentro), não de uma fatia igual do espaço da linha. Uma caixa com 1
+     botão fica estreita; uma com 6 fica larga o quanto couber, e só quebra
+     os próprios botões em mais de uma linha quando realmente não sobra
+     espaço. flex-grow:0 é o que evita esticar pra preencher a vizinha. */
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 200px;
+  max-width: 100%;
   border: 0.5px solid #ececea;
   border-radius: 10px;
   background: #fbfbfa;
