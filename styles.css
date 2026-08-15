@@ -369,6 +369,22 @@ html, body {
   margin-left: 8px;
   color: #d6d6d2;
 }
+/* badge "stacked" (ex: 2 tags de "📖 Contrato" em Contratos) — cada uma na
+   sua PRÓPRIA linha (não continua ao lado da anterior nem entra na fila de
+   "·" separando badges), com o texto INTEIRO sempre visível (sem cortar
+   com "..."), já que agora tem a largura toda do card só pra ela. */
+.item-sub-badge-stacked {
+  display: block;
+  width: 100%;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: break-word;
+  overflow: visible;
+  text-overflow: clip;
+}
+.item-sub-badge-stacked::after {
+  content: none;
+}
 
 /* ---------- grouped pages: visual boxes inside the same page ---------- */
 /* Ex: Favoritas — cada "grupo" (Controles, Colegiados...) vira uma caixa com

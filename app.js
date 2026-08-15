@@ -360,11 +360,13 @@
       subRow.className = "item-sub";
       item.sub.forEach(function (s) {
         var badge = document.createElement("span");
-        badge.className = "item-sub-badge";
+        badge.className = s.stacked ? "item-sub-badge item-sub-badge-stacked" : "item-sub-badge";
         if (s.color) badge.style.color = s.color;
         badge.textContent = s.text;
         // se o texto for cortado (ellipsis) por ser muito longo, o título
-        // completo ainda aparece passando o mouse por cima.
+        // completo ainda aparece passando o mouse por cima. Badges
+        // "stacked" (ver buildCardSub) não cortam — não precisam do title,
+        // mas não custa deixar por consistência.
         badge.title = s.text;
         subRow.appendChild(badge);
       });
@@ -550,13 +552,16 @@
       rowEntries.push({ opt: opt, row: row });
     });
 
-    // "filterDef.default" (opcional) — pageId de uma opção pra já vir
-    // marcada quando a página abre (ex: "Últimas Reuniões" já abrir com
-    // "Última semana"). Só atualiza a aparência aqui — quem chama essa
-    // função já seeda o filtro real antes da 1ª busca.
+    // "filterDef.default" (opcional) — pageId de UMA opção, OU lista de
+    // pageIds (array) pra marcar VÁRIAS de uma vez, já vindo marcado quando
+    // a página abre (ex: "Últimas Reuniões" já abre com "Última semana";
+    // "Situação" em Contratos já abre com "Em licitação" + "Vigente"). Só
+    // atualiza a aparência aqui — quem chama essa função já seeda o filtro
+    // real antes da 1ª busca.
     if (filterDef.default) {
-      var defOpt = (filterDef.options || []).filter(function (o) { return o.pageId === filterDef.default; })[0];
-      if (defOpt) { selected = [defOpt]; updateTriggerUI(); updateRowsUI(); }
+      var defIds = Array.isArray(filterDef.default) ? filterDef.default : [filterDef.default];
+      var defOpts = (filterDef.options || []).filter(function (o) { return defIds.indexOf(o.pageId) !== -1; });
+      if (defOpts.length) { selected = defOpts; updateTriggerUI(); updateRowsUI(); }
     }
 
     trigger.addEventListener("click", function (e) {
@@ -799,16 +804,33 @@
           else if (v) ruFlat.push(v);
         });
         if (ruFlat.length) {
-          var ruNames = ruFlat.map(function (v) { return v.name; }).filter(Boolean).join(", ");
-          if (ruNames) sub.push({ text: ruNames, color: NOTION_COLOR[ruFlat[0].color] || "" });
+          if (cf.stacked) {
+            // "stacked" (ex: "📖 Contrato" em Contratos, quase sempre com 2
+            // valores marcados) — em vez de juntar tudo num badge só (que
+            // cortava/estourava a largura do card), 1 badge POR valor, cada
+            // um na sua própria linha (ver .item-sub-badge-stacked no CSS).
+            ruFlat.forEach(function (v) {
+              if (v && v.name) sub.push({ text: v.name, color: NOTION_COLOR[v.color] || "", stacked: true });
+            });
+          } else {
+            var ruNames = ruFlat.map(function (v) { return v.name; }).filter(Boolean).join(", ");
+            if (ruNames) sub.push({ text: ruNames, color: NOTION_COLOR[ruFlat[0].color] || "" });
+          }
         }
       } else if (cf.type === "multi_select") {
         // ex: "📖 Processo/Chamado" em Betha — array de {name,color}; junta
         // todas as tags marcadas num badge só (na prática quase sempre só
-        // 1), com a cor da primeira.
+        // 1), com a cor da primeira. "stacked" (ver rollup acima) faz o
+        // mesmo tratamento pra esse tipo, se precisar no futuro.
         if (raw && raw.length) {
-          var names = raw.map(function (v) { return v.name; }).filter(Boolean).join(", ");
-          if (names) sub.push({ text: names, color: NOTION_COLOR[raw[0].color] || "" });
+          if (cf.stacked) {
+            raw.forEach(function (v) {
+              if (v && v.name) sub.push({ text: v.name, color: NOTION_COLOR[v.color] || "", stacked: true });
+            });
+          } else {
+            var names = raw.map(function (v) { return v.name; }).filter(Boolean).join(", ");
+            if (names) sub.push({ text: names, color: NOTION_COLOR[raw[0].color] || "" });
+          }
         }
       }
     });
@@ -963,10 +985,13 @@
         }));
         // "f.default" (opcional) — já seeda o filtro real ANTES da 1ª busca,
         // pra a página abrir direto com esse filtro aplicado (ex: "Últimas
-        // Reuniões" abre já em "Última semana", sem precisar clicar).
+        // Reuniões" abre já em "Última semana", sem precisar clicar; ou
+        // "Situação" em Contratos, que já abre marcada em "Em licitação" +
+        // "Vigente" — nesse caso "default" é uma LISTA de pageIds).
         if (f.default) {
-          var defOpt = (f.options || []).filter(function (o) { return o.pageId === f.default; })[0];
-          if (defOpt) filterState[f.property] = filterStateFromOpts(f, [defOpt]);
+          var defIds = Array.isArray(f.default) ? f.default : [f.default];
+          var defOpts = (f.options || []).filter(function (o) { return defIds.indexOf(o.pageId) !== -1; });
+          if (defOpts.length) filterState[f.property] = filterStateFromOpts(f, defOpts);
         }
       });
       row.appendChild(filterBar);

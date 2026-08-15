@@ -347,9 +347,12 @@ var CONTRATOS_CONTRATO_FILTER = {
 
 // "Situação" é campo nativo (select) da própria base Contratos — cores
 // exatas conferidas no schema (Em licitação=pink, Expirado=brown,
-// Revogado=yellow, Vigente=green).
+// Revogado=yellow, Vigente=green). "default" já vem marcado em "Em
+// licitação" + "Vigente" quando a página abre (os 2 estados "ativos"); pode
+// desmarcar/marcar à vontade na tela, é só o ponto de partida.
 var CONTRATOS_SITUACAO_FILTER = {
   property: "Situação", type: "select", condition: "equals", label: "Situação",
+  default: ["Em licitação", "Vigente"],
   options: [
     { label: "Em licitação", pageId: "Em licitação", icon: "ti-tag", color: "#c14c8a" },
     { label: "Expirado", pageId: "Expirado", icon: "ti-tag", color: "#8d6e5c" },
@@ -365,7 +368,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-15 18:57",
+  appVersion: "2026-08-15 19:03",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -1216,7 +1219,7 @@ const APP_CONFIG = {
           nameSearch: { property: "Nome", type: "title", condition: "contains", placeholder: "Buscar por nome..." },
           filters: [LEGISLACOES_ASSUNTOS_FILTER, CONTRATOS_CONTRATO_FILTER, CONTRATOS_SITUACAO_FILTER, LIMIT_FILTER],
           cardFields: [
-            { property: "📖 Contrato", type: "rollup" },
+            { property: "📖 Contrato", type: "rollup", stacked: true },
             { property: "Prazo Inicial", property2: "Prazo Final", type: "date-range-pair" },
             { property: "Situação", type: "select" }
           ]
