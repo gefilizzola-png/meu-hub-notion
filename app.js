@@ -469,10 +469,37 @@
       });
     }
 
+    // "filterDef.searchable" — filtros com MUITAS opções (ex: Assuntos, 90+
+    // tags): depois de marcar uma opção lá embaixo na lista, ela sobe pro
+    // topo (logo abaixo da caixa de busca/"Todos"), junto das outras já
+    // marcadas — assim dá pra ver e desmarcar sem precisar rolar a lista de
+    // novo. Reordena o DOM de verdade (appendChild move o nó existente),
+    // mantendo a ordem original dentro de cada grupo (marcadas / não
+    // marcadas). Só roda nesses filtros — nos demais (poucas opções) a
+    // ordem sempre igual à do config.js é mais previsível.
+    function reorderRows() {
+      if (!filterDef.searchable) return;
+      var selectedEntries = [];
+      var restEntries = [];
+      rowEntries.forEach(function (entry) {
+        entry.row.classList.remove("filter-option-divider");
+        (selected.indexOf(entry.opt) !== -1 ? selectedEntries : restEntries).push(entry);
+      });
+      selectedEntries.concat(restEntries).forEach(function (entry) {
+        menu.appendChild(entry.row);
+      });
+      // linha separando o "grupo de marcadas" (agora no topo) do resto da
+      // lista — só aparece quando há as duas coisas ao mesmo tempo.
+      if (selectedEntries.length && restEntries.length) {
+        selectedEntries[selectedEntries.length - 1].row.classList.add("filter-option-divider");
+      }
+    }
+
     function setSelected(next) {
       selected = next;
       updateTriggerUI();
       updateRowsUI();
+      reorderRows();
       // manda a lista de opções inteira (não só o pageId) — assim quem
       // escuta pode usar opt.condition/opt.value pra sobrescrever o filtro
       // padrão (necessário pros filtros de data relativa: cada opção tem
@@ -601,7 +628,7 @@
     if (filterDef.default) {
       var defIds = Array.isArray(filterDef.default) ? filterDef.default : [filterDef.default];
       var defOpts = (filterDef.options || []).filter(function (o) { return defIds.indexOf(o.pageId) !== -1; });
-      if (defOpts.length) { selected = defOpts; updateTriggerUI(); updateRowsUI(); }
+      if (defOpts.length) { selected = defOpts; updateTriggerUI(); updateRowsUI(); reorderRows(); }
     }
 
     trigger.addEventListener("click", function (e) {
