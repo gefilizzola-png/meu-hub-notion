@@ -61,7 +61,13 @@ html, body {
 }
 .auth-user button:hover { color: #666; }
 
-/* ---------- sidebar (desktop only) ---------- */
+/* ---------- sidebar (mostra/esconde em QUALQUER tela, via #menuToggleBtn) ----------
+   Visibilidade 100% controlada pela classe ".sidebar-visible" no #shell (ver
+   app.js) — não depende mais só do tamanho da tela. app.js decide o estado
+   INICIAL (aberto em telas largas, fechado em estreitas, igual já era antes),
+   mas dali em diante quem manda é o botão. Em telas estreitas (abaixo de
+   1024px, ver media query lá embaixo) o menu aberto vira uma camada por
+   cima do conteúdo (com fundo escuro atrás) em vez de espremer o conteúdo. */
 .sidebar {
   display: none;
   width: 272px;
@@ -74,6 +80,40 @@ html, body {
   top: 0;
   overflow-y: auto;
 }
+#shell.sidebar-visible .sidebar { display: flex; }
+.sidebar-backdrop { display: none; }
+@media (max-width: 1023px) {
+  #shell.sidebar-visible .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    box-shadow: 2px 0 20px rgba(0, 0, 0, 0.18);
+  }
+  #shell.sidebar-visible .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.32);
+    z-index: 45;
+  }
+}
+.menu-toggle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  font-size: 18px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.menu-toggle-btn:active { background: #f0f0ee; }
 .app-version {
   display: block;
   margin-top: 2px;
@@ -803,7 +843,9 @@ html, body {
 
 /* ---------- desktop: 1024px+ = sidebar + full toolbar ---------- */
 @media (min-width: 1024px) {
-  .sidebar { display: flex; }
+  /* visibilidade do .sidebar não depende mais só da largura da tela — ver
+     "#shell.sidebar-visible .sidebar" lá em cima (controlado pelo
+     #menuToggleBtn); app.js já inicia com o menu aberto em telas largas. */
   .mobile-only { display: none !important; }
   .content { padding: 18px 32px 40px; }
   .content-plain { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }

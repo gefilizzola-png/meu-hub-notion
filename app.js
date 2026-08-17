@@ -1117,7 +1117,44 @@
   // /query no Worker — nunca escreve nada no Notion.
   function renderSearchBlock(page, container) {
     var s = page.search;
-    var state = { text: "", filterState: null, filterProp: null }; // filterState: null | { type, pairs }
+    // "optionsFrom" pendente (ex: Assuntos/Processo-Chamado, que buscam a
+    // lista de opções ao vivo — ver fetchSchemaOptions) precisa resolver
+    // ANTES de montar os dropdowns, mesmo esquema do "renderDynamicQueryBlock"
+    // pras exibições — mostra um placeholder enquanto isso.
+    var pending = (s.filters || []).filter(function (f) { return f.optionsFrom && !f.options; });
+    if (pending.length) {
+      var placeholder = document.createElement("div");
+      placeholder.className = "search-block";
+      var loadingMsg = document.createElement("p");
+      loadingMsg.className = "empty";
+      loadingMsg.textContent = "Carregando filtros…";
+      placeholder.appendChild(loadingMsg);
+      container.appendChild(placeholder);
+
+      Promise.all(pending.map(function (f) {
+        return fetchSchemaOptions(f.optionsFrom.database_id, f.optionsFrom.property).then(function (opts) {
+          f.options = opts;
+        });
+      }))
+        .then(function () {
+          container.removeChild(placeholder);
+          renderSearchBlockReady(page, container);
+        })
+        .catch(function () {
+          loadingMsg.textContent = "Não foi possível carregar os filtros.";
+        });
+      return;
+    }
+    renderSearchBlockReady(page, container);
+  }
+
+  function renderSearchBlockReady(page, container) {
+    var s = page.search;
+    // "filterState" — um por PROPRIEDADE (igual "renderDynamicQueryBlockReady"),
+    // não mais um único {type,pairs} — senão, com 2+ filtros no mesmo bloco
+    // de busca (ex: Assuntos + Processo/Chamado), escolher um apagava o
+    // outro (cada dropdown sobrescrevia a mesma variável).
+    var state = { text: "", filterState: {} }; // filterState: { [property]: {type, pairs} }
     var debounceTimer = null;
     var requestSeq = 0;
 
@@ -1148,8 +1185,9 @@
       filterBar.className = "filter-bar search-block-filter-bar";
       s.filters.forEach(function (f) {
         filterBar.appendChild(buildIconDropdown(f, function (opts) {
-          state.filterState = filterStateFromOpts(f, opts);
-          state.filterProp = f;
+          var fs = filterStateFromOpts(f, opts);
+          if (fs) state.filterState[f.property] = fs;
+          else delete state.filterState[f.property];
           runQuery();
         }));
       });
@@ -1172,7 +1210,8 @@
       // "hasInput" decide se busca ou não — independente de "s.baseFilters"
       // (filtro fixo sempre aplicado, ex: escopar a base inteira só aos
       // registros de "PMF - Reuniões"), que sozinho não conta como busca.
-      var hasInput = !!state.text.trim() || !!(state.filterState && state.filterProp);
+      var filterProps = Object.keys(state.filterState);
+      var hasInput = !!state.text.trim() || filterProps.length > 0;
       var filters = (s.baseFilters || []).map(function (f) { return f; });
       if (state.text.trim()) {
         filters.push({
@@ -1180,9 +1219,9 @@
           condition: s.nameField.condition, value: state.text.trim()
         });
       }
-      if (state.filterState && state.filterProp) {
-        filters.push(filterStateToFilterEntry(state.filterProp.property, state.filterState));
-      }
+      filterProps.forEach(function (prop) {
+        filters.push(filterStateToFilterEntry(prop, state.filterState[prop]));
+      });
       var mySeq = ++requestSeq;
       resultsWrap.innerHTML = "";
       if (!hasInput) return; // nada digitado/selecionado ainda — não busca
@@ -1398,7 +1437,48 @@
   function navigate(pageId) {
     closeSearch();
     render(pageId, true);
+    closeSidebarOnNarrowScreen();
   }
+
+  // ---------------- menu lateral: mostrar/recolher (qualquer tamanho de tela) ----------------
+  // Antes disso, o menu simplesmente não aparecia em telas estreitas (só a
+  // media query "min-width:1024px" mostrava). Agora a visibilidade é 100%
+  // controlada pela classe "sidebar-visible" no #shell — o botão liga/
+  // desliga essa classe, e o estado INICIAL (só na abertura do app) segue
+  // imitando o comportamento de antes: aberto em telas largas, fechado em
+  // estreitas — dali em diante, quem manda é o botão.
+  var isNarrowScreen = window.matchMedia("(max-width: 1023px)");
+
+  function setSidebarVisible(visible) {
+    document.getElementById("shell").classList.toggle("sidebar-visible", visible);
+  }
+
+  function isSidebarVisible() {
+    return document.getElementById("shell").classList.contains("sidebar-visible");
+  }
+
+  // depois de navegar pra uma página (clique num item do menu, por exemplo),
+  // fecha o menu automaticamente SE estiver em tela estreita — lá ele é uma
+  // camada por cima do conteúdo, então continuar aberto esconderia a página
+  // que acabou de abrir. Em tela larga (lado a lado com o conteúdo) não
+  // mexe em nada.
+  function closeSidebarOnNarrowScreen() {
+    if (isNarrowScreen.matches) setSidebarVisible(false);
+  }
+
+  var menuToggleBtn = document.getElementById("menuToggleBtn");
+  if (menuToggleBtn) {
+    menuToggleBtn.addEventListener("click", function () {
+      setSidebarVisible(!isSidebarVisible());
+    });
+  }
+  var sidebarBackdrop = document.getElementById("sidebarBackdrop");
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener("click", function () { setSidebarVisible(false); });
+  }
+  // estado inicial: aberto em telas largas (>=1024px), fechado nas estreitas
+  // — chamado aqui (fora do boot()) pra já valer antes do 1º render.
+  setSidebarVisible(!isNarrowScreen.matches);
 
   document.getElementById("backBtn").addEventListener("click", function () { history.back(); });
   window.addEventListener("popstate", function (e) {

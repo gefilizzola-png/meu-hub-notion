@@ -350,6 +350,25 @@ var CONTRATOS_CONTRATO_FILTER = {
   optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📖 Processo/Chamado" }
 };
 
+// Versões pra páginas que consultam a Central DIRETO (Betha, Reuniões,
+// Tarefas, TAT — todas usam database_id da própria Central, ver
+// pmf_ctrl_betha/pmf_ctrl_reunioes/pmf_ctrl_tarefas/pmf_col_tat abaixo), ao
+// contrário de Legislações/Contratos (bases PRÓPRIAS, que só enxergam esses
+// campos como ROLLUP da relação "Central"). Aqui, tanto "🏷️ Assuntos (PMF)"
+// quanto "📖 Processo/Chamado" já são multi_select NATIVOS da própria
+// Central — mesmo campo/mesma lista de opções de CONTRATOS_CONTRATO_FILTER/
+// LEGISLACOES_ASSUNTOS_FILTER acima, só que sem precisar do "rollup" a mais.
+var CENTRAL_ASSUNTOS_FILTER = {
+  property: "🏷️ Assuntos (PMF)", type: "multi_select", condition: "contains", label: "Assuntos",
+  searchable: true,
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "🏷️ Assuntos (PMF)" }
+};
+var CENTRAL_PROCESSO_FILTER = {
+  property: "📖 Processo/Chamado", type: "multi_select", condition: "contains", label: "Processo/Chamado",
+  searchable: true,
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📖 Processo/Chamado" }
+};
+
 // "Situação" é campo nativo (select) da própria base Contratos — cores
 // exatas conferidas no schema (Em licitação=pink, Expirado=brown,
 // Revogado=yellow, Vigente=green). "default" já vem marcado em "Em
@@ -373,7 +392,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-15 19:31",
+  appVersion: "2026-08-17 00:33",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -856,7 +875,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER, LIMIT_FILTER],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
             { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -888,7 +907,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
           ],
           sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
-          filters: [ANDAMENTO_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER, LIMIT_FILTER],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
             { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -911,7 +930,8 @@ const APP_CONFIG = {
               { condition: "equals", value: "PMF - TAT - Processos" }
             ]
           }
-        ]
+        ],
+        filters: [CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER]
       }
     },
     pmf_col_tat_processos: { title: "Processos", items: [] },
@@ -1329,7 +1349,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER, LIMIT_FILTER],
           cardFields: BETHA_CARD_FIELDS
         },
         {
@@ -1343,7 +1363,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER, LIMIT_FILTER],
           cardFields: BETHA_CARD_FIELDS
         },
         {
@@ -1355,7 +1375,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
           ],
           sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, BETHA_CATEGORIA_FILTER, FOCUS_FILTER, CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER, LIMIT_FILTER],
           cardFields: BETHA_CARD_FIELDS
         }
       ],
@@ -1366,7 +1386,8 @@ const APP_CONFIG = {
         nameField: { property: "Nome", type: "title", condition: "contains" },
         baseFilters: [
           { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Betha - Tarefas" }
-        ]
+        ],
+        filters: [CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER]
       }
     },
     pmf_ctrl_betha_tarefas: { title: "Tarefas", items: [] },
@@ -1420,7 +1441,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         },
         {
@@ -1434,7 +1455,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         },
         {
@@ -1446,7 +1467,7 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "contains", value: "d228224dee1d43dabb72744097f10028" }
           ],
           sorts: [{ property: "📅 Data de Conclusão", direction: "descending" }],
-          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+          filters: [ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER, LIMIT_FILTER],
           cardFields: TAREFAS_CARD_FIELDS
         }
       ],
@@ -1459,7 +1480,8 @@ const APP_CONFIG = {
         nameField: { property: "Nome", type: "title", condition: "contains" },
         baseFilters: [
           { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Tarefas" }
-        ]
+        ],
+        filters: [CENTRAL_ASSUNTOS_FILTER, CENTRAL_PROCESSO_FILTER]
       }
     },
     // "dynamicQueries" — várias exibições fixas (baseFilters + sorts) numa
@@ -1524,7 +1546,8 @@ const APP_CONFIG = {
                 { label: "Este mês", pageId: "next_month", condition: "next_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
               ]
             },
-            FOCUS_FILTER
+            FOCUS_FILTER,
+            CENTRAL_ASSUNTOS_FILTER
           ],
           // campos extras mostrados como subtítulo em cada card de resultado
           // (data/hora + status de andamento) — só leitura, vem junto da
@@ -1559,7 +1582,8 @@ const APP_CONFIG = {
                 { label: "Último mês", pageId: "past_month", condition: "past_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
               ]
             },
-            FOCUS_FILTER
+            FOCUS_FILTER,
+            CENTRAL_ASSUNTOS_FILTER
           ],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
@@ -1593,7 +1617,8 @@ const APP_CONFIG = {
                 { label: "5 - Agendado", pageId: "4ef9e6737cea4c53ae37efe966013214", icon: "ti-refresh", color: "#4a90d9" }
               ]
             },
-            FOCUS_FILTER
+            FOCUS_FILTER,
+            CENTRAL_ASSUNTOS_FILTER
           ],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
@@ -1612,7 +1637,8 @@ const APP_CONFIG = {
         nameField: { property: "Nome", type: "title", condition: "contains" },
         baseFilters: [
           { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" }
-        ]
+        ],
+        filters: [CENTRAL_ASSUNTOS_FILTER]
       }
     },
     pmf_ctrl_timesheet: { title: "Time Sheet", items: [] },

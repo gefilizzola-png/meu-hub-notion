@@ -25,6 +25,10 @@
 </div>
 
 <div id="shell">
+  <!-- fundo escuro atrás do menu quando aberto em telas estreitas (celular);
+       clicar nele fecha o menu — ver app.js. Fica invisível/sem clique em
+       telas largas (o menu já convive lado a lado com o conteúdo). -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header" id="sidebarTitle">Meu hub</div>
     <div class="sidebar-search">
@@ -39,6 +43,10 @@
 
   <div class="main">
     <header class="main-header">
+      <!-- visível em QUALQUER tamanho de tela (diferente do back-btn, que só
+           aparece no celular) — mostra/recolhe o menu lateral; no celular o
+           menu hoje some sem isso, sem jeito nenhum de abrir. -->
+      <button class="menu-toggle-btn" id="menuToggleBtn" aria-label="Mostrar/recolher menu"><i class="ti ti-menu-2"></i></button>
       <button class="back-btn mobile-only" id="backBtn" aria-label="Voltar"><i class="ti ti-chevron-left"></i></button>
       <div class="breadcrumb" id="breadcrumb"></div>
       <div class="header-search">
