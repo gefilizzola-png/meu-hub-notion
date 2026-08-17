@@ -333,7 +333,7 @@ var LEGISLACOES_TIPO_FILTER = {
 // marcar uma, a caixa limpa sozinha pra já digitar o próximo termo.
 var LEGISLACOES_ASSUNTOS_FILTER = {
   property: "🏷️ Assuntos (PMF)", type: "rollup", rollupTargetType: "multi_select", condition: "contains", label: "Assuntos",
-  searchable: true,
+  searchable: true, andOrToggle: true,
   optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "🏷️ Assuntos (PMF)" }
 };
 
@@ -360,7 +360,7 @@ var CONTRATOS_CONTRATO_FILTER = {
 // LEGISLACOES_ASSUNTOS_FILTER acima, só que sem precisar do "rollup" a mais.
 var CENTRAL_ASSUNTOS_FILTER = {
   property: "🏷️ Assuntos (PMF)", type: "multi_select", condition: "contains", label: "Assuntos",
-  searchable: true,
+  searchable: true, andOrToggle: true,
   optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "🏷️ Assuntos (PMF)" }
 };
 var CENTRAL_PROCESSO_FILTER = {
@@ -392,7 +392,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-17 00:33",
+  appVersion: "2026-08-17 00:54",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 

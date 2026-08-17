@@ -719,6 +719,27 @@ html, body {
   padding-bottom: 9px;
 }
 
+/* "filterDef.andOrToggle" — botão discreto do lado direito da linha "Todos"
+   (só aparece nos filtros que ligam essa opção, ex: Assuntos) pra alternar
+   entre "OU" (qualquer opção marcada bate — padrão) e "E" (todas precisam
+   bater ao mesmo tempo), naquela pesquisa específica. */
+.filter-mode-toggle {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid #d8d8d3;
+  background: #f4f4f2;
+  color: #77776f;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  line-height: 16px;
+}
+.filter-mode-toggle:hover { border-color: #b9b9b3; }
+.filter-mode-toggle.mode-and { background: #eef5fb; border-color: #a9cdea; color: #2f6fa8; }
+
 /* "filterDef.searchable" — caixa de texto no topo do dropdown, pra filtros
    com muitas opções (ex: Assuntos, 90+ tags) que não cabem só rolando. */
 .filter-search-wrap { position: relative; margin: 2px 2px 6px; }

@@ -437,6 +437,13 @@
     var selected = []; // opções marcadas no momento
     var rowEntries = []; // [{ opt, row }] — pra marcar/desmarcar visualmente
 
+    // "filterDef.andOrToggle" (opcional) — pra filtros de seleção múltipla
+    // onde faz sentido escolher se 2+ opções marcadas devem bater com
+    // QUALQUER uma delas ("OU", padrão) ou com TODAS ao mesmo tempo ("E").
+    // Hoje só usado no filtro de Assuntos. "mode" começa sempre em "or" ao
+    // abrir a página — é um ajuste pontual daquela pesquisa, não é lembrado.
+    var mode = "or";
+
     // só atualiza a aparência do botão (ícone/cor/texto): nenhuma marcada =
     // "Todos"; 1 marcada = ícone/cor/label dela; 2+ marcadas = "N selecionados"
     // (não dá pra mostrar um ícone/cor só quando são de status diferentes).
@@ -452,7 +459,7 @@
       } else {
         triggerIcon.className = "ti ti-filter";
         triggerIcon.style.color = "";
-        triggerLabel.textContent = filterDef.label + ": " + selected.length + " selecionados";
+        triggerLabel.textContent = filterDef.label + ": " + selected.length + " selecionados" + (mode === "and" ? " (E)" : "");
       }
     }
 
@@ -470,8 +477,12 @@
       // escuta pode usar opt.condition/opt.value pra sobrescrever o filtro
       // padrão (necessário pros filtros de data relativa: cada opção tem
       // sua própria condition, ex: "equals" pra Hoje/Amanhã, "next_week"
-      // pra Esta semana).
-      onChange(selected.slice());
+      // pra Esta semana). "mode" ("or"/"and") vai pendurado na própria
+      // lista — filterStateFromOpts lê "opts.mode" pra decidir orPairs x
+      // andPairs sem precisar mudar a assinatura de onChange em quem chama.
+      var arr = selected.slice();
+      arr.mode = mode;
+      onChange(arr);
     }
 
     // "filterDef.searchable" (opcional) — pra filtros com MUITAS opções (ex:
@@ -507,12 +518,41 @@
 
     var allRow = document.createElement("div");
     allRow.className = "filter-option filter-option-all";
-    allRow.textContent = "Todos";
+    var allLabel = document.createElement("span");
+    allLabel.textContent = "Todos";
+    allRow.appendChild(allLabel);
     allRow.addEventListener("click", function (e) {
       e.stopPropagation(); // não deixa o listener global (fecha menus abertos) atrapalhar
       menu.classList.remove("open");
       setSelected([]);
     });
+
+    // "filterDef.andOrToggle" — botão discreto do lado direito da linha
+    // "Todos" pra alternar, só naquela pesquisa/naquele dropdown, se 2+
+    // opções marcadas devem bater com QUALQUER uma ("OU", padrão) ou com
+    // TODAS ao mesmo tempo ("E"). stopPropagation pra não disparar o clique
+    // da linha "Todos" (que zeraria a seleção) nem fechar o menu.
+    if (filterDef.andOrToggle) {
+      var modeBtn = document.createElement("button");
+      modeBtn.type = "button";
+      modeBtn.className = "filter-mode-toggle";
+      modeBtn.textContent = "OU";
+      modeBtn.title = "Alternar: OU (qualquer opção marcada) / E (todas ao mesmo tempo)";
+      modeBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        mode = mode === "or" ? "and" : "or";
+        modeBtn.textContent = mode === "and" ? "E" : "OU";
+        modeBtn.classList.toggle("mode-and", mode === "and");
+        updateTriggerUI();
+        if (selected.length > 1) {
+          var arr = selected.slice();
+          arr.mode = mode;
+          onChange(arr);
+        }
+      });
+      allRow.appendChild(modeBtn);
+    }
+
     menu.appendChild(allRow);
 
     (filterDef.options || []).forEach(function (opt) {
@@ -597,13 +637,19 @@
       type: f.type,
       formulaType: f.formulaType,
       rollupTargetType: f.rollupTargetType,
+      // "opts.mode" ("or"/"and") vem pendurado na lista por buildIconDropdown
+      // quando o filtro tem "andOrToggle" — default "or" pros demais filtros
+      // (Andamento, Prioridade etc.), que continuam sempre "qualquer uma".
+      mode: opts.mode || "or",
       pairs: opts.map(function (o) {
         return { condition: o.condition || f.condition, value: o.value !== undefined ? o.value : o.pageId };
       })
     };
   }
 
-  // { type, pairs } de uma propriedade → entrada da lista "filters" do Worker
+  // { type, pairs, mode } de uma propriedade → entrada da lista "filters" do
+  // Worker. 1 par vira filtro simples; 2+ vira "orPairs" (qualquer um bate)
+  // ou "andPairs" (todos precisam bater), conforme "mode".
   function filterStateToFilterEntry(property, fs) {
     var out = { property: property, type: fs.type };
     if (fs.formulaType) out.formulaType = fs.formulaType;
@@ -611,6 +657,8 @@
     if (fs.pairs.length === 1) {
       out.condition = fs.pairs[0].condition;
       out.value = fs.pairs[0].value;
+    } else if (fs.mode === "and") {
+      out.andPairs = fs.pairs;
     } else {
       out.orPairs = fs.pairs;
     }
