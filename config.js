@@ -458,7 +458,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-18 00:16",
+  appVersion: "2026-08-18 00:21",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -504,37 +504,135 @@ const APP_CONFIG = {
       ]
     },
 
-    // "dynamicQuery": em vez de "items" fixos, essa página busca ao vivo no
-    // Notion (via Worker) as páginas da base indicada cujo campo de data
-    // bater com a data informada (ou hoje, se "date" não for definido).
+    // Página "briefing" do dia — junta, em seções fixas (sem filtro
+    // interativo, exceto a última), tudo que tem Data/Prazo = hoje na
+    // Central: Aniversários, Reuniões, Sessões (TAT/JART/COMAT, que também
+    // ficam registradas na Central) e Tarefas (PMF/Betha/Pessoal). A última
+    // seção foge da regra "hoje" de propósito — mostra o que já está
+    // atrasado E é prioritário (mesma definição usada em "Atrasados e
+    // Prioritários"), pra não esquecer do que ficou pra trás. Substituiu o
+    // protótipo antigo (um único dynamicQuery genérico com só um filtro de
+    // Andamento) — "Amanhã" e "Início" ainda não foram construídas.
     hoje: {
       title: "Hoje",
-      dynamicQuery: {
-        database_id: "2310481486dd80079202fe1eaf5e14c4",
-        // filtro sempre aplicado: Data/Prazo = hoje
-        baseFilters: [
-          { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
-        ],
-        // filtros extras escolhidos na tela (dropdown com ícone)
-        filters: [
-          {
-            property: "🧲 Andamento",
-            type: "relation",
-            condition: "contains",
-            label: "Andamento",
-            options: [
-              { label: "0 - Iniciar agora", pageId: "9ff8db6d456d43f39e70e14786c1fe6d", icon: "ti-player-skip-forward-filled", color: "#4a90d9" },
-              { label: "1 - Em andamento", pageId: "2030481486dd80d386a1cf7522b3deb1", icon: "ti-player-play-filled", color: "#4a90d9" },
-              { label: "2 - Iniciar assim que possível", pageId: "d18f7c0ac312422cbc14a3ae1bc82399", icon: "ti-player-track-next-filled", color: "#4a90d9" },
-              { label: "3 - Aguardando terceiros", pageId: "08cb3ec723ef41b19e6c6472ee9d9a75", icon: "ti-player-pause-filled", color: "#4a90d9" },
-              { label: "4 - Iniciar quando possível", pageId: "959d289339c440a492612c70ea8ed1c9", icon: "ti-arrows-left-right", color: "#4a90d9" },
-              { label: "5 - Agendado", pageId: "4ef9e6737cea4c53ae37efe966013214", icon: "ti-refresh", color: "#4a90d9" },
-              { label: "6 - Concluído", pageId: "d228224dee1d43dabb72744097f10028", icon: "ti-circle-check-filled", color: "#2f9e44" },
-              { label: "9 - Cancelado", pageId: "2410481486dd80a3a8b0d819542a55c5", icon: "ti-circle-x-filled", color: "#e03131" }
-            ]
-          }
-        ]
-      }
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir no Notion",
+          items: [
+            { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" }
+          ]
+        }
+      ],
+      dynamicQueries: [
+        {
+          title: "🎂 Aniversários",
+          bg: "#fdf2f8",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "Pessoal - Aniversários" },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
+          ],
+          sorts: [{ property: "Nome", direction: "ascending" }],
+          cardFields: []
+        },
+        {
+          title: "📅 Reuniões",
+          bg: "#eaf2fb",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+          ]
+        },
+        {
+          // TAT/JART/COMAT: as 3 têm registro próprio na Central (confirmado
+          // consultando direto), cada uma com seu valor de "📚 Página de
+          // Origem" — junto numa seção só, com a origem aparecendo no card
+          // pra diferenciar qual colegiado é cada uma.
+          title: "⚖️ Sessões (TAT / JART / COMAT)",
+          bg: "#fdf6e3",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            {
+              property: "📚 Página de Origem", type: "select",
+              orPairs: [
+                { condition: "equals", value: "PMF - TAT - Sessões" },
+                { condition: "equals", value: "PMF - JART - Sessões" },
+                { condition: "equals", value: "PMF - COMAT - Reuniões" }
+              ]
+            },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        },
+        {
+          // PMF - Tarefas + PMF - Betha - Tarefas + Pessoal - Tarefas juntas
+          // (mesmo critério "traga tudo" já usado em Atrasados e
+          // Prioritários) — a origem aparece no card pra diferenciar.
+          title: "✅ Tarefas",
+          bg: "#eaf7ed",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            {
+              property: "📚 Página de Origem", type: "select",
+              orPairs: [
+                { condition: "equals", value: "PMF - Tarefas" },
+                { condition: "equals", value: "PMF - Betha - Tarefas" },
+                { condition: "equals", value: "Pessoal - Tarefas" }
+              ]
+            },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
+          ],
+          sorts: [{ property: "Nome", direction: "ascending" }],
+          cardFields: [
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        },
+        {
+          // Não filtra por "hoje" — é o mesmo recorte de "Atrasados e
+          // Prioritários" (Data/Prazo já passou, Prioridade 1/2/3, não
+          // Concluído/Cancelado), só que resumido (com "Exibir" limitando a
+          // quantidade) pra caber num briefing. Pra ver tudo sem limite,
+          // Controles → Atrasados e Prioritários.
+          title: "⚠️ Prioritários atrasados",
+          bg: "#fdecea",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📅 Data/Prazo", type: "date", condition: "before", value: "today" },
+            {
+              property: " 🚩 Prioridade", type: "relation",
+              orPairs: [
+                { condition: "contains", value: "2460481486dd80b19d7edb3a9eccba08" },
+                { condition: "contains", value: "2330481486dd801981efc913350a8034" },
+                { condition: "contains", value: "2330481486dd807e9f21c4ed2c3c8e88" }
+              ]
+            },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [LIMIT_FILTER],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        }
+      ]
     },
 
     criar_paginas: {
