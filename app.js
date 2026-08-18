@@ -1370,14 +1370,15 @@
   }
 
   // ---------------- content grid/list ----------------
-  // "page.weather" (opcional, só liga na página "Hoje" por enquanto) —
-  // widget pequeno com a previsão do dia (mín/máx + chance de chuva e o
-  // horário mais provável). Usa a API pública da Open-Meteo — sem chave,
-  // sem custo, e é SÓ LEITURA (nunca escreve nada, nem no Notion nem em
-  // outro lugar). Coordenadas fixas de Florianópolis/SC. Se a busca falhar
-  // (sem internet, API fora do ar etc.) o widget simplesmente some — não
-  // quebra o resto da página.
-  function renderWeatherWidget(container) {
+  // "page.weather" (opcional — "true"/1 pra hoje, "2" pra amanhã, etc — dia
+  // 0-based a partir de hoje) — widget pequeno com a previsão do dia
+  // (mín/máx + chance de chuva e o horário mais provável). Usa a API
+  // pública da Open-Meteo — sem chave, sem custo, e é SÓ LEITURA (nunca
+  // escreve nada, nem no Notion nem em outro lugar). Coordenadas fixas de
+  // Florianópolis/SC. Se a busca falhar (sem internet, API fora do ar etc.)
+  // o widget simplesmente some — não quebra o resto da página.
+  function renderWeatherWidget(container, dayOffset) {
+    dayOffset = dayOffset || 0;
     var wrap = document.createElement("div");
     wrap.className = "weather-widget weather-widget-loading";
     wrap.textContent = "Carregando previsão do tempo…";
@@ -1386,7 +1387,7 @@
     var url = "https://api.open-meteo.com/v1/forecast?latitude=-27.5954&longitude=-48.5480"
       + "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max"
       + "&hourly=precipitation_probability"
-      + "&timezone=America%2FSao_Paulo&forecast_days=1";
+      + "&timezone=America%2FSao_Paulo&forecast_days=" + (dayOffset + 1);
 
     fetch(url).then(function (r) {
       if (!r.ok) throw new Error("weather http " + r.status);
@@ -1396,17 +1397,21 @@
       wrap.innerHTML = "";
 
       var daily = data.daily || {};
-      var max = (daily.temperature_2m_max || [])[0];
-      var min = (daily.temperature_2m_min || [])[0];
-      var chance = (daily.precipitation_probability_max || [])[0];
+      var max = (daily.temperature_2m_max || [])[dayOffset];
+      var min = (daily.temperature_2m_min || [])[dayOffset];
+      var chance = (daily.precipitation_probability_max || [])[dayOffset];
+      var targetDate = (daily.time || [])[dayOffset]; // "YYYY-MM-DD" do dia certo
 
-      // acha a hora de maior chance de chuva HOJE, pra completar "às XXh" —
-      // só quando a chance máxima do dia já é relevante (>=30%); abaixo
-      // disso, "sem previsão de chuva" já basta, sem precisar de hora.
+      // acha a hora de maior chance de chuva NAQUELE dia (o array "hourly"
+      // cobre todos os dias pedidos, então filtra só as horas com a mesma
+      // data de "targetDate") — só quando a chance máxima do dia já é
+      // relevante (>=30%); abaixo disso, "sem previsão de chuva" já basta.
       var rainHourLabel = "";
       if (chance >= 30 && data.hourly && data.hourly.time && data.hourly.precipitation_probability) {
         var bestIdx = -1, bestVal = -1;
-        data.hourly.precipitation_probability.forEach(function (v, i) {
+        data.hourly.time.forEach(function (t, i) {
+          if (targetDate && t.slice(0, 10) !== targetDate) return;
+          var v = data.hourly.precipitation_probability[i];
           if (v > bestVal) { bestVal = v; bestIdx = i; }
         });
         if (bestIdx !== -1 && data.hourly.time[bestIdx]) {
@@ -1437,7 +1442,7 @@
     var container = document.getElementById("content");
     container.innerHTML = "";
 
-    if (page.weather) renderWeatherWidget(container);
+    if (page.weather) renderWeatherWidget(container, typeof page.weather === "number" ? page.weather : 0);
 
     if (page.dynamicQuery) {
       renderDynamicQuery(page, pageId, container);

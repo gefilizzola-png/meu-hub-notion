@@ -458,7 +458,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-18 00:33",
+  appVersion: "2026-08-18 00:43",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -495,6 +495,7 @@ const APP_CONFIG = {
       title: "Entrada",
       items: [
         { label: "Hoje", type: "page", target: "hoje", icon: "calendar-event" },
+        { label: "Amanhã", type: "page", target: "amanha", icon: "calendar-plus" },
         { label: "Criar páginas", type: "page", target: "criar_paginas", icon: "file-plus" },
         { label: "Eventos", type: "page", target: "eventos", icon: "calendar" },
         { label: "Favoritas", type: "page", target: "favoritas", icon: "star" },
@@ -661,6 +662,149 @@ const APP_CONFIG = {
             { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - JART - Sessões" },
             { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - COMAT - Reuniões" },
             { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        }
+      ]
+    },
+
+    // Idêntica a "Hoje" (mesmas 6 seções), só com "Data/Prazo = amanhã" em
+    // vez de "hoje" nas seções que dependem da data — EXCETO "Prioritários
+    // atrasados", que continua igual (Data/Prazo já passado é sempre
+    // relativo a HOJE, não faz sentido "atrasado em relação a amanhã").
+    // "weather: 1" pede o dia seguinte na Open-Meteo (dayOffset=1).
+    amanha: {
+      title: "Amanhã",
+      weather: 1,
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir no Notion",
+          items: [
+            { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" }
+          ]
+        }
+      ],
+      dynamicQueries: [
+        {
+          title: "📅 Reuniões",
+          bg: "#eaf2fb",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+          ]
+        },
+        {
+          title: "⚖️ Sessões (TAT / JART / COMAT)",
+          bg: "#fdf6e3",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            {
+              property: "📚 Página de Origem", type: "select",
+              orPairs: [
+                { condition: "equals", value: "PMF - TAT - Sessões" },
+                { condition: "equals", value: "PMF - JART - Sessões" },
+                { condition: "equals", value: "PMF - COMAT - Reuniões" }
+              ]
+            },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        },
+        {
+          title: "✅ Tarefas",
+          bg: "#eaf7ed",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            {
+              property: "📚 Página de Origem", type: "select",
+              orPairs: [
+                { condition: "equals", value: "PMF - Tarefas" },
+                { condition: "equals", value: "PMF - Betha - Tarefas" },
+                { condition: "equals", value: "Pessoal - Tarefas" }
+              ]
+            },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
+          ],
+          sorts: [{ property: "Nome", direction: "ascending" }],
+          cardFields: [
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        },
+        {
+          // Igual à seção de mesmo nome em "Hoje" — Data/Prazo < hoje (não
+          // "amanhã"), Prioridade 1/2/3, exclui Concluído/Cancelado.
+          title: "⚠️ Prioritários atrasados",
+          bg: "#fdecea",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📅 Data/Prazo", type: "date", condition: "before", value: "today" },
+            {
+              property: " 🚩 Prioridade", type: "relation",
+              orPairs: [
+                { condition: "contains", value: "2460481486dd80b19d7edb3a9eccba08" },
+                { condition: "contains", value: "2330481486dd801981efc913350a8034" },
+                { condition: "contains", value: "2330481486dd807e9f21c4ed2c3c8e88" }
+              ]
+            },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [LIMIT_FILTER],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        },
+        {
+          title: "🎂 Aniversários",
+          bg: "#fdf2f8",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "Pessoal - Aniversários" },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
+          ],
+          sorts: [{ property: "Nome", direction: "ascending" }],
+          cardFields: []
+        },
+        {
+          title: "🗓️ Outros eventos",
+          bg: "#f3eefc",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            {
+              property: "🖥 Formas", type: "relation",
+              orPairs: [
+                { condition: "contains", value: "24104814-86dd-8086-9dd7-d3541def817b" },
+                { condition: "contains", value: "23a04814-86dd-808a-8515-edcd72b5ac49" }
+              ]
+            },
+            { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - Reuniões" },
+            { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - TAT - Sessões" },
+            { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - JART - Sessões" },
+            { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - COMAT - Reuniões" },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
           cardFields: [
