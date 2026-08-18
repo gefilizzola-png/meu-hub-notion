@@ -664,21 +664,43 @@
       type: f.type,
       formulaType: f.formulaType,
       rollupTargetType: f.rollupTargetType,
+      // "f.property" viaja aqui dentro pra filterStateToFilterEntry poder
+      // usar o property REAL do Notion, em vez da chave usada só pra guardar
+      // esse estado no mapa "filterState" (ver "f.stateKey" abaixo) — sem
+      // isso, dois filtros diferentes que miram a MESMA propriedade do
+      // Notion (ex: "Categoria" e "Página de Origem", ambos sobre "📚
+      // Página de Origem" em Atrasados e Prioritários) se sobrescreveriam
+      // um ao outro no mapa.
+      property: f.property,
       // "opts.mode" ("or"/"and") vem pendurado na lista por buildIconDropdown
       // quando o filtro tem "andOrToggle" — default "or" pros demais filtros
       // (Andamento, Prioridade etc.), que continuam sempre "qualquer uma".
       mode: opts.mode || "or",
-      pairs: opts.map(function (o) {
-        return { condition: o.condition || f.condition, value: o.value !== undefined ? o.value : o.pageId };
-      })
+      // cada opção normalmente vira 1 par — MAS uma opção pode trazer sua
+      // própria lista "pairs" (ex: "Categoria: PMF" expande pra várias
+      // "📚 Página de Origem" reais, combinadas com "ou" por trás); nesse
+      // caso todos os pares dela entram soltos na lista final.
+      pairs: opts.reduce(function (acc, o) {
+        if (Array.isArray(o.pairs)) {
+          o.pairs.forEach(function (p) { acc.push({ condition: p.condition || f.condition, value: p.value }); });
+        } else {
+          acc.push({ condition: o.condition || f.condition, value: o.value !== undefined ? o.value : o.pageId });
+        }
+        return acc;
+      }, [])
     };
   }
 
-  // { type, pairs, mode } de uma propriedade → entrada da lista "filters" do
-  // Worker. 1 par vira filtro simples; 2+ vira "orPairs" (qualquer um bate)
-  // ou "andPairs" (todos precisam bater), conforme "mode".
-  function filterStateToFilterEntry(property, fs) {
-    var out = { property: property, type: fs.type };
+  // { type, pairs, mode, property } de um item do filterState → entrada da
+  // lista "filters" do Worker. 1 par vira filtro simples; 2+ vira "orPairs"
+  // (qualquer um bate) ou "andPairs" (todos precisam bater), conforme
+  // "mode". "stateKey" é a chave usada no mapa "filterState" (pra não
+  // colidir quando 2 filtros miram a mesma propriedade do Notion) — o
+  // property de verdade mandado pro Worker é sempre "fs.property" (cai de
+  // volta pro "stateKey" nos filtros antigos, onde os dois sempre foram
+  // iguais).
+  function filterStateToFilterEntry(stateKey, fs) {
+    var out = { property: fs.property || stateKey, type: fs.type };
     if (fs.formulaType) out.formulaType = fs.formulaType;
     if (fs.rollupTargetType) out.rollupTargetType = fs.rollupTargetType;
     if (fs.pairs.length === 1) {
@@ -707,8 +729,9 @@
       q.filters.forEach(function (f) {
         filterBar.appendChild(buildIconDropdown(f, function (opts) {
           var fs = filterStateFromOpts(f, opts);
-          if (fs) filterState[f.property] = fs;
-          else delete filterState[f.property];
+          var key = f.stateKey || f.property;
+          if (fs) filterState[key] = fs;
+          else delete filterState[key];
           runQuery();
         }));
       });
@@ -1054,8 +1077,9 @@
         }
         filterBar.appendChild(buildIconDropdown(f, function (opts) {
           var fs = filterStateFromOpts(f, opts);
-          if (fs) filterState[f.property] = fs;
-          else delete filterState[f.property];
+          var key = f.stateKey || f.property;
+          if (fs) filterState[key] = fs;
+          else delete filterState[key];
           runQuery();
         }));
         // "f.default" (opcional) — já seeda o filtro real ANTES da 1ª busca,
@@ -1066,7 +1090,7 @@
         if (f.default) {
           var defIds = Array.isArray(f.default) ? f.default : [f.default];
           var defOpts = (f.options || []).filter(function (o) { return defIds.indexOf(o.pageId) !== -1; });
-          if (defOpts.length) filterState[f.property] = filterStateFromOpts(f, defOpts);
+          if (defOpts.length) filterState[f.stateKey || f.property] = filterStateFromOpts(f, defOpts);
         }
       });
       row.appendChild(filterBar);
@@ -1261,8 +1285,9 @@
       s.filters.forEach(function (f) {
         filterBar.appendChild(buildIconDropdown(f, function (opts) {
           var fs = filterStateFromOpts(f, opts);
-          if (fs) state.filterState[f.property] = fs;
-          else delete state.filterState[f.property];
+          var key = f.stateKey || f.property;
+          if (fs) state.filterState[key] = fs;
+          else delete state.filterState[key];
           runQuery();
         }));
       });

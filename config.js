@@ -193,6 +193,16 @@ var PRIORIDADE_FILTER = {
   ]
 };
 
+// Igual PRIORIDADE_FILTER acima, mas já vem com "1 - Imediato"/"2 -
+// Urgente"/"3 - Alta" marcados quando a página abre — usado só em
+// "Atrasados e Prioritários". Não mexe no PRIORIDADE_FILTER original (que
+// segue sem nada marcado nas demais páginas); reaproveita as mesmas opções.
+var PRIORITARIOS_PRIORIDADE_FILTER = {
+  property: " 🚩 Prioridade", type: "relation", condition: "contains", label: "Prioridade",
+  default: ["2460481486dd80b19d7edb3a9eccba08", "2330481486dd801981efc913350a8034", "2330481486dd807e9f21c4ed2c3c8e88"],
+  options: PRIORIDADE_FILTER.options
+};
+
 // Origem — campo "select" (não relação): o "pageId" de cada opção é o
 // próprio texto da opção no Notion (é o valor usado no filtro "equals").
 var ORIGEM_FILTER = {
@@ -369,6 +379,62 @@ var CENTRAL_PROCESSO_FILTER = {
   optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📖 Processo/Chamado" }
 };
 
+// "📚 Página de Origem" — usado só em "Atrasados e Prioritários", pra ver
+// tudo o que a Central junta (Tarefas/Reuniões/Betha/TAT/JART/COMAT/
+// Aniversários/Pessoal/etc — confirmado consultando a Central direto, tem
+// quase 30 valores diferentes). É campo NATIVO "select" (não multi_select),
+// então cada registro só tem UM valor — por isso não tem "andOrToggle" aqui
+// como em Assuntos: marcar 2+ opções sempre vira "ou" (qualquer uma bate);
+// "e" nunca bateria com nada, já que nenhum registro tem 2 origens ao mesmo
+// tempo.
+var PRIORITARIOS_ORIGEM_FILTER = {
+  property: "📚 Página de Origem", type: "select", condition: "equals", label: "Página de Origem",
+  searchable: true,
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📚 Página de Origem" }
+};
+
+// monta uma lista de "pairs" (todas "equals") a partir de uma lista de
+// valores de texto — usado só no filtro "Categoria" abaixo, que precisa
+// expandir CADA opção (PMF/Pessoal) numa lista de valores reais de "📚
+// Página de Origem" combinados com "ou".
+function pairsFromValues(values) {
+  return values.map(function (v) { return { condition: "equals", value: v }; });
+}
+
+// "Categoria" — não é campo do Notion, é um agrupamento manual dos valores
+// de "📚 Página de Origem" em 2 baldes (PMF/Pessoal), levantado consultando
+// a Central direto. "stateKey" (diferente de "property") é só a chave usada
+// pra guardar o estado desse filtro no app — sem ela colidiria com
+// PRIORITARIOS_ORIGEM_FILTER acima (os dois miram a MESMA propriedade do
+// Notion). Os dois filtros se combinam com "e": ex. Categoria=PMF +
+// Página de Origem=Tarefas só dá Tarefas (que já é PMF); Categoria=Pessoal
+// + Página de Origem=Tarefas não bate com nada.
+var PRIORITARIOS_CATEGORIA_FILTER = {
+  property: "📚 Página de Origem", type: "select", label: "Categoria", stateKey: "categoria",
+  options: [
+    {
+      label: "PMF", pageId: "PMF", icon: "ti-building", color: "#4a90d9",
+      pairs: pairsFromValues([
+        "PMF - Tarefas", "PMF - Diárias", "PMF - Betha - Tarefas", "PMF - Reuniões", "PMF - Convênios",
+        "PMF - Legislações", "PMF - IPTU - Lançamento Anual", "PMF - TAT - Sessões", "PMF - TAT - Processos",
+        "PMF - Time Sheet", "PMF - JART - Processos", "PMF - JART - Sessões", "PMF - Auditoria TCE",
+        "PMF - TAT - Jeton", "PMF - Jurisprudências", "PMF - JART - Jeton", "PMF - COMAT - Consultas",
+        "PMF - COMAT - Processos", "PMF - COMAT - Reuniões", "PMF - Contratos"
+      ])
+    },
+    {
+      // "Vitor - ..." (eventos/saúde/tarefas de um familiar) entram aqui
+      // dentro de "Pessoal" — não tem um prefixo "Pessoal -" próprio, mas
+      // conceitualmente é vida pessoal, não PMF.
+      label: "Pessoal", pageId: "Pessoal", icon: "ti-user", color: "#37b24d",
+      pairs: pairsFromValues([
+        "Pessoal - Despesas Fixas", "Pessoal - Judicial", "Pessoal - AFIFI", "Pessoal - Aniversários",
+        "Pessoal - Tarefas", "Vitor - Festas/Eventos", "Vitor - Saúde", "Vitor - Tarefas/Provas"
+      ])
+    }
+  ]
+};
+
 // "Situação" é campo nativo (select) da própria base Contratos — cores
 // exatas conferidas no schema (Em licitação=pink, Expirado=brown,
 // Revogado=yellow, Vigente=green). "default" já vem marcado em "Em
@@ -392,7 +458,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-17 01:03",
+  appVersion: "2026-08-18 00:16",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -1300,10 +1366,74 @@ const APP_CONFIG = {
     pmf_controles: {
       title: "Controles",
       items: [
+        { label: "Atrasados e Prioritários", type: "page", target: "pmf_ctrl_atrasados" },
         { label: "Betha", type: "page", target: "pmf_ctrl_betha" },
         { label: "Reuniões", type: "page", target: "pmf_ctrl_reunioes" },
         { label: "Tarefas", type: "page", target: "pmf_ctrl_tarefas" },
         { label: "Time Sheet", type: "notion", url: "https://app.notion.com/p/georges-filizzola/95226c82b4aa45c0bc428a3c570ce28d?v=780f9595e978455abf33cce0c934ed8d&source=copy_link" }
+      ]
+    },
+
+    // Junta TUDO que está atrasado (📅 Data/Prazo já passou) na Central,
+    // não travado numa origem específica (ao contrário de Betha/Reuniões/
+    // Tarefas/TAT) — é a página de "pendências gerais", primeiro passo do
+    // que o Georges pensou em fazer (Hoje/Amanhã/Início vêm depois, ainda
+    // em aberto). Só leitura (GET /query), igual as demais.
+    pmf_ctrl_atrasados: {
+      title: "Atrasados e Prioritários",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir no Notion",
+          items: [
+            { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" }
+          ]
+        }
+      ],
+      dynamicQueries: [
+        {
+          title: "Atrasados",
+          bg: "#fdecea",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📅 Data/Prazo", type: "date", condition: "before", value: "today" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          filters: [
+            {
+              // faixa de quanto tempo atrás venceu — combinada com "antes de
+              // hoje" acima (baseFilters), então cada opção aqui só limita o
+              // início da faixa (ex: "Última semana" = venceu nos últimos 7
+              // dias, sem contar hoje).
+              property: "📅 Data/Prazo",
+              type: "date",
+              condition: "on_or_after",
+              label: "Prazo",
+              default: "past_week",
+              options: [
+                { label: "Ontem", pageId: "yesterday", condition: "equals", value: "yesterday", icon: "ti-calendar-minus", color: "#4a90d9" },
+                { label: "Últimos 3 dias", pageId: "past_3_days", condition: "on_or_after", value: "past_3_days", icon: "ti-calendar-minus", color: "#4a90d9" },
+                { label: "Semana passada", pageId: "past_week", condition: "past_week", value: {}, icon: "ti-calendar-week", color: "#4a90d9" },
+                { label: "Últimos 15 dias", pageId: "past_15_days", condition: "on_or_after", value: "past_15_days", icon: "ti-calendar-minus", color: "#4a90d9" },
+                { label: "Último mês", pageId: "past_month", condition: "past_month", value: {}, icon: "ti-calendar-month", color: "#4a90d9" }
+              ]
+            },
+            PRIORITARIOS_PRIORIDADE_FILTER,
+            PRIORITARIOS_ORIGEM_FILTER,
+            PRIORITARIOS_CATEGORIA_FILTER,
+            ANDAMENTO_FILTER,
+            FOCUS_FILTER,
+            LIMIT_FILTER
+          ],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+            { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        }
       ]
     },
 
