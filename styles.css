@@ -122,6 +122,22 @@ html, body {
   letter-spacing: 0.02em;
   color: #b5b3ae;
 }
+/* widget de previsão do tempo (só na página "Hoje", ver "page.weather" no
+   app.js) — pill pequeno e discreto no topo do conteúdo. */
+.weather-widget {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: #eaf2fb;
+  color: #2f3a44;
+  font-size: 13.5px;
+  margin-bottom: 14px;
+}
+.weather-widget .ti { font-size: 19px; color: #4a90d9; flex-shrink: 0; }
+.weather-widget-loading { color: #999; font-style: italic; background: #f4f4f2; }
 .sidebar-header {
   padding: 20px 20px 14px;
   font-size: 15px;

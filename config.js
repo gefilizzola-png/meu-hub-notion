@@ -458,7 +458,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-18 00:21",
+  appVersion: "2026-08-18 00:33",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -505,16 +505,21 @@ const APP_CONFIG = {
     },
 
     // Página "briefing" do dia — junta, em seções fixas (sem filtro
-    // interativo, exceto a última), tudo que tem Data/Prazo = hoje na
-    // Central: Aniversários, Reuniões, Sessões (TAT/JART/COMAT, que também
-    // ficam registradas na Central) e Tarefas (PMF/Betha/Pessoal). A última
-    // seção foge da regra "hoje" de propósito — mostra o que já está
-    // atrasado E é prioritário (mesma definição usada em "Atrasados e
-    // Prioritários"), pra não esquecer do que ficou pra trás. Substituiu o
-    // protótipo antigo (um único dynamicQuery genérico com só um filtro de
-    // Andamento) — "Amanhã" e "Início" ainda não foram construídas.
+    // interativo, exceto "Prioritários atrasados"), tudo que tem Data/Prazo
+    // = hoje na Central: Reuniões, Sessões (TAT/JART/COMAT, que também
+    // ficam registradas na Central), Tarefas (PMF/Betha/Pessoal),
+    // Aniversários e Outros eventos (Forma Virtual/Presencial que não caiu
+    // em nenhuma das origens específicas acima). "Prioritários atrasados"
+    // foge da regra "hoje" de propósito — mostra o que já está atrasado E é
+    // prioritário (mesma definição de "Atrasados e Prioritários"), pra não
+    // esquecer do que ficou pra trás. "weather: true" liga o widget de
+    // previsão do tempo (só nessa página) — ver renderWeatherWidget no
+    // app.js. Substituiu o protótipo antigo (um único dynamicQuery genérico
+    // com só um filtro de Andamento) — "Amanhã" e "Início" ainda não foram
+    // construídas.
     hoje: {
       title: "Hoje",
+      weather: true,
       itemsCompact: true,
       itemGroups: [
         {
@@ -525,17 +530,6 @@ const APP_CONFIG = {
         }
       ],
       dynamicQueries: [
-        {
-          title: "🎂 Aniversários",
-          bg: "#fdf2f8",
-          database_id: "2310481486dd80079202fe1eaf5e14c4",
-          baseFilters: [
-            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "Pessoal - Aniversários" },
-            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
-          ],
-          sorts: [{ property: "Nome", direction: "ascending" }],
-          cardFields: []
-        },
         {
           title: "📅 Reuniões",
           bg: "#eaf2fb",
@@ -629,6 +623,49 @@ const APP_CONFIG = {
             { property: "📅 Data/Prazo", type: "date" },
             { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
             { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
+            { property: "📚 Página de Origem", type: "select" }
+          ]
+        },
+        {
+          title: "🎂 Aniversários",
+          bg: "#fdf2f8",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            { property: "📚 Página de Origem", type: "select", condition: "equals", value: "Pessoal - Aniversários" },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
+          ],
+          sorts: [{ property: "Nome", direction: "ascending" }],
+          cardFields: []
+        },
+        {
+          // Pega qualquer página da Central com Forma = "Virtual (Meet)" ou
+          // "Presencial" (relação "🖥 Formas" — ids confirmados direto no
+          // Notion) que NÃO seja uma das origens já cobertas acima
+          // (Reuniões/TAT/JART/COMAT), pra pegar outros compromissos com
+          // hora marcada que não caem em nenhuma seção específica (ex:
+          // itens pessoais, de outras origens). Também filtrado por hoje,
+          // igual as demais.
+          title: "🗓️ Outros eventos",
+          bg: "#f3eefc",
+          database_id: "2310481486dd80079202fe1eaf5e14c4",
+          baseFilters: [
+            {
+              property: "🖥 Formas", type: "relation",
+              orPairs: [
+                { condition: "contains", value: "24104814-86dd-8086-9dd7-d3541def817b" },
+                { condition: "contains", value: "23a04814-86dd-808a-8515-edcd72b5ac49" }
+              ]
+            },
+            { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - Reuniões" },
+            { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - TAT - Sessões" },
+            { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - JART - Sessões" },
+            { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - COMAT - Reuniões" },
+            { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
+          ],
+          sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+          cardFields: [
+            { property: "📅 Data/Prazo", type: "date" },
+            { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
             { property: "📚 Página de Origem", type: "select" }
           ]
         }

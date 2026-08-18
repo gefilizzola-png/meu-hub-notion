@@ -1370,10 +1370,74 @@
   }
 
   // ---------------- content grid/list ----------------
+  // "page.weather" (opcional, só liga na página "Hoje" por enquanto) —
+  // widget pequeno com a previsão do dia (mín/máx + chance de chuva e o
+  // horário mais provável). Usa a API pública da Open-Meteo — sem chave,
+  // sem custo, e é SÓ LEITURA (nunca escreve nada, nem no Notion nem em
+  // outro lugar). Coordenadas fixas de Florianópolis/SC. Se a busca falhar
+  // (sem internet, API fora do ar etc.) o widget simplesmente some — não
+  // quebra o resto da página.
+  function renderWeatherWidget(container) {
+    var wrap = document.createElement("div");
+    wrap.className = "weather-widget weather-widget-loading";
+    wrap.textContent = "Carregando previsão do tempo…";
+    container.appendChild(wrap);
+
+    var url = "https://api.open-meteo.com/v1/forecast?latitude=-27.5954&longitude=-48.5480"
+      + "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+      + "&hourly=precipitation_probability"
+      + "&timezone=America%2FSao_Paulo&forecast_days=1";
+
+    fetch(url).then(function (r) {
+      if (!r.ok) throw new Error("weather http " + r.status);
+      return r.json();
+    }).then(function (data) {
+      wrap.classList.remove("weather-widget-loading");
+      wrap.innerHTML = "";
+
+      var daily = data.daily || {};
+      var max = (daily.temperature_2m_max || [])[0];
+      var min = (daily.temperature_2m_min || [])[0];
+      var chance = (daily.precipitation_probability_max || [])[0];
+
+      // acha a hora de maior chance de chuva HOJE, pra completar "às XXh" —
+      // só quando a chance máxima do dia já é relevante (>=30%); abaixo
+      // disso, "sem previsão de chuva" já basta, sem precisar de hora.
+      var rainHourLabel = "";
+      if (chance >= 30 && data.hourly && data.hourly.time && data.hourly.precipitation_probability) {
+        var bestIdx = -1, bestVal = -1;
+        data.hourly.precipitation_probability.forEach(function (v, i) {
+          if (v > bestVal) { bestVal = v; bestIdx = i; }
+        });
+        if (bestIdx !== -1 && data.hourly.time[bestIdx]) {
+          rainHourLabel = " por volta das " + data.hourly.time[bestIdx].slice(11, 13) + "h";
+        }
+      }
+
+      var icon = document.createElement("i");
+      icon.className = "ti " + (chance >= 50 ? "ti-cloud-rain" : chance >= 20 ? "ti-cloud" : "ti-sun");
+
+      var text = document.createElement("span");
+      var parts = [];
+      if (min != null && max != null) parts.push("Mín " + Math.round(min) + "° · Máx " + Math.round(max) + "°");
+      if (chance != null) {
+        parts.push(chance >= 30 ? "🌧 " + chance + "% de chuva" + rainHourLabel : "Sem previsão de chuva");
+      }
+      text.textContent = parts.join(" · ") || "Previsão indisponível";
+
+      wrap.appendChild(icon);
+      wrap.appendChild(text);
+    }).catch(function () {
+      wrap.remove();
+    });
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
+
+    if (page.weather) renderWeatherWidget(container);
 
     if (page.dynamicQuery) {
       renderDynamicQuery(page, pageId, container);
