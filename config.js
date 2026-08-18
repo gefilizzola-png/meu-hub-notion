@@ -471,7 +471,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-18 01:04",
+  appVersion: "2026-08-18 02:00",
   startPage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
@@ -501,6 +501,20 @@ const APP_CONFIG = {
     { pageId: "2330481486dd80ef94f9dae36b42b39f", label: "4 - Média", color: "#4a90d9" },
     { pageId: "2330481486dd80029cb6e049f84b8198", label: "5 - Baixa", color: "#868e96" },
     { pageId: "2330481486dd80d2bc15f5017684326f", label: "6 - Sem prioridade", color: "#c4c4c0" }
+  ],
+
+  // Rótulos/cores dos 3 valores possíveis de "⭐ Focus" (fórmula da
+  // Central) — mesmo papel de "andamentoOptions"/"prioridadeOptions"
+  // acima, mas pro selo de Focus nos cards (ex: "Itens Prioritários" em
+  // Início). Como Focus é "formula" (não "relation"), o valor bruto que
+  // vem do Notion já é o texto do rótulo (não um pageId) — por isso aqui
+  // a "chave" de busca é "label", não "pageId" (ver buildCardSub no
+  // app.js). Mesmos 3 rótulos/cores de FOCUS_FILTER, só que num formato
+  // mais direto pra exibição no card.
+  focusOptions: [
+    { label: "⭐ 1 - Focus", color: "#f08c00" },
+    { label: "⚠️ 2 - Atenção", color: "#e8590c" },
+    { label: "📅 3 - Verificar prazo", color: "#4a90d9" }
   ],
 
   pages: {
@@ -534,22 +548,39 @@ const APP_CONFIG = {
     // Georges pediu). "weather: true" = previsão de hoje.
     inicio: {
       title: "Início",
-      weather: true,
       itemsCompact: true,
-      items: [
-        { label: "Favoritas", type: "page", target: "favoritas", icon: "star" }
-      ],
+      // Central + Favoritas juntos na mesma caixinha "Abrir no Notion", igual
+      // ao padrão usado nas demais páginas (Reuniões/Tarefas/TAT/Betha).
+      // Favoritas usa "type: 'link'" (não "page") de propósito: um botão
+      // "page" vira automaticamente uma SUBPASTA da página atual no menu
+      // lateral (ver app.js: buildTreeNode / pageItems) — o que fazia
+      // "Favoritas" aparecer aninhado embaixo de "Início" na árvore, já que
+      // Favoritas TAMBÉM já é filha direta de "Entrada" lá em cima. "link" é
+      // só um atalho de navegação (mesmo destino, mesmo clique), sem entrar
+      // na árvore/breadcrumb como filha de Início.
       itemGroups: [
         {
           title: "Abrir no Notion",
           items: [
-            { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" }
+            { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" },
+            { label: "Favoritas", type: "link", icon: "folder", target: "favoritas" }
           ]
         }
       ],
+      // Cada aba agora carrega também "dateRange" (pra mostrar a data ao
+      // lado do rótulo do botão, ex: "Hoje (18/08)") e "weatherDay" (pro
+      // widget de previsão do tempo, que mudou de lugar: antes ficava fixo
+      // no topo da página inteira, agora mora DENTRO de cada aba — logo
+      // abaixo da barra Hoje/Amanhã/Próximos 7 dias — e atualiza sozinho
+      // trocando de aba (ver renderTabs no app.js). "dateRange: [0]" = só
+      // hoje; "[0,6]" = intervalo de 7 dias (hoje + 6) formatado como
+      // "18-24/08" (mesmo mês) ou "27/08-02/09" (virando o mês) por
+      // tabDateLabel() no app.js.
       tabs: [
         {
           label: "Hoje",
+          dateRange: [0],
+          weatherDay: 0,
           dynamicQueries: [
             {
               title: "📅 Reuniões",
@@ -603,6 +634,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
               ],
               sorts: [{ property: "Nome", direction: "ascending" }],
+              filters: [PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
               cardFields: [
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
                 { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
@@ -649,6 +681,8 @@ const APP_CONFIG = {
         },
         {
           label: "Amanhã",
+          dateRange: [1],
+          weatherDay: 1,
           dynamicQueries: [
             {
               title: "📅 Reuniões",
@@ -702,6 +736,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
               ],
               sorts: [{ property: "Nome", direction: "ascending" }],
+              filters: [PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
               cardFields: [
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
                 { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
@@ -748,6 +783,8 @@ const APP_CONFIG = {
         },
         {
           label: "Próximos 7 dias",
+          dateRange: [0, 6],
+          weatherDay: 0,
           dynamicQueries: [
             {
               title: "📅 Reuniões",
@@ -804,6 +841,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -872,7 +910,8 @@ const APP_CONFIG = {
             { property: "📅 Data/Prazo", type: "date" },
             { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
             { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
-            { property: "📚 Página de Origem", type: "select" }
+            { property: "📚 Página de Origem", type: "select" },
+            { property: "⭐ Focus", type: "formula" }
           ]
         }
       ],

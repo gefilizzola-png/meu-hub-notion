@@ -915,6 +915,15 @@
             if (ruNames) sub.push({ text: ruNames, color: NOTION_COLOR[ruFlat[0].color] || "" });
           }
         }
+      } else if (cf.type === "formula") {
+        // valor de uma fórmula "string" (ex: "⭐ Focus") — já vem como texto
+        // puro (não pageId), então a cor sai batendo o texto direto contra
+        // "cfg.focusOptions" (ver config.js), sem precisar de lookup por id
+        // como Andamento/Prioridade acima.
+        if (raw) {
+          var focusOpt = (cfg.focusOptions || []).filter(function (o) { return o.label === raw; })[0];
+          sub.push({ text: raw, color: focusOpt ? focusOpt.color : "" });
+        }
       } else if (cf.type === "multi_select") {
         // ex: "📖 Processo/Chamado" em Betha — array de {name,color}; junta
         // todas as tags marcadas num badge só (na prática quase sempre só
@@ -1437,6 +1446,47 @@
     });
   }
 
+  // ---------------- data de hoje em São Paulo (só a parte Y/M/D) ----------------
+  // Usado pra rotular as abas de "page.tabs" com a data real (ex: "Hoje
+  // (18/08)") — pega a data no fuso de São Paulo (não o fuso do navegador
+  // do usuário) via Intl, depois monta um Date "local" só com essa Y/M/D
+  // (meia-noite), seguro pra somar dias sem se preocupar com fuso/DST.
+  function saoPauloToday() {
+    var parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(new Date());
+    var y, m, d;
+    parts.forEach(function (p) {
+      if (p.type === "year") y = p.value;
+      if (p.type === "month") m = p.value;
+      if (p.type === "day") d = p.value;
+    });
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  }
+  function addDays(date, n) {
+    var d = new Date(date);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+  function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+  function fmtDDMM(date) { return pad2(date.getDate()) + "/" + pad2(date.getMonth() + 1); }
+
+  // "tab.dateRange" — [offset] pra um dia só (ex: [0] = hoje, [1] = amanhã)
+  // ou [offsetInicio, offsetFim] pra um intervalo (ex: [0,6] = hoje até
+  // hoje+6, os "próximos 7 dias" que a aba busca). Formata "18/08" (dia
+  // único), "18-24/08" (intervalo no mesmo mês) ou "27/08-02/09" (intervalo
+  // cruzando o mês).
+  function tabDateLabel(range) {
+    var today = saoPauloToday();
+    var start = addDays(today, range[0]);
+    if (range.length < 2 || range[1] === range[0]) return fmtDDMM(start);
+    var end = addDays(today, range[1]);
+    if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+      return pad2(start.getDate()) + "-" + pad2(end.getDate()) + "/" + pad2(start.getMonth() + 1);
+    }
+    return fmtDDMM(start) + "-" + fmtDDMM(end);
+  }
+
   // "page.tabs" — grupo de botões que troca TODO um conjunto de
   // "dynamicQueries" de uma vez (ex: Início: Hoje / Amanhã / Próximos 7
   // dias). Cada item de "page.tabs" tem { label, dynamicQueries: [...] } —
@@ -1444,6 +1494,10 @@
   // Só a aba ativa é buscada/desenhada; trocar de aba refaz do zero (sem
   // guardar cache das outras) — como cada busca é rápida e o Worker é só
   // leitura, não há necessidade de complicar com cache aqui.
+  // "tab.weatherDay" (opcional) — dia (offset) do widget de previsão do
+  // tempo DENTRO da aba, logo abaixo da barra de botões — refaz sozinho
+  // (widget novo) toda vez que troca de aba, já que "renderBody" limpa e
+  // remonta tudo do zero.
   function renderTabs(page, pageId, container) {
     var tabsBar = document.createElement("div");
     tabsBar.className = "page-tabs";
@@ -1454,6 +1508,7 @@
     function renderBody() {
       body.innerHTML = "";
       var tab = page.tabs[activeIdx];
+      if (typeof tab.weatherDay === "number") renderWeatherWidget(body, tab.weatherDay);
       (tab.dynamicQueries || []).forEach(function (qDef, i) {
         if (i > 0) {
           var divider = document.createElement("hr");
@@ -1468,7 +1523,7 @@
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "page-tab-btn" + (idx === 0 ? " active" : "");
-      btn.textContent = tab.label;
+      btn.textContent = tab.label + (tab.dateRange ? " (" + tabDateLabel(tab.dateRange) + ")" : "");
       btn.addEventListener("click", function () {
         if (activeIdx === idx) return;
         activeIdx = idx;
@@ -1498,16 +1553,19 @@
     title.textContent = "Anotações rápidas";
     section.appendChild(title);
 
+    // linha de criação — "notes-text-input" ficou mais estreita/baixa (era
+    // igual à barra de tags antes) pra sobrar espaço pra barra de filtros
+    // logo abaixo, sem deixar o bloco todo pesado visualmente.
     var formRow = document.createElement("div");
     formRow.className = "notes-form-row";
     var textInput = document.createElement("input");
     textInput.type = "text";
     textInput.className = "notes-text-input";
-    textInput.placeholder = "Escreva uma anotação ou tarefa...";
+    textInput.placeholder = "Nova anotação...";
     var tagsInput = document.createElement("input");
     tagsInput.type = "text";
     tagsInput.className = "notes-tags-input";
-    tagsInput.placeholder = "tags (separadas por vírgula)";
+    tagsInput.placeholder = "tags (vírgula)";
     var addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "notes-add-btn";
@@ -1517,10 +1575,39 @@
     formRow.appendChild(addBtn);
     section.appendChild(formRow);
 
+    // barra de filtros — texto (pesquisa no corpo da anotação), tag (lista
+    // montada a partir das tags que já existem nas anotações carregadas) e
+    // status (todas/pendentes/concluídas). Filtra em cima do que já foi
+    // buscado (sem chamada nova ao Worker a cada letra digitada).
+    var filterRow = document.createElement("div");
+    filterRow.className = "notes-filter-row";
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "notes-filter-input";
+    searchInput.placeholder = "Pesquisar...";
+    var tagSelect = document.createElement("select");
+    tagSelect.className = "notes-filter-select";
+    var statusSelect = document.createElement("select");
+    statusSelect.className = "notes-filter-select";
+    [["all", "Todas"], ["pending", "Pendentes"], ["done", "Concluídas"]].forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      statusSelect.appendChild(opt);
+    });
+    filterRow.appendChild(searchInput);
+    filterRow.appendChild(tagSelect);
+    filterRow.appendChild(statusSelect);
+    section.appendChild(filterRow);
+
     var listWrap = document.createElement("div");
     listWrap.className = "notes-list";
     section.appendChild(listWrap);
     container.appendChild(section);
+
+    // guarda a última lista buscada no Worker — os 3 filtros acima mexem só
+    // nisso aqui na tela, sem recarregar do KV a cada mudança.
+    var allNotes = [];
 
     function parseTags(v) {
       return v.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
@@ -1531,12 +1618,47 @@
       return res;
     }
 
+    // reconstrói as opções do dropdown de tags a partir das anotações
+    // carregadas (sem lista fixa em lugar nenhum) — tenta manter a tag
+    // selecionada se ela continuar existindo depois de recarregar.
+    function populateTagSelect() {
+      var seen = {};
+      allNotes.forEach(function (n) { (n.tags || []).forEach(function (t) { seen[t] = true; }); });
+      var current = tagSelect.value;
+      tagSelect.innerHTML = "";
+      var allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = "Todas as tags";
+      tagSelect.appendChild(allOpt);
+      Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (t) {
+        var opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = t;
+        tagSelect.appendChild(opt);
+      });
+      if (Object.prototype.hasOwnProperty.call(seen, current)) tagSelect.value = current;
+    }
+
+    function applyFilters() {
+      var q = searchInput.value.trim().toLowerCase();
+      var tag = tagSelect.value;
+      var status = statusSelect.value;
+      var filtered = allNotes.filter(function (n) {
+        if (q && n.text.toLowerCase().indexOf(q) === -1) return false;
+        if (tag && (n.tags || []).indexOf(tag) === -1) return false;
+        if (status === "pending" && n.done) return false;
+        if (status === "done" && !n.done) return false;
+        return true;
+      });
+      renderList(filtered);
+    }
+
     function renderList(notes) {
       listWrap.innerHTML = "";
       if (!notes.length) {
         var empty = document.createElement("p");
         empty.className = "empty";
-        empty.textContent = "Nenhuma anotação ainda.";
+        empty.textContent = allNotes.length ? "Nenhuma anotação bate com o filtro." : "Nenhuma anotação ainda.";
         listWrap.appendChild(empty);
         return;
       }
@@ -1563,12 +1685,48 @@
           row.appendChild(tag);
         });
 
+        // "+" — adiciona tag numa anotação que já existe (não só na hora de
+        // criar). Clique abre um campinho de texto inline; Enter confirma
+        // (manda a lista de tags COMPLETA pro Worker — a rota PUT /notes
+        // substitui "tags" inteiro, não faz merge sozinha), Escape/perder o
+        // foco sem digitar nada cancela.
+        var addTagBtn = document.createElement("button");
+        addTagBtn.type = "button";
+        addTagBtn.className = "notes-item-addtag";
+        addTagBtn.innerHTML = '<i class="ti ti-tag-plus"></i>';
+        addTagBtn.title = "Adicionar tag";
+
         var delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "notes-item-del";
         delBtn.innerHTML = '<i class="ti ti-x"></i>';
         delBtn.title = "Apagar";
         delBtn.addEventListener("click", function () { removeNote(n.id); });
+
+        addTagBtn.addEventListener("click", function () {
+          if (row.querySelector(".notes-item-addtag-input")) return;
+          var tagInput = document.createElement("input");
+          tagInput.type = "text";
+          tagInput.className = "notes-item-addtag-input";
+          tagInput.placeholder = "nova tag";
+          var done = false;
+          function commit() {
+            if (done) return;
+            done = true;
+            var v = tagInput.value.trim();
+            if (v) addTagToNote(n, v);
+            tagInput.remove();
+          }
+          tagInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") { done = true; tagInput.remove(); }
+          });
+          tagInput.addEventListener("blur", function () { commit(); });
+          row.insertBefore(tagInput, delBtn);
+          tagInput.focus();
+        });
+
+        row.appendChild(addTagBtn);
         row.appendChild(delBtn);
 
         listWrap.appendChild(row);
@@ -1580,7 +1738,11 @@
       authFetch(cfg.templateWorkerUrl + "/notes")
         .then(handle401)
         .then(function (r) { return r.json(); })
-        .then(function (data) { renderList(data.notes || []); })
+        .then(function (data) {
+          allNotes = data.notes || [];
+          populateTagSelect();
+          applyFilters();
+        })
         .catch(function () { listWrap.innerHTML = '<p class="empty">Não foi possível carregar as anotações.</p>'; });
     }
 
@@ -1595,6 +1757,16 @@
     function removeNote(id) {
       authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(id), { method: "DELETE" })
         .then(handle401).then(loadNotes);
+    }
+
+    function addTagToNote(note, tagValue) {
+      var newTags = (note.tags || []).slice();
+      if (newTags.indexOf(tagValue) === -1) newTags.push(tagValue);
+      authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(note.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: newTags })
+      }).then(handle401).then(loadNotes);
     }
 
     function addNote() {
@@ -1617,6 +1789,9 @@
     addBtn.addEventListener("click", addNote);
     textInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addNote(); });
     tagsInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addNote(); });
+    searchInput.addEventListener("input", applyFilters);
+    tagSelect.addEventListener("change", applyFilters);
+    statusSelect.addEventListener("change", applyFilters);
 
     loadNotes();
   }

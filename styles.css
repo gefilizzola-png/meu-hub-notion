@@ -952,21 +952,25 @@ html, body {
   margin: 8px 0 12px;
   flex-wrap: wrap;
 }
-.notes-text-input { flex: 1 1 260px; min-width: 0; }
-.notes-tags-input { flex: 0 1 200px; min-width: 0; }
+/* "notes-text-input" ficou mais estreita e baixa que antes (era igual à
+   barra de tags) — o bloco de anotações ganhou uma 2ª linha de filtros
+   logo abaixo, então a barra de escrever não precisa mais dominar a
+   largura toda. */
+.notes-text-input { flex: 1 1 180px; max-width: 320px; min-width: 0; }
+.notes-tags-input { flex: 0 1 180px; min-width: 0; }
 .notes-text-input,
 .notes-tags-input {
-  height: 36px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 10px;
   border-radius: 8px;
   border: 0.5px solid #dcdcd8;
-  font-size: 13.5px;
+  font-size: 13px;
   background: #fff;
 }
 .notes-text-input:focus,
 .notes-tags-input:focus { outline: none; border-color: #4a90d9; }
 .notes-add-btn {
-  height: 36px;
+  height: 32px;
   padding: 0 14px;
   border-radius: 8px;
   border: none;
@@ -982,6 +986,30 @@ html, body {
 }
 .notes-add-btn:hover { background: #3f7fc4; }
 .notes-add-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* barra de filtros (pesquisar / tag / status) — mesma altura/estilo dos
+   campos acima, só que num tom mais neutro (fundo cinza claro) pra
+   diferenciar visualmente "criar" (azul) de "filtrar" (neutro). */
+.notes-filter-row {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 12px;
+  flex-wrap: wrap;
+}
+.notes-filter-input,
+.notes-filter-select {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  font-size: 12.5px;
+  background: #fbfbfa;
+  color: #55554f;
+}
+.notes-filter-input { flex: 1 1 160px; min-width: 0; }
+.notes-filter-select { flex: 0 1 150px; min-width: 0; }
+.notes-filter-input:focus,
+.notes-filter-select:focus { outline: none; border-color: #4a90d9; background: #fff; }
 .notes-list { display: flex; flex-direction: column; gap: 6px; }
 .notes-item {
   display: flex;
@@ -1004,7 +1032,8 @@ html, body {
   font-size: 11px;
   font-weight: 500;
 }
-.notes-item-del {
+.notes-item-del,
+.notes-item-addtag {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
@@ -1018,6 +1047,20 @@ html, body {
   justify-content: center;
 }
 .notes-item-del:hover { background: #fdecea; color: #e03131; }
+.notes-item-addtag:hover { background: #eaf2fb; color: #4a90d9; }
+/* campinho que aparece inline ao clicar em "+" pra adicionar tag numa
+   anotação já existente — mesmo tom das outras entradas, só bem estreito. */
+.notes-item-addtag-input {
+  flex-shrink: 0;
+  width: 100px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 0.5px solid #4a90d9;
+  font-size: 12px;
+  background: #fff;
+}
+.notes-item-addtag-input:focus { outline: none; }
 
 @media (max-width: 1023px) {
   .header-search { display: none; }
