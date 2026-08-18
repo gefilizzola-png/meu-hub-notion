@@ -916,6 +916,109 @@ html, body {
   .content-plain { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .content-grouped .group-items { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 }
+/* "page.tabs" — botões que trocam todo um conjunto de exibições de uma vez
+   (ex: Início: Hoje / Amanhã / Próximos 7 dias). Visual parecido com
+   ".filter-trigger", mas em grupo e com estado "ativo" marcado. */
+.page-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.page-tab-btn {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #55554f;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.page-tab-btn:hover { border-color: #b9b9b3; }
+.page-tab-btn.active {
+  background: #2f3a44;
+  border-color: #2f3a44;
+  color: #fff;
+}
+
+/* "page.notes" — bloco de anotações rápidas/lista de tarefas (texto livre
+   + tags), sempre por último na página. Guardado no Cloudflare KV via
+   Worker — nada a ver com o Notion. */
+.notes-block { margin-top: 4px; }
+.notes-form-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 12px;
+  flex-wrap: wrap;
+}
+.notes-text-input { flex: 1 1 260px; min-width: 0; }
+.notes-tags-input { flex: 0 1 200px; min-width: 0; }
+.notes-text-input,
+.notes-tags-input {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  font-size: 13.5px;
+  background: #fff;
+}
+.notes-text-input:focus,
+.notes-tags-input:focus { outline: none; border-color: #4a90d9; }
+.notes-add-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: none;
+  background: #4a90d9;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.notes-add-btn:hover { background: #3f7fc4; }
+.notes-add-btn:disabled { opacity: 0.6; cursor: default; }
+.notes-list { display: flex; flex-direction: column; gap: 6px; }
+.notes-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 0.5px solid #ececea;
+  background: #fbfbfa;
+}
+.notes-item-check { flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
+.notes-item-text { flex: 1; min-width: 0; font-size: 13.5px; color: #2f3a44; word-break: break-word; }
+.notes-item.done .notes-item-text { text-decoration: line-through; color: #adaba5; }
+.notes-item-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eaf2fb;
+  color: #4a90d9;
+  font-size: 11px;
+  font-weight: 500;
+}
+.notes-item-del {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #b5b3ae;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notes-item-del:hover { background: #fdecea; color: #e03131; }
+
 @media (max-width: 1023px) {
   .header-search { display: none; }
   /* cabeçalho mobile já é apertado (botão voltar + breadcrumb) — o

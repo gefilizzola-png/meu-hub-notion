@@ -1437,6 +1437,190 @@
     });
   }
 
+  // "page.tabs" — grupo de botões que troca TODO um conjunto de
+  // "dynamicQueries" de uma vez (ex: Início: Hoje / Amanhã / Próximos 7
+  // dias). Cada item de "page.tabs" tem { label, dynamicQueries: [...] } —
+  // a mesma forma de "page.dynamicQueries" normal, só que agrupada por aba.
+  // Só a aba ativa é buscada/desenhada; trocar de aba refaz do zero (sem
+  // guardar cache das outras) — como cada busca é rápida e o Worker é só
+  // leitura, não há necessidade de complicar com cache aqui.
+  function renderTabs(page, pageId, container) {
+    var tabsBar = document.createElement("div");
+    tabsBar.className = "page-tabs";
+    var body = document.createElement("div");
+
+    var activeIdx = 0;
+
+    function renderBody() {
+      body.innerHTML = "";
+      var tab = page.tabs[activeIdx];
+      (tab.dynamicQueries || []).forEach(function (qDef, i) {
+        if (i > 0) {
+          var divider = document.createElement("hr");
+          divider.className = "content-divider";
+          body.appendChild(divider);
+        }
+        renderDynamicQueryBlock(qDef, pageId, body);
+      });
+    }
+
+    page.tabs.forEach(function (tab, idx) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "page-tab-btn" + (idx === 0 ? " active" : "");
+      btn.textContent = tab.label;
+      btn.addEventListener("click", function () {
+        if (activeIdx === idx) return;
+        activeIdx = idx;
+        tabsBar.querySelectorAll(".page-tab-btn").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        renderBody();
+      });
+      tabsBar.appendChild(btn);
+    });
+
+    container.appendChild(tabsBar);
+    container.appendChild(body);
+    renderBody();
+  }
+
+  // "page.notes" — bloco de anotações rápidas/lista de tarefas (texto livre
+  // + tags), guardado no Cloudflare KV via Worker (rotas /notes) — nada a
+  // ver com o Notion, é um bloco à parte. Marcar/desmarcar concluída não
+  // apaga a nota (fica riscada, mas continua na lista pra consultar
+  // depois); o "x" apaga de vez.
+  function renderNotesBlock(container) {
+    var section = document.createElement("div");
+    section.className = "notes-block";
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "Anotações rápidas";
+    section.appendChild(title);
+
+    var formRow = document.createElement("div");
+    formRow.className = "notes-form-row";
+    var textInput = document.createElement("input");
+    textInput.type = "text";
+    textInput.className = "notes-text-input";
+    textInput.placeholder = "Escreva uma anotação ou tarefa...";
+    var tagsInput = document.createElement("input");
+    tagsInput.type = "text";
+    tagsInput.className = "notes-tags-input";
+    tagsInput.placeholder = "tags (separadas por vírgula)";
+    var addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "notes-add-btn";
+    addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
+    formRow.appendChild(textInput);
+    formRow.appendChild(tagsInput);
+    formRow.appendChild(addBtn);
+    section.appendChild(formRow);
+
+    var listWrap = document.createElement("div");
+    listWrap.className = "notes-list";
+    section.appendChild(listWrap);
+    container.appendChild(section);
+
+    function parseTags(v) {
+      return v.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+    }
+
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+
+    function renderList(notes) {
+      listWrap.innerHTML = "";
+      if (!notes.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhuma anotação ainda.";
+        listWrap.appendChild(empty);
+        return;
+      }
+      notes.forEach(function (n) {
+        var row = document.createElement("div");
+        row.className = "notes-item" + (n.done ? " done" : "");
+
+        var check = document.createElement("input");
+        check.type = "checkbox";
+        check.className = "notes-item-check";
+        check.checked = !!n.done;
+        check.addEventListener("change", function () { toggleDone(n.id, check.checked); });
+        row.appendChild(check);
+
+        var textSpan = document.createElement("span");
+        textSpan.className = "notes-item-text";
+        textSpan.textContent = n.text;
+        row.appendChild(textSpan);
+
+        (n.tags || []).forEach(function (t) {
+          var tag = document.createElement("span");
+          tag.className = "notes-item-tag";
+          tag.textContent = t;
+          row.appendChild(tag);
+        });
+
+        var delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "notes-item-del";
+        delBtn.innerHTML = '<i class="ti ti-x"></i>';
+        delBtn.title = "Apagar";
+        delBtn.addEventListener("click", function () { removeNote(n.id); });
+        row.appendChild(delBtn);
+
+        listWrap.appendChild(row);
+      });
+    }
+
+    function loadNotes() {
+      listWrap.innerHTML = '<p class="empty">Carregando…</p>';
+      authFetch(cfg.templateWorkerUrl + "/notes")
+        .then(handle401)
+        .then(function (r) { return r.json(); })
+        .then(function (data) { renderList(data.notes || []); })
+        .catch(function () { listWrap.innerHTML = '<p class="empty">Não foi possível carregar as anotações.</p>'; });
+    }
+
+    function toggleDone(id, done) {
+      authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: done })
+      }).then(handle401).then(loadNotes);
+    }
+
+    function removeNote(id) {
+      authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(id), { method: "DELETE" })
+        .then(handle401).then(loadNotes);
+    }
+
+    function addNote() {
+      var text = textInput.value.trim();
+      if (!text) { textInput.focus(); return; }
+      var tags = parseTags(tagsInput.value);
+      addBtn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text, tags: tags })
+      }).then(handle401).then(function () {
+        textInput.value = "";
+        tagsInput.value = "";
+        textInput.focus();
+        loadNotes();
+      }).finally(function () { addBtn.disabled = false; });
+    }
+
+    addBtn.addEventListener("click", addNote);
+    textInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addNote(); });
+    tagsInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addNote(); });
+
+    loadNotes();
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
@@ -1453,8 +1637,9 @@
     var itemGroups = (page.itemGroups || []).filter(function (g) { return (g.items || []).length > 0; });
     var groups = (page.groups || []).filter(function (g) { return (g.items || []).length > 0; });
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
+    var hasTabs = !!(page.tabs && page.tabs.length);
 
-    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -1507,6 +1692,22 @@
         itemGroupsWrap.appendChild(box);
       });
       container.appendChild(itemGroupsWrap);
+      renderedSomething = true;
+    }
+
+    // "page.tabs" — botões que trocam TODO um conjunto de "dynamicQueries"
+    // de uma vez (ex: Início: Hoje / Amanhã / Próximos 7 dias) — cada aba já
+    // é uma lista de exibições completa, igual "page.dynamicQueries"
+    // normal, só que só a aba ativa é desenhada por vez. Diferente de
+    // "page.dynamicQueries" (que fica sempre visível, não depende de aba —
+    // ex: "Itens Prioritários" em Início, que não muda com o dia).
+    if (hasTabs) {
+      if (renderedSomething) {
+        var dividerTabs = document.createElement("hr");
+        dividerTabs.className = "content-divider";
+        container.appendChild(dividerTabs);
+      }
+      renderTabs(page, pageId, container);
       renderedSomething = true;
     }
 
@@ -1583,6 +1784,20 @@
         container.appendChild(divider2);
       }
       renderSearchBlock(page, container);
+      renderedSomething = true;
+    }
+
+    // "page.notes" (opcional) — bloco de anotações rápidas/lista de tarefas
+    // (texto livre + tags), sempre por último na página (depois até da
+    // busca). Guardado à parte no Cloudflare KV via Worker — sem NENHUMA
+    // relação com o Notion.
+    if (page.notes) {
+      if (renderedSomething) {
+        var dividerNotes = document.createElement("hr");
+        dividerNotes.className = "content-divider";
+        container.appendChild(dividerNotes);
+      }
+      renderNotesBlock(container);
     }
   }
 
