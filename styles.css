@@ -531,6 +531,12 @@ html, body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #8a8a86;
+  /* flex só entra em jogo quando existe "qDef.titleLinks" (2º filho) — com
+     1 filho só (texto), continua idêntico ao bloco de antes. */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 /* "page.groupsSectionTitle" — rótulo maior acima de um bloco inteiro de
    "groups" (ex: "LEGISLAÇÃO POR ASSUNTO"), pra separar visualmente de uma
@@ -543,7 +549,27 @@ html, body {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #57534e;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
+
+/* "qDef.titleLinks" — atalhos pequenos (Notion / app) ao lado do título de
+   uma exibição (ex: "📅 Reuniões" em Início). */
+.query-title-links { display: flex; align-items: center; gap: 4px; flex-shrink: 0; text-transform: none; letter-spacing: normal; }
+.query-title-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: #8a8a86;
+}
+.query-title-link:hover { background: #ececea; }
+.query-title-link img { width: 13px; height: 13px; }
+.query-title-link .ti { font-size: 13px; }
 .group-items { }
 .group-items .item:last-child { border-bottom: none; }
 
@@ -1066,7 +1092,11 @@ html, body {
 }
 .notes-item-check { flex-shrink: 0; width: 16px; height: 16px; cursor: pointer; }
 /* estrela de "sinalizar como prioritária" — contorno cinza quando vazia,
-   preenchida em amarelo (mesma cor do Focus, #f08c00) quando marcada. */
+   preenchida em amarelo (mesma cor do Focus, #f08c00) quando marcada. SVG
+   desenhado à mão (ver makeStarSvg no app.js), não ícone de fonte — o
+   ícone "preenchido" da Tabler não vem no arquivo de fonte carregado por
+   este app (só a versão contorno), então ficava em branco. O SVG usa
+   "currentColor", por isso muda de cor junto com ".notes-item-star". */
 .notes-item-star {
   flex-shrink: 0;
   width: 22px;
@@ -1079,10 +1109,13 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
 }
+.notes-item-star svg { fill: none; stroke: currentColor; stroke-width: 1.8px; stroke-linejoin: round; stroke-linecap: round; }
 .notes-item-star:hover { background: #fdf6e3; color: #f08c00; }
 .notes-item-star.flagged { color: #f08c00; }
+.notes-item-star.flagged svg { fill: currentColor; stroke: none; }
+/* data de criação de cada anotação — bem pequena, só referência. */
+.notes-item-date { flex-shrink: 0; font-size: 10.5px; color: #adaba5; }
 .notes-item-text { flex: 1; min-width: 0; font-size: 13.5px; color: #2f3a44; word-break: break-word; }
 .notes-item.done .notes-item-text { text-decoration: line-through; color: #adaba5; }
 .notes-item-tag {

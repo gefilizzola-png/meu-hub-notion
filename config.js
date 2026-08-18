@@ -549,6 +549,25 @@ var BUSCA_INSCRICAO_FILTER = {
 // NATIVOS da Central do tipo created_time/last_edited_time (não são a
 // data/hora "de sistema" implícita da página — são propriedades de
 // verdade, filtráveis do mesmo jeito que qualquer outra).
+// ---- atalhos ao lado dos títulos "📅 Reuniões"/"✅ Tarefas"/"🎂
+// Aniversários" nas 3 abas de Início (Hoje/Amanhã/Próximos 7 dias) — cada
+// item é { type: "notion", url, title } (abre em aba nova) ou
+// { type: "page", target, title } (navega dentro do próprio app, ver
+// app.js). Reuniões e Tarefas já têm página própria no app
+// (pmf_ctrl_reunioes/pmf_ctrl_tarefas), por isso ganham os dois; Aniversários
+// só o link do Notion — ainda não existe página própria pra ela no app.
+var TITLELINKS_REUNIOES = [
+  { type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link", title: "Abrir Reuniões no Notion" },
+  { type: "page", target: "pmf_ctrl_reunioes", title: "Abrir Reuniões no app" }
+];
+var TITLELINKS_TAREFAS = [
+  { type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link", title: "Abrir Tarefas no Notion" },
+  { type: "page", target: "pmf_ctrl_tarefas", title: "Abrir Tarefas no app" }
+];
+var TITLELINKS_ANIVERSARIOS = [
+  { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link", title: "Abrir Aniversários no Notion" }
+];
+
 var BUSCA_DATA_PRAZO_FILTER = { property: "📅 Data/Prazo", type: "date", label: "Data/Prazo" };
 var BUSCA_DATA_CONCLUSAO_FILTER = { property: "📅 Data de Conclusão", type: "date", label: "Data de Conclusão" };
 var BUSCA_DATA_CRIACAO_FILTER = { property: "✨ Criado em", type: "created_time", label: "Data de Criação" };
@@ -561,7 +580,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-18 04:00",
+  appVersion: "2026-08-18 05:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -684,6 +703,7 @@ const APP_CONFIG = {
           dynamicQueries: [
             {
               title: "📅 Reuniões",
+              titleLinks: TITLELINKS_REUNIOES,
               bg: "#eaf2fb",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -720,6 +740,7 @@ const APP_CONFIG = {
             },
             {
               title: "✅ Tarefas",
+              titleLinks: TITLELINKS_TAREFAS,
               bg: "#eaf7ed",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -743,6 +764,7 @@ const APP_CONFIG = {
             },
             {
               title: "🎂 Aniversários",
+              titleLinks: TITLELINKS_ANIVERSARIOS,
               bg: "#fdf2f8",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -786,6 +808,7 @@ const APP_CONFIG = {
           dynamicQueries: [
             {
               title: "📅 Reuniões",
+              titleLinks: TITLELINKS_REUNIOES,
               bg: "#eaf2fb",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -822,6 +845,7 @@ const APP_CONFIG = {
             },
             {
               title: "✅ Tarefas",
+              titleLinks: TITLELINKS_TAREFAS,
               bg: "#eaf7ed",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -845,6 +869,7 @@ const APP_CONFIG = {
             },
             {
               title: "🎂 Aniversários",
+              titleLinks: TITLELINKS_ANIVERSARIOS,
               bg: "#fdf2f8",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -888,6 +913,7 @@ const APP_CONFIG = {
           dynamicQueries: [
             {
               title: "📅 Reuniões",
+              titleLinks: TITLELINKS_REUNIOES,
               bg: "#eaf2fb",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -926,6 +952,7 @@ const APP_CONFIG = {
             },
             {
               title: "✅ Tarefas",
+              titleLinks: TITLELINKS_TAREFAS,
               bg: "#eaf7ed",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -951,6 +978,7 @@ const APP_CONFIG = {
             },
             {
               title: "🎂 Aniversários",
+              titleLinks: TITLELINKS_ANIVERSARIOS,
               bg: "#fdf2f8",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [

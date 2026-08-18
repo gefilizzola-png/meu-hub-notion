@@ -1131,7 +1131,43 @@
     // estilo maior de ".content-section-title" (ver "groupsSectionTitle"
     // em renderContent) pra manter o mesmo padrão visual entre os dois.
     title.className = qDef.nameSearch ? "content-section-title" : "group-title";
-    title.textContent = qDef.title;
+    var titleText = document.createElement("span");
+    titleText.textContent = qDef.title;
+    title.appendChild(titleText);
+    // "qDef.titleLinks" (opcional) — atalhos pequenos ao lado do título da
+    // exibição (ex: "📅 Reuniões" em Início ganha um cubo do Notion + um
+    // ícone do app, cada um levando pra o lugar de sempre daquele assunto —
+    // Notion abre em aba nova, "page" navega dentro do próprio app).
+    if (qDef.titleLinks && qDef.titleLinks.length) {
+      var titleLinksWrap = document.createElement("span");
+      titleLinksWrap.className = "query-title-links";
+      qDef.titleLinks.forEach(function (tl) {
+        var a = document.createElement("a");
+        a.className = "query-title-link";
+        a.title = tl.title || "";
+        if (tl.type === "notion") {
+          a.href = tl.url;
+          a.target = "_blank";
+          a.rel = "noopener";
+          var img = document.createElement("img");
+          img.src = IMG_ICONS.notion;
+          img.alt = "";
+          a.appendChild(img);
+        } else {
+          a.href = "#" + tl.target;
+          a.addEventListener("click", function (e) {
+            if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            navigate(tl.target);
+          });
+          var ic = document.createElement("i");
+          ic.className = "ti ti-apps";
+          a.appendChild(ic);
+        }
+        titleLinksWrap.appendChild(a);
+      });
+      title.appendChild(titleLinksWrap);
+    }
     section.appendChild(title);
 
     var filterState = {}; // property -> { type, pairs: [{condition,value}, ...] }
@@ -1660,6 +1696,40 @@
     renderBody();
   }
 
+  // estrela da estrela de "sinalizar" — SVG desenhado à mão (path clássico
+  // de estrela de 5 pontas, mesmo usado por várias libs de ícone) em vez de
+  // ícone de fonte, pra não depender de "ti-star-filled" existir na fonte
+  // carregada (ver comentário em renderList mais abaixo). ".notes-item-star"
+  // (CSS) desenha o contorno por padrão (fill:none + stroke) e preenche
+  // sólido quando a classe "flagged" está presente.
+  var STAR_SVG_PATH = "M12 17.75l-6.172 3.245 1.179 -6.873 -5 -4.867 6.9 -1.002 3.086 -6.253 3.086 6.253 6.9 1.002 -5 4.867 1.179 6.873z";
+  function makeStarSvg() {
+    var svgNS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "15");
+    svg.setAttribute("height", "15");
+    var path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", STAR_SVG_PATH);
+    svg.appendChild(path);
+    return svg;
+  }
+
+  // "dd/mm hh:mm" bem pequeno, pro selo de data de criação de cada
+  // anotação — mesmo formato usado em formatDateRangeExtra, só que a
+  // partir de um ISO simples (n.createdAt), não de um objeto {start,end}
+  // do Notion.
+  function formatNoteDate(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var dd = String(d.getDate()).padStart(2, "0");
+    var mm = String(d.getMonth() + 1).padStart(2, "0");
+    var hh = String(d.getHours()).padStart(2, "0");
+    var mi = String(d.getMinutes()).padStart(2, "0");
+    return dd + "/" + mm + " " + hh + ":" + mi;
+  }
+
   // "page.notes" — bloco de anotações rápidas/lista de tarefas (texto livre
   // + tags), guardado no Cloudflare KV via Worker (rotas /notes) — nada a
   // ver com o Notion, é um bloco à parte. Marcar/desmarcar concluída não
@@ -1706,21 +1776,32 @@
     searchInput.type = "text";
     searchInput.className = "notes-filter-input";
     searchInput.placeholder = "Pesquisar...";
+    // cada <select> ganha o NOME do filtro dentro de cada opção (ex: "Tag:
+    // Todas", "Status: Pendentes") — sem isso o rótulo escolhido sozinho
+    // ("Todas"/"Pendentes"/"Sinalizadas") não dizia do que se tratava sem
+    // clicar pra abrir e ver as outras opções ao lado.
     var tagSelect = document.createElement("select");
     tagSelect.className = "notes-filter-select";
+    tagSelect.title = "Filtrar por tag";
+    // "Status: Pendentes" já vem marcado por padrão (pedido do Georges) —
+    // "populateTagSelect"/"applyFilters" leem ".value" na hora, então só
+    // precisa estar certo ANTES da 1ª chamada de loadNotes() lá embaixo.
     var statusSelect = document.createElement("select");
     statusSelect.className = "notes-filter-select";
-    [["all", "Todas"], ["pending", "Pendentes"], ["done", "Concluídas"]].forEach(function (pair) {
+    statusSelect.title = "Filtrar por status";
+    [["all", "Status: Todas"], ["pending", "Status: Pendentes"], ["done", "Status: Concluídas"]].forEach(function (pair) {
       var opt = document.createElement("option");
       opt.value = pair[0];
       opt.textContent = pair[1];
       statusSelect.appendChild(opt);
     });
+    statusSelect.value = "pending";
     // "sinalizadas" (estrela preenchida, cor do Focus) — filtro à parte de
     // "concluída/pendente", pode combinar os dois ao mesmo tempo.
     var flaggedSelect = document.createElement("select");
     flaggedSelect.className = "notes-filter-select";
-    [["all", "Todas"], ["flagged", "Sinalizadas"], ["unflagged", "Não sinalizadas"]].forEach(function (pair) {
+    flaggedSelect.title = "Filtrar por sinalização";
+    [["all", "Sinalização: Todas"], ["flagged", "Sinalização: Sinalizadas"], ["unflagged", "Sinalização: Não sinalizadas"]].forEach(function (pair) {
       var opt = document.createElement("option");
       opt.value = pair[0];
       opt.textContent = pair[1];
@@ -1728,16 +1809,18 @@
     });
     // ordenar — "Prioridade" = sinalizadas primeiro (não é o mesmo campo
     // "🚩 Prioridade" do Notion, que nem existe aqui; é só a estrela desta
-    // anotação). "Data de criação" é a ordem natural que já vem do Worker
-    // (mais recente primeiro), então funciona mesmo sem reordenar de novo.
+    // anotação). Já vem marcado por padrão (pedido do Georges), pra ver as
+    // sinalizadas no topo assim que a página abre.
     var sortSelect = document.createElement("select");
     sortSelect.className = "notes-filter-select";
+    sortSelect.title = "Ordenar lista";
     [["created", "Ordenar: Data de criação"], ["name", "Ordenar: Nome"], ["priority", "Ordenar: Prioridade"], ["tag", "Ordenar: Tag"]].forEach(function (pair) {
       var opt = document.createElement("option");
       opt.value = pair[0];
       opt.textContent = pair[1];
       sortSelect.appendChild(opt);
     });
+    sortSelect.value = "priority";
     filterRow.appendChild(searchInput);
     filterRow.appendChild(tagSelect);
     filterRow.appendChild(statusSelect);
@@ -1773,12 +1856,12 @@
       tagSelect.innerHTML = "";
       var allOpt = document.createElement("option");
       allOpt.value = "";
-      allOpt.textContent = "Todas as tags";
+      allOpt.textContent = "Tag: Todas";
       tagSelect.appendChild(allOpt);
       Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (t) {
         var opt = document.createElement("option");
         opt.value = t;
-        opt.textContent = t;
+        opt.textContent = "Tag: " + t;
         tagSelect.appendChild(opt);
       });
       if (Object.prototype.hasOwnProperty.call(seen, current)) tagSelect.value = current;
@@ -1847,11 +1930,17 @@
         // estrela — sinaliza a anotação como prioritária. Contorno vazio
         // quando não sinalizada, preenchida em amarelo (mesma cor do Focus,
         // #f08c00) quando sinalizada. Clique alterna e já reflete na hora
-        // (sem esperar o reload da lista).
+        // (sem esperar o reload da lista). Usa um SVG desenhado à mão (ver
+        // makeStarSvg), não o ícone "ti-star-filled" da fonte — esse
+        // ícone "preenchido" simplesmente não existe no arquivo de fonte
+        // carregado (tabler-icons.min.css só traz os ícones OUTLINE; a
+        // versão preenchida é um arquivo à parte que este app não carrega),
+        // por isso ficava em branco. "ti-star" (contorno) continua sendo
+        // usado só como referência de estilo, não mais renderizado direto.
         var starBtn = document.createElement("button");
         starBtn.type = "button";
         starBtn.className = "notes-item-star" + (n.flagged ? " flagged" : "");
-        starBtn.innerHTML = '<i class="ti ' + (n.flagged ? "ti-star-filled" : "ti-star") + '"></i>';
+        starBtn.appendChild(makeStarSvg());
         starBtn.title = n.flagged ? "Remover sinalização" : "Sinalizar como prioritária";
         starBtn.addEventListener("click", function () { toggleFlagged(n.id, !n.flagged); });
         row.appendChild(starBtn);
@@ -1867,6 +1956,13 @@
           tag.textContent = t;
           row.appendChild(tag);
         });
+
+        // data de criação — bem pequena, só pra referência (não é o foco
+        // do card). "n.createdAt" é ISO (ver handleNotesCreate no worker.js).
+        var dateBadge = document.createElement("span");
+        dateBadge.className = "notes-item-date";
+        dateBadge.textContent = formatNoteDate(n.createdAt);
+        row.appendChild(dateBadge);
 
         // "+" — adiciona tag numa anotação que já existe (não só na hora de
         // criar). Clique abre um campinho de texto inline; Enter confirma
