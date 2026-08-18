@@ -471,8 +471,18 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-18 02:00",
+  appVersion: "2026-08-18 03:00",
+  // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
+  // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
+  // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
+  // "inicio" aqui, essas páginas ficariam inacessíveis pelo menu, porque
+  // buildIndex()/buildTreeNode() só percorrem a árvore a partir de
+  // "startPage"). "homePage" é um campo NOVO, separado — só decide qual
+  // tela abre primeiro (e quando o botão "voltar"/Esc consideram "já
+  // estou na home") sem mexer na raiz da árvore. Pedido do Georges: Início
+  // sempre abre primeiro.
   startPage: "entrada",
+  homePage: "inicio",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
   // Lista mestre dos status de "🧲 Andamento" (id da página no Notion +

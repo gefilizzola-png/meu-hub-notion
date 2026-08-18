@@ -1,6 +1,13 @@
 (function () {
   var cfg = APP_CONFIG;
-  var currentId = cfg.startPage;
+  // "homePage" (tela que sempre abre primeiro, ex: Início) é diferente de
+  // "startPage" (raiz da árvore do menu lateral, ex: Entrada — precisa
+  // continuar sendo a raiz pra "Criar páginas"/"Eventos"/etc. continuarem
+  // alcançáveis pelo menu). Todo lugar abaixo que decide "qual página abre
+  // /qual página é 'casa'" usa homePage; buildIndex()/buildTreeNode()
+  // (raiz da árvore) continuam usando startPage puro.
+  var homePageId = cfg.homePage || cfg.startPage;
+  var currentId = homePageId;
   var parentOf = {};        // pageId -> parentPageId
   var flatIndex = [];       // { label, type, url|target, pathTitles: [..], pathIds: [..], ownerPageId }
   var selectedResult = -1;
@@ -1595,9 +1602,33 @@
       opt.textContent = pair[1];
       statusSelect.appendChild(opt);
     });
+    // "sinalizadas" (estrela preenchida, cor do Focus) — filtro à parte de
+    // "concluída/pendente", pode combinar os dois ao mesmo tempo.
+    var flaggedSelect = document.createElement("select");
+    flaggedSelect.className = "notes-filter-select";
+    [["all", "Todas"], ["flagged", "Sinalizadas"], ["unflagged", "Não sinalizadas"]].forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      flaggedSelect.appendChild(opt);
+    });
+    // ordenar — "Prioridade" = sinalizadas primeiro (não é o mesmo campo
+    // "🚩 Prioridade" do Notion, que nem existe aqui; é só a estrela desta
+    // anotação). "Data de criação" é a ordem natural que já vem do Worker
+    // (mais recente primeiro), então funciona mesmo sem reordenar de novo.
+    var sortSelect = document.createElement("select");
+    sortSelect.className = "notes-filter-select";
+    [["created", "Ordenar: Data de criação"], ["name", "Ordenar: Nome"], ["priority", "Ordenar: Prioridade"], ["tag", "Ordenar: Tag"]].forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      sortSelect.appendChild(opt);
+    });
     filterRow.appendChild(searchInput);
     filterRow.appendChild(tagSelect);
     filterRow.appendChild(statusSelect);
+    filterRow.appendChild(flaggedSelect);
+    filterRow.appendChild(sortSelect);
     section.appendChild(filterRow);
 
     var listWrap = document.createElement("div");
@@ -1639,18 +1670,44 @@
       if (Object.prototype.hasOwnProperty.call(seen, current)) tagSelect.value = current;
     }
 
+    function sortNotes(notes) {
+      var mode = sortSelect.value;
+      var copy = notes.slice();
+      if (mode === "name") {
+        copy.sort(function (a, b) { return a.text.localeCompare(b.text, "pt-BR"); });
+      } else if (mode === "priority") {
+        // sinalizadas (flagged) primeiro; dentro de cada grupo, mantém a
+        // ordem que já veio (mais recente primeiro).
+        copy.sort(function (a, b) { return (b.flagged ? 1 : 0) - (a.flagged ? 1 : 0); });
+      } else if (mode === "tag") {
+        copy.sort(function (a, b) {
+          var ta = (a.tags && a.tags[0]) || "";
+          var tb = (b.tags && b.tags[0]) || "";
+          if (!ta && tb) return 1;
+          if (ta && !tb) return -1;
+          return ta.localeCompare(tb, "pt-BR");
+        });
+      }
+      // "created" — já vem nessa ordem do Worker (mais recente primeiro),
+      // não precisa reordenar de novo.
+      return copy;
+    }
+
     function applyFilters() {
       var q = searchInput.value.trim().toLowerCase();
       var tag = tagSelect.value;
       var status = statusSelect.value;
+      var flag = flaggedSelect.value;
       var filtered = allNotes.filter(function (n) {
         if (q && n.text.toLowerCase().indexOf(q) === -1) return false;
         if (tag && (n.tags || []).indexOf(tag) === -1) return false;
         if (status === "pending" && n.done) return false;
         if (status === "done" && !n.done) return false;
+        if (flag === "flagged" && !n.flagged) return false;
+        if (flag === "unflagged" && n.flagged) return false;
         return true;
       });
-      renderList(filtered);
+      renderList(sortNotes(filtered));
     }
 
     function renderList(notes) {
@@ -1672,6 +1729,18 @@
         check.checked = !!n.done;
         check.addEventListener("change", function () { toggleDone(n.id, check.checked); });
         row.appendChild(check);
+
+        // estrela — sinaliza a anotação como prioritária. Contorno vazio
+        // quando não sinalizada, preenchida em amarelo (mesma cor do Focus,
+        // #f08c00) quando sinalizada. Clique alterna e já reflete na hora
+        // (sem esperar o reload da lista).
+        var starBtn = document.createElement("button");
+        starBtn.type = "button";
+        starBtn.className = "notes-item-star" + (n.flagged ? " flagged" : "");
+        starBtn.innerHTML = '<i class="ti ' + (n.flagged ? "ti-star-filled" : "ti-star") + '"></i>';
+        starBtn.title = n.flagged ? "Remover sinalização" : "Sinalizar como prioritária";
+        starBtn.addEventListener("click", function () { toggleFlagged(n.id, !n.flagged); });
+        row.appendChild(starBtn);
 
         var textSpan = document.createElement("span");
         textSpan.className = "notes-item-text";
@@ -1754,6 +1823,14 @@
       }).then(handle401).then(loadNotes);
     }
 
+    function toggleFlagged(id, flagged) {
+      authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flagged: flagged })
+      }).then(handle401).then(loadNotes);
+    }
+
     function removeNote(id) {
       authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(id), { method: "DELETE" })
         .then(handle401).then(loadNotes);
@@ -1792,6 +1869,8 @@
     searchInput.addEventListener("input", applyFilters);
     tagSelect.addEventListener("change", applyFilters);
     statusSelect.addEventListener("change", applyFilters);
+    flaggedSelect.addEventListener("change", applyFilters);
+    sortSelect.addEventListener("change", applyFilters);
 
     loadNotes();
   }
@@ -1979,11 +2058,11 @@
   // ---------------- page render / navigation ----------------
   function render(pageId, push) {
     var page = cfg.pages[pageId];
-    if (!page) { pageId = cfg.startPage; page = cfg.pages[pageId]; }
+    if (!page) { pageId = homePageId; page = cfg.pages[pageId]; }
     currentId = pageId;
 
     document.title = page.title + " · " + cfg.appTitle;
-    document.getElementById("backBtn").classList.toggle("hidden", pageId === cfg.startPage);
+    document.getElementById("backBtn").classList.toggle("hidden", pageId === homePageId);
 
     expandAncestors(pageId);
     renderBreadcrumb();
@@ -2041,7 +2120,7 @@
 
   document.getElementById("backBtn").addEventListener("click", function () { history.back(); });
   window.addEventListener("popstate", function (e) {
-    var pageId = (e.state && e.state.pageId) || location.hash.replace("#", "") || cfg.startPage;
+    var pageId = (e.state && e.state.pageId) || location.hash.replace("#", "") || homePageId;
     render(pageId, false);
   });
 
@@ -2167,7 +2246,7 @@
       return;
     }
     if (!typing && e.key === "Escape") {
-      if (currentId !== cfg.startPage) history.back();
+      if (currentId !== homePageId) history.back();
       return;
     }
     if (!typing && e.key >= "1" && e.key <= "9") {
@@ -2196,7 +2275,7 @@
 
     buildIndex();
     collectSearchInputs();
-    var initial = location.hash.replace("#", "") || cfg.startPage;
+    var initial = location.hash.replace("#", "") || homePageId;
     history.replaceState({ pageId: initial }, "", "#" + initial);
     render(initial, false);
   }
