@@ -648,6 +648,108 @@
     return wrap;
   }
 
+  // filtro de intervalo de data — usado pelos campos "date"/"created_time"/
+  // "last_edited_time" (ex: Data/Prazo, Data de Conclusão, Data de Criação,
+  // Última edição na busca de Central em Início). Mesmo visual/mecanismo do
+  // buildIconDropdown (botão + menu suspenso, mesmas classes CSS), só que
+  // com 2 campos de data (De/Até) em vez de lista de opções. Só "De"
+  // preenchido = data fixa (equals); só "Até" = data fixa também; os dois
+  // juntos = intervalo (on_or_after De + on_or_before Até, combinados com
+  // "e"). O objeto montado em onChange já sai no formato
+  // { type, property, mode, pairs } que filterStateToFilterEntry espera —
+  // mesmo "contrato" que filterStateFromOpts produz pros filtros de opção,
+  // por isso runQuery() não precisa saber a diferença.
+  function buildDateRangeFilter(filterDef, onChange) {
+    var wrap = document.createElement("div");
+    wrap.className = "filter-dropdown";
+
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "filter-trigger";
+    var triggerIcon = document.createElement("i");
+    triggerIcon.className = "ti ti-calendar";
+    var triggerLabel = document.createElement("span");
+    triggerLabel.textContent = filterDef.label + ": Todos";
+    var chevron = document.createElement("i");
+    chevron.className = "ti ti-chevron-down";
+    trigger.appendChild(triggerIcon);
+    trigger.appendChild(triggerLabel);
+    trigger.appendChild(chevron);
+
+    var menu = document.createElement("div");
+    menu.className = "filter-menu filter-date-menu";
+
+    function makeRow(labelText) {
+      var row = document.createElement("label");
+      row.className = "filter-date-row";
+      var lbl = document.createElement("span");
+      lbl.textContent = labelText;
+      var input = document.createElement("input");
+      input.type = "date";
+      input.className = "filter-date-input";
+      row.appendChild(lbl);
+      row.appendChild(input);
+      row.addEventListener("click", function (e) { e.stopPropagation(); });
+      menu.appendChild(row);
+      return input;
+    }
+
+    var fromInput = makeRow("De");
+    var toInput = makeRow("Até");
+
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "filter-date-clear";
+    clearBtn.textContent = "Limpar";
+    clearBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      fromInput.value = "";
+      toInput.value = "";
+      menu.classList.remove("open");
+      emit();
+    });
+    menu.appendChild(clearBtn);
+
+    function fmtBR(iso) {
+      var parts = iso.split("-");
+      return parts.length === 3 ? parts[2] + "/" + parts[1] : iso;
+    }
+
+    function emit() {
+      var from = fromInput.value;
+      var to = toInput.value;
+      if (!from && !to) {
+        triggerIcon.style.color = "";
+        triggerLabel.textContent = filterDef.label + ": Todos";
+        onChange(null);
+        return;
+      }
+      var pairs;
+      if (from && to) {
+        pairs = [{ condition: "on_or_after", value: from }, { condition: "on_or_before", value: to }];
+        triggerLabel.textContent = filterDef.label + ": " + fmtBR(from) + "–" + fmtBR(to);
+      } else {
+        var only = from || to;
+        pairs = [{ condition: "equals", value: only }];
+        triggerLabel.textContent = filterDef.label + ": " + fmtBR(only);
+      }
+      triggerIcon.style.color = "#4a90d9";
+      onChange({ type: filterDef.type, property: filterDef.property, mode: "and", pairs: pairs });
+    }
+
+    fromInput.addEventListener("change", emit);
+    toInput.addEventListener("change", emit);
+
+    trigger.addEventListener("click", function (e) {
+      e.stopPropagation();
+      menu.classList.toggle("open");
+    });
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    return wrap;
+  }
+
   document.addEventListener("click", function () {
     document.querySelectorAll(".filter-menu.open").forEach(function (m) { m.classList.remove("open"); });
   });
@@ -1299,13 +1401,25 @@
       var filterBar = document.createElement("div");
       filterBar.className = "filter-bar search-block-filter-bar";
       s.filters.forEach(function (f) {
-        filterBar.appendChild(buildIconDropdown(f, function (opts) {
-          var fs = filterStateFromOpts(f, opts);
-          var key = f.stateKey || f.property;
-          if (fs) state.filterState[key] = fs;
-          else delete state.filterState[key];
-          runQuery();
-        }));
+        var key = f.stateKey || f.property;
+        // filtros de data (Data/Prazo, Data de Conclusão, Data de Criação,
+        // Última edição) usam um widget diferente (2 campos De/Até) em vez
+        // do dropdown de opções — ver buildDateRangeFilter.
+        var isDateType = f.type === "date" || f.type === "created_time" || f.type === "last_edited_time";
+        if (isDateType) {
+          filterBar.appendChild(buildDateRangeFilter(f, function (fs) {
+            if (fs) state.filterState[key] = fs;
+            else delete state.filterState[key];
+            runQuery();
+          }));
+        } else {
+          filterBar.appendChild(buildIconDropdown(f, function (opts) {
+            var fs = filterStateFromOpts(f, opts);
+            if (fs) state.filterState[key] = fs;
+            else delete state.filterState[key];
+            runQuery();
+          }));
+        }
       });
       row.appendChild(filterBar);
     }

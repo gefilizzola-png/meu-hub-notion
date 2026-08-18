@@ -784,6 +784,44 @@ html, body {
 }
 .filter-search-input:focus { border-color: #b9b9b3; }
 
+/* buildDateRangeFilter — mesmo botão/menu do buildIconDropdown
+   (.filter-trigger/.filter-menu), com 2 campos de data (De/Até) em vez de
+   lista de opções. Usado pelos filtros de data da busca de Central em
+   Início (Data/Prazo, Data de Conclusão, Data de Criação, Última edição). */
+.filter-date-menu { min-width: 180px; padding: 10px; }
+.filter-date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: #55554f;
+}
+.filter-date-input {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  font-size: 12.5px;
+  background: #fff;
+  color: #262624;
+}
+.filter-date-input:focus { outline: none; border-color: #4a90d9; }
+.filter-date-clear {
+  width: 100%;
+  margin-top: 6px;
+  height: 28px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #f4f4f2;
+  color: #77776f;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.filter-date-clear:hover { border-color: #b9b9b3; }
+
 /* search dropdown */
 .search-results {
   position: fixed;

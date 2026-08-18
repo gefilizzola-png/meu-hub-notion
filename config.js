@@ -464,6 +464,96 @@ var CONTRATOS_SITUACAO_FILTER = {
   ]
 };
 
+// ---- filtros da busca "Pesquisar" de Início (varre a Central inteira) ----
+// Todos com prefixo "BUSCA_" — são CÓPIAS (não os mesmos objetos) dos
+// filtros compartilhados equivalentes (Focus/Prioridade/Origem/Processo),
+// só que com "andOrToggle: true" ligado (pedido do Georges pra essa busca
+// específica). Copiar em vez de ligar direto no objeto original evita
+// mudar o comportamento das páginas que já usavam esses filtros antes
+// (Betha/Reuniões/Tarefas/TAT), que continuam exatamente como estavam.
+// Observação sobre "📚 Página de Origem" e "🧾 Origem": os dois são campos
+// "select" (não multi_select) — cada página só tem UM valor. O botão E/OU
+// aparece porque foi pedido pra TODOS os filtros de opção aqui, mas
+// marcando "E" com esses dois nunca vai encontrar nada (nenhuma página tem
+// 2 origens ao mesmo tempo) — é só uma limitação do próprio campo, não um
+// bug. "OU" (padrão) funciona normalmente.
+var BUSCA_FOCUS_FILTER = {
+  property: "⭐ Focus", type: "formula", formulaType: "string", condition: "contains", label: "Focus",
+  andOrToggle: true,
+  options: FOCUS_FILTER.options
+};
+var BUSCA_PRIORIDADE_FILTER = {
+  property: " 🚩 Prioridade", type: "relation", condition: "contains", label: "Prioridade",
+  andOrToggle: true,
+  options: PRIORIDADE_FILTER.options
+};
+// "⚠️ Importância" — relação com a base "Importância" (5 níveis, confirmado
+// consultando a base direto: 1-Extrema, 2-Alta, 3-Média, 4-Baixa, 5-Sem
+// importância). Não tinha filtro compartilhado ainda porque esse campo não
+// era usado em nenhuma página até agora.
+var BUSCA_IMPORTANCIA_FILTER = {
+  property: "⚠️ Importância", type: "relation", condition: "contains", label: "Importância",
+  andOrToggle: true,
+  options: [
+    { label: "1 - Extrema", pageId: "2470481486dd80ee803fec5406b3691a", icon: "ti-flame", color: "#e03131" },
+    { label: "2 - Alta", pageId: "2470481486dd800e8090d1b900cb098d", icon: "ti-alert-triangle", color: "#e8590c" },
+    { label: "3 - Média", pageId: "2470481486dd809687ade2e3d7b437d3", icon: "ti-minus", color: "#f08c00" },
+    { label: "4 - Baixa", pageId: "2470481486dd80fc8102c2b0065f04f7", icon: "ti-arrow-down", color: "#4a90d9" },
+    { label: "5 - Sem importância", pageId: "2470481486dd80919590c381e45c6352", icon: "ti-circle-dashed", color: "#868e96" }
+  ]
+};
+var BUSCA_PROCESSO_FILTER = {
+  property: "📖 Processo/Chamado", type: "multi_select", condition: "contains", label: "Processo/Chamado",
+  searchable: true, andOrToggle: true,
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📖 Processo/Chamado" }
+};
+var BUSCA_PAGINA_ORIGEM_FILTER = {
+  property: "📚 Página de Origem", type: "select", condition: "equals", label: "Página de Origem",
+  searchable: true, andOrToggle: true,
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📚 Página de Origem" }
+};
+var BUSCA_ORIGEM_FILTER = {
+  property: "🧾 Origem", type: "select", condition: "equals", label: "Origem",
+  searchable: true, andOrToggle: true,
+  options: ORIGEM_FILTER.options
+};
+// "🖥 Formas" — só 2 opções conhecidas (mesmas usadas em "Outros eventos"
+// de Início), por isso sem "searchable" (não pedido pra esse campo).
+var BUSCA_FORMAS_FILTER = {
+  property: "🖥 Formas", type: "relation", condition: "contains", label: "Formas",
+  andOrToggle: true,
+  options: [
+    { label: "Virtual (Meet)", pageId: "24104814-86dd-8086-9dd7-d3541def817b", icon: "ti-video", color: "#4a90d9" },
+    { label: "Presencial", pageId: "23a04814-86dd-808a-8515-edcd72b5ac49", icon: "ti-map-pin", color: "#448361" }
+  ]
+};
+// "🧑🏻‍💼 Contribuintes" e "🏠 Inscrições Imobiliárias" — multi_select
+// NATIVOS da Central, com centenas de opções cada (366 e 484 — confirmado
+// consultando o schema direto), por isso sempre via "optionsFrom" (nunca
+// lista fixa) + "searchable".
+var BUSCA_CONTRIBUINTES_FILTER = {
+  property: "🧑🏻‍💼 Contribuintes", type: "multi_select", condition: "contains", label: "Contribuintes",
+  searchable: true, andOrToggle: true,
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "🧑🏻‍💼 Contribuintes" }
+};
+var BUSCA_INSCRICAO_FILTER = {
+  property: "🏠 Inscrições Imobiliárias", type: "multi_select", condition: "contains", label: "Inscrição Imobiliária",
+  searchable: true, andOrToggle: true,
+  optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "🏠 Inscrições Imobiliárias" }
+};
+// Filtros de data (tipo NOVO — "date"/"created_time"/"last_edited_time",
+// sem "options": em vez de lista de opções, o app.js desenha 2 campos de
+// data (De/Até) — ver buildDateRangeFilter. Só "De" preenchido = data fixa
+// (equals); só "Até" = data fixa também; os dois = intervalo (on_or_after
+// De + on_or_before Até). "✨ Criado em"/"✏️ Última edição" são campos
+// NATIVOS da Central do tipo created_time/last_edited_time (não são a
+// data/hora "de sistema" implícita da página — são propriedades de
+// verdade, filtráveis do mesmo jeito que qualquer outra).
+var BUSCA_DATA_PRAZO_FILTER = { property: "📅 Data/Prazo", type: "date", label: "Data/Prazo" };
+var BUSCA_DATA_CONCLUSAO_FILTER = { property: "📅 Data de Conclusão", type: "date", label: "Data de Conclusão" };
+var BUSCA_DATA_CRIACAO_FILTER = { property: "✨ Criado em", type: "created_time", label: "Data de Criação" };
+var BUSCA_ULTIMA_EDICAO_FILTER = { property: "✏️ Última edição", type: "last_edited_time", label: "Última edição" };
+
 const APP_CONFIG = {
   appTitle: "Meu hub",
   // Carimbo de "quando esse config.js foi editado por último" (data + hora,
@@ -471,7 +561,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-18 03:00",
+  appVersion: "2026-08-18 04:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -915,7 +1005,12 @@ const APP_CONFIG = {
             { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
           ],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-          filters: [INICIO_FOCUS_FILTER, LIMIT_FILTER],
+          // Prioridade entrou como filtro COMPLEMENTAR ao Focus (pedido do
+          // Georges) — útil quando vários itens caem no mesmo Focus (1 ou
+          // 2) e ele quer restringir só aos de prioridade mais alta. Sem
+          // "default": não vem nada pré-marcado, filtra em cima do que o
+          // Focus já trouxe.
+          filters: [INICIO_FOCUS_FILTER, PRIORIDADE_FILTER, LIMIT_FILTER],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
             { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -925,6 +1020,35 @@ const APP_CONFIG = {
           ]
         }
       ],
+      // Busca geral na Central inteira (sem baseFilters — nenhum recorte
+      // fixo, varre tudo) — sempre vazia até o usuário digitar um nome OU
+      // ativar qualquer filtro (ver renderSearchBlockReady: "hasInput" =
+      // texto OU algum filtro marcado). Pedido do Georges: ficar entre
+      // "Itens Prioritários" e "Anotações rápidas" — já cai exatamente
+      // nessa posição sem precisar mexer no app.js, porque renderContent já
+      // desenha "search" depois de "dynamicQueries" e antes de "notes".
+      search: {
+        title: "Pesquisar",
+        placeholder: "Buscar na Central por nome...",
+        database_id: "2310481486dd80079202fe1eaf5e14c4",
+        nameField: { property: "Nome", type: "title", condition: "contains" },
+        filters: [
+          BUSCA_DATA_PRAZO_FILTER,
+          BUSCA_DATA_CONCLUSAO_FILTER,
+          BUSCA_FOCUS_FILTER,
+          BUSCA_PRIORIDADE_FILTER,
+          BUSCA_IMPORTANCIA_FILTER,
+          CENTRAL_ASSUNTOS_FILTER,
+          BUSCA_PROCESSO_FILTER,
+          BUSCA_PAGINA_ORIGEM_FILTER,
+          BUSCA_ORIGEM_FILTER,
+          BUSCA_FORMAS_FILTER,
+          BUSCA_CONTRIBUINTES_FILTER,
+          BUSCA_INSCRICAO_FILTER,
+          BUSCA_DATA_CRIACAO_FILTER,
+          BUSCA_ULTIMA_EDICAO_FILTER
+        ]
+      },
       // Bloco de anotações rápidas/lista de tarefas (texto livre + tags),
       // guardado à parte no Cloudflare KV via Worker — nunca no Notion. Ver
       // renderNotesBlock no app.js e as rotas /notes no worker.js.
