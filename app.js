@@ -2265,6 +2265,100 @@
     }
   }
 
+  // ---------------- painel retrátil do lado direito ----------------
+  // "page.sidePanel" (opcional, ver config.js) — hoje só em Início. Aba
+  // discreta fixa na borda direita (#sidePanelTab) + painel que desliza da
+  // direita (#sidePanel), ambos escondidos por padrão via CSS/atributo
+  // "display:none" inline no index.html. Recolhe sozinho toda vez que
+  // render() troca de página (closeSidePanel() no início de
+  // renderSidePanel) — trocar de aba dentro de Início não passa por aqui,
+  // então o painel continua aberto/fechado do jeito que o usuário deixou.
+  function closeSidePanel() {
+    var tab = document.getElementById("sidePanelTab");
+    var panel = document.getElementById("sidePanel");
+    if (!tab || !panel) return;
+    panel.classList.remove("open");
+    tab.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+    tab.setAttribute("aria-expanded", "false");
+    var icon = tab.querySelector(".ti");
+    if (icon) icon.className = "ti ti-chevron-left";
+  }
+
+  function toggleSidePanel() {
+    var tab = document.getElementById("sidePanelTab");
+    var panel = document.getElementById("sidePanel");
+    if (!tab || !panel) return;
+    var open = !panel.classList.contains("open");
+    panel.classList.toggle("open", open);
+    tab.classList.toggle("open", open);
+    panel.setAttribute("aria-hidden", open ? "false" : "true");
+    tab.setAttribute("aria-expanded", open ? "true" : "false");
+    var icon = tab.querySelector(".ti");
+    if (icon) icon.className = open ? "ti ti-chevron-right" : "ti ti-chevron-left";
+  }
+
+  function renderSidePanel(pageId) {
+    var page = cfg.pages[pageId];
+    var tab = document.getElementById("sidePanelTab");
+    var panel = document.getElementById("sidePanel");
+    if (!tab || !panel) return;
+    closeSidePanel();
+    if (!page || !page.sidePanel || !page.sidePanel.length) {
+      tab.style.display = "none";
+      panel.style.display = "none";
+      return;
+    }
+    tab.style.display = "";
+    panel.style.display = "";
+    panel.innerHTML = "";
+    page.sidePanel.forEach(function (group) {
+      var g = document.createElement("div");
+      g.className = "side-panel-group";
+      var title = document.createElement("div");
+      title.className = "side-panel-group-title";
+      title.textContent = group.title;
+      g.appendChild(title);
+      var row = document.createElement("div");
+      row.className = "side-panel-buttons";
+      group.items.forEach(function (it) {
+        var a = document.createElement("a");
+        a.className = "side-panel-btn";
+        if (it.type === "notion") {
+          a.href = it.url;
+          a.target = "_blank";
+          a.rel = "noopener";
+          var img = document.createElement("img");
+          img.src = IMG_ICONS.notion;
+          img.alt = "";
+          a.appendChild(img);
+        } else {
+          a.href = "#" + it.target;
+          a.addEventListener("click", function (e) {
+            if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            closeSidePanel();
+            navigate(it.target);
+          });
+          var ic = document.createElement("i");
+          ic.className = "ti ti-apps";
+          a.appendChild(ic);
+        }
+        var label = document.createElement("span");
+        label.textContent = it.label || "";
+        a.appendChild(label);
+        row.appendChild(a);
+      });
+      g.appendChild(row);
+      panel.appendChild(g);
+    });
+  }
+
+  var sidePanelTabBtn = document.getElementById("sidePanelTab");
+  if (sidePanelTabBtn) {
+    sidePanelTabBtn.addEventListener("click", toggleSidePanel);
+  }
+
   // ---------------- page render / navigation ----------------
   function render(pageId, push) {
     var page = cfg.pages[pageId];
@@ -2278,6 +2372,7 @@
     renderBreadcrumb();
     renderContent(pageId);
     renderTree();
+    renderSidePanel(pageId);
 
     if (push) history.pushState({ pageId: pageId }, "", "#" + pageId);
   }

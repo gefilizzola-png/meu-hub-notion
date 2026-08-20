@@ -568,6 +568,73 @@ var TITLELINKS_ANIVERSARIOS = [
   { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link", title: "Abrir Aniversários no Notion" }
 ];
 
+// "page.sidePanel" (opcional) — painel retrátil do lado direito, só na
+// página Início por enquanto. Cada divisória é { title, items: [...] },
+// cada item é { type:"notion", url, label } (abre em aba nova, ícone do
+// cubo Notion) ou { type:"page", target, label } (navega dentro do
+// próprio app, ícone "ti-apps") — mesmo contrato de "titleLinks" acima,
+// só que com "label" (texto curto do botão) em vez de "title" (tooltip),
+// porque aqui o texto aparece no botão, não só no hover. Ordem das
+// divisórias: alfabética (padrão adotado quando não há um motivo pra
+// fugir disso). Dentro de cada divisória: Notion primeiro, depois App —
+// mesma ordem de TITLELINKS_* acima. Páginas sem uma view única no
+// Notion (Favoritas/Atrasados e Prioritários/Eventos são páginas de
+// menu/curadoria, não uma database só) ganham só o botão do App.
+var SIDEPANEL_LINKS = [
+  {
+    title: "Aniversários",
+    items: [
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link", label: "Notion" }
+    ]
+  },
+  {
+    title: "Atrasados e Prioritários",
+    items: [
+      { type: "page", target: "pmf_ctrl_atrasados", label: "App" }
+    ]
+  },
+  {
+    title: "Betha",
+    items: [
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link", label: "Notion" },
+      { type: "page", target: "pmf_ctrl_betha", label: "App" }
+    ]
+  },
+  {
+    title: "Central",
+    items: [
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link", label: "Notion" },
+      { type: "page", target: "central", label: "App" }
+    ]
+  },
+  {
+    title: "Eventos",
+    items: [
+      { type: "page", target: "eventos", label: "App" }
+    ]
+  },
+  {
+    title: "Favoritas",
+    items: [
+      { type: "page", target: "favoritas", label: "App" }
+    ]
+  },
+  {
+    title: "Reuniões",
+    items: [
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link", label: "Notion" },
+      { type: "page", target: "pmf_ctrl_reunioes", label: "App" }
+    ]
+  },
+  {
+    title: "Tarefas",
+    items: [
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link", label: "Notion" },
+      { type: "page", target: "pmf_ctrl_tarefas", label: "App" }
+    ]
+  }
+];
+
 var BUSCA_DATA_PRAZO_FILTER = { property: "📅 Data/Prazo", type: "date", label: "Data/Prazo" };
 var BUSCA_DATA_CONCLUSAO_FILTER = { property: "📅 Data de Conclusão", type: "date", label: "Data de Conclusão" };
 var BUSCA_DATA_CRIACAO_FILTER = { property: "✨ Criado em", type: "created_time", label: "Data de Criação" };
@@ -580,7 +647,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-18 05:00",
+  appVersion: "2026-08-20 06:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -668,6 +735,9 @@ const APP_CONFIG = {
     inicio: {
       title: "Início",
       itemsCompact: true,
+      // painel retrátil do lado direito — ver comentário de SIDEPANEL_LINKS
+      // acima. Só existe nessa página por enquanto.
+      sidePanel: SIDEPANEL_LINKS,
       // Central + Favoritas juntos na mesma caixinha "Abrir no Notion", igual
       // ao padrão usado nas demais páginas (Reuniões/Tarefas/TAT/Betha).
       // Favoritas usa "type: 'link'" (não "page") de propósito: um botão

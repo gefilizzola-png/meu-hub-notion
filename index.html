@@ -64,6 +64,15 @@
   </div>
 </div>
 
+<!-- painel retrátil do lado direito (só aparece em páginas com
+     page.sidePanel configurado — hoje só "Início"): aba discreta fixa na
+     borda + painel que desliza da direita, ambos escondidos por padrão via
+     CSS/JS — ver renderSidePanel() em app.js. -->
+<button class="side-panel-tab" id="sidePanelTab" aria-label="Mostrar atalhos" aria-expanded="false" style="display:none">
+  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+</button>
+<aside class="side-panel" id="sidePanel" aria-hidden="true" style="display:none"></aside>
+
 <div class="search-results" id="searchResults"></div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
