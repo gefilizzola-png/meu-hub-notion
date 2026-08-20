@@ -319,6 +319,17 @@ html, body {
 .content {
   padding: 6px 20px 40px;
   width: 100%;
+  transition: padding-right 0.25s ease;
+}
+/* painel retrátil aberto (ver ".side-panel-open" em app.js,
+   updateContentPanelSpacing) — só em tela larga (>=1024px), onde o
+   painel abre por padrão: soma a largura dele (144px) ao padding direito
+   de sempre, senão Pesquisar/Anotações rápidas/exibições ficam
+   parcialmente atrás dele. Em tela estreita o painel é uma gaveta por
+   CIMA do conteúdo (não reserva espaço), então essa regra fica de fora
+   do media query de propósito — nada muda lá. */
+@media (min-width: 1024px) {
+  .content.side-panel-open { padding-right: 164px; }
 }
 .empty {
   color: #999;

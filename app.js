@@ -2437,6 +2437,21 @@
   // é o botão quem manda; só volta a recolher sozinho em tela estreita
   // depois de navegar (closeSidePanelOnNarrowScreen, chamado em
   // navigate()).
+  // "#content .side-panel-open" (CSS) — só entra em telas largas
+  // (>=1024px, ver styles.css): abre espaço à direita (padding) pra
+  // Pesquisar/Anotações rápidas/exibições não ficarem parcialmente atrás
+  // do painel quando ele abre por padrão (applySidePanelDefault). Em
+  // tela estreita o painel é sempre uma camada por CIMA do conteúdo
+  // (comportamento de gaveta) — não empurra nada, então essa classe não
+  // faz diferença lá (a regra CSS só existe dentro do media query largo).
+  function updateContentPanelSpacing() {
+    var panel = document.getElementById("sidePanel");
+    var content = document.getElementById("content");
+    if (!panel || !content) return;
+    var open = panel.classList.contains("open") && panel.style.display !== "none";
+    content.classList.toggle("side-panel-open", open);
+  }
+
   function closeSidePanel() {
     var tab = document.getElementById("sidePanelTab");
     var panel = document.getElementById("sidePanel");
@@ -2447,6 +2462,7 @@
     tab.setAttribute("aria-expanded", "false");
     var icon = tab.querySelector(".ti");
     if (icon) icon.className = "ti ti-chevron-left";
+    updateContentPanelSpacing();
   }
 
   function toggleSidePanel() {
@@ -2460,6 +2476,7 @@
     tab.setAttribute("aria-expanded", open ? "true" : "false");
     var icon = tab.querySelector(".ti");
     if (icon) icon.className = open ? "ti ti-chevron-right" : "ti ti-chevron-left";
+    updateContentPanelSpacing();
   }
 
   // Estado inicial do painel depende do tamanho da tela — igual ao menu
@@ -2489,11 +2506,13 @@
     if (!page || !page.sidePanel || !page.sidePanel.length) {
       tab.style.display = "none";
       panel.style.display = "none";
+      updateContentPanelSpacing();
       return;
     }
     tab.style.display = "";
     panel.style.display = "";
     applySidePanelDefault();
+    updateContentPanelSpacing();
     panel.innerHTML = "";
     page.sidePanel.forEach(function (group) {
       var g = document.createElement("div");
