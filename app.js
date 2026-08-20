@@ -1134,6 +1134,22 @@
     var titleText = document.createElement("span");
     titleText.textContent = qDef.title;
     title.appendChild(titleText);
+    // atalhos (Notion/app) + botão de recolher, os dois juntos num ÚNICO
+    // wrapper (".query-title-actions") — ".group-title"/".content-section-
+    // title" usam "justify-content:space-between" com só 2 filhos em
+    // mente (texto de um lado, ações do outro); com titleLinks e
+    // collapseBtn como filhos SEPARADOS do title, o space-between jogava
+    // um pra cada canto (esticado, longe do nome). Um wrapper só resolve:
+    // title text na ponta esquerda, tudo o mais junto na direita, coladinho.
+    var titleActions = null;
+    function titleActionsWrap() {
+      if (!titleActions) {
+        titleActions = document.createElement("span");
+        titleActions.className = "query-title-actions";
+        title.appendChild(titleActions);
+      }
+      return titleActions;
+    }
     // "qDef.titleLinks" (opcional) — atalhos pequenos ao lado do título da
     // exibição (ex: "📅 Reuniões" em Início ganha um cubo do Notion + um
     // ícone do app, cada um levando pra o lugar de sempre daquele assunto —
@@ -1166,7 +1182,7 @@
         }
         titleLinksWrap.appendChild(a);
       });
-      title.appendChild(titleLinksWrap);
+      titleActionsWrap().appendChild(titleLinksWrap);
     }
     // "qDef.collapsible" (opcional) — botão de recolher/expandir só essa
     // exibição, ao lado do título. Junto com "collapseAllQueryBlocks"
@@ -1191,7 +1207,7 @@
         section.classList.toggle("collapsed", willCollapse);
         collapseIcon.className = willCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
       });
-      title.appendChild(collapseBtn);
+      titleActionsWrap().appendChild(collapseBtn);
     }
     section.appendChild(title);
 
@@ -1456,8 +1472,18 @@
         });
       }))
         .then(function () {
+          // insere no lugar EXATO do placeholder (container.insertBefore),
+          // igual ao mesmo bug já corrigido em renderDynamicQueryBlock —
+          // um "container.appendChild" aqui jogaria o bloco de Pesquisar
+          // pro FIM de "container", depois de "Anotações rápidas" (que já
+          // tinha sido desenhada de forma síncrona nesse meio-tempo, logo
+          // depois do "return" abaixo). Batia exatamente com o relato do
+          // Georges: só na 1ª visita da sessão (quando as opções ainda não
+          // estavam em cache no filtro), Anotações aparecia ACIMA de
+          // Pesquisar — revisitas na mesma sessão (opções já cacheadas,
+          // sem essa espera) sempre ficavam na ordem certa.
+          renderSearchBlockReady(page, container, placeholder);
           container.removeChild(placeholder);
-          renderSearchBlockReady(page, container);
         })
         .catch(function () {
           loadingMsg.textContent = "Não foi possível carregar os filtros.";
@@ -1467,7 +1493,7 @@
     renderSearchBlockReady(page, container);
   }
 
-  function renderSearchBlockReady(page, container) {
+  function renderSearchBlockReady(page, container, beforeNode) {
     var s = page.search;
     // "filterState" — um por PROPRIEDADE (igual "renderDynamicQueryBlockReady"),
     // não mais um único {type,pairs} — senão, com 2+ filtros no mesmo bloco
@@ -1631,7 +1657,8 @@
         });
     }
 
-    container.appendChild(section);
+    if (beforeNode) container.insertBefore(section, beforeNode);
+    else container.appendChild(section);
   }
 
   // ---------------- content grid/list ----------------
@@ -1751,26 +1778,38 @@
   // guardar cache das outras) — como cada busca é rápida e o Worker é só
   // leitura, não há necessidade de complicar com cache aqui.
   // "tab.weatherDay" (opcional) — dia (offset) do widget de previsão do
-  // tempo DENTRO da aba, logo abaixo da barra de botões — refaz sozinho
-  // (widget novo) toda vez que troca de aba, já que "renderBody" limpa e
-  // remonta tudo do zero.
+  // tempo, agora ACIMA da barra de botões Hoje/Amanhã/Próximos 7 dias
+  // (pedido do Georges — antes ficava dentro do corpo da aba, abaixo dos
+  // botões). Continua reagindo à troca de aba (renderWeather() é chamada
+  // junto com renderBody() no clique), só que mora num wrapper PRÓPRIO
+  // (weatherWrap), fora do "body" que renderBody() limpa/remonta.
   function renderTabs(page, pageId, container) {
+    var weatherWrap = document.createElement("div");
     var tabsBar = document.createElement("div");
     tabsBar.className = "page-tabs";
+    var tabsButtons = document.createElement("div");
+    tabsButtons.className = "page-tabs-buttons";
     var body = document.createElement("div");
 
     var activeIdx = 0;
 
+    function renderWeather() {
+      weatherWrap.innerHTML = "";
+      var tab = page.tabs[activeIdx];
+      if (typeof tab.weatherDay === "number") renderWeatherWidget(weatherWrap, tab.weatherDay);
+    }
+
+    // sem linha divisória entre as exibições de uma mesma aba (Reuniões/
+    // Sessões/Tarefas/Aniversários/Outros eventos) nem entre o fim delas
+    // e "Itens Prioritários" logo abaixo — pedido do Georges pra deixar
+    // esse bloco todo mais compacto/contínuo. As únicas divisórias que
+    // sobram ficam FORA daqui: uma antes da barra de abas (logo abaixo,
+    // ver dividerBeforeTabs) e outras já cuidadas por renderContent (antes
+    // de Pesquisar e antes de Anotações rápidas).
     function renderBody() {
       body.innerHTML = "";
       var tab = page.tabs[activeIdx];
-      if (typeof tab.weatherDay === "number") renderWeatherWidget(body, tab.weatherDay);
-      (tab.dynamicQueries || []).forEach(function (qDef, i) {
-        if (i > 0) {
-          var divider = document.createElement("hr");
-          divider.className = "content-divider";
-          body.appendChild(divider);
-        }
+      (tab.dynamicQueries || []).forEach(function (qDef) {
         renderDynamicQueryBlock(qDef, pageId, body);
       });
     }
@@ -1783,15 +1822,51 @@
       btn.addEventListener("click", function () {
         if (activeIdx === idx) return;
         activeIdx = idx;
-        tabsBar.querySelectorAll(".page-tab-btn").forEach(function (b) { b.classList.remove("active"); });
+        tabsButtons.querySelectorAll(".page-tab-btn").forEach(function (b) { b.classList.remove("active"); });
         btn.classList.add("active");
         renderBody();
+        renderWeather();
       });
-      tabsBar.appendChild(btn);
+      tabsButtons.appendChild(btn);
     });
+    tabsBar.appendChild(tabsButtons);
 
+    // "page.collapseAllControls" (opcional) — ícones "Recolher tudo"/
+    // "Expandir tudo" (só ícone, sem texto, pra caber justo), agora na
+    // MESMA linha dos botões de dia, ao lado de "Próximos 7 dias" —
+    // antes ficavam numa barra própria acima das abas.
+    if (page.collapseAllControls) {
+      var tabsActions = document.createElement("div");
+      tabsActions.className = "page-tabs-actions";
+      var collapseAllBtn = document.createElement("button");
+      collapseAllBtn.type = "button";
+      collapseAllBtn.className = "toolbar-icon-btn";
+      collapseAllBtn.title = "Recolher tudo";
+      collapseAllBtn.setAttribute("aria-label", "Recolher tudo");
+      collapseAllBtn.innerHTML = '<i class="ti ti-arrows-minimize"></i>';
+      collapseAllBtn.addEventListener("click", function () { collapseAllQueryBlocks(true); });
+      var expandAllBtn = document.createElement("button");
+      expandAllBtn.type = "button";
+      expandAllBtn.className = "toolbar-icon-btn";
+      expandAllBtn.title = "Expandir tudo";
+      expandAllBtn.setAttribute("aria-label", "Expandir tudo");
+      expandAllBtn.innerHTML = '<i class="ti ti-arrows-maximize"></i>';
+      expandAllBtn.addEventListener("click", function () { collapseAllQueryBlocks(false); });
+      tabsActions.appendChild(collapseAllBtn);
+      tabsActions.appendChild(expandAllBtn);
+      tabsBar.appendChild(tabsActions);
+    }
+
+    // divisória única entre a previsão do tempo e o início das abas
+    // (antes dos botões Hoje/Amanhã/Próximos 7 dias) — pedido do Georges.
+    var dividerBeforeTabs = document.createElement("hr");
+    dividerBeforeTabs.className = "content-divider";
+
+    container.appendChild(weatherWrap);
+    container.appendChild(dividerBeforeTabs);
     container.appendChild(tabsBar);
     container.appendChild(body);
+    renderWeather();
     renderBody();
   }
 
@@ -2292,41 +2367,15 @@
       renderedSomething = true;
     }
 
-    // "page.collapseAllControls" (opcional) — botões "Recolher tudo"/
-    // "Expandir tudo" no topo, antes das abas. Só faz sentido em páginas
-    // com exibições "collapsible: true" (hoje só Início) — mexe em TODAS
-    // de uma vez (as 5 da aba ativa + Itens Prioritários), pra descer
-    // rápido até Pesquisar/Anotações rápidas sem recolher uma por uma.
-    if (page.collapseAllControls) {
-      if (renderedSomething) {
-        var dividerCollapse = document.createElement("hr");
-        dividerCollapse.className = "content-divider";
-        container.appendChild(dividerCollapse);
-      }
-      var collapseToolbar = document.createElement("div");
-      collapseToolbar.className = "content-toolbar";
-      var collapseAllBtn = document.createElement("button");
-      collapseAllBtn.type = "button";
-      collapseAllBtn.className = "toolbar-btn";
-      collapseAllBtn.innerHTML = '<i class="ti ti-arrows-minimize"></i> Recolher tudo';
-      collapseAllBtn.addEventListener("click", function () { collapseAllQueryBlocks(true); });
-      var expandAllBtn = document.createElement("button");
-      expandAllBtn.type = "button";
-      expandAllBtn.className = "toolbar-btn";
-      expandAllBtn.innerHTML = '<i class="ti ti-arrows-maximize"></i> Expandir tudo';
-      expandAllBtn.addEventListener("click", function () { collapseAllQueryBlocks(false); });
-      collapseToolbar.appendChild(collapseAllBtn);
-      collapseToolbar.appendChild(expandAllBtn);
-      container.appendChild(collapseToolbar);
-      renderedSomething = true;
-    }
-
     // "page.tabs" — botões que trocam TODO um conjunto de "dynamicQueries"
     // de uma vez (ex: Início: Hoje / Amanhã / Próximos 7 dias) — cada aba já
     // é uma lista de exibições completa, igual "page.dynamicQueries"
     // normal, só que só a aba ativa é desenhada por vez. Diferente de
     // "page.dynamicQueries" (que fica sempre visível, não depende de aba —
-    // ex: "Itens Prioritários" em Início, que não muda com o dia).
+    // ex: "Itens Prioritários" em Início, que não muda com o dia). Os
+    // botões "Recolher tudo"/"Expandir tudo" (page.collapseAllControls)
+    // agora são montados DENTRO de renderTabs, na mesma linha das abas —
+    // não tem mais um toolbar separado aqui.
     if (hasTabs) {
       if (renderedSomething) {
         var dividerTabs = document.createElement("hr");
@@ -2339,8 +2388,11 @@
 
     // "dynamicQueries" — várias exibições fixas (baseFilters + sorts), cada
     // uma buscando sozinha ao abrir a página. Só leitura (GET /query).
+    // Sem linha divisória antes quando vem logo depois de "hasTabs" —
+    // caso do "Itens Prioritários" em Início, que continua direto depois
+    // das 5 exibições da aba ativa, sem separação (pedido do Georges).
     if (hasDynamicQueries) {
-      if (renderedSomething) {
+      if (renderedSomething && !hasTabs) {
         var dividerDQ = document.createElement("hr");
         dividerDQ.className = "content-divider";
         container.appendChild(dividerDQ);

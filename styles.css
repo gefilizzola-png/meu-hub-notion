@@ -500,23 +500,9 @@ html, body {
 .query-block.collapsed .query-block-body { display: none; }
 .query-block.collapsed { padding-bottom: 12px; }
 
-/* botões globais "Recolher tudo"/"Expandir tudo" (page.collapseAllControls) */
-.content-toolbar { display: flex; gap: 8px; margin-bottom: 4px; }
-.toolbar-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 0.5px solid #dcdcd8;
-  background: #fff;
-  color: #57534e;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.toolbar-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
-.toolbar-btn .ti { font-size: 15px; color: #4a90d9; }
+/* wrapper único pra titleLinks (Notion/app) + botão de recolher, juntos
+   no lado direito do título — ver comentário em renderDynamicQueryBlockReady. */
+.query-title-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 /* título de exibição com "nameSearch" (ex: "Todas as legislações") usa
    ".content-section-title" (mesmo padrão de "groupsSectionTitle") — zera a
    margem de cima aqui dentro, já que o "padding" do .query-block já dá o
@@ -1063,11 +1049,34 @@ html, body {
 /* "page.tabs" — botões que trocam todo um conjunto de exibições de uma vez
    (ex: Início: Hoje / Amanhã / Próximos 7 dias). Visual parecido com
    ".filter-trigger", mas em grupo e com estado "ativo" marcado. */
+/* ".page-tabs" agora é o wrapper da linha inteira: botões de dia
+   (".page-tabs-buttons") de um lado, ícones de recolher/expandir tudo
+   (".page-tabs-actions", só quando page.collapseAllControls) do outro —
+   antes ".page-tabs" era só a fileira de botões, sem esses dois níveis. */
 .page-tabs {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 14px;
 }
+.page-tabs-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.page-tabs-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.toolbar-icon-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #4a90d9;
+  cursor: pointer;
+}
+.toolbar-icon-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
+.toolbar-icon-btn .ti { font-size: 15px; }
 .page-tab-btn {
   height: 34px;
   padding: 0 16px;
@@ -1278,7 +1287,7 @@ html, body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 40;
+  z-index: 4;
   transition: transform 0.25s ease, color 0.15s ease, background 0.15s ease;
 }
 .side-panel-tab:hover { color: #666; background: #f0f0ee; }
@@ -1291,7 +1300,11 @@ html, body {
 .side-panel {
   position: fixed;
   right: 0;
-  top: 0;
+  /* começa ABAIXO do cabeçalho (.main-header, ~64px de altura: padding
+     16px + botão 32px + padding 16px) — antes era "top:0", que fazia o
+     painel cobrir parte do cabeçalho (busca/usuário logado) quando
+     aberto, em qualquer tamanho de tela. */
+  top: 64px;
   bottom: 0;
   width: 144px;
   background: #fff;
@@ -1301,7 +1314,7 @@ html, body {
   overflow-y: auto;
   transform: translateX(100%);
   transition: transform 0.25s ease;
-  z-index: 40;
+  z-index: 4;
 }
 .side-panel.open { transform: translateX(0); }
 @media (max-width: 1023px) {

@@ -648,7 +648,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-20 09:30",
+  appVersion: "2026-08-20 11:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -744,24 +744,10 @@ const APP_CONFIG = {
       // Prioritários), pra chegar mais rápido em Pesquisar/Anotações
       // rápidas sem rolar por tudo. Ver collapseAllQueryBlocks no app.js.
       collapseAllControls: true,
-      // Central + Favoritas juntos na mesma caixinha "Abrir no Notion", igual
-      // ao padrão usado nas demais páginas (Reuniões/Tarefas/TAT/Betha).
-      // Favoritas usa "type: 'link'" (não "page") de propósito: um botão
-      // "page" vira automaticamente uma SUBPASTA da página atual no menu
-      // lateral (ver app.js: buildTreeNode / pageItems) — o que fazia
-      // "Favoritas" aparecer aninhado embaixo de "Início" na árvore, já que
-      // Favoritas TAMBÉM já é filha direta de "Entrada" lá em cima. "link" é
-      // só um atalho de navegação (mesmo destino, mesmo clique), sem entrar
-      // na árvore/breadcrumb como filha de Início.
-      itemGroups: [
-        {
-          title: "Abrir no Notion",
-          items: [
-            { label: "Central", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" },
-            { label: "Favoritas", type: "link", icon: "folder", target: "favoritas" }
-          ]
-        }
-      ],
+      // A caixinha "Abrir no Notion" (Central + Favoritas) que existia aqui
+      // foi removida — ficou redundante depois do painel retrátil do lado
+      // direito (sidePanel acima), que já tem as duas como divisórias
+      // próprias (com botão de Notion E de app, no caso de Central).
       // Cada aba agora carrega também "dateRange" (pra mostrar a data ao
       // lado do rótulo do botão, ex: "Hoje (18/08)") e "weatherDay" (pro
       // widget de previsão do tempo, que mudou de lugar: antes ficava fixo
