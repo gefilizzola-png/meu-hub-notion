@@ -1184,9 +1184,9 @@ html, body {
 }
 .side-panel-tab:hover { color: #666; background: #f0f0ee; }
 .side-panel-tab .ti { font-size: 14px; }
-.side-panel-tab.open { transform: translate(-210px, -50%); }
+.side-panel-tab.open { transform: translate(-144px, -50%); }
 @media (max-width: 1023px) {
-  .side-panel-tab.open { transform: translate(-78vw, -50%); }
+  .side-panel-tab.open { transform: translate(-58vw, -50%); }
 }
 
 .side-panel {
@@ -1194,11 +1194,11 @@ html, body {
   right: 0;
   top: 0;
   bottom: 0;
-  width: 210px;
+  width: 144px;
   background: #fff;
   border-left: 0.5px solid #ececea;
   box-shadow: -2px 0 20px rgba(0, 0, 0, 0.08);
-  padding: 16px 12px;
+  padding: 16px 10px;
   overflow-y: auto;
   transform: translateX(100%);
   transition: transform 0.25s ease;
@@ -1206,41 +1206,35 @@ html, body {
 }
 .side-panel.open { transform: translateX(0); }
 @media (max-width: 1023px) {
-  .side-panel { width: 78vw; max-width: 280px; }
+  .side-panel { width: 58vw; max-width: 200px; }
 }
 
-.side-panel-group { margin-bottom: 16px; }
+.side-panel-group { margin-bottom: 14px; }
 .side-panel-group:last-child { margin-bottom: 0; }
 .side-panel-group-title {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: #8a8a86;
   margin: 0 0 6px;
+  line-height: 1.3;
 }
 .side-panel-buttons { display: flex; gap: 6px; }
 .side-panel-btn {
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 6px;
   border: 0.5px solid #ececea;
   border-radius: 8px;
   color: #57534e;
-  font-size: 11px;
   text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .side-panel-btn:hover { background: #f7f7f5; border-color: #dedcd7; }
-.side-panel-btn img { width: 13px; height: 13px; flex-shrink: 0; }
-.side-panel-btn .ti { font-size: 14px; flex-shrink: 0; color: #4a90d9; }
+.side-panel-btn img { width: 15px; height: 15px; }
+.side-panel-btn .ti { font-size: 16px; color: #4a90d9; }
 
 @media (max-width: 1023px) {
   .header-search { display: none; }

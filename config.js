@@ -570,67 +570,68 @@ var TITLELINKS_ANIVERSARIOS = [
 
 // "page.sidePanel" (opcional) — painel retrátil do lado direito, só na
 // página Início por enquanto. Cada divisória é { title, items: [...] },
-// cada item é { type:"notion", url, label } (abre em aba nova, ícone do
-// cubo Notion) ou { type:"page", target, label } (navega dentro do
-// próprio app, ícone "ti-apps") — mesmo contrato de "titleLinks" acima,
-// só que com "label" (texto curto do botão) em vez de "title" (tooltip),
-// porque aqui o texto aparece no botão, não só no hover. Ordem das
-// divisórias: alfabética (padrão adotado quando não há um motivo pra
-// fugir disso). Dentro de cada divisória: Notion primeiro, depois App —
-// mesma ordem de TITLELINKS_* acima. Páginas sem uma view única no
-// Notion (Favoritas/Atrasados e Prioritários/Eventos são páginas de
-// menu/curadoria, não uma database só) ganham só o botão do App.
+// cada item é { type:"notion", url } (abre em aba nova, ícone do cubo
+// Notion) ou { type:"page", target } (navega dentro do próprio app,
+// ícone "ti-apps") — botões só com ícone (sem texto "Notion"/"App" ao
+// lado, pra caber mais estreito); a legenda de cada um vira só o
+// tooltip (title="") do botão, montado em app.js a partir do título da
+// divisória (ex: "Reuniões no Notion"). Ordem das divisórias: alfabética
+// (padrão adotado quando não há um motivo pra fugir disso). Dentro de
+// cada divisória: Notion primeiro, depois App — mesma ordem de
+// TITLELINKS_* acima. Páginas sem uma view única no Notion (Favoritas/
+// Atrasados e Prioritários/Eventos são páginas de menu/curadoria, não
+// uma database só) ganham só o botão do App.
 var SIDEPANEL_LINKS = [
   {
     title: "Aniversários",
     items: [
-      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link", label: "Notion" }
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link" }
     ]
   },
   {
     title: "Atrasados e Prioritários",
     items: [
-      { type: "page", target: "pmf_ctrl_atrasados", label: "App" }
+      { type: "page", target: "pmf_ctrl_atrasados" }
     ]
   },
   {
     title: "Betha",
     items: [
-      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link", label: "Notion" },
-      { type: "page", target: "pmf_ctrl_betha", label: "App" }
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link" },
+      { type: "page", target: "pmf_ctrl_betha" }
     ]
   },
   {
     title: "Central",
     items: [
-      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link", label: "Notion" },
-      { type: "page", target: "central", label: "App" }
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/2310481486dd80079202fe1eaf5e14c4?v=23a0481486dd80888552000ce77ddd24&source=copy_link" },
+      { type: "page", target: "central" }
     ]
   },
   {
     title: "Eventos",
     items: [
-      { type: "page", target: "eventos", label: "App" }
+      { type: "page", target: "eventos" }
     ]
   },
   {
     title: "Favoritas",
     items: [
-      { type: "page", target: "favoritas", label: "App" }
+      { type: "page", target: "favoritas" }
     ]
   },
   {
     title: "Reuniões",
     items: [
-      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link", label: "Notion" },
-      { type: "page", target: "pmf_ctrl_reunioes", label: "App" }
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link" },
+      { type: "page", target: "pmf_ctrl_reunioes" }
     ]
   },
   {
     title: "Tarefas",
     items: [
-      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link", label: "Notion" },
-      { type: "page", target: "pmf_ctrl_tarefas", label: "App" }
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link" },
+      { type: "page", target: "pmf_ctrl_tarefas" }
     ]
   }
 ];
@@ -647,7 +648,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-20 06:00",
+  appVersion: "2026-08-20 07:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse

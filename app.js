@@ -2269,10 +2269,12 @@
   // "page.sidePanel" (opcional, ver config.js) — hoje só em Início. Aba
   // discreta fixa na borda direita (#sidePanelTab) + painel que desliza da
   // direita (#sidePanel), ambos escondidos por padrão via CSS/atributo
-  // "display:none" inline no index.html. Recolhe sozinho toda vez que
-  // render() troca de página (closeSidePanel() no início de
-  // renderSidePanel) — trocar de aba dentro de Início não passa por aqui,
-  // então o painel continua aberto/fechado do jeito que o usuário deixou.
+  // "display:none" inline no index.html. Estado inicial (aberto/fechado)
+  // segue o tamanho da tela — igual ao menu lateral esquerdo, ver
+  // applySidePanelDefault()/isNarrowScreen mais abaixo — e dali em diante
+  // é o botão quem manda; só volta a recolher sozinho em tela estreita
+  // depois de navegar (closeSidePanelOnNarrowScreen, chamado em
+  // navigate()).
   function closeSidePanel() {
     var tab = document.getElementById("sidePanelTab");
     var panel = document.getElementById("sidePanel");
@@ -2298,12 +2300,30 @@
     if (icon) icon.className = open ? "ti ti-chevron-right" : "ti ti-chevron-left";
   }
 
+  // Estado inicial do painel depende do tamanho da tela — igual ao menu
+  // lateral (ver "isNarrowScreen"/setSidebarVisible mais abaixo): tela
+  // estreita (celular fechado) começa RECOLHIDO; tela larga (celular
+  // aberto tipo Z Fold, tablet, computador) começa AMOSTRANDO por
+  // padrão. Só aplica isso UMA vez (na 1ª vez que o painel aparece) —
+  // dali em diante o botão manda, e só volta a recolher sozinho em tela
+  // estreita depois de navegar (closeSidePanelOnNarrowScreen, chamado em
+  // navigate()), nunca força abrir de novo em tela larga.
+  var sidePanelDefaultApplied = false;
+  function applySidePanelDefault() {
+    if (sidePanelDefaultApplied) return;
+    sidePanelDefaultApplied = true;
+    if (!isNarrowScreen.matches) toggleSidePanel();
+  }
+
+  function closeSidePanelOnNarrowScreen() {
+    if (isNarrowScreen.matches) closeSidePanel();
+  }
+
   function renderSidePanel(pageId) {
     var page = cfg.pages[pageId];
     var tab = document.getElementById("sidePanelTab");
     var panel = document.getElementById("sidePanel");
     if (!tab || !panel) return;
-    closeSidePanel();
     if (!page || !page.sidePanel || !page.sidePanel.length) {
       tab.style.display = "none";
       panel.style.display = "none";
@@ -2311,6 +2331,7 @@
     }
     tab.style.display = "";
     panel.style.display = "";
+    applySidePanelDefault();
     panel.innerHTML = "";
     page.sidePanel.forEach(function (group) {
       var g = document.createElement("div");
@@ -2324,7 +2345,10 @@
       group.items.forEach(function (it) {
         var a = document.createElement("a");
         a.className = "side-panel-btn";
+        // só ícone (sem texto "Notion"/"App" do lado) — a legenda vira
+        // tooltip, montada a partir do título da divisória.
         if (it.type === "notion") {
+          a.title = group.title + " no Notion";
           a.href = it.url;
           a.target = "_blank";
           a.rel = "noopener";
@@ -2333,20 +2357,17 @@
           img.alt = "";
           a.appendChild(img);
         } else {
+          a.title = group.title + " no app";
           a.href = "#" + it.target;
           a.addEventListener("click", function (e) {
             if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
             e.preventDefault();
-            closeSidePanel();
             navigate(it.target);
           });
           var ic = document.createElement("i");
           ic.className = "ti ti-apps";
           a.appendChild(ic);
         }
-        var label = document.createElement("span");
-        label.textContent = it.label || "";
-        a.appendChild(label);
         row.appendChild(a);
       });
       g.appendChild(row);
@@ -2381,6 +2402,7 @@
     closeSearch();
     render(pageId, true);
     closeSidebarOnNarrowScreen();
+    closeSidePanelOnNarrowScreen();
   }
 
   // ---------------- menu lateral: mostrar/recolher (qualquer tamanho de tela) ----------------
