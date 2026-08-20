@@ -648,7 +648,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-20 07:00",
+  appVersion: "2026-08-20 09:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -739,6 +739,11 @@ const APP_CONFIG = {
       // painel retrátil do lado direito — ver comentário de SIDEPANEL_LINKS
       // acima. Só existe nessa página por enquanto.
       sidePanel: SIDEPANEL_LINKS,
+      // botões "Recolher tudo"/"Expandir tudo" no topo — mexem em toda
+      // exibição com "collapsible: true" (as 5 de cada aba + Itens
+      // Prioritários), pra chegar mais rápido em Pesquisar/Anotações
+      // rápidas sem rolar por tudo. Ver collapseAllQueryBlocks no app.js.
+      collapseAllControls: true,
       // Central + Favoritas juntos na mesma caixinha "Abrir no Notion", igual
       // ao padrão usado nas demais páginas (Reuniões/Tarefas/TAT/Betha).
       // Favoritas usa "type: 'link'" (não "page") de propósito: um botão
@@ -774,6 +779,7 @@ const APP_CONFIG = {
           dynamicQueries: [
             {
               title: "📅 Reuniões",
+              collapsible: true,
               titleLinks: TITLELINKS_REUNIOES,
               bg: "#eaf2fb",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -789,6 +795,7 @@ const APP_CONFIG = {
             },
             {
               title: "⚖️ Sessões (TAT / JART / COMAT)",
+              collapsible: true,
               bg: "#fdf6e3",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -811,6 +818,7 @@ const APP_CONFIG = {
             },
             {
               title: "✅ Tarefas",
+              collapsible: true,
               titleLinks: TITLELINKS_TAREFAS,
               bg: "#eaf7ed",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -835,6 +843,7 @@ const APP_CONFIG = {
             },
             {
               title: "🎂 Aniversários",
+              collapsible: true,
               titleLinks: TITLELINKS_ANIVERSARIOS,
               bg: "#fdf2f8",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -847,6 +856,7 @@ const APP_CONFIG = {
             },
             {
               title: "🗓️ Outros eventos",
+              collapsible: true,
               bg: "#f3eefc",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -879,6 +889,7 @@ const APP_CONFIG = {
           dynamicQueries: [
             {
               title: "📅 Reuniões",
+              collapsible: true,
               titleLinks: TITLELINKS_REUNIOES,
               bg: "#eaf2fb",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -894,6 +905,7 @@ const APP_CONFIG = {
             },
             {
               title: "⚖️ Sessões (TAT / JART / COMAT)",
+              collapsible: true,
               bg: "#fdf6e3",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -916,6 +928,7 @@ const APP_CONFIG = {
             },
             {
               title: "✅ Tarefas",
+              collapsible: true,
               titleLinks: TITLELINKS_TAREFAS,
               bg: "#eaf7ed",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -940,6 +953,7 @@ const APP_CONFIG = {
             },
             {
               title: "🎂 Aniversários",
+              collapsible: true,
               titleLinks: TITLELINKS_ANIVERSARIOS,
               bg: "#fdf2f8",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -952,6 +966,7 @@ const APP_CONFIG = {
             },
             {
               title: "🗓️ Outros eventos",
+              collapsible: true,
               bg: "#f3eefc",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -984,6 +999,7 @@ const APP_CONFIG = {
           dynamicQueries: [
             {
               title: "📅 Reuniões",
+              collapsible: true,
               titleLinks: TITLELINKS_REUNIOES,
               bg: "#eaf2fb",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -1000,6 +1016,7 @@ const APP_CONFIG = {
             },
             {
               title: "⚖️ Sessões (TAT / JART / COMAT)",
+              collapsible: true,
               bg: "#fdf6e3",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -1023,6 +1040,7 @@ const APP_CONFIG = {
             },
             {
               title: "✅ Tarefas",
+              collapsible: true,
               titleLinks: TITLELINKS_TAREFAS,
               bg: "#eaf7ed",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -1049,6 +1067,7 @@ const APP_CONFIG = {
             },
             {
               title: "🎂 Aniversários",
+              collapsible: true,
               titleLinks: TITLELINKS_ANIVERSARIOS,
               bg: "#fdf2f8",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -1064,6 +1083,7 @@ const APP_CONFIG = {
             },
             {
               title: "🗓️ Outros eventos",
+              collapsible: true,
               bg: "#f3eefc",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -1097,6 +1117,7 @@ const APP_CONFIG = {
       dynamicQueries: [
         {
           title: "⭐ Itens Prioritários",
+          collapsible: true,
           bg: "#fdecea",
           database_id: "2310481486dd80079202fe1eaf5e14c4",
           baseFilters: [

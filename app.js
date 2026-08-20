@@ -1168,7 +1168,40 @@
       });
       title.appendChild(titleLinksWrap);
     }
+    // "qDef.collapsible" (opcional) — botão de recolher/expandir só essa
+    // exibição, ao lado do título. Junto com "collapseAllQueryBlocks"
+    // (botões globais "Recolher tudo"/"Expandir tudo", ver renderContent)
+    // e o auto-recolhimento na 1ª busca sem resultado (ver dentro de
+    // runQuery mais abaixo). ".query-block-collapsible" marca a seção pra
+    // esses botões globais encontrarem via querySelectorAll — sem isso
+    // ela é ignorada por eles (mantém o comportamento de sempre nas
+    // demais páginas, que não passam "collapsible").
+    var collapseBtn = null;
+    if (qDef.collapsible) {
+      section.classList.add("query-block-collapsible");
+      collapseBtn = document.createElement("button");
+      collapseBtn.type = "button";
+      collapseBtn.className = "query-collapse-btn";
+      collapseBtn.setAttribute("aria-label", "Recolher/expandir");
+      var collapseIcon = document.createElement("i");
+      collapseIcon.className = "ti ti-chevron-down";
+      collapseBtn.appendChild(collapseIcon);
+      collapseBtn.addEventListener("click", function () {
+        var willCollapse = !section.classList.contains("collapsed");
+        section.classList.toggle("collapsed", willCollapse);
+        collapseIcon.className = willCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
+      });
+      title.appendChild(collapseBtn);
+    }
     section.appendChild(title);
+
+    // tudo que vem depois do título (busca por nome/filtros/resultados)
+    // mora dentro de ".query-block-body" — é esse wrapper que
+    // "collapsed" (CSS) esconde, deixando só o título+botão visíveis
+    // quando a exibição está recolhida.
+    var body = document.createElement("div");
+    body.className = "query-block-body";
+    section.appendChild(body);
 
     var filterState = {}; // property -> { type, pairs: [{condition,value}, ...] }
     // "type: 'limit'" é diferente dos outros filtros — não é uma condição do
@@ -1176,6 +1209,9 @@
     // ao Worker; corta o array de resultados no cliente, depois de buscar.
     // Sempre single-select (config.js marca "multi: false" nele).
     var displayLimit = null;
+    // controla se o auto-recolhimento (vazio = recolhido) já rodou — só
+    // na 1ª resposta de runQuery, ver dentro dela mais abaixo.
+    var autoCollapseApplied = false;
 
     // "qDef.nameSearch" (opcional) — junta uma caixa de texto (igual ao
     // "search" de sempre) NA MESMA exibição, em vez de uma caixa de busca
@@ -1193,9 +1229,9 @@
     var row = qDef.nameSearch ? (function () {
       var r = document.createElement("div");
       r.className = "search-block-row";
-      section.appendChild(r);
+      body.appendChild(r);
       return r;
-    })() : section;
+    })() : body;
 
     if (qDef.nameSearch) {
       var nameWrap = document.createElement("div");
@@ -1252,7 +1288,7 @@
 
     var resultsWrap = document.createElement("div");
     resultsWrap.className = "content-plain";
-    section.appendChild(resultsWrap);
+    body.appendChild(resultsWrap);
 
     function runQuery() {
       resultsWrap.innerHTML = "";
@@ -1296,6 +1332,21 @@
           if (result.status === 401 && window.Auth) { Auth.signOut(); return; }
           if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar");
           var pages = result.data.pages || [];
+          // auto-recolhe/expande só na 1ª busca de verdade (antes de
+          // qualquer filtro manual) — exibição vazia (ex: Aniversários
+          // sem ninguém fazendo aniversário hoje) já abre recolhida; com
+          // algum item, já abre expandida. Trocar um filtro depois NÃO
+          // mexe mais nisso — aí quem manda é só o botão (individual ou
+          // "Recolher/Expandir tudo").
+          if (qDef.collapsible && !autoCollapseApplied) {
+            autoCollapseApplied = true;
+            var shouldCollapse = pages.length === 0;
+            section.classList.toggle("collapsed", shouldCollapse);
+            if (collapseBtn) {
+              var ic = collapseBtn.querySelector(".ti");
+              if (ic) ic.className = shouldCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
+            }
+          }
           if (!pages.length) {
             var empty = document.createElement("p");
             empty.className = "empty";
@@ -1320,6 +1371,21 @@
     }
 
     runQuery();
+  }
+
+  // botões globais "Recolher tudo"/"Expandir tudo" (page.collapseAllControls,
+  // ver renderContent) — acham TODAS as exibições marcadas
+  // ".query-block-collapsible" dentro de "#content" (inclusive as que
+  // estão escondidas dentro da aba não-ativa no momento — não tem
+  // problema, elas só não aparecem até o usuário trocar de aba de novo)
+  // e forçam o mesmo estado em todas de uma vez, direto via classList —
+  // não precisa guardar referência a cada bloco individualmente.
+  function collapseAllQueryBlocks(collapsed) {
+    document.querySelectorAll("#content .query-block-collapsible").forEach(function (sec) {
+      sec.classList.toggle("collapsed", collapsed);
+      var ic = sec.querySelector(".query-collapse-btn .ti");
+      if (ic) ic.className = collapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
+    });
   }
 
   // "law-links": linha densa com o nome da lei + um botãozinho de ícone pra
@@ -1412,11 +1478,17 @@
     var requestSeq = 0;
 
     var section = document.createElement("div");
-    section.className = "search-block";
+    // "search-block-accent" só entra na Início (Pesquisar) — dá destaque
+    // visual pra separar essa seção de "Anotações rápidas" logo abaixo
+    // (mesma ideia de ".notes-block-accent", ver renderNotesBlock). Nas
+    // demais páginas (Betha/Tarefas/Reuniões/TAT) o bloco de busca
+    // continua no visual simples de sempre.
+    section.className = "search-block" + (page === cfg.pages.inicio ? " search-block-accent" : "");
     var title = document.createElement("h3");
     title.className = "group-title";
-    title.textContent = s.title || "Pesquisar";
-    section.appendChild(title);
+    var titleText = document.createElement("span");
+    titleText.textContent = s.title || "Pesquisar";
+    title.appendChild(titleText);
 
     var row = document.createElement("div");
     row.className = "search-block-row";
@@ -1433,8 +1505,34 @@
     inputWrap.appendChild(input);
     row.appendChild(inputWrap);
 
+    // "Limpar filtros" — zera texto + todos os filtros ativos de uma vez.
+    // Reconstrói a barra de filtros do zero (buildFilterBar) em vez de
+    // tentar resetar cada dropdown/campo de data na mão, porque
+    // buildIconDropdown/buildDateRangeFilter guardam o próprio estado
+    // interno (marcados, aberto/fechado) dentro do closure — recriar o
+    // elemento é a forma mais simples de garantir que tudo volta pro
+    // estado inicial de verdade.
     if (s.filters && s.filters.length) {
-      var filterBar = document.createElement("div");
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "search-clear-btn";
+      clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+      clearBtn.addEventListener("click", function () {
+        state.text = "";
+        input.value = "";
+        state.filterState = {};
+        buildFilterBar();
+        runQuery();
+      });
+      title.appendChild(clearBtn);
+    }
+    section.appendChild(title);
+
+    var filterBar = null;
+    function buildFilterBar() {
+      if (filterBar) filterBar.remove();
+      if (!(s.filters && s.filters.length)) return;
+      filterBar = document.createElement("div");
       filterBar.className = "filter-bar search-block-filter-bar";
       s.filters.forEach(function (f) {
         var key = f.stateKey || f.property;
@@ -1459,6 +1557,7 @@
       });
       row.appendChild(filterBar);
     }
+    buildFilterBar();
 
     section.appendChild(row);
 
@@ -1737,7 +1836,11 @@
   // depois); o "x" apaga de vez.
   function renderNotesBlock(container) {
     var section = document.createElement("div");
-    section.className = "notes-block";
+    // "notes-block-accent" — mesmo esquema de destaque de
+    // "search-block-accent" (cor diferente, âmbar em vez de azul), pra
+    // marcar visualmente que essa seção é separada/independente da busca
+    // acima (não usa o Notion — fica só no Cloudflare KV).
+    section.className = "notes-block notes-block-accent";
 
     var title = document.createElement("h3");
     title.className = "group-title";
@@ -1827,6 +1930,27 @@
     filterRow.appendChild(flaggedSelect);
     filterRow.appendChild(sortSelect);
     section.appendChild(filterRow);
+
+    // aviso de erro (escondido por padrão) — criar/editar/apagar uma
+    // anotação sem isso falhava CALADO quando a chamada ao Worker dava
+    // errado (sem internet, sessão expirada, Worker fora do ar etc.): a
+    // lista simplesmente não atualizava e não tinha nenhum sinal na tela
+    // do motivo, então parecia que só um F5 "resolvia" (na real só
+    // recarregava do KV, mostrando o estado real — se a escrita tinha
+    // falhado mesmo, o F5 nem mostraria a mudança). Agora qualquer falha
+    // aparece aqui, com o motivo, em vez de sumir sem avisar.
+    var errorMsg = document.createElement("p");
+    errorMsg.className = "notes-error";
+    errorMsg.style.display = "none";
+    section.appendChild(errorMsg);
+
+    function showNotesError(err) {
+      errorMsg.textContent = "Não foi possível salvar: " + ((err && err.message) || "erro desconhecido") + ". Tente de novo.";
+      errorMsg.style.display = "block";
+    }
+    function hideNotesError() {
+      errorMsg.style.display = "none";
+    }
 
     var listWrap = document.createElement("div");
     listWrap.className = "notes-list";
@@ -2021,16 +2145,25 @@
           allNotes = data.notes || [];
           populateTagSelect();
           applyFilters();
+          hideNotesError();
         })
         .catch(function () { listWrap.innerHTML = '<p class="empty">Não foi possível carregar as anotações.</p>'; });
     }
 
+    // as 4 ações abaixo (marcar feita, sinalizar, apagar, adicionar tag)
+    // sempre chamavam loadNotes() no final — em teoria já deveriam
+    // atualizar a lista sozinhas, sem precisar de F5. O problema real era
+    // a FALTA de ".catch()" aqui: se a chamada ao Worker falhasse (sem
+    // internet, sessão expirada, Worker fora do ar), a Promise ficava
+    // "rejeitada" em silêncio — loadNotes() nunca rodava, a tela
+    // simplesmente não mudava, e não tinha nenhum aviso do motivo. Agora
+    // qualquer falha aparece em ".notes-error" (ver showNotesError acima).
     function toggleDone(id, done) {
       authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(id), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ done: done })
-      }).then(handle401).then(loadNotes);
+      }).then(handle401).then(loadNotes).catch(showNotesError);
     }
 
     function toggleFlagged(id, flagged) {
@@ -2038,12 +2171,12 @@
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ flagged: flagged })
-      }).then(handle401).then(loadNotes);
+      }).then(handle401).then(loadNotes).catch(showNotesError);
     }
 
     function removeNote(id) {
       authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(id), { method: "DELETE" })
-        .then(handle401).then(loadNotes);
+        .then(handle401).then(loadNotes).catch(showNotesError);
     }
 
     function addTagToNote(note, tagValue) {
@@ -2053,7 +2186,7 @@
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: newTags })
-      }).then(handle401).then(loadNotes);
+      }).then(handle401).then(loadNotes).catch(showNotesError);
     }
 
     function addNote() {
@@ -2070,7 +2203,7 @@
         tagsInput.value = "";
         textInput.focus();
         loadNotes();
-      }).finally(function () { addBtn.disabled = false; });
+      }).catch(showNotesError).finally(function () { addBtn.disabled = false; });
     }
 
     addBtn.addEventListener("click", addNote);
@@ -2156,6 +2289,35 @@
         itemGroupsWrap.appendChild(box);
       });
       container.appendChild(itemGroupsWrap);
+      renderedSomething = true;
+    }
+
+    // "page.collapseAllControls" (opcional) — botões "Recolher tudo"/
+    // "Expandir tudo" no topo, antes das abas. Só faz sentido em páginas
+    // com exibições "collapsible: true" (hoje só Início) — mexe em TODAS
+    // de uma vez (as 5 da aba ativa + Itens Prioritários), pra descer
+    // rápido até Pesquisar/Anotações rápidas sem recolher uma por uma.
+    if (page.collapseAllControls) {
+      if (renderedSomething) {
+        var dividerCollapse = document.createElement("hr");
+        dividerCollapse.className = "content-divider";
+        container.appendChild(dividerCollapse);
+      }
+      var collapseToolbar = document.createElement("div");
+      collapseToolbar.className = "content-toolbar";
+      var collapseAllBtn = document.createElement("button");
+      collapseAllBtn.type = "button";
+      collapseAllBtn.className = "toolbar-btn";
+      collapseAllBtn.innerHTML = '<i class="ti ti-arrows-minimize"></i> Recolher tudo';
+      collapseAllBtn.addEventListener("click", function () { collapseAllQueryBlocks(true); });
+      var expandAllBtn = document.createElement("button");
+      expandAllBtn.type = "button";
+      expandAllBtn.className = "toolbar-btn";
+      expandAllBtn.innerHTML = '<i class="ti ti-arrows-maximize"></i> Expandir tudo';
+      expandAllBtn.addEventListener("click", function () { collapseAllQueryBlocks(false); });
+      collapseToolbar.appendChild(collapseAllBtn);
+      collapseToolbar.appendChild(expandAllBtn);
+      container.appendChild(collapseToolbar);
       renderedSomething = true;
     }
 
