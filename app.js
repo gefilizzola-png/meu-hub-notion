@@ -2579,9 +2579,11 @@
         var a = document.createElement("a");
         a.className = "side-panel-btn";
         // só ícone (sem texto "Notion"/"App" do lado) — a legenda vira
-        // tooltip, montada a partir do título da divisória.
+        // tooltip, montada a partir do título da divisória (ou de
+        // "it.label", quando o grupo tem mais de um botão do MESMO tipo —
+        // ex: TAT com Processos + Sessões, os dois do Notion).
         if (it.type === "notion") {
-          a.title = group.title + " no Notion";
+          a.title = (it.label || group.title) + " no Notion";
           a.href = it.url;
           a.target = "_blank";
           a.rel = "noopener";
@@ -2590,7 +2592,7 @@
           img.alt = "";
           a.appendChild(img);
         } else {
-          a.title = group.title + " no app";
+          a.title = (it.label || group.title) + " no app";
           a.href = "#" + it.target;
           a.addEventListener("click", function (e) {
             if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;

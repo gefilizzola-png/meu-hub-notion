@@ -609,6 +609,13 @@ var SIDEPANEL_LINKS = [
     ]
   },
   {
+    title: "Contratos",
+    items: [
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/23ccd4efa7074deab954fc3fc6625f8c?v=d715fa98fd4f44acaa057442e04e5ace&source=copy_link" },
+      { type: "page", target: "pmf_cad_contratos" }
+    ]
+  },
+  {
     title: "Eventos",
     items: [
       { type: "page", target: "eventos" }
@@ -618,6 +625,23 @@ var SIDEPANEL_LINKS = [
     title: "Favoritas",
     items: [
       { type: "page", target: "favoritas" }
+    ]
+  },
+  {
+    title: "Jurisprudências",
+    items: [
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/24f0481486dd8094a099ec12b3a81bcf?v=24f0481486dd8150aea3000cb171d145&source=copy_link" },
+      // "pmf_cad_jurisprudencias" ainda é uma página vazia (placeholder,
+      // igual Time Sheet) — o botão do app existe mas não leva a nada
+      // útil por enquanto, até essa página ser montada de verdade.
+      { type: "page", target: "pmf_cad_jurisprudencias" }
+    ]
+  },
+  {
+    title: "Legislações",
+    items: [
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/39f8d5dfde534e378a108521c1978e21?v=3371b71811134e19b51c2d5ab23b211f&source=copy_link" },
+      { type: "page", target: "pmf_cad_legislacoes" }
     ]
   },
   {
@@ -632,6 +656,21 @@ var SIDEPANEL_LINKS = [
     items: [
       { type: "notion", url: "https://app.notion.com/p/georges-filizzola/72d4cab7152b4580b88c1350c53b1a05?v=a2ff0d56471a4b1baab88fea288fb307&source=copy_link" },
       { type: "page", target: "pmf_ctrl_tarefas" }
+    ]
+  },
+  {
+    title: "TAT",
+    // 2 links do Notion (Processos + Sessões, mesmos usados no "Abrir no
+    // Notion" da própria página TAT) + 1 do app — 3 botões numa linha só,
+    // cabe de boa nos 144px do painel. "label" em cada item (opcional,
+    // só usado quando tem mais de um botão do MESMO tipo no grupo) vira
+    // o tooltip específico daquele botão — sem isso os dois botões do
+    // Notion mostrariam o mesmo tooltip genérico "TAT no Notion", sem dar
+    // pra diferenciar Processos de Sessões antes de clicar.
+    items: [
+      { type: "notion", label: "Processos", url: "https://app.notion.com/p/georges-filizzola/88435f4ebb9849ac88664da53f13ceb6?v=8f9a3a9c068447a2aa9bb49a2d69eeb6&source=copy_link" },
+      { type: "notion", label: "Sessões", url: "https://app.notion.com/p/georges-filizzola/8cfdb6aa51e14988930a98dd0793c7bf?v=1faa5782ba1d49d5a491c42261ca61e8&source=copy_link" },
+      { type: "page", target: "pmf_col_tat" }
     ]
   }
 ];
@@ -648,7 +687,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-20 11:00",
+  appVersion: "2026-08-20 12:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse

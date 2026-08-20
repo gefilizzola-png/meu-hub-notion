@@ -27,11 +27,25 @@
   precisa se adicionar como "Test user" na tela de configuração do
   consentimento (OAuth consent screen) com o mesmo e-mail que vai usar
   pra logar — senão o Google recusa o login com uma tela de aviso.
+
+  SESSÃO PRÓPRIA (login mais longo, sem precisar renovar toda hora): o
+  token do Google ("credential" acima) dura só ~1h — é fixo assim pela
+  própria Google, não dá pra configurar diferente. Por isso, assim que
+  esse token chega aqui, a gente troca ele por uma sessão NOSSA (emitida
+  pelo Worker, POST /session), válida por 30 dias — ver exchangeForSession()
+  abaixo e a rota /session em worker.js. Isso exige um novo segredo no
+  Worker (SESSION_SECRET, ver comentário no topo do worker.js); enquanto
+  esse segredo não for configurado lá, a troca falha silenciosamente e o
+  app volta a usar o token do Google puro (1h), sem quebrar o login.
 */
 var GOOGLE_CLIENT_ID = "900562279481-h40rkjbkk92958ivcrjfa27d24fj6t3h.apps.googleusercontent.com";
 
 var Auth = (function () {
   var STORAGE_KEY = "meuhub_google_id_token";
+  // Guarda quando foi a última troca por sessão própria bem-sucedida, só
+  // pra não ficar chamando /session toda hora — ver maybeRefreshSession().
+  var LAST_REFRESH_KEY = "meuhub_session_last_refresh";
+  var REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 dia
   // localStorage (não sessionStorage) — sessionStorage é isolado POR ABA,
   // então uma aba nova (ex: Ctrl+clique num link) sempre nascia sem o token
   // e pedia login de novo, mesmo já logado em outra aba do mesmo navegador.
@@ -114,12 +128,61 @@ var Auth = (function () {
     }
   }
 
+  // Troca um login válido (token do Google ou sessão própria ainda
+  // válida) por uma sessão nossa nova, de 30 dias — POST /session no
+  // Worker (ver worker.js). Usa o token PASSADO como parâmetro pro
+  // cabeçalho Authorization (não o `token` da closure), porque na hora do
+  // login inicial ainda nem gravamos o token do Google como o "atual".
+  function exchangeForSession(bearerToken) {
+    var cfg = (typeof APP_CONFIG !== "undefined") ? APP_CONFIG : null;
+    var base = cfg && cfg.templateWorkerUrl;
+    if (!base || !bearerToken) return Promise.reject(new Error("sem worker/token"));
+    return fetch(base + "/session", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + bearerToken }
+    }).then(function (res) {
+      if (!res.ok) throw new Error("falha ao trocar sessão (" + res.status + ")");
+      return res.json();
+    }).then(function (data) {
+      if (!data || !data.token) throw new Error("resposta sem token");
+      return data.token;
+    });
+  }
+
+  function markRefreshed() {
+    try { localStorage.setItem(LAST_REFRESH_KEY, String(Date.now())); } catch (e) {}
+  }
+
+  // Só tenta trocar de novo se já faz um tempo desde a última troca —
+  // evita bater no Worker a cada navegação/reload. Falha em silêncio: se
+  // o SESSION_SECRET ainda não tiver sido configurado no Worker, ou a
+  // rede cair, o login atual (o que já está em `token`) continua valendo
+  // normalmente até expirar sozinho.
+  function maybeRefreshSession() {
+    if (!token) return;
+    var last = 0;
+    try { last = parseInt(localStorage.getItem(LAST_REFRESH_KEY), 10) || 0; } catch (e) {}
+    if (Date.now() - last < REFRESH_INTERVAL_MS) return;
+    exchangeForSession(token).then(function (newToken) {
+      setToken(newToken);
+      markRefreshed();
+    }).catch(function () { /* segue com o token atual, sem quebrar nada */ });
+  }
+
   function handleCredentialResponse(response) {
+    // Mostra a tela principal imediatamente com o token do Google (como
+    // sempre foi) — a troca pela sessão de 30 dias acontece por trás, sem
+    // atrasar o login nem exigir nada extra da pessoa.
     setToken(response.credential);
+    exchangeForSession(response.credential).then(function (newToken) {
+      setToken(newToken);
+      markRefreshed();
+    }).catch(function () { /* sem SESSION_SECRET configurado ainda, ou erro de rede — segue com o token do Google (dura ~1h) */ });
   }
 
   function signOut() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    try { localStorage.removeItem(LAST_REFRESH_KEY); } catch (e) {}
     token = null;
     paintUserLabel();
     if (window.google && google.accounts && google.accounts.id) {
@@ -184,6 +247,10 @@ var Auth = (function () {
         var cb = pendingReady;
         pendingReady = null;
         if (cb) cb();
+        // já tinha login válido salvo (sessão de 30 dias ou, no pior caso,
+        // um token do Google ainda dentro da 1h) — aproveita e desliza a
+        // janela da sessão própria pra frente, sem pedir nada da pessoa.
+        maybeRefreshSession();
       } else {
         showGate();
         renderSignInButton();
