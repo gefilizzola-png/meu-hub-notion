@@ -2507,9 +2507,11 @@
   function closeSidePanel() {
     var tab = document.getElementById("sidePanelTab");
     var panel = document.getElementById("sidePanel");
+    var backdrop = document.getElementById("sidePanelBackdrop");
     if (!tab || !panel) return;
     panel.classList.remove("open");
     tab.classList.remove("open");
+    if (backdrop) backdrop.classList.remove("open");
     panel.setAttribute("aria-hidden", "true");
     tab.setAttribute("aria-expanded", "false");
     var icon = tab.querySelector(".ti");
@@ -2520,10 +2522,12 @@
   function toggleSidePanel() {
     var tab = document.getElementById("sidePanelTab");
     var panel = document.getElementById("sidePanel");
+    var backdrop = document.getElementById("sidePanelBackdrop");
     if (!tab || !panel) return;
     var open = !panel.classList.contains("open");
     panel.classList.toggle("open", open);
     tab.classList.toggle("open", open);
+    if (backdrop) backdrop.classList.toggle("open", open);
     panel.setAttribute("aria-hidden", open ? "false" : "true");
     tab.setAttribute("aria-expanded", open ? "true" : "false");
     var icon = tab.querySelector(".ti");
@@ -2613,6 +2617,15 @@
   var sidePanelTabBtn = document.getElementById("sidePanelTab");
   if (sidePanelTabBtn) {
     sidePanelTabBtn.addEventListener("click", toggleSidePanel);
+  }
+  // clicar fora (no fundo escuro) fecha o painel — só aparece em telas
+  // estreitas (ver ".side-panel-backdrop.open" em styles.css); em telas
+  // largas o backdrop nem chega a ficar visível, então o clique não tem
+  // efeito nenhum lá (não tem como "clicar fora" de algo que já convive
+  // lado a lado com o conteúdo).
+  var sidePanelBackdrop = document.getElementById("sidePanelBackdrop");
+  if (sidePanelBackdrop) {
+    sidePanelBackdrop.addEventListener("click", closeSidePanel);
   }
 
   // ---------------- page render / navigation ----------------

@@ -180,6 +180,30 @@ var ANDAMENTO_FILTER = {
   ]
 };
 
+// Igual ANDAMENTO_FILTER acima, mas já vem com todos os status MENOS "6 -
+// Concluído" pré-marcados — usado nas divisórias de cards de Início
+// (Reuniões, Sessões, Tarefas, Aniversários, Outros eventos e Itens
+// Prioritários), pra esconder itens já concluídos por padrão, sem esconder
+// mais nada além disso (Cancelado, por ex., continua aparecendo). Pra ver
+// algum item concluído em Início, é só marcar "6 - Concluído" nesse
+// filtro (ou desmarcar os outros, se quiser ver só concluídos). Não mexe
+// no ANDAMENTO_FILTER original — reaproveita as mesmas opções.
+var INICIO_ANDAMENTO_FILTER = {
+  property: "🧲 Andamento", type: "relation", condition: "contains", label: "Andamento",
+  default: [
+    "9ff8db6d456d43f39e70e14786c1fe6d", // 0 - Iniciar agora
+    "2030481486dd80d386a1cf7522b3deb1", // 1 - Em andamento
+    "d18f7c0ac312422cbc14a3ae1bc82399", // 2 - Iniciar assim que possível
+    "08cb3ec723ef41b19e6c6472ee9d9a75", // 3 - Aguardando terceiros
+    "959d289339c440a492612c70ea8ed1c9", // 4 - Iniciar quando possível
+    "4ef9e6737cea4c53ae37efe966013214", // 5 - Agendado
+    "2410481486dd80a3a8b0d819542a55c5"  // 9 - Cancelado
+    // "d228224dee1d43dabb72744097f10028" (6 - Concluído) fica de fora do
+    // default de propósito — é o único status escondido por padrão.
+  ],
+  options: ANDAMENTO_FILTER.options
+};
+
 // Prioridade — relação com a base "Prioridade" (6 níveis, 1 = mais urgente).
 var PRIORIDADE_FILTER = {
   property: " 🚩 Prioridade", type: "relation", condition: "contains", label: "Prioridade",
@@ -687,7 +711,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-20 12:00",
+  appVersion: "2026-08-20 13:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -813,6 +837,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
@@ -835,6 +860,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -859,7 +885,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
               ],
               sorts: [{ property: "Nome", direction: "ascending" }],
-              filters: [PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+              filters: [INICIO_ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
               cardFields: [
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
                 { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
@@ -877,6 +903,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
               ],
               sorts: [{ property: "Nome", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: []
             },
             {
@@ -899,6 +926,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -923,6 +951,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
@@ -945,6 +974,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -969,7 +999,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
               ],
               sorts: [{ property: "Nome", direction: "ascending" }],
-              filters: [PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+              filters: [INICIO_ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
               cardFields: [
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
                 { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
@@ -987,6 +1017,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
               ],
               sorts: [{ property: "Nome", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: []
             },
             {
@@ -1009,6 +1040,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -1034,6 +1066,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
@@ -1057,6 +1090,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -1082,7 +1116,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-              filters: [PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+              filters: [INICIO_ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -1102,6 +1136,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" }
               ]
@@ -1127,6 +1162,7 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
               cardFields: [
                 { property: "📅 Data/Prazo", type: "date" },
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
@@ -1145,17 +1181,19 @@ const APP_CONFIG = {
           collapsible: true,
           bg: "#fdecea",
           database_id: "2310481486dd80079202fe1eaf5e14c4",
-          baseFilters: [
-            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
-            { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
-          ],
+          // Andamento != Concluído/Cancelado ERA fixo aqui (baseFilters);
+          // virou o filtro visível INICIO_ANDAMENTO_FILTER abaixo (default
+          // só esconde Concluído, ajustável pela pessoa) — sem baseFilters
+          // de Andamento sobrando, senão o filtro visível não conseguiria
+          // "reexibir" nada (baseFilters sempre vale, filters é opcional).
+          baseFilters: [],
           sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
           // Prioridade entrou como filtro COMPLEMENTAR ao Focus (pedido do
           // Georges) — útil quando vários itens caem no mesmo Focus (1 ou
           // 2) e ele quer restringir só aos de prioridade mais alta. Sem
           // "default": não vem nada pré-marcado, filtra em cima do que o
           // Focus já trouxe.
-          filters: [INICIO_FOCUS_FILTER, PRIORIDADE_FILTER, LIMIT_FILTER],
+          filters: [INICIO_ANDAMENTO_FILTER, INICIO_FOCUS_FILTER, PRIORIDADE_FILTER, LIMIT_FILTER],
           cardFields: [
             { property: "📅 Data/Prazo", type: "date" },
             { property: "🧲 Andamento", type: "relation", lookup: "andamento" },

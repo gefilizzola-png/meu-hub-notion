@@ -1271,6 +1271,21 @@ html, body {
    até renderSidePanel() decidir que a página atual tem sidePanel — ver
    app.js. z-index abaixo do menu lateral mobile (50/45) de propósito: se
    o menu abrir por cima em tela estreita, ele deve vencer. */
+/* fundo escuro atrás do painel retrátil direito, só em telas estreitas —
+   igual ".sidebar-backdrop" do menu esquerdo (ver acima), mas essa classe
+   é controlada por JS (".open", em app.js) em vez de depender de um
+   ancestral comum, porque tab/painel/backdrop moram fora de #shell. */
+.side-panel-backdrop { display: none; }
+@media (max-width: 1023px) {
+  .side-panel-backdrop.open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.32);
+    z-index: 3;
+  }
+}
+
 .side-panel-tab {
   position: fixed;
   right: 0;

@@ -67,7 +67,12 @@
 <!-- painel retrátil do lado direito (só aparece em páginas com
      page.sidePanel configurado — hoje só "Início"): aba discreta fixa na
      borda + painel que desliza da direita, ambos escondidos por padrão via
-     CSS/JS — ver renderSidePanel() em app.js. -->
+     CSS/JS — ver renderSidePanel() em app.js. Fundo escuro atrás do painel
+     quando aberto em telas estreitas (celular); clicar nele fecha o painel
+     — igual ao sidebarBackdrop do menu esquerdo, acima. Só aparece (via
+     CSS) em telas estreitas — em telas largas o painel já convive lado a
+     lado com o conteúdo, sem precisar de fundo escuro. -->
+<div class="side-panel-backdrop" id="sidePanelBackdrop"></div>
 <button class="side-panel-tab" id="sidePanelTab" aria-label="Mostrar atalhos" aria-expanded="false" style="display:none">
   <i class="ti ti-chevron-left" aria-hidden="true"></i>
 </button>
