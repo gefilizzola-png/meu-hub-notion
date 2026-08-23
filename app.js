@@ -1331,11 +1331,29 @@
       }
       if (qDef.cardFields && qDef.cardFields.length) {
         var extraProps = [];
+        // "crossRelation" (opcional em cardFields) — pra campos que não
+        // existem na própria Central, só numa página RELACIONADA (ex:
+        // "Grupo" mora na base Aniversários, não na Central; chega até um
+        // card de Aniversários pela relação "🎉 Aniversários"). Em vez de
+        // pedir isso como "extra" normal (que só lê propriedades da própria
+        // Central), monta uma lista separada "crossExtra" — o Worker busca
+        // a página relacionada e devolve o valor já pronto, no mesmo
+        // formato de "extra" de sempre (ver handleQuery em worker.js).
+        var crossExtra = [];
         qDef.cardFields.forEach(function (cf) {
+          if (cf.crossRelation) {
+            crossExtra.push({
+              relationProperty: cf.crossRelation.relationProperty,
+              targetProperty: cf.crossRelation.targetProperty,
+              as: cf.property
+            });
+            return;
+          }
           extraProps.push(cf.property);
           if (cf.property2) extraProps.push(cf.property2); // ex: "date-range-pair" (Prazo Inicial + Prazo Final)
         });
-        url += "&extra=" + encodeURIComponent(JSON.stringify(extraProps));
+        if (extraProps.length) url += "&extra=" + encodeURIComponent(JSON.stringify(extraProps));
+        if (crossExtra.length) url += "&crossExtra=" + encodeURIComponent(JSON.stringify(crossExtra));
       }
 
       authFetch(url)

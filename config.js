@@ -711,7 +711,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-20 13:00",
+  appVersion: "2026-08-23 09:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -903,8 +903,20 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "today" }
               ],
               sorts: [{ property: "Nome", direction: "ascending" }],
-              filters: [INICIO_ANDAMENTO_FILTER],
-              cardFields: []
+              // Sem INICIO_ANDAMENTO_FILTER de propósito — os itens de
+              // Aniversários ficam sempre em "6 - Concluído" (não fazem
+              // sentido com outro status), então filtrar por Andamento aqui
+              // só escondia tudo por padrão. Mostra sempre, independente do
+              // Andamento (pedido do Georges).
+              cardFields: [
+                // "Grupo" não existe na Central — mora na própria página de
+                // Aniversários, e chega até aqui pela relação "🎉
+                // Aniversários" (crossRelation, ver worker.js/app.js).
+                {
+                  property: "Grupo", type: "select",
+                  crossRelation: { relationProperty: "🎉 Aniversários", targetProperty: "Grupo" }
+                }
+              ]
             },
             {
               title: "🗓️ Outros eventos",
@@ -1017,8 +1029,15 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "equals", value: "tomorrow" }
               ],
               sorts: [{ property: "Nome", direction: "ascending" }],
-              filters: [INICIO_ANDAMENTO_FILTER],
-              cardFields: []
+              // Sem INICIO_ANDAMENTO_FILTER de propósito — ver comentário na
+              // aba "Hoje" acima.
+              cardFields: [
+                // "Grupo" via crossRelation — ver comentário na aba "Hoje".
+                {
+                  property: "Grupo", type: "select",
+                  crossRelation: { relationProperty: "🎉 Aniversários", targetProperty: "Grupo" }
+                }
+              ]
             },
             {
               title: "🗓️ Outros eventos",
@@ -1136,9 +1155,15 @@ const APP_CONFIG = {
                 { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
               ],
               sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-              filters: [INICIO_ANDAMENTO_FILTER],
+              // Sem INICIO_ANDAMENTO_FILTER de propósito — ver comentário na
+              // aba "Hoje" acima.
               cardFields: [
-                { property: "📅 Data/Prazo", type: "date" }
+                { property: "📅 Data/Prazo", type: "date" },
+                // "Grupo" via crossRelation — ver comentário na aba "Hoje".
+                {
+                  property: "Grupo", type: "select",
+                  crossRelation: { relationProperty: "🎉 Aniversários", targetProperty: "Grupo" }
+                }
               ]
             },
             {
