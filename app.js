@@ -2543,6 +2543,8 @@
       var values = [];
       var rowEntries = [];
       var onChangeCb = null;
+      var onCloseCb = null;
+      var wasOpen = false;
 
       function updateTrigger() {
         if (!values.length) triggerLabel.textContent = placeholderText;
@@ -2621,15 +2623,41 @@
         } else {
           positionMenu();
           menu.classList.add("open");
+          wasOpen = true;
         }
       });
+
+      // avisa quando o menu FECHA — não quando cada opção é marcada/
+      // desmarcada (ver "onChange" abaixo, esse sim dispara a cada clique).
+      // Precisa disso separado porque o menu pode fechar de 3 jeitos
+      // diferentes (clicar de novo no botão, clicar fora — listener global
+      // de "click" — ou rolar fora dele — listener global de "scroll"), e
+      // só o primeiro passa por aqui; um MutationObserver na classe do menu
+      // pega os 3 casos de uma vez só, sem precisar mexer nos listeners
+      // globais.
+      if (window.MutationObserver) {
+        new MutationObserver(function () {
+          if (wasOpen && !menu.classList.contains("open")) {
+            wasOpen = false;
+            if (onCloseCb) onCloseCb(values.slice());
+          }
+        }).observe(menu, { attributes: true, attributeFilter: ["class"] });
+      }
 
       wrap.appendChild(trigger);
       wrap.appendChild(menu);
 
       wrap.getValues = function () { return values.slice(); };
       wrap.setValues = function (arr) { setValues(arr, true); };
+      // dispara a CADA marcar/desmarcar (ex: filtro por coluna, que só
+      // refiltra em memória — sem chamada ao Worker, sem problema nenhum
+      // em disparar toda hora).
       wrap.onChange = function (fn) { onChangeCb = fn; };
+      // dispara só quando o menu FECHA, com o valor final (ex: célula
+      // editável da tabela, que salva no Worker e recarrega a lista
+      // inteira — se disparasse a cada clique, a lista recarregava no meio
+      // da seleção e derrubava o próprio menu que o usuário estava usando).
+      wrap.onClose = function (fn) { onCloseCb = fn; };
 
       updateTrigger();
       return wrap;
@@ -2911,7 +2939,12 @@
           if (isMultiField(key)) {
             var control = buildMultiCheckDropdown(key, label, "priorities-cell-select");
             control.setValues(it[key] || []);
-            control.onChange(function (vals) {
+            // "onClose" (não "onChange") — salva só quando o menu fecha,
+            // com o valor final já com todas as marcações feitas. Salvar a
+            // CADA clique recarregaria a lista inteira no meio da seleção
+            // (updateItem -> loadItems -> tbody reconstruído do zero),
+            // derrubando o próprio menu que o usuário estava usando.
+            control.onClose(function (vals) {
               var patch = {};
               patch[key] = vals;
               updateItem(it.id, patch);
