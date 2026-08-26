@@ -1937,7 +1937,33 @@
 
     var title = document.createElement("h3");
     title.className = "group-title";
-    title.textContent = "Anotações rápidas";
+    var titleText = document.createElement("span");
+    titleText.textContent = "Anotações rápidas";
+    title.appendChild(titleText);
+    // atalho pra página própria de Anotações Rápidas (mesmo padrão visual
+    // das outras divisórias de Início — ver "qDef.titleLinks" em
+    // renderDynamicQueryBlockReady) — só o ícone do app, já que esse bloco
+    // não vem do Notion (não tem link equivalente lá). Só aparece fora da
+    // própria página "anotacoes" (lá seria um link pra ela mesma, sem
+    // sentido) — "currentId" é a página atual, ver render()/navigate().
+    if (currentId !== "anotacoes") {
+      var notesTitleLinks = document.createElement("span");
+      notesTitleLinks.className = "query-title-links";
+      var notesTitleLink = document.createElement("a");
+      notesTitleLink.className = "query-title-link";
+      notesTitleLink.title = "Abrir Anotações Rápidas no app";
+      notesTitleLink.href = "#anotacoes";
+      notesTitleLink.addEventListener("click", function (e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate("anotacoes");
+      });
+      var notesTitleLinkIcon = document.createElement("i");
+      notesTitleLinkIcon.className = "ti ti-apps";
+      notesTitleLink.appendChild(notesTitleLinkIcon);
+      notesTitleLinks.appendChild(notesTitleLink);
+      title.appendChild(notesTitleLinks);
+    }
     section.appendChild(title);
 
     // linha de criação — "notes-text-input" ficou mais estreita/baixa (era
@@ -2192,6 +2218,17 @@
         addTagBtn.innerHTML = '<i class="ti ti-tag-plus"></i>';
         addTagBtn.title = "Adicionar tag";
 
+        // "+" — adiciona um sub-item (checklist DENTRO da anotação, ex:
+        // "Levantar dados"/"Montar slides" dentro de "Preparar reunião X").
+        // Mesmo padrão de interação do botão de tag acima (campo inline,
+        // Enter confirma) — ver addSubitemBtn.addEventListener mais abaixo,
+        // depois que "subitemsWrap" já existe.
+        var addSubitemBtn = document.createElement("button");
+        addSubitemBtn.type = "button";
+        addSubitemBtn.className = "notes-item-addtag";
+        addSubitemBtn.innerHTML = '<i class="ti ti-list-check"></i>';
+        addSubitemBtn.title = "Adicionar item à checklist";
+
         var delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "notes-item-del";
@@ -2223,9 +2260,76 @@
         });
 
         row.appendChild(addTagBtn);
+        row.appendChild(addSubitemBtn);
         row.appendChild(delBtn);
 
-        listWrap.appendChild(row);
+        // checklist da anotação — cada sub-item numa linha própria (check +
+        // texto + apagar), recuada pra alinhar embaixo do texto da
+        // anotação (não embaixo do checkbox/estrela dela). Sempre existe
+        // (mesmo vazia) — é onde o campo de "novo item" entra quando o
+        // botão acima é clicado.
+        var subitemsWrap = document.createElement("div");
+        subitemsWrap.className = "notes-subitems";
+
+        function renderSubitems() {
+          subitemsWrap.innerHTML = "";
+          (n.subitems || []).forEach(function (s) {
+            var subRow = document.createElement("div");
+            subRow.className = "notes-subitem" + (s.done ? " done" : "");
+
+            var subCheck = document.createElement("input");
+            subCheck.type = "checkbox";
+            subCheck.className = "notes-subitem-check";
+            subCheck.checked = !!s.done;
+            subCheck.addEventListener("change", function () { toggleSubitem(n, s.id, subCheck.checked); });
+            subRow.appendChild(subCheck);
+
+            var subText = document.createElement("span");
+            subText.className = "notes-subitem-text";
+            subText.textContent = s.text;
+            subRow.appendChild(subText);
+
+            var subDelBtn = document.createElement("button");
+            subDelBtn.type = "button";
+            subDelBtn.className = "notes-subitem-del";
+            subDelBtn.innerHTML = '<i class="ti ti-x"></i>';
+            subDelBtn.title = "Apagar item";
+            subDelBtn.addEventListener("click", function () { removeSubitem(n, s.id); });
+            subRow.appendChild(subDelBtn);
+
+            subitemsWrap.appendChild(subRow);
+          });
+        }
+        renderSubitems();
+
+        addSubitemBtn.addEventListener("click", function () {
+          if (subitemsWrap.querySelector(".notes-subitem-add-input")) return;
+          var subInput = document.createElement("input");
+          subInput.type = "text";
+          subInput.className = "notes-subitem-add-input";
+          subInput.placeholder = "novo item da checklist";
+          var done = false;
+          function commit() {
+            if (done) return;
+            done = true;
+            var v = subInput.value.trim();
+            subInput.remove();
+            if (v) addSubitem(n, v);
+          }
+          subInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") { done = true; subInput.remove(); }
+          });
+          subInput.addEventListener("blur", function () { commit(); });
+          subitemsWrap.appendChild(subInput);
+          subInput.focus();
+        });
+
+        var itemWrap = document.createElement("div");
+        itemWrap.className = "notes-item-wrap";
+        itemWrap.appendChild(row);
+        itemWrap.appendChild(subitemsWrap);
+        listWrap.appendChild(itemWrap);
       });
     }
 
@@ -2280,6 +2384,32 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: newTags })
       }).then(handle401).then(loadNotes).catch(showNotesError);
+    }
+
+    // checklist (page.subitems) — mesmo padrão de addTagToNote acima: monta
+    // a lista COMPLETA já com a mudança aplicada e manda inteira pro Worker
+    // (PUT /notes substitui "subitems", não faz merge sozinho).
+    function putSubitems(note, subitems) {
+      authFetch(cfg.templateWorkerUrl + "/notes?id=" + encodeURIComponent(note.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subitems: subitems })
+      }).then(handle401).then(loadNotes).catch(showNotesError);
+    }
+    function addSubitem(note, text) {
+      var newSubitems = (note.subitems || []).slice();
+      newSubitems.push({ id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), text: text, done: false });
+      putSubitems(note, newSubitems);
+    }
+    function toggleSubitem(note, subitemId, done) {
+      var newSubitems = (note.subitems || []).map(function (s) {
+        return s.id === subitemId ? { id: s.id, text: s.text, done: done } : s;
+      });
+      putSubitems(note, newSubitems);
+    }
+    function removeSubitem(note, subitemId) {
+      var newSubitems = (note.subitems || []).filter(function (s) { return s.id !== subitemId; });
+      putSubitems(note, newSubitems);
     }
 
     function addNote() {

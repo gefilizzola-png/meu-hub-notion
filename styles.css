@@ -1265,6 +1265,62 @@ html, body {
 }
 .notes-item-addtag-input:focus { outline: none; }
 
+/* agrupa o card da anotação (.notes-item) com a checklist dela
+   (.notes-subitems) logo abaixo — ".notes-list" antes tinha ".notes-item"
+   como filho direto; agora é ".notes-item-wrap" (sem borda/fundo próprios,
+   só organiza os dois em coluna). */
+.notes-item-wrap { display: flex; flex-direction: column; gap: 4px; }
+/* checklist dentro da anotação (page.subitems) — recuada pra alinhar
+   embaixo do TEXTO da anotação (não do checkbox/estrela dela): 16px
+   (checkbox) + 22px (estrela) + 2×10px (gaps) + 12px (padding do card) =
+   70px de recuo. Fica vazia (sem itens, sem borda) até ter pelo menos 1
+   sub-item ou o campo de "novo item" estar aberto — não ocupa espaço à
+   toa nas anotações sem checklist. */
+.notes-subitems { display: flex; flex-direction: column; gap: 3px; padding-left: 70px; }
+.notes-subitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f4f4f2;
+}
+.notes-subitem-check { flex-shrink: 0; width: 14px; height: 14px; cursor: pointer; }
+.notes-subitem-text { flex: 1; min-width: 0; font-size: 12.5px; color: #57534e; word-break: break-word; }
+.notes-subitem.done .notes-subitem-text { text-decoration: line-through; color: #adaba5; }
+.notes-subitem-del {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #b5b3ae;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+.notes-subitem-del:hover { background: #fdecea; color: #e03131; }
+/* campinho de "novo item" — mesmo tom do campinho de tag (.notes-item-
+   addtag-input), só que dentro da checklist (largura maior, cabe mais
+   texto). */
+.notes-subitem-add-input {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 0.5px solid #4a90d9;
+  font-size: 12px;
+  background: #fff;
+}
+.notes-subitem-add-input:focus { outline: none; }
+@media (max-width: 1023px) {
+  /* no celular a checklist recua menos — 70px do desktop, num card mais
+     estreito, sobraria pouco espaço pro texto do item. */
+  .notes-subitems { padding-left: 34px; }
+}
+
 /* painel retrátil do lado direito (page.sidePanel, hoje só Início) — aba
    discreta fixa na borda + painel que desliza da direita por cima do
    conteúdo (não empurra o layout). Ambos ficam com "display:none" inline
