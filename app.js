@@ -753,6 +753,15 @@
   document.addEventListener("click", function () {
     document.querySelectorAll(".filter-menu.open").forEach(function (m) { m.classList.remove("open"); });
   });
+  // fecha qualquer dropdown de filtro aberto ao rolar (a página OU um
+  // container com scroll próprio, ex: ".priorities-table-wrap") — sem isso,
+  // um menu posicionado como "fixed" (ver buildMultiCheckDropdown, usado na
+  // Lista de Prioridades) ficaria "descolado" do botão que o abriu depois
+  // de rolar. "capture: true" pega o evento mesmo vindo de um scroll
+  // interno (esses não borbulham (bubble) até o document normalmente).
+  document.addEventListener("scroll", function () {
+    document.querySelectorAll(".filter-menu.open").forEach(function (m) { m.classList.remove("open"); });
+  }, true);
 
   // ---------------- helpers pra montar filtros a partir de um buildIconDropdown ----------------
   // buildIconDropdown sempre devolve a LISTA de opções marcadas (0, 1 ou
@@ -2575,9 +2584,35 @@
         rowEntries.push({ opt: opt, row: row });
       });
 
+      // dentro de uma célula da tabela, o menu (posicionado normalmente
+      // "absolute" relativo ao ".priorities-multiselect") ficava PRESO
+      // dentro de ".priorities-table-wrap" (que rola na horizontal — ver
+      // styles.css — e por isso, sem querer, também vira uma "caixa que
+      // recorta" o que passa da borda dela, inclusive pra baixo), então o
+      // menu abria escondido/cortado atrás da própria linha. Aqui ele vira
+      // "fixed" (posição calculada a partir do botão, em pixels da tela) só
+      // na hora de abrir — isso faz o menu "escapar" de QUALQUER container
+      // com scroll no caminho e aparecer por cima de tudo, do tamanho certo
+      // (nunca mais estreito que o botão). Fecha sozinho ao rolar (ver o
+      // listener global de "scroll" mais acima) pra nunca ficar "flutuando"
+      // longe do botão que abriu.
+      function positionMenu() {
+        var rect = trigger.getBoundingClientRect();
+        menu.style.position = "fixed";
+        menu.style.top = (rect.bottom + 4) + "px";
+        menu.style.left = rect.left + "px";
+        menu.style.minWidth = Math.max(rect.width, 200) + "px";
+      }
+
       trigger.addEventListener("click", function (e) {
         e.stopPropagation();
-        menu.classList.toggle("open");
+        var isOpen = menu.classList.contains("open");
+        if (isOpen) {
+          menu.classList.remove("open");
+        } else {
+          positionMenu();
+          menu.classList.add("open");
+        }
       });
 
       wrap.appendChild(trigger);
