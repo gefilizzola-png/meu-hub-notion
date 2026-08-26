@@ -711,7 +711,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-23 09:00",
+  appVersion: "2026-08-23 10:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -772,6 +772,7 @@ const APP_CONFIG = {
       title: "Entrada",
       items: [
         { label: "Início", type: "page", target: "inicio", icon: "home" },
+        { label: "Anotações Rápidas", type: "page", target: "anotacoes", icon: "notes" },
         { label: "Criar páginas", type: "page", target: "criar_paginas", icon: "file-plus" },
         { label: "Eventos", type: "page", target: "eventos", icon: "calendar" },
         { label: "Favoritas", type: "page", target: "favoritas", icon: "star" },
@@ -1260,6 +1261,20 @@ const APP_CONFIG = {
       // Bloco de anotações rápidas/lista de tarefas (texto livre + tags),
       // guardado à parte no Cloudflare KV via Worker — nunca no Notion. Ver
       // renderNotesBlock no app.js e as rotas /notes no worker.js.
+      notes: true
+    },
+
+    // Página própria pra Anotações Rápidas (pedido do Georges): mesmo bloco
+    // de sempre ("page.notes: true", genérico — não é preso a Início),
+    // então é a MESMA lista/dados de lá, só com mais espaço pra visualizar e
+    // usar os filtros (Início continua com o bloco dela também, sem
+    // mudança nenhuma; as duas telas ficam sempre em sincronia porque leem
+    // do mesmo KV no Worker). Sem "items"/"dynamicQueries"/"search" —
+    // renderContent já sabe mostrar uma página só com "notes" (mesmo
+    // tratamento de página vazia-exceto-notas que Início já passava antes
+    // de ganhar Hoje/Amanhã).
+    anotacoes: {
+      title: "Anotações Rápidas",
       notes: true
     },
 
