@@ -716,7 +716,7 @@ var BUSCA_ULTIMA_EDICAO_FILTER = { property: "✏️ Última edição", type: "l
 var PRIORIDADES_TIPO_OPTIONS = ["PMF", "Pessoal"];
 var PRIORIDADES_PRIORIDADE_OPTIONS = ["1 - Imediato", "2 - Urgente", "3 - Alta", "4 - Média", "5 - Baixa", "6 - Sem prioridade"];
 var PRIORIDADES_TEMPO_OPTIONS = ["Menos do que 5 minutos", "5 minutos", "10 minutos", "15 minutos", "30 minutos", "45 minutos", "1 hora", "1 hora e meia", "2 horas", "Mais do que 2 horas"];
-var PRIORIDADES_FORMA_OPTIONS = ["Chrome", "E-mail", "Excel", "Explorer", "Notion", "Presencial", "Solar", "SQL", "Tributos", "WhatsApp", "Word"];
+var PRIORIDADES_FORMA_OPTIONS = ["Chrome", "Claude", "E-mail", "Excel", "Explorer", "Notion", "Presencial", "Solar", "SQL", "Tributos", "WhatsApp", "Word"];
 var PRIORIDADES_PROGRAMACAO_OPTIONS = ["Auditorias", "DOI", "Fiscalização", "IA", "Legislação", "Notion", "Ofícios", "Pessoal", "Planilhas", "Processos", "Sistemas", "TCE"];
 var PRIORIDADES_TRIBUTO_OPTIONS = ["Amigos", "CadImob", "CadMob", "Casa", "Eletrônicos", "Família", "Financeiro", "Financeiros", "Funcional", "Geral", "IPTU", "IPTU/ITBI", "ITBI", "Notion", "OODC", "Profissional", "Saúde", "TCRS", "Vitor"];
 
@@ -727,7 +727,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-26 15:00",
+  appVersion: "2026-08-26 16:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
