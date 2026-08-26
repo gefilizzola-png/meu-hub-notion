@@ -1432,3 +1432,97 @@ html, body {
   .notes-item { flex-wrap: wrap; row-gap: 4px; }
   .notes-item-date { flex-basis: 100%; order: 10; padding-left: 34px; }
 }
+
+/* "page.priorities" — tabela "Lista de Prioridades" (renderPrioritiesTable
+   no app.js). Reaproveita ".notes-block"/".notes-block-accent" (mesma
+   caixinha âmbar), ".notes-add-btn"/".notes-filter-select"/".notes-filter-
+   input"/".notes-error"/".notes-list"/".notes-item-wrap" e TODA a checklist
+   (".notes-subitem*") sem mudança nenhuma — só o que é específico das 9
+   colunas (grade de criação/filtro e o card de cada linha) ganha classe
+   própria aqui. */
+.priorities-block { margin-top: 4px; }
+
+/* grade da linha de criação e da barra de filtros — largura mínima por
+   campo, quebra livre (celular empilha em várias linhas curtas em vez de 1
+   linha espremida). */
+.priorities-form-grid {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 12px;
+  flex-wrap: wrap;
+}
+.priorities-filter-row { margin: 0 0 12px; }
+.priorities-form-select,
+.priorities-form-text {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  font-size: 13px;
+  background: #fff;
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.priorities-form-text { flex: 1 1 160px; }
+.priorities-form-select:focus,
+.priorities-form-text:focus { outline: none; border-color: #4a90d9; }
+.priorities-add-btn,
+.priorities-clear-btn { flex-shrink: 0; }
+.priorities-clear-btn {
+  background: #fff;
+  color: #55554f;
+  border: 0.5px solid #dcdcd8;
+}
+.priorities-clear-btn:hover { background: #f7f7f5; }
+
+/* cada item = card com o checkbox de concluído à esquerda, a grade de 9
+   campos editáveis no meio (min-width por campo, quebra pra celular) e os
+   botões de checklist/apagar à direita — mesma altura/toque de
+   ".notes-item" (que continua sendo usado por Anotações Rápidas, essa
+   classe aqui é só a variante com mais campos). */
+.priorities-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 0.5px solid #eeede9;
+}
+.priorities-item .notes-item-check { margin-top: 8px; }
+.priorities-item.done { opacity: 0.65; }
+.priorities-item.done .priorities-cell-text { text-decoration: line-through; color: #adaba5; }
+.priorities-item-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.priorities-cell-select,
+.priorities-cell-text {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 0.5px solid #e2e0da;
+  background: #fbfbfa;
+  color: #2f3a44;
+  font-size: 12.5px;
+  min-width: 0;
+  flex: 1 1 110px;
+}
+.priorities-cell-text { flex: 1 1 150px; }
+.priorities-cell-select:focus,
+.priorities-cell-text:focus { outline: none; border-color: #4a90d9; background: #fff; }
+.priorities-item .notes-item-addtag,
+.priorities-item .notes-item-del { margin-top: 2px; }
+
+@media (max-width: 1023px) {
+  /* celular: cada campo vira uma linha mais larga (mais fácil de tocar/
+     ler) em vez de tentar caber vários lado a lado. */
+  .priorities-form-select,
+  .priorities-form-text,
+  .priorities-cell-select,
+  .priorities-cell-text { flex-basis: 100%; }
+  .priorities-item { flex-wrap: wrap; }
+}

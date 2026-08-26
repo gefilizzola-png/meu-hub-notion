@@ -2441,6 +2441,371 @@
     loadNotes();
   }
 
+  // "page.priorities" — tabela "Lista de Prioridades" (pedido do Georges):
+  // mesmo esquema de renderNotesBlock acima (guardado à parte no Cloudflare
+  // KV via Worker, rotas /priorities, nada a ver com o Notion), mas com 9
+  // colunas por item (6 "de opção" editáveis por <select>, 3 de texto
+  // livre) em vez de só texto+tags, e reaproveitando O MESMO mecanismo de
+  // checklist/subitens (mesmas classes CSS "notes-subitem*", mesmo padrão
+  // de "putSubitems substitui a lista inteira") já usado em Anotações
+  // Rápidas — daí não precisar de CSS novo pra essa parte.
+  function renderPrioritiesTable(container, page) {
+    var fieldDefs = page.priorityFields || {};
+    var fieldKeys = ["tipo", "prioridade", "tempo", "forma", "programacao", "tributo"];
+    var textKeys = ["origem", "assunto", "providencia"];
+    var textLabels = { origem: "Origem", assunto: "Assunto", providencia: "Providência" };
+
+    var section = document.createElement("div");
+    section.className = "notes-block notes-block-accent priorities-block";
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "Lista de Prioridades";
+    section.appendChild(title);
+
+    function makeSelect(cls, key, includeEmpty, emptyLabel) {
+      var sel = document.createElement("select");
+      sel.className = cls;
+      if (includeEmpty) {
+        var emptyOpt = document.createElement("option");
+        emptyOpt.value = "";
+        emptyOpt.textContent = emptyLabel;
+        sel.appendChild(emptyOpt);
+      }
+      ((fieldDefs[key] && fieldDefs[key].options) || []).forEach(function (opt) {
+        var o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt;
+        sel.appendChild(o);
+      });
+      return sel;
+    }
+
+    // ---- linha de criação — um <select> por coluna de opção + 3 campos de
+    // texto (Assunto é o único obrigatório, igual "text" em Anotações
+    // Rápidas) + botão Adicionar.
+    var formRow = document.createElement("div");
+    formRow.className = "priorities-form-grid";
+    var formSelects = {};
+    fieldKeys.forEach(function (key) {
+      var sel = makeSelect("priorities-form-select", key, true, (fieldDefs[key] && fieldDefs[key].label) || key);
+      formSelects[key] = sel;
+      formRow.appendChild(sel);
+    });
+    var formTextInputs = {};
+    textKeys.forEach(function (key) {
+      var inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "priorities-form-text";
+      inp.placeholder = textLabels[key] + (key === "assunto" ? " *" : "");
+      formTextInputs[key] = inp;
+      formRow.appendChild(inp);
+    });
+    var addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "notes-add-btn priorities-add-btn";
+    addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
+    formRow.appendChild(addBtn);
+    section.appendChild(formRow);
+
+    // ---- barra de filtros — um <select> por coluna de opção (+ "Todos"),
+    // status (Todas/Pendentes/Concluídas) e busca textual (Origem/Assunto/
+    // Providência).
+    var filterRow = document.createElement("div");
+    filterRow.className = "priorities-form-grid priorities-filter-row";
+    var filterSelects = {};
+    fieldKeys.forEach(function (key) {
+      var sel = makeSelect("notes-filter-select", key, true, ((fieldDefs[key] && fieldDefs[key].label) || key) + ": Todos");
+      // prefixa cada opção com o nome do filtro, igual aos filtros de
+      // Anotações Rápidas (ex: "Tipo: PMF"), pra não ficar sem contexto.
+      Array.prototype.forEach.call(sel.options, function (o) {
+        if (o.value) o.textContent = ((fieldDefs[key] && fieldDefs[key].label) || key) + ": " + o.value;
+      });
+      filterSelects[key] = sel;
+      filterRow.appendChild(sel);
+    });
+    var statusSelect = document.createElement("select");
+    statusSelect.className = "notes-filter-select";
+    [["all", "Status: Todas"], ["pending", "Status: Pendentes"], ["done", "Status: Concluídas"]].forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      statusSelect.appendChild(opt);
+    });
+    statusSelect.value = "pending";
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "notes-filter-input";
+    searchInput.placeholder = "Pesquisar (Origem/Assunto/Providência)...";
+    filterRow.appendChild(statusSelect);
+    filterRow.appendChild(searchInput);
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "notes-add-btn priorities-clear-btn";
+    clearBtn.textContent = "Limpar filtros";
+    filterRow.appendChild(clearBtn);
+    section.appendChild(filterRow);
+
+    var errorMsg = document.createElement("p");
+    errorMsg.className = "notes-error";
+    errorMsg.style.display = "none";
+    section.appendChild(errorMsg);
+    function showErr(err) {
+      errorMsg.textContent = "Não foi possível salvar: " + ((err && err.message) || "erro desconhecido") + ". Tente de novo.";
+      errorMsg.style.display = "block";
+    }
+    function hideErr() { errorMsg.style.display = "none"; }
+
+    var listWrap = document.createElement("div");
+    listWrap.className = "notes-list priorities-list";
+    section.appendChild(listWrap);
+    container.appendChild(section);
+
+    var allItems = [];
+
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+
+    function applyFilters() {
+      var q = searchInput.value.trim().toLowerCase();
+      var status = statusSelect.value;
+      var filtered = allItems.filter(function (it) {
+        if (status === "pending" && it.done) return false;
+        if (status === "done" && !it.done) return false;
+        for (var i = 0; i < fieldKeys.length; i++) {
+          var key = fieldKeys[i];
+          var want = filterSelects[key].value;
+          if (want && it[key] !== want) return false;
+        }
+        if (q) {
+          var hay = ((it.origem || "") + " " + (it.assunto || "") + " " + (it.providencia || "")).toLowerCase();
+          if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+      });
+      renderList(filtered);
+    }
+
+    function renderList(items) {
+      listWrap.innerHTML = "";
+      if (!items.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = allItems.length ? "Nenhum item bate com o filtro." : "Nenhum item ainda.";
+        listWrap.appendChild(empty);
+        return;
+      }
+      items.forEach(function (it) {
+        var row = document.createElement("div");
+        row.className = "priorities-item" + (it.done ? " done" : "");
+
+        var check = document.createElement("input");
+        check.type = "checkbox";
+        check.className = "notes-item-check";
+        check.checked = !!it.done;
+        check.title = "Marcar como concluída";
+        check.addEventListener("change", function () { updateItem(it.id, { done: check.checked }); });
+        row.appendChild(check);
+
+        var fieldsWrap = document.createElement("div");
+        fieldsWrap.className = "priorities-item-fields";
+
+        fieldKeys.forEach(function (key) {
+          var sel = makeSelect("priorities-cell-select", key, true, (fieldDefs[key] && fieldDefs[key].label) || key);
+          sel.value = it[key] || "";
+          sel.addEventListener("change", function () {
+            var patch = {};
+            patch[key] = sel.value;
+            updateItem(it.id, patch);
+          });
+          fieldsWrap.appendChild(sel);
+        });
+
+        textKeys.forEach(function (key) {
+          var inp = document.createElement("input");
+          inp.type = "text";
+          inp.className = "priorities-cell-text";
+          inp.placeholder = textLabels[key];
+          inp.value = it[key] || "";
+          function commit() {
+            var v = inp.value.trim();
+            if (key === "assunto" && !v) { inp.value = it.assunto || ""; return; }
+            if (v === (it[key] || "")) return;
+            var patch = {};
+            patch[key] = v;
+            updateItem(it.id, patch);
+          }
+          inp.addEventListener("blur", commit);
+          inp.addEventListener("keydown", function (e) { if (e.key === "Enter") inp.blur(); });
+          fieldsWrap.appendChild(inp);
+        });
+
+        row.appendChild(fieldsWrap);
+
+        var addSubitemBtn = document.createElement("button");
+        addSubitemBtn.type = "button";
+        addSubitemBtn.className = "notes-item-addtag";
+        addSubitemBtn.innerHTML = '<i class="ti ti-list-check"></i>';
+        addSubitemBtn.title = "Adicionar item à checklist";
+
+        var delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "notes-item-del";
+        delBtn.innerHTML = '<i class="ti ti-x"></i>';
+        delBtn.title = "Apagar";
+        delBtn.addEventListener("click", function () { removeItem(it.id); });
+
+        row.appendChild(addSubitemBtn);
+        row.appendChild(delBtn);
+
+        // checklist — mesmíssimo mecanismo/classes de Anotações Rápidas.
+        var subitemsWrap = document.createElement("div");
+        subitemsWrap.className = "notes-subitems";
+
+        function renderSubitems() {
+          subitemsWrap.innerHTML = "";
+          (it.subitems || []).forEach(function (s) {
+            var subRow = document.createElement("div");
+            subRow.className = "notes-subitem" + (s.done ? " done" : "");
+
+            var subCheck = document.createElement("input");
+            subCheck.type = "checkbox";
+            subCheck.className = "notes-subitem-check";
+            subCheck.checked = !!s.done;
+            subCheck.addEventListener("change", function () { toggleSubitem(it, s.id, subCheck.checked); });
+            subRow.appendChild(subCheck);
+
+            var subText = document.createElement("span");
+            subText.className = "notes-subitem-text";
+            subText.textContent = s.text;
+            subRow.appendChild(subText);
+
+            var subDelBtn = document.createElement("button");
+            subDelBtn.type = "button";
+            subDelBtn.className = "notes-subitem-del";
+            subDelBtn.innerHTML = '<i class="ti ti-x"></i>';
+            subDelBtn.title = "Apagar item";
+            subDelBtn.addEventListener("click", function () { removeSubitem(it, s.id); });
+            subRow.appendChild(subDelBtn);
+
+            subitemsWrap.appendChild(subRow);
+          });
+        }
+        renderSubitems();
+
+        addSubitemBtn.addEventListener("click", function () {
+          if (subitemsWrap.querySelector(".notes-subitem-add-input")) return;
+          var subInput = document.createElement("input");
+          subInput.type = "text";
+          subInput.className = "notes-subitem-add-input";
+          subInput.placeholder = "novo item da checklist";
+          var doneAdding = false;
+          function commit() {
+            if (doneAdding) return;
+            doneAdding = true;
+            var v = subInput.value.trim();
+            subInput.remove();
+            if (v) addSubitem(it, v);
+          }
+          subInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") { doneAdding = true; subInput.remove(); }
+          });
+          subInput.addEventListener("blur", function () { commit(); });
+          subitemsWrap.appendChild(subInput);
+          subInput.focus();
+        });
+
+        var itemWrap = document.createElement("div");
+        itemWrap.className = "notes-item-wrap priorities-item-wrap";
+        itemWrap.appendChild(row);
+        itemWrap.appendChild(subitemsWrap);
+        listWrap.appendChild(itemWrap);
+      });
+    }
+
+    function loadItems() {
+      listWrap.innerHTML = '<p class="empty">Carregando…</p>';
+      authFetch(cfg.templateWorkerUrl + "/priorities")
+        .then(handle401)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          allItems = data.priorities || [];
+          applyFilters();
+          hideErr();
+        })
+        .catch(function () { listWrap.innerHTML = '<p class="empty">Não foi possível carregar a lista.</p>'; });
+    }
+
+    function updateItem(id, patch) {
+      authFetch(cfg.templateWorkerUrl + "/priorities?id=" + encodeURIComponent(id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch)
+      }).then(handle401).then(loadItems).catch(showErr);
+    }
+
+    function removeItem(id) {
+      authFetch(cfg.templateWorkerUrl + "/priorities?id=" + encodeURIComponent(id), { method: "DELETE" })
+        .then(handle401).then(loadItems).catch(showErr);
+    }
+
+    function putSubitems(it, subitems) {
+      updateItem(it.id, { subitems: subitems });
+    }
+    function addSubitem(it, text) {
+      var newSubitems = (it.subitems || []).slice();
+      newSubitems.push({ id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), text: text, done: false });
+      putSubitems(it, newSubitems);
+    }
+    function toggleSubitem(it, subitemId, done) {
+      var newSubitems = (it.subitems || []).map(function (s) {
+        return s.id === subitemId ? { id: s.id, text: s.text, done: done } : s;
+      });
+      putSubitems(it, newSubitems);
+    }
+    function removeSubitem(it, subitemId) {
+      var newSubitems = (it.subitems || []).filter(function (s) { return s.id !== subitemId; });
+      putSubitems(it, newSubitems);
+    }
+
+    function addItem() {
+      var assunto = formTextInputs.assunto.value.trim();
+      if (!assunto) { formTextInputs.assunto.focus(); return; }
+      var body = { assunto: assunto };
+      fieldKeys.forEach(function (key) { body[key] = formSelects[key].value; });
+      textKeys.forEach(function (key) { if (key !== "assunto") body[key] = formTextInputs[key].value.trim(); });
+      addBtn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/priorities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(handle401).then(function () {
+        fieldKeys.forEach(function (key) { formSelects[key].value = ""; });
+        textKeys.forEach(function (key) { formTextInputs[key].value = ""; });
+        loadItems();
+      }).catch(showErr).finally(function () { addBtn.disabled = false; });
+    }
+
+    addBtn.addEventListener("click", addItem);
+    textKeys.forEach(function (key) {
+      formTextInputs[key].addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
+    });
+    searchInput.addEventListener("input", applyFilters);
+    statusSelect.addEventListener("change", applyFilters);
+    fieldKeys.forEach(function (key) { filterSelects[key].addEventListener("change", applyFilters); });
+    clearBtn.addEventListener("click", function () {
+      searchInput.value = "";
+      statusSelect.value = "all";
+      fieldKeys.forEach(function (key) { filterSelects[key].value = ""; });
+      applyFilters();
+    });
+
+    loadItems();
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
@@ -2459,7 +2824,7 @@
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
     var hasTabs = !!(page.tabs && page.tabs.length);
 
-    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorities) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -2624,6 +2989,19 @@
         container.appendChild(dividerNotes);
       }
       renderNotesBlock(container);
+      renderedSomething = true;
+    }
+
+    // "page.priorities" (opcional) — tabela "Lista de Prioridades", mesmo
+    // esquema de "page.notes" acima (KV à parte, nada a ver com Notion),
+    // também sempre por último na página. Ver renderPrioritiesTable.
+    if (page.priorities) {
+      if (renderedSomething) {
+        var dividerPriorities = document.createElement("hr");
+        dividerPriorities.className = "content-divider";
+        container.appendChild(dividerPriorities);
+      }
+      renderPrioritiesTable(container, page);
     }
   }
 

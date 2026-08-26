@@ -704,6 +704,22 @@ var BUSCA_DATA_CONCLUSAO_FILTER = { property: "📅 Data de Conclusão", type: "
 var BUSCA_DATA_CRIACAO_FILTER = { property: "✨ Criado em", type: "created_time", label: "Data de Criação" };
 var BUSCA_ULTIMA_EDICAO_FILTER = { property: "✏️ Última edição", type: "last_edited_time", label: "Última edição" };
 
+// ---------------- Lista de Prioridades (página própria, sem Notion) ----------------
+// Listas fixas de opção pras 6 colunas "de opção" da tabela de Lista de
+// Prioridades (ver pages.prioridades mais abaixo e renderPrioritiesTable no
+// app.js). Isso NÃO é um filtro de propriedade do Notion (não tem
+// "property"/"type" — são arrays simples de string) — é só pra montar os
+// <select> da tabela e dos filtros por coluna. Precisam bater EXATAMENTE
+// (mesmo texto, mesma ordem) com as constantes PRIORITIES_* no worker.js,
+// que são quem de fato valida/aceita os valores no servidor — se um valor
+// mudar aqui, tem que mudar lá também (arquivos/runtimes separados).
+var PRIORIDADES_TIPO_OPTIONS = ["PMF", "Pessoal"];
+var PRIORIDADES_PRIORIDADE_OPTIONS = ["1 - Imediato", "2 - Urgente", "3 - Alta", "4 - Média", "5 - Baixa", "6 - Sem prioridade"];
+var PRIORIDADES_TEMPO_OPTIONS = ["Menos do que 5 minutos", "5 minutos", "10 minutos", "15 minutos", "30 minutos", "45 minutos", "1 hora", "1 hora e meia", "2 horas", "Mais do que 2 horas"];
+var PRIORIDADES_FORMA_OPTIONS = ["Chrome", "E-mail", "Excel", "Explorer", "Notion", "Presencial", "Solar", "SQL", "Tributos", "WhatsApp", "Word"];
+var PRIORIDADES_PROGRAMACAO_OPTIONS = ["Auditorias", "DOI", "Fiscalização", "IA", "Legislação", "Notion", "Ofícios", "Pessoal", "Planilhas", "Processos", "Sistemas", "TCE"];
+var PRIORIDADES_TRIBUTO_OPTIONS = ["Amigos", "CadImob", "CadMob", "Casa", "Eletrônicos", "Família", "Financeiro", "Financeiros", "Funcional", "Geral", "IPTU", "IPTU/ITBI", "ITBI", "Notion", "OODC", "Profissional", "Saúde", "TCRS", "Vitor"];
+
 const APP_CONFIG = {
   appTitle: "Meu hub",
   // Carimbo de "quando esse config.js foi editado por último" (data + hora,
@@ -711,7 +727,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-23 11:00",
+  appVersion: "2026-08-26 10:00",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -773,6 +789,7 @@ const APP_CONFIG = {
       items: [
         { label: "Início", type: "page", target: "inicio", icon: "home" },
         { label: "Anotações Rápidas", type: "page", target: "anotacoes", icon: "notes" },
+        { label: "Lista de Prioridades", type: "page", target: "prioridades", icon: "list-check" },
         { label: "Criar páginas", type: "page", target: "criar_paginas", icon: "file-plus" },
         { label: "Eventos", type: "page", target: "eventos", icon: "calendar" },
         { label: "Favoritas", type: "page", target: "favoritas", icon: "star" },
@@ -1276,6 +1293,33 @@ const APP_CONFIG = {
     anotacoes: {
       title: "Anotações Rápidas",
       notes: true
+    },
+
+    // "Lista de Prioridades" (pedido do Georges): tabela própria do app,
+    // NADA a ver com o Notion — guardada à parte no Cloudflare KV via
+    // Worker (rotas /priorities, mesmo namespace de /notes, prefixo
+    // diferente). "priorities: true" é o flag genérico que renderContent
+    // usa pra chamar renderPrioritiesTable no app.js (mesmo padrão de
+    // "notes: true" acima). As 6 listas de opção (Tipo/Prioridade/Tempo/
+    // Forma/Programação/Tributo) usadas nos <select> da tabela vêm das
+    // constantes PRIORIDADES_*_OPTIONS lá em cima — têm que bater com as
+    // PRIORITIES_* do worker.js.
+    prioridades: {
+      title: "Lista de Prioridades",
+      priorities: true,
+      // listas de opção de cada coluna "de opção" — passadas explicitamente
+      // aqui (em vez de renderPrioritiesTable ler as constantes globais
+      // direto) pra seguir o mesmo padrão do resto do config.js: tudo que
+      // uma página precisa pra se desenhar vem PENDURADO no objeto da
+      // página, o app.js só lê "page.*" de forma genérica.
+      priorityFields: {
+        tipo: { label: "Tipo", options: PRIORIDADES_TIPO_OPTIONS },
+        prioridade: { label: "Prioridade", options: PRIORIDADES_PRIORIDADE_OPTIONS },
+        tempo: { label: "Tempo", options: PRIORIDADES_TEMPO_OPTIONS },
+        forma: { label: "Forma", options: PRIORIDADES_FORMA_OPTIONS },
+        programacao: { label: "Programação", options: PRIORIDADES_PROGRAMACAO_OPTIONS },
+        tributo: { label: "Tributo", options: PRIORIDADES_TRIBUTO_OPTIONS }
+      }
     },
 
     criar_paginas: {
