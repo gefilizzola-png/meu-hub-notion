@@ -1475,30 +1475,51 @@ html, body {
 }
 .priorities-clear-btn:hover { background: #f7f7f5; }
 
-/* cada item = card com o checkbox de concluído à esquerda, a grade de 9
-   campos editáveis no meio (min-width por campo, quebra pra celular) e os
-   botões de checklist/apagar à direita — mesma altura/toque de
-   ".notes-item" (que continua sendo usado por Anotações Rápidas, essa
-   classe aqui é só a variante com mais campos). */
-.priorities-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
+/* tabela de verdade (pedido do Georges): cabeçalho fixo com o nome de cada
+   coluna, clicável pra classificar — ver refreshHeaderIndicators/sortItems
+   no app.js. ".priorities-table-wrap" dá o scroll horizontal no celular
+   (a tabela mantém uma largura mínima em vez de espremer as colunas). */
+.priorities-table-wrap {
+  overflow-x: auto;
   border-radius: 8px;
-  background: #fff;
   border: 0.5px solid #eeede9;
+  background: #fff;
 }
-.priorities-item .notes-item-check { margin-top: 8px; }
-.priorities-item.done { opacity: 0.65; }
-.priorities-item.done .priorities-cell-text { text-decoration: line-through; color: #adaba5; }
-.priorities-item-fields {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.priorities-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 920px;
 }
+.priorities-th {
+  position: sticky;
+  top: 0;
+  background: #f7f6f2;
+  border-bottom: 1px solid #e2e0da;
+  padding: 8px 8px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: #55554f;
+  white-space: nowrap;
+  user-select: none;
+}
+.priorities-th-check,
+.priorities-th-actions { width: 1%; }
+/* colunas clicáveis pra classificar — cursor de ponteiro + destaque leve
+   no hover avisam que dá pra clicar; ".active" (coluna que está
+   ordenando agora) ganha cor de destaque + a seta ▲/▼ ao lado do nome. */
+.priorities-th-sortable { cursor: pointer; }
+.priorities-th-sortable:hover { background: #eeece6; }
+.priorities-th-sortable.active { color: #4a90d9; }
+.priorities-th-arrow { margin-left: 4px; font-size: 10px; }
+.priorities-row > td {
+  padding: 6px 8px;
+  border-bottom: 0.5px solid #f0efeb;
+  vertical-align: middle;
+}
+.priorities-row:last-child > td { border-bottom: none; }
+.priorities-row.done { opacity: 0.65; }
+.priorities-row.done .priorities-cell-text { text-decoration: line-through; color: #adaba5; }
 .priorities-cell-select,
 .priorities-cell-text {
   height: 28px;
@@ -1508,21 +1529,34 @@ html, body {
   background: #fbfbfa;
   color: #2f3a44;
   font-size: 12.5px;
-  min-width: 0;
-  flex: 1 1 110px;
+  width: 100%;
+  min-width: 100px;
+  box-sizing: border-box;
 }
-.priorities-cell-text { flex: 1 1 150px; }
+.priorities-cell-text { min-width: 130px; }
 .priorities-cell-select:focus,
 .priorities-cell-text:focus { outline: none; border-color: #4a90d9; background: #fff; }
-.priorities-item .notes-item-addtag,
-.priorities-item .notes-item-del { margin-top: 2px; }
+.priorities-actions {
+  display: flex;
+  gap: 2px;
+  white-space: nowrap;
+}
+/* linha da checklist — sem borda própria (fica "colada" na linha do item
+   acima dela); só existe visualmente quando tem sub-itens ou o campo de
+   adicionar está aberto (".notes-subitems" vazio não ocupa espaço). */
+.priorities-subitems-row > td {
+  padding: 0 8px 6px;
+  border-bottom: 0.5px solid #f0efeb;
+}
+.priorities-subitems-row:last-child > td { border-bottom: none; }
+.priorities-subitems-row .notes-subitems { padding-left: 30px; }
 
 @media (max-width: 1023px) {
-  /* celular: cada campo vira uma linha mais larga (mais fácil de tocar/
-     ler) em vez de tentar caber vários lado a lado. */
+  /* celular: linha de criação/filtro empilha (1 campo por linha, mais
+     fácil de tocar); a TABELA em si continua rolando na horizontal (ver
+     ".priorities-table-wrap" acima) em vez de empilhar — uma tabela de 9
+     colunas não dá pra virar cartão sem perder a ideia de "cabeçalho
+     clicável" que foi o pedido. */
   .priorities-form-select,
-  .priorities-form-text,
-  .priorities-cell-select,
-  .priorities-cell-text { flex-basis: 100%; }
-  .priorities-item { flex-wrap: wrap; }
+  .priorities-form-text { flex-basis: 100%; }
 }

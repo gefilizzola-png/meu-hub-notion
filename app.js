@@ -2556,16 +2556,112 @@
     }
     function hideErr() { errorMsg.style.display = "none"; }
 
-    var listWrap = document.createElement("div");
-    listWrap.className = "notes-list priorities-list";
-    section.appendChild(listWrap);
+    // ---- tabela de verdade (cabeçalho fixo com nome de cada coluna,
+    // clicável pra classificar — pedido do Georges) em vez da lista de
+    // cartões usada em Anotações Rápidas. "priorities-table-wrap" dá o
+    // scroll horizontal no celular (a tabela não encolhe, ela desliza).
+    var columns = [
+      { key: "tipo", label: (fieldDefs.tipo && fieldDefs.tipo.label) || "Tipo" },
+      { key: "prioridade", label: (fieldDefs.prioridade && fieldDefs.prioridade.label) || "Prioridade" },
+      { key: "tempo", label: (fieldDefs.tempo && fieldDefs.tempo.label) || "Tempo" },
+      { key: "forma", label: (fieldDefs.forma && fieldDefs.forma.label) || "Forma" },
+      { key: "programacao", label: (fieldDefs.programacao && fieldDefs.programacao.label) || "Programação" },
+      { key: "tributo", label: (fieldDefs.tributo && fieldDefs.tributo.label) || "Tributo" },
+      { key: "origem", label: "Origem" },
+      { key: "assunto", label: "Assunto" },
+      { key: "providencia", label: "Providência" }
+    ];
+    // colunas "de opção" ordenam pela posição na lista fixa (ex: "1 -
+    // Imediato" antes de "2 - Urgente"), não por ordem alfabética — pra
+    // Prioridade e Tempo isso é o que faz sentido; as de texto livre
+    // ordenam por ordem alfabética normal. Vazio sempre vai pro final.
+    var sortState = { key: null, dir: 1 };
+
+    var tableWrap = document.createElement("div");
+    tableWrap.className = "priorities-table-wrap";
+    var table = document.createElement("table");
+    table.className = "priorities-table";
+    var thead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+
+    var thCheck = document.createElement("th");
+    thCheck.className = "priorities-th priorities-th-check";
+    headRow.appendChild(thCheck);
+
+    columns.forEach(function (col) {
+      var th = document.createElement("th");
+      th.className = "priorities-th priorities-th-sortable";
+      th.dataset.key = col.key;
+      th.title = "Clique para classificar por " + col.label;
+      var thLabel = document.createElement("span");
+      thLabel.className = "priorities-th-label";
+      thLabel.textContent = col.label;
+      var thArrow = document.createElement("span");
+      thArrow.className = "priorities-th-arrow";
+      th.appendChild(thLabel);
+      th.appendChild(thArrow);
+      th.addEventListener("click", function () {
+        if (sortState.key === col.key) sortState.dir = sortState.dir * -1;
+        else { sortState.key = col.key; sortState.dir = 1; }
+        refreshHeaderIndicators();
+        applyFilters();
+      });
+      headRow.appendChild(th);
+    });
+
+    var thActions = document.createElement("th");
+    thActions.className = "priorities-th priorities-th-actions";
+    headRow.appendChild(thActions);
+
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    section.appendChild(tableWrap);
     container.appendChild(section);
+
+    function refreshHeaderIndicators() {
+      Array.prototype.forEach.call(headRow.querySelectorAll(".priorities-th-sortable"), function (th) {
+        var arrow = th.querySelector(".priorities-th-arrow");
+        if (th.dataset.key === sortState.key) {
+          th.classList.add("active");
+          arrow.textContent = sortState.dir === 1 ? "▲" : "▼";
+        } else {
+          th.classList.remove("active");
+          arrow.textContent = "";
+        }
+      });
+    }
 
     var allItems = [];
 
     function handle401(res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
       return res;
+    }
+
+    function sortItems(items) {
+      if (!sortState.key) return items;
+      var key = sortState.key;
+      var opts = (fieldDefs[key] && fieldDefs[key].options) || null;
+      var copy = items.slice();
+      copy.sort(function (a, b) {
+        var av, bv, cmp;
+        if (opts) {
+          av = opts.indexOf(a[key] || ""); if (av === -1) av = opts.length;
+          bv = opts.indexOf(b[key] || ""); if (bv === -1) bv = opts.length;
+          cmp = av - bv;
+        } else {
+          av = (a[key] || "");
+          bv = (b[key] || "");
+          if (!av && bv) return 1;
+          if (av && !bv) return -1;
+          cmp = av.localeCompare(bv, "pt-BR");
+        }
+        return cmp * sortState.dir;
+      });
+      return copy;
     }
 
     function applyFilters() {
@@ -2585,34 +2681,37 @@
         }
         return true;
       });
-      renderList(filtered);
+      renderList(sortItems(filtered));
     }
 
     function renderList(items) {
-      listWrap.innerHTML = "";
+      tbody.innerHTML = "";
       if (!items.length) {
-        var empty = document.createElement("p");
-        empty.className = "empty";
-        empty.textContent = allItems.length ? "Nenhum item bate com o filtro." : "Nenhum item ainda.";
-        listWrap.appendChild(empty);
+        var emptyRow = document.createElement("tr");
+        var emptyCell = document.createElement("td");
+        emptyCell.className = "empty";
+        emptyCell.colSpan = columns.length + 2;
+        emptyCell.textContent = allItems.length ? "Nenhum item bate com o filtro." : "Nenhum item ainda.";
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
         return;
       }
       items.forEach(function (it) {
-        var row = document.createElement("div");
-        row.className = "priorities-item" + (it.done ? " done" : "");
+        var row = document.createElement("tr");
+        row.className = "priorities-row" + (it.done ? " done" : "");
 
+        var checkCell = document.createElement("td");
         var check = document.createElement("input");
         check.type = "checkbox";
         check.className = "notes-item-check";
         check.checked = !!it.done;
         check.title = "Marcar como concluída";
         check.addEventListener("change", function () { updateItem(it.id, { done: check.checked }); });
-        row.appendChild(check);
-
-        var fieldsWrap = document.createElement("div");
-        fieldsWrap.className = "priorities-item-fields";
+        checkCell.appendChild(check);
+        row.appendChild(checkCell);
 
         fieldKeys.forEach(function (key) {
+          var cell = document.createElement("td");
           var sel = makeSelect("priorities-cell-select", key, true, (fieldDefs[key] && fieldDefs[key].label) || key);
           sel.value = it[key] || "";
           sel.addEventListener("change", function () {
@@ -2620,10 +2719,12 @@
             patch[key] = sel.value;
             updateItem(it.id, patch);
           });
-          fieldsWrap.appendChild(sel);
+          cell.appendChild(sel);
+          row.appendChild(cell);
         });
 
         textKeys.forEach(function (key) {
+          var cell = document.createElement("td");
           var inp = document.createElement("input");
           inp.type = "text";
           inp.className = "priorities-cell-text";
@@ -2639,10 +2740,12 @@
           }
           inp.addEventListener("blur", commit);
           inp.addEventListener("keydown", function (e) { if (e.key === "Enter") inp.blur(); });
-          fieldsWrap.appendChild(inp);
+          cell.appendChild(inp);
+          row.appendChild(cell);
         });
 
-        row.appendChild(fieldsWrap);
+        var actionsCell = document.createElement("td");
+        actionsCell.className = "priorities-actions";
 
         var addSubitemBtn = document.createElement("button");
         addSubitemBtn.type = "button";
@@ -2657,12 +2760,22 @@
         delBtn.title = "Apagar";
         delBtn.addEventListener("click", function () { removeItem(it.id); });
 
-        row.appendChild(addSubitemBtn);
-        row.appendChild(delBtn);
+        actionsCell.appendChild(addSubitemBtn);
+        actionsCell.appendChild(delBtn);
+        row.appendChild(actionsCell);
+        tbody.appendChild(row);
 
-        // checklist — mesmíssimo mecanismo/classes de Anotações Rápidas.
+        // checklist — linha própria logo abaixo, ocupando todas as colunas
+        // (mesmíssimo mecanismo/classes de Anotações Rápidas).
+        var subitemsRow = document.createElement("tr");
+        subitemsRow.className = "priorities-subitems-row";
+        var subitemsCell = document.createElement("td");
+        subitemsCell.colSpan = columns.length + 2;
         var subitemsWrap = document.createElement("div");
         subitemsWrap.className = "notes-subitems";
+        subitemsCell.appendChild(subitemsWrap);
+        subitemsRow.appendChild(subitemsCell);
+        tbody.appendChild(subitemsRow);
 
         function renderSubitems() {
           subitemsWrap.innerHTML = "";
@@ -2717,17 +2830,11 @@
           subitemsWrap.appendChild(subInput);
           subInput.focus();
         });
-
-        var itemWrap = document.createElement("div");
-        itemWrap.className = "notes-item-wrap priorities-item-wrap";
-        itemWrap.appendChild(row);
-        itemWrap.appendChild(subitemsWrap);
-        listWrap.appendChild(itemWrap);
       });
     }
 
     function loadItems() {
-      listWrap.innerHTML = '<p class="empty">Carregando…</p>';
+      tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 2) + '">Carregando…</td></tr>';
       authFetch(cfg.templateWorkerUrl + "/priorities")
         .then(handle401)
         .then(function (r) { return r.json(); })
@@ -2736,7 +2843,7 @@
           applyFilters();
           hideErr();
         })
-        .catch(function () { listWrap.innerHTML = '<p class="empty">Não foi possível carregar a lista.</p>'; });
+        .catch(function () { tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 2) + '">Não foi possível carregar a lista.</td></tr>'; });
     }
 
     function updateItem(id, patch) {
