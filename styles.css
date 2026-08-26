@@ -1551,6 +1551,42 @@ html, body {
 .priorities-subitems-row:last-child > td { border-bottom: none; }
 .priorities-subitems-row .notes-subitems { padding-left: 30px; }
 
+/* checkbox-dropdown de seleção múltipla (só "forma" hoje) — reaproveita
+   ".filter-dropdown/.filter-trigger/.filter-menu/.filter-option" (já
+   estilizadas mais acima, usadas pelos filtros de busca do resto do app),
+   só que o "trigger" aqui NÃO usa ".filter-trigger": ele leva a MESMA
+   classe de tamanho que um <select> normal levaria no mesmo lugar
+   (".priorities-form-select"/".notes-filter-select"/".priorities-cell-
+   select" — passadas como "sizeClass" no app.js), pra ficar exatamente do
+   mesmo tamanho que os outros 5 campos de opção ao lado. Aqui só entram os
+   ajustes que faltam pra um <button> se comportar visualmente como um
+   <select> (texto alinhado à esquerda, cursor de ponteiro, ícone/label
+   lado a lado). */
+.priorities-multiselect { position: relative; min-width: 0; }
+.priorities-form-grid .priorities-multiselect,
+.priorities-filter-row .priorities-multiselect { flex: 1 1 130px; min-width: 0; }
+.priorities-row .priorities-multiselect { width: 100%; }
+.priorities-multiselect-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.priorities-multiselect-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.priorities-multiselect-trigger .ti-chevron-down { font-size: 11px; color: #999; flex-shrink: 0; }
+.priorities-multiselect:focus-within .priorities-multiselect-trigger { outline: none; border-color: #4a90d9; }
+
 @media (max-width: 1023px) {
   /* celular: linha de criação/filtro empilha (1 campo por linha, mais
      fácil de tocar); a TABELA em si continua rolando na horizontal (ver
@@ -1558,5 +1594,6 @@ html, body {
      colunas não dá pra virar cartão sem perder a ideia de "cabeçalho
      clicável" que foi o pedido. */
   .priorities-form-select,
-  .priorities-form-text { flex-basis: 100%; }
+  .priorities-form-text,
+  .priorities-form-grid .priorities-multiselect { flex-basis: 100%; }
 }

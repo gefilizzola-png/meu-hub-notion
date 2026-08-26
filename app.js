@@ -2481,16 +2481,129 @@
       return sel;
     }
 
-    // ---- linha de criação — um <select> por coluna de opção + 3 campos de
-    // texto (Assunto é o único obrigatório, igual "text" em Anotações
-    // Rápidas) + botão Adicionar.
+    function isMultiField(key) { return !!(fieldDefs[key] && fieldDefs[key].multi); }
+
+    // controle "genérico" que trata <select> (seleção única) e o
+    // checkbox-dropdown abaixo (seleção múltipla, só "forma" hoje) da mesma
+    // forma — quem usa não precisa saber qual dos dois é.
+    function getControlValue(control) {
+      return typeof control.getValues === "function" ? control.getValues() : control.value;
+    }
+    function resetControl(control) {
+      if (typeof control.setValues === "function") control.setValues([]);
+      else control.value = "";
+    }
+
+    // checkbox-dropdown de seleção múltipla (hoje só "forma") — mesmo
+    // esquema visual/mecanismo do menu suspenso de filtro já usado no resto
+    // do app (buildIconDropdown, ver mais acima): reaproveita as classes
+    // ".filter-dropdown/.filter-trigger/.filter-menu/.filter-option", que
+    // inclusive já fecham sozinhas ao clicar fora (ver o
+    // "document.addEventListener('click', ...)" global que target
+    // ".filter-menu.open" — nenhum código novo precisa disso aqui).
+    // "sizeClass" é a MESMA classe que o <select> normal usaria no mesmo
+    // lugar (linha de criação/filtro/célula da tabela), pra ficar do
+    // mesmo tamanho.
+    function buildMultiCheckDropdown(key, placeholderText, sizeClass) {
+      var options = (fieldDefs[key] && fieldDefs[key].options) || [];
+      var wrap = document.createElement("div");
+      wrap.className = "filter-dropdown priorities-multiselect";
+
+      var trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = "priorities-multiselect-trigger" + (sizeClass ? " " + sizeClass : "");
+      var triggerLabel = document.createElement("span");
+      triggerLabel.className = "priorities-multiselect-label";
+      var chevron = document.createElement("i");
+      chevron.className = "ti ti-chevron-down";
+      trigger.appendChild(triggerLabel);
+      trigger.appendChild(chevron);
+
+      var menu = document.createElement("div");
+      menu.className = "filter-menu";
+
+      var values = [];
+      var rowEntries = [];
+      var onChangeCb = null;
+
+      function updateTrigger() {
+        if (!values.length) triggerLabel.textContent = placeholderText;
+        else if (values.length <= 2) triggerLabel.textContent = values.join(", ");
+        else triggerLabel.textContent = values.length + " selecionadas";
+      }
+      function updateRowsUI() {
+        rowEntries.forEach(function (entry) {
+          entry.row.classList.toggle("selected", values.indexOf(entry.opt) !== -1);
+        });
+      }
+      function setValues(next, silent) {
+        values = (next || []).slice();
+        updateTrigger();
+        updateRowsUI();
+        if (!silent && onChangeCb) onChangeCb(values.slice());
+      }
+
+      var allRow = document.createElement("div");
+      allRow.className = "filter-option filter-option-all";
+      var allLabel = document.createElement("span");
+      allLabel.textContent = "Nenhuma";
+      allRow.appendChild(allLabel);
+      allRow.addEventListener("click", function (e) {
+        e.stopPropagation();
+        menu.classList.remove("open");
+        setValues([]);
+      });
+      menu.appendChild(allRow);
+
+      options.forEach(function (opt) {
+        var row = document.createElement("div");
+        row.className = "filter-option";
+        var lbl = document.createElement("span");
+        lbl.textContent = opt;
+        var check = document.createElement("i");
+        check.className = "ti ti-check filter-option-check";
+        row.appendChild(lbl);
+        row.appendChild(check);
+        row.addEventListener("click", function (e) {
+          e.stopPropagation();
+          var idx = values.indexOf(opt);
+          var next = values.slice();
+          if (idx === -1) next.push(opt); else next.splice(idx, 1);
+          setValues(next);
+        });
+        menu.appendChild(row);
+        rowEntries.push({ opt: opt, row: row });
+      });
+
+      trigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        menu.classList.toggle("open");
+      });
+
+      wrap.appendChild(trigger);
+      wrap.appendChild(menu);
+
+      wrap.getValues = function () { return values.slice(); };
+      wrap.setValues = function (arr) { setValues(arr, true); };
+      wrap.onChange = function (fn) { onChangeCb = fn; };
+
+      updateTrigger();
+      return wrap;
+    }
+
+    // ---- linha de criação — um <select> (ou checkbox-dropdown, pra "forma")
+    // por coluna de opção + 3 campos de texto (Assunto é o único
+    // obrigatório, igual "text" em Anotações Rápidas) + botão Adicionar.
     var formRow = document.createElement("div");
     formRow.className = "priorities-form-grid";
     var formSelects = {};
     fieldKeys.forEach(function (key) {
-      var sel = makeSelect("priorities-form-select", key, true, (fieldDefs[key] && fieldDefs[key].label) || key);
-      formSelects[key] = sel;
-      formRow.appendChild(sel);
+      var label = (fieldDefs[key] && fieldDefs[key].label) || key;
+      var control = isMultiField(key)
+        ? buildMultiCheckDropdown(key, label, "priorities-form-select")
+        : makeSelect("priorities-form-select", key, true, label);
+      formSelects[key] = control;
+      formRow.appendChild(control);
     });
     var formTextInputs = {};
     textKeys.forEach(function (key) {
@@ -2515,11 +2628,18 @@
     filterRow.className = "priorities-form-grid priorities-filter-row";
     var filterSelects = {};
     fieldKeys.forEach(function (key) {
-      var sel = makeSelect("notes-filter-select", key, true, ((fieldDefs[key] && fieldDefs[key].label) || key) + ": Todos");
+      var label = (fieldDefs[key] && fieldDefs[key].label) || key;
+      if (isMultiField(key)) {
+        var control = buildMultiCheckDropdown(key, label + ": Todos", "notes-filter-select");
+        filterSelects[key] = control;
+        filterRow.appendChild(control);
+        return;
+      }
+      var sel = makeSelect("notes-filter-select", key, true, label + ": Todos");
       // prefixa cada opção com o nome do filtro, igual aos filtros de
       // Anotações Rápidas (ex: "Tipo: PMF"), pra não ficar sem contexto.
       Array.prototype.forEach.call(sel.options, function (o) {
-        if (o.value) o.textContent = ((fieldDefs[key] && fieldDefs[key].label) || key) + ": " + o.value;
+        if (o.value) o.textContent = label + ": " + o.value;
       });
       filterSelects[key] = sel;
       filterRow.appendChild(sel);
@@ -2641,14 +2761,36 @@
       return res;
     }
 
+    // pra campo de seleção múltipla (só "forma"), usa a posição do valor
+    // "mais prioritário" (menor índice na lista fixa) dentre os marcados —
+    // ex: item com Forma = ["Notion","Chrome"] ordena pela posição de
+    // "Chrome" (vem antes de "Notion" na lista). Sem nenhum marcado, vai
+    // pro final, igual campo vazio nos de seleção única.
+    function minOptionIndex(arr, opts) {
+      arr = arr || [];
+      if (!arr.length) return opts.length;
+      var min = opts.length;
+      arr.forEach(function (v) {
+        var idx = opts.indexOf(v);
+        if (idx === -1) idx = opts.length;
+        if (idx < min) min = idx;
+      });
+      return min;
+    }
+
     function sortItems(items) {
       if (!sortState.key) return items;
       var key = sortState.key;
       var opts = (fieldDefs[key] && fieldDefs[key].options) || null;
+      var multi = isMultiField(key);
       var copy = items.slice();
       copy.sort(function (a, b) {
         var av, bv, cmp;
-        if (opts) {
+        if (opts && multi) {
+          av = minOptionIndex(a[key], opts);
+          bv = minOptionIndex(b[key], opts);
+          cmp = av - bv;
+        } else if (opts) {
           av = opts.indexOf(a[key] || ""); if (av === -1) av = opts.length;
           bv = opts.indexOf(b[key] || ""); if (bv === -1) bv = opts.length;
           cmp = av - bv;
@@ -2672,8 +2814,17 @@
         if (status === "done" && !it.done) return false;
         for (var i = 0; i < fieldKeys.length; i++) {
           var key = fieldKeys[i];
-          var want = filterSelects[key].value;
-          if (want && it[key] !== want) return false;
+          if (isMultiField(key)) {
+            var wantList = filterSelects[key].getValues();
+            if (wantList.length) {
+              var have = it[key] || [];
+              var anyMatch = wantList.some(function (w) { return have.indexOf(w) !== -1; });
+              if (!anyMatch) return false;
+            }
+          } else {
+            var want = filterSelects[key].value;
+            if (want && it[key] !== want) return false;
+          }
         }
         if (q) {
           var hay = ((it.origem || "") + " " + (it.assunto || "") + " " + (it.providencia || "")).toLowerCase();
@@ -2712,14 +2863,26 @@
 
         fieldKeys.forEach(function (key) {
           var cell = document.createElement("td");
-          var sel = makeSelect("priorities-cell-select", key, true, (fieldDefs[key] && fieldDefs[key].label) || key);
-          sel.value = it[key] || "";
-          sel.addEventListener("change", function () {
-            var patch = {};
-            patch[key] = sel.value;
-            updateItem(it.id, patch);
-          });
-          cell.appendChild(sel);
+          var label = (fieldDefs[key] && fieldDefs[key].label) || key;
+          if (isMultiField(key)) {
+            var control = buildMultiCheckDropdown(key, label, "priorities-cell-select");
+            control.setValues(it[key] || []);
+            control.onChange(function (vals) {
+              var patch = {};
+              patch[key] = vals;
+              updateItem(it.id, patch);
+            });
+            cell.appendChild(control);
+          } else {
+            var sel = makeSelect("priorities-cell-select", key, true, label);
+            sel.value = it[key] || "";
+            sel.addEventListener("change", function () {
+              var patch = {};
+              patch[key] = sel.value;
+              updateItem(it.id, patch);
+            });
+            cell.appendChild(sel);
+          }
           row.appendChild(cell);
         });
 
@@ -2882,7 +3045,7 @@
       var assunto = formTextInputs.assunto.value.trim();
       if (!assunto) { formTextInputs.assunto.focus(); return; }
       var body = { assunto: assunto };
-      fieldKeys.forEach(function (key) { body[key] = formSelects[key].value; });
+      fieldKeys.forEach(function (key) { body[key] = getControlValue(formSelects[key]); });
       textKeys.forEach(function (key) { if (key !== "assunto") body[key] = formTextInputs[key].value.trim(); });
       addBtn.disabled = true;
       authFetch(cfg.templateWorkerUrl + "/priorities", {
@@ -2890,7 +3053,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       }).then(handle401).then(function () {
-        fieldKeys.forEach(function (key) { formSelects[key].value = ""; });
+        fieldKeys.forEach(function (key) { resetControl(formSelects[key]); });
         textKeys.forEach(function (key) { formTextInputs[key].value = ""; });
         loadItems();
       }).catch(showErr).finally(function () { addBtn.disabled = false; });
@@ -2902,11 +3065,14 @@
     });
     searchInput.addEventListener("input", applyFilters);
     statusSelect.addEventListener("change", applyFilters);
-    fieldKeys.forEach(function (key) { filterSelects[key].addEventListener("change", applyFilters); });
+    fieldKeys.forEach(function (key) {
+      if (isMultiField(key)) filterSelects[key].onChange(applyFilters);
+      else filterSelects[key].addEventListener("change", applyFilters);
+    });
     clearBtn.addEventListener("click", function () {
       searchInput.value = "";
       statusSelect.value = "all";
-      fieldKeys.forEach(function (key) { filterSelects[key].value = ""; });
+      fieldKeys.forEach(function (key) { resetControl(filterSelects[key]); });
       applyFilters();
     });
 
