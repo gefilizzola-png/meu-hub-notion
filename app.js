@@ -759,8 +759,17 @@
   // Lista de Prioridades) ficaria "descolado" do botão que o abriu depois
   // de rolar. "capture: true" pega o evento mesmo vindo de um scroll
   // interno (esses não borbulham (bubble) até o document normalmente).
-  document.addEventListener("scroll", function () {
-    document.querySelectorAll(".filter-menu.open").forEach(function (m) { m.classList.remove("open"); });
+  document.addEventListener("scroll", function (e) {
+    document.querySelectorAll(".filter-menu.open").forEach(function (m) {
+      // rolando a própria lista de opções (".filter-menu" tem overflow-y:
+      // auto, pra listas compridas tipo Forma) NÃO deve fechar o menu — só
+      // rolagem de FORA dele (a página, ou ".priorities-table-wrap") deve.
+      // "m.contains(e.target)" cobre os dois casos de dentro (o scroll
+      // dispara com e.target = o próprio ".filter-menu", já que é ele quem
+      // tem a barra de rolagem).
+      if (m.contains(e.target)) return;
+      m.classList.remove("open");
+    });
   }, true);
 
   // ---------------- helpers pra montar filtros a partir de um buildIconDropdown ----------------
