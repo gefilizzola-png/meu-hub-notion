@@ -3567,6 +3567,11 @@
     updateColumnVisibility();
 
     var allItems = [];
+    // id do item cujo campo "novo subitem" deve receber o foco de volta
+    // assim que a tabela terminar de recarregar (ver renderList mais abaixo
+    // e o addRow dentro de renderSubitems) — pra dar pra digitar vários
+    // subitens seguidos sem precisar clicar de novo a cada um.
+    var pendingFocusSubitemAddId = null;
 
     function handle401(res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
@@ -3764,12 +3769,6 @@
         var actionsCell = document.createElement("td");
         actionsCell.className = "priorities-actions";
 
-        var addSubitemBtn = document.createElement("button");
-        addSubitemBtn.type = "button";
-        addSubitemBtn.className = "notes-item-addtag";
-        addSubitemBtn.innerHTML = '<i class="ti ti-list-check"></i>';
-        addSubitemBtn.title = "Adicionar item à checklist";
-
         // botão de criar/editar nota do item (pedido do Georges — "além do
         // botão de criar tasks, queria poder criar nota também, para
         // alguns casos"). Diferente da checklist (que é uma LISTA de
@@ -3796,16 +3795,20 @@
         delBtn.title = "Apagar";
         delBtn.addEventListener("click", function () { removeItem(it.id); });
 
-        actionsCell.appendChild(addSubitemBtn);
         actionsCell.appendChild(addNoteBtn);
         actionsCell.appendChild(delBtn);
         row.appendChild(actionsCell);
         tbody.appendChild(row);
 
         // checklist — linha própria logo abaixo, ocupando todas as colunas
-        // (mesmíssimo mecanismo/classes de Anotações Rápidas).
+        // (mesmíssimo mecanismo/classes de Anotações Rápidas). "data-item-id"
+        // só serve pra recuperar essa linha depois de um reload completo da
+        // tabela (ver "pendingFocusSubitemAddId" mais abaixo — devolve o
+        // foco pro campo de novo subitem depois de adicionar um, já que
+        // updateItem sempre recarrega a lista inteira do zero).
         var subitemsRow = document.createElement("tr");
         subitemsRow.className = "priorities-subitems-row";
+        subitemsRow.dataset.itemId = it.id;
         var subitemsCell = document.createElement("td");
         subitemsCell.colSpan = columns.length + 3;
         var subitemsWrap = document.createElement("div");
@@ -3845,24 +3848,28 @@
 
         // listener do botão — só dá pra ligar aqui (não lá na criação do
         // botão, mais acima) porque "applySubitemsCollapsed" só existe a
-        // partir desta linha.
+        // partir desta linha. Sempre visível agora (pedido do Georges —
+        // antes só aparecia quando já existia pelo menos 1 subitem; agora é
+        // ele mesmo quem "abre a porta" pro campo de criar o 1º subitem,
+        // já que o botão avulso de "+" foi removido — ver renderSubitems
+        // mais abaixo). Ao ABRIR, foca direto no campo de novo subitem, pra
+        // já poder digitar sem precisar clicar de novo em nada.
         toggleSubitemsBtn.addEventListener("click", function () {
           subitemsExpanded = !subitemsExpanded;
           applySubitemsCollapsed();
+          if (subitemsExpanded) {
+            var addInput = subitemsWrap.querySelector(".notes-subitem-add-input");
+            if (addInput) addInput.focus();
+          }
         });
 
         function applySubitemsCollapsed() {
           var count = (it.subitems || []).length;
-          subitemsRow.classList.toggle("collapsed", count > 0 && !subitemsExpanded);
-          if (count > 0) {
-            toggleSubitemsBtn.style.display = "";
-            toggleSubitemsBtn.innerHTML = '<i class="ti ti-chevron-' + (subitemsExpanded ? "up" : "down") + '"></i> ' + count;
-            toggleSubitemsBtn.title = subitemsExpanded ? "Ocultar checklist" : "Exibir checklist (" + count + (count === 1 ? " item" : " itens") + ")";
-          } else {
-            // sem subitens não tem o que expandir/recolher — some o botão
-            // (equivalente ao estado antigo, antes desse recurso existir).
-            toggleSubitemsBtn.style.display = "none";
-          }
+          subitemsRow.classList.toggle("collapsed", !subitemsExpanded);
+          toggleSubitemsBtn.innerHTML = '<i class="ti ti-chevron-' + (subitemsExpanded ? "up" : "down") + '"></i>' + (count ? " " + count : "");
+          toggleSubitemsBtn.title = subitemsExpanded
+            ? "Ocultar checklist"
+            : (count ? "Exibir checklist (" + count + (count === 1 ? " item" : " itens") + ")" : "Exibir checklist / adicionar item");
         }
 
         function renderSubitems() {
@@ -3928,6 +3935,20 @@
             });
             subRow.appendChild(subText);
 
+            // nota do SUBITEM (pedido do Georges — "conseguimos criar notas
+            // vinculadas aos subitens... ícone de nota pra exibir as notas
+            // existentes em cada subitem"). Mesmíssimo padrão da nota do
+            // item (texto livre solto, "has-note" muda a cor quando já tem
+            // algo escrito), só que a linha da textarea fica dentro da
+            // própria checklist, logo abaixo desse subitem (não lá embaixo
+            // da tabela como a nota do item) — ver subNoteRow mais abaixo.
+            var subNoteBtn = document.createElement("button");
+            subNoteBtn.type = "button";
+            subNoteBtn.className = "notes-subitem-del notes-subitem-note-toggle" + ((s.nota || "").trim() ? " has-note" : "");
+            subNoteBtn.innerHTML = '<i class="ti ti-note"></i>';
+            subNoteBtn.title = (s.nota || "").trim() ? "Ver/editar nota do subitem" : "Criar nota no subitem";
+            subRow.appendChild(subNoteBtn);
+
             var subDelBtn = document.createElement("button");
             subDelBtn.type = "button";
             subDelBtn.className = "notes-subitem-del";
@@ -3937,38 +3958,75 @@
             subRow.appendChild(subDelBtn);
 
             subitemsWrap.appendChild(subRow);
+
+            // linha da nota do subitem — própria, logo abaixo dele, recolhida
+            // por padrão (mesmo mecanismo de "collapsed" do noteRow do item,
+            // só que por subitem). O botão acima só alterna essa classe.
+            var subNoteRow = document.createElement("div");
+            subNoteRow.className = "notes-subitem-note-row collapsed";
+            var subNoteTextarea = document.createElement("textarea");
+            subNoteTextarea.className = "notes-subitem-note-textarea";
+            subNoteTextarea.placeholder = "Nota do subitem...";
+            subNoteTextarea.value = s.nota || "";
+            subNoteTextarea.addEventListener("blur", function () {
+              var v = subNoteTextarea.value.trim();
+              if (v !== (s.nota || "")) editSubitemNote(it, s.id, v);
+            });
+            subNoteRow.appendChild(subNoteTextarea);
+            subitemsWrap.appendChild(subNoteRow);
+
+            subNoteBtn.addEventListener("click", function () {
+              var expanding = subNoteRow.classList.contains("collapsed");
+              subNoteRow.classList.toggle("collapsed", !expanding);
+              if (expanding) subNoteTextarea.focus();
+            });
           });
+
+          // linha vazia SEMPRE presente depois do último subitem (pedido do
+          // Georges — substitui o antigo botão "+" avulso: agora é só clicar
+          // no botão de expandir a checklist — ver toggleSubitemsBtn acima —
+          // que essa linha já está lá, pronta pra digitar). Enter ou perder
+          // o foco com texto cria o subitem; updateItem recarrega a tabela
+          // inteira, o que naturalmente já recria essa linha vazia de novo
+          // no final (pronta pro próximo).
+          var addRow = document.createElement("div");
+          addRow.className = "notes-subitem-add-row";
+          var addInput = document.createElement("input");
+          addInput.type = "text";
+          addInput.className = "notes-subitem-add-input";
+          addInput.placeholder = "Novo item da checklist...";
+          var addSubmitted = false;
+          function commitAdd() {
+            if (addSubmitted) return;
+            var v = addInput.value.trim();
+            if (!v) return; // nada digitado — deixa a linha vazia como está, sem chamar o Worker à toa
+            addSubmitted = true;
+            pendingFocusSubitemAddId = it.id; // ver comment no topo de renderList
+            addSubitem(it, v);
+          }
+          addInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") { e.preventDefault(); commitAdd(); }
+          });
+          addInput.addEventListener("blur", function () { commitAdd(); });
+          addRow.appendChild(addInput);
+          subitemsWrap.appendChild(addRow);
         }
         renderSubitems();
         applySubitemsCollapsed();
-
-        addSubitemBtn.addEventListener("click", function () {
-          // expande a checklist ao adicionar (senão o campo novo nasceria
-          // escondido atrás do "recolhido por padrão").
-          subitemsExpanded = true;
-          applySubitemsCollapsed();
-          if (subitemsWrap.querySelector(".notes-subitem-add-input")) return;
-          var subInput = document.createElement("input");
-          subInput.type = "text";
-          subInput.className = "notes-subitem-add-input";
-          subInput.placeholder = "novo item da checklist";
-          var doneAdding = false;
-          function commit() {
-            if (doneAdding) return;
-            doneAdding = true;
-            var v = subInput.value.trim();
-            subInput.remove();
-            if (v) addSubitem(it, v);
-          }
-          subInput.addEventListener("keydown", function (e) {
-            if (e.key === "Enter") commit();
-            else if (e.key === "Escape") { doneAdding = true; subInput.remove(); }
-          });
-          subInput.addEventListener("blur", function () { commit(); });
-          subitemsWrap.appendChild(subInput);
-          subInput.focus();
-        });
       });
+
+      // devolve o foco pro campo de "novo subitem" depois de um reload
+      // completo da tabela (updateItem -> loadItems -> renderList de novo),
+      // se a última ação tiver sido criar um subitem via essa linha —
+      // assim dá pra digitar vários itens seguidos sem precisar clicar de
+      // novo no botão de expandir a cada um.
+      if (pendingFocusSubitemAddId) {
+        var focusId = pendingFocusSubitemAddId;
+        pendingFocusSubitemAddId = null;
+        var targetRow = tbody.querySelector('.priorities-subitems-row[data-item-id="' + focusId + '"]');
+        var targetInput = targetRow && targetRow.querySelector(".notes-subitem-add-input");
+        if (targetInput) targetInput.focus();
+      }
     }
 
     function loadItems() {
@@ -4002,22 +4060,28 @@
     }
     function addSubitem(it, text) {
       var newSubitems = (it.subitems || []).slice();
-      newSubitems.push({ id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), text: text, done: false, flagged: false });
+      newSubitems.push({ id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), text: text, done: false, flagged: false, nota: "" });
       putSubitems(it, newSubitems);
     }
+    // IMPORTANTE: toggleSubitem/editSubitem/toggleSubitemFlag/editSubitemNote
+    // reconstroem o subitem inteiro (PUT substitui a lista toda, sem merge
+    // no servidor — ver worker.js). Cada uma dessas 4 funções PRECISA
+    // preservar TODOS os campos que não está mudando (mesmo bug que já
+    // aconteceu 1x com "flagged" sendo derrubado silenciosamente por
+    // toggleSubitem/editSubitem antes de existir — não repetir com "nota").
     function toggleSubitem(it, subitemId, done) {
       var newSubitems = (it.subitems || []).map(function (s) {
-        return s.id === subitemId ? { id: s.id, text: s.text, done: done, flagged: !!s.flagged } : s;
+        return s.id === subitemId ? { id: s.id, text: s.text, done: done, flagged: !!s.flagged, nota: s.nota || "" } : s;
       });
       putSubitems(it, newSubitems);
     }
     // edição do texto de um subitem já existente (pedido do Georges — antes
     // só dava pra marcar como feito ou excluir). Mesmo padrão de
     // toggleSubitem: substitui a lista inteira via putSubitems (PUT já
-    // sanitiza { id, text, done, flagged } no worker.js).
+    // sanitiza { id, text, done, flagged, nota } no worker.js).
     function editSubitem(it, subitemId, newText) {
       var newSubitems = (it.subitems || []).map(function (s) {
-        return s.id === subitemId ? { id: s.id, text: newText, done: s.done, flagged: !!s.flagged } : s;
+        return s.id === subitemId ? { id: s.id, text: newText, done: s.done, flagged: !!s.flagged, nota: s.nota || "" } : s;
       });
       putSubitems(it, newSubitems);
     }
@@ -4026,7 +4090,15 @@
     // anotação inteira). Mesmo padrão de toggleSubitem/editSubitem.
     function toggleSubitemFlag(it, subitemId, flagged) {
       var newSubitems = (it.subitems || []).map(function (s) {
-        return s.id === subitemId ? { id: s.id, text: s.text, done: s.done, flagged: flagged } : s;
+        return s.id === subitemId ? { id: s.id, text: s.text, done: s.done, flagged: flagged, nota: s.nota || "" } : s;
+      });
+      putSubitems(it, newSubitems);
+    }
+    // nota do subitem (pedido do Georges — "notas vinculadas aos subitens").
+    // Mesmíssimo padrão das outras 3 funções acima.
+    function editSubitemNote(it, subitemId, newNota) {
+      var newSubitems = (it.subitems || []).map(function (s) {
+        return s.id === subitemId ? { id: s.id, text: s.text, done: s.done, flagged: !!s.flagged, nota: newNota } : s;
       });
       putSubitems(it, newSubitems);
     }

@@ -1330,6 +1330,41 @@ html, body {
   background: #fff;
 }
 .notes-subitem-add-input:focus { outline: none; }
+/* linha SEMPRE presente no fim da checklist da Lista de Prioridades,
+   pronta pra digitar um novo subitem (pedido do Georges — substitui o
+   antigo botão "+" avulso que só aparecia depois de clicar). Diferente do
+   uso antigo de ".notes-subitem-add-input" (que nasce direto dentro de
+   ".notes-subitems", um flex EM COLUNA, e por isso já estica sozinho pela
+   largura toda via "align-items: stretch" padrão), essa linha nova é um
+   flex em LINHA — sem "flex: 1" aqui o campo ficaria com a largura mínima
+   do navegador (~20 caracteres); por isso o "flex: 1" é escopado só a esse
+   contexto (".notes-subitem-add-row"), sem afetar o uso antigo. */
+.notes-subitem-add-row { display: flex; padding: 2px 8px; }
+.notes-subitem-add-row .notes-subitem-add-input { flex: 1; min-width: 0; }
+/* nota do SUBITEM (pedido do Georges — "notas vinculadas aos subitens"),
+   mesmo espírito visual de ".priorities-note-row/-textarea/-toggle.has-
+   note" (nota do item), só que menor e encaixada dentro da própria
+   checklist — reaproveita ".notes-subitem-del" como base de tamanho/cor do
+   ícone (ver classe dupla no app.js), só troca a cor quando já tem algo
+   escrito. */
+.notes-subitem-note-toggle.has-note { color: #c98a1f; }
+.notes-subitem-note-toggle.has-note:hover { background: #fdf2e0; color: #c98a1f; }
+.notes-subitem-note-row { padding: 0 8px 4px; }
+.notes-subitem-note-row.collapsed { display: none; }
+.notes-subitem-note-textarea {
+  width: 100%;
+  min-height: 40px;
+  resize: vertical;
+  border: 0.5px solid #dcdcd8;
+  border-radius: 6px;
+  padding: 5px 7px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #262624;
+  background: #fffdf7;
+  box-sizing: border-box;
+}
+.notes-subitem-note-textarea:focus { outline: none; border-color: #4a90d9; background: #fff; }
 @media (max-width: 1023px) {
   /* no celular a checklist recua menos — 70px do desktop, num card mais
      estreito, sobraria pouco espaço pro texto do item. */
