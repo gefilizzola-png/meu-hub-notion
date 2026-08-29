@@ -2481,6 +2481,263 @@
     title.textContent = "Lista de Prioridades";
     section.appendChild(title);
 
+    // ---- "Filtros rápidos" (pedido do Georges): seção de botões-atalho no
+    // TOPO da página, um bloco por grupo (Tipo/Prioridade/Tempo/Forma/
+    // Programação/Tributo) — clicar um botão filtra a tabela mais abaixo.
+    // Vários botões ativos no MESMO grupo se somam com "OU" (ex: Forma =
+    // Chrome OU WhatsApp); grupos diferentes se combinam entre si com "E"
+    // (ex: Tipo = PMF E Forma = Chrome). É tudo INDEPENDENTE dos filtros
+    // por coluna da barra mais abaixo — os dois conjuntos se combinam
+    // também com "E" (ver applyFilters). "Editar filtros" liga um modo em
+    // que dá pra criar/renomear/trocar as opções/excluir cada botão — some
+    // pra /priorities-quickfilters no Worker (mesmo KV, chave fixa) assim
+    // que salvo, então já fica valendo em qualquer aparelho.
+    var qfConfig = page.quickFilters || { groups: [], defaults: {} };
+    var qfGroups = qfConfig.groups || [];
+    var qfData = null; // só preenchido depois do GET (ou dos "defaults" se nunca foi salvo nada no Worker)
+    var qfActive = {}; // { grupoKey: [índice, índice, ...] } — botões ativos agora, "OU" dentro do grupo
+    qfGroups.forEach(function (g) { qfActive[g.key] = []; });
+    var qfEditMode = false;
+    var qfEditing = null; // { key, index } do botão sendo criado/editado agora (index === -1 = "criando novo"), ou null = nenhum editor aberto
+
+    var qfSection = document.createElement("div");
+    qfSection.className = "priorities-quickfilters";
+    section.appendChild(qfSection);
+
+    // devolve a lista (sem repetição) de valores brutos que os botões
+    // ATIVOS daquele grupo representam, ou null se nenhum botão do grupo
+    // estiver ativo (== sem restrição nenhuma vinda dos filtros rápidos
+    // pra essa coluna, deixa applyFilters decidir só pelos outros filtros).
+    function qfActiveValues(key) {
+      var idxs = qfActive[key] || [];
+      if (!idxs.length || !qfData || !qfData[key]) return null;
+      var union = [];
+      idxs.forEach(function (idx) {
+        var btn = qfData[key][idx];
+        if (!btn) return;
+        btn.values.forEach(function (v) { if (union.indexOf(v) === -1) union.push(v); });
+      });
+      return union.length ? union : null;
+    }
+
+    function qfCloneDefaults() {
+      var out = {};
+      qfGroups.forEach(function (g) {
+        var src = (qfConfig.defaults && qfConfig.defaults[g.key]) || [];
+        out[g.key] = src.map(function (b) { return { label: b.label, values: b.values.slice() }; });
+      });
+      return out;
+    }
+
+    // PUT substitui a config INTEIRA no Worker (mesmo padrão de "subitems"/
+    // "forma" — nunca faz merge no servidor). Depois de salvar, some com a
+    // seleção ATIVA do grupo mexido: os índices dos botões podem ter mudado
+    // (um botão apagado desloca os que vêm depois dele) — mais simples e
+    // seguro que tentar recasar é só limpar, evita aplicar um filtro sem
+    // querer num botão que não é mais o que o usuário pensa que é.
+    function qfSave(changedKey) {
+      return authFetch(cfg.templateWorkerUrl + "/priorities-quickfilters", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(qfData)
+      }).then(handle401).then(function (r) { return r.json(); }).then(function (data) {
+        qfData = (data && data.quickFilters) || qfCloneDefaults();
+        if (changedKey) qfActive[changedKey] = [];
+        qfEditing = null;
+        renderQfSection();
+        applyFilters();
+      }).catch(showErr);
+    }
+
+    function renderQfSection() {
+      qfSection.innerHTML = "";
+
+      var header = document.createElement("div");
+      header.className = "priorities-quickfilters-header";
+      var heading = document.createElement("h4");
+      heading.className = "priorities-quickfilters-title";
+      heading.textContent = "Filtros rápidos";
+      header.appendChild(heading);
+      var editToggle = document.createElement("button");
+      editToggle.type = "button";
+      editToggle.className = "priorities-quickfilters-edit-toggle" + (qfEditMode ? " active" : "");
+      editToggle.innerHTML = qfEditMode
+        ? '<i class="ti ti-check"></i> Concluir edição'
+        : '<i class="ti ti-pencil"></i> Editar filtros';
+      editToggle.addEventListener("click", function () {
+        qfEditMode = !qfEditMode;
+        qfEditing = null;
+        renderQfSection();
+      });
+      header.appendChild(editToggle);
+      qfSection.appendChild(header);
+
+      if (!qfData) {
+        var loading = document.createElement("p");
+        loading.className = "priorities-quickfilters-loading";
+        loading.textContent = "Carregando…";
+        qfSection.appendChild(loading);
+        return;
+      }
+
+      qfGroups.forEach(function (g) {
+        var groupRow = document.createElement("div");
+        groupRow.className = "priorities-quickfilter-group";
+        var groupLabel = document.createElement("span");
+        groupLabel.className = "priorities-quickfilter-group-label";
+        groupLabel.textContent = g.label;
+        groupRow.appendChild(groupLabel);
+
+        var btnsWrap = document.createElement("div");
+        btnsWrap.className = "priorities-quickfilter-buttons";
+
+        (qfData[g.key] || []).forEach(function (btn, idx) {
+          var pill = document.createElement("button");
+          pill.type = "button";
+          var isActive = qfActive[g.key].indexOf(idx) !== -1;
+          pill.className = "priorities-quickfilter-btn" + (isActive ? " active" : "");
+          var pillLabel = document.createElement("span");
+          pillLabel.textContent = btn.label;
+          pill.appendChild(pillLabel);
+          if (qfEditMode) {
+            var removeX = document.createElement("i");
+            removeX.className = "ti ti-x priorities-quickfilter-btn-remove";
+            removeX.title = "Excluir";
+            removeX.addEventListener("click", function (e) {
+              e.stopPropagation();
+              qfData[g.key] = qfData[g.key].filter(function (_, i2) { return i2 !== idx; });
+              qfSave(g.key);
+            });
+            pill.appendChild(removeX);
+          }
+          pill.addEventListener("click", function () {
+            if (qfEditMode) {
+              qfEditing = { key: g.key, index: idx };
+              renderQfSection();
+              return;
+            }
+            var pos = qfActive[g.key].indexOf(idx);
+            if (pos === -1) qfActive[g.key].push(idx); else qfActive[g.key].splice(pos, 1);
+            renderQfSection();
+            applyFilters();
+          });
+          btnsWrap.appendChild(pill);
+        });
+
+        if (qfEditMode) {
+          var addBtnQf = document.createElement("button");
+          addBtnQf.type = "button";
+          addBtnQf.className = "priorities-quickfilter-btn priorities-quickfilter-btn-add";
+          addBtnQf.innerHTML = '<i class="ti ti-plus"></i> Novo';
+          addBtnQf.addEventListener("click", function () {
+            qfEditing = { key: g.key, index: -1 };
+            renderQfSection();
+          });
+          btnsWrap.appendChild(addBtnQf);
+        }
+
+        groupRow.appendChild(btnsWrap);
+        qfSection.appendChild(groupRow);
+
+        if (qfEditMode && qfEditing && qfEditing.key === g.key) {
+          groupRow.appendChild(buildQfEditor(g, qfEditing.index));
+        }
+      });
+    }
+
+    // caixinha de criar/editar 1 botão — nome + checkboxes com as opções
+    // FIXAS daquele grupo (fieldDefs[key].options, a mesma lista usada na
+    // tabela). Salvar manda a config INTEIRA pro Worker (ver qfSave).
+    function buildQfEditor(g, index) {
+      var isNew = index === -1;
+      var existing = isNew ? null : qfData[g.key][index];
+      var options = (fieldDefs[g.key] && fieldDefs[g.key].options) || [];
+
+      var editor = document.createElement("div");
+      editor.className = "priorities-quickfilter-editor";
+
+      var labelInput = document.createElement("input");
+      labelInput.type = "text";
+      labelInput.className = "priorities-quickfilter-editor-label";
+      labelInput.placeholder = "Nome do botão";
+      labelInput.value = existing ? existing.label : "";
+      editor.appendChild(labelInput);
+
+      var optsWrap = document.createElement("div");
+      optsWrap.className = "priorities-quickfilter-editor-options";
+      var checked = {};
+      (existing ? existing.values : []).forEach(function (v) { checked[v] = true; });
+      var checkboxes = [];
+      options.forEach(function (opt) {
+        var optLabel = document.createElement("label");
+        optLabel.className = "priorities-quickfilter-editor-opt";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!checked[opt];
+        optLabel.appendChild(cb);
+        optLabel.appendChild(document.createTextNode(" " + opt));
+        optsWrap.appendChild(optLabel);
+        checkboxes.push({ opt: opt, cb: cb });
+      });
+      editor.appendChild(optsWrap);
+
+      var editorErr = document.createElement("p");
+      editorErr.className = "priorities-quickfilter-editor-error";
+      editorErr.style.display = "none";
+      editor.appendChild(editorErr);
+
+      var actions = document.createElement("div");
+      actions.className = "priorities-quickfilter-editor-actions";
+      var saveBtnQf = document.createElement("button");
+      saveBtnQf.type = "button";
+      saveBtnQf.className = "notes-add-btn";
+      saveBtnQf.textContent = "Salvar";
+      saveBtnQf.addEventListener("click", function () {
+        var label = labelInput.value.trim();
+        var values = checkboxes.filter(function (c) { return c.cb.checked; }).map(function (c) { return c.opt; });
+        if (!label || !values.length) {
+          editorErr.textContent = "Escolha um nome e pelo menos uma opção.";
+          editorErr.style.display = "block";
+          return;
+        }
+        var newBtn = { label: label, values: values };
+        if (isNew) qfData[g.key] = (qfData[g.key] || []).concat([newBtn]);
+        else qfData[g.key][index] = newBtn;
+        qfSave(g.key);
+      });
+      var cancelBtnQf = document.createElement("button");
+      cancelBtnQf.type = "button";
+      cancelBtnQf.className = "priorities-clear-btn";
+      cancelBtnQf.textContent = "Cancelar";
+      cancelBtnQf.addEventListener("click", function () {
+        qfEditing = null;
+        renderQfSection();
+      });
+      actions.appendChild(saveBtnQf);
+      actions.appendChild(cancelBtnQf);
+      editor.appendChild(actions);
+
+      return editor;
+    }
+
+    function qfLoad() {
+      authFetch(cfg.templateWorkerUrl + "/priorities-quickfilters")
+        .then(handle401)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          qfData = (data && data.quickFilters) || qfCloneDefaults();
+          qfGroups.forEach(function (g) { if (!Array.isArray(qfData[g.key])) qfData[g.key] = []; });
+          renderQfSection();
+        })
+        .catch(function () {
+          qfData = qfCloneDefaults();
+          renderQfSection();
+        });
+    }
+
+    renderQfSection();
+    qfLoad();
+
     function makeSelect(cls, key, includeEmpty, emptyLabel) {
       var sel = document.createElement("select");
       sel.className = cls;
@@ -2897,6 +3154,16 @@
             var want = filterSelects[key].value;
             if (want && it[key] !== want) return false;
           }
+          // "Filtros rápidos" (ver qfActiveValues acima) — INDEPENDENTE do
+          // filtro por coluna de cima, os dois se combinam com "E" (por
+          // isso não tem "else"/"continue" aqui: os dois passam pelo mesmo
+          // item, na mesma volta do for).
+          var qWant = qfActiveValues(key);
+          if (qWant) {
+            var qHave = isMultiField(key) ? (it[key] || []) : [it[key]];
+            var qMatch = qWant.some(function (w) { return qHave.indexOf(w) !== -1; });
+            if (!qMatch) return false;
+          }
         }
         if (q) {
           var hay = ((it.origem || "") + " " + (it.assunto || "") + " " + (it.providencia || "")).toLowerCase();
@@ -3150,6 +3417,11 @@
       searchInput.value = "";
       statusSelect.value = "all";
       fieldKeys.forEach(function (key) { resetControl(filterSelects[key]); });
+      // "Limpar filtros" também solta os botões de "Filtros rápidos" que
+      // estiverem apertados (senão a tabela continuava filtrada mesmo com
+      // a barra de filtros de cima toda limpa — ia confundir).
+      qfGroups.forEach(function (g) { qfActive[g.key] = []; });
+      renderQfSection();
       applyFilters();
     });
 

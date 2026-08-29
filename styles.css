@@ -1587,6 +1587,158 @@ html, body {
 .priorities-multiselect-trigger .ti-chevron-down { font-size: 11px; color: #999; flex-shrink: 0; }
 .priorities-multiselect:focus-within .priorities-multiselect-trigger { outline: none; border-color: #4a90d9; }
 
+/* "Filtros rápidos" (pedido do Georges) — seção de botões-atalho no TOPO
+   da Lista de Prioridades, ANTES até da linha de criação. Uma "divisória"
+   (linha) por grupo — Tipo/Prioridade/Tempo/Forma/Programação/Tributo —
+   com o nome do grupo à esquerda e os botões (pílulas) à direita, um
+   embaixo do outro. Fica dentro da MESMA caixinha âmbar de
+   ".priorities-block" (não é uma caixa nova), só com uma linha divisória
+   fina separando do resto. */
+.priorities-quickfilters {
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 0.5px solid rgba(240, 140, 0, 0.25);
+}
+.priorities-quickfilters-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.priorities-quickfilters-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #55554f;
+}
+.priorities-quickfilters-loading { margin: 0; font-size: 12.5px; color: #8a8a84; }
+/* mesmo visual do ".priorities-clear-btn" (botão neutro, borda fina) —
+   só troca de cor quando o modo de edição está LIGADO, pra ficar bem
+   claro que apertar de novo os botões abaixo agora edita/exclui em vez
+   de filtrar. */
+.priorities-quickfilters-edit-toggle {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #55554f;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.priorities-quickfilters-edit-toggle:hover { border-color: #b9b9b3; background: #f7f7f5; }
+.priorities-quickfilters-edit-toggle.active {
+  background: #2f3a44;
+  border-color: #2f3a44;
+  color: #fff;
+}
+.priorities-quickfilter-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 0;
+}
+.priorities-quickfilter-group + .priorities-quickfilter-group { border-top: 0.5px solid rgba(240, 140, 0, 0.12); }
+.priorities-quickfilter-group-label {
+  flex: 0 0 84px;
+  padding-top: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8a8a84;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.priorities-quickfilter-buttons {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* pílula — mesma família visual de ".page-tab-btn" (estado "ativo" já
+   estabelecido em outra parte do app: fundo escuro #2f3a44 + texto
+   branco), só mais baixa/compacta pra caber várias numa linha só. */
+.priorities-quickfilter-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #55554f;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.priorities-quickfilter-btn:hover { border-color: #b9b9b3; }
+.priorities-quickfilter-btn.active {
+  background: #2f3a44;
+  border-color: #2f3a44;
+  color: #fff;
+}
+.priorities-quickfilter-btn-remove {
+  font-size: 12px;
+  color: #b9b9b3;
+}
+.priorities-quickfilter-btn-remove:hover { color: #d9534f; }
+.priorities-quickfilter-btn-add {
+  border-style: dashed;
+  color: #4a90d9;
+  background: #fff;
+}
+.priorities-quickfilter-btn-add:hover { border-color: #4a90d9; background: #eef5fb; }
+/* caixinha de criar/editar 1 botão — aparece logo abaixo da linha do
+   grupo mexido, empurrando o resto pra baixo (não é um modal por cima,
+   pra não esconder os outros grupos/botões enquanto edita). */
+.priorities-quickfilter-editor {
+  flex-basis: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fbfbfa;
+}
+.priorities-quickfilter-editor-label {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  font-size: 12.5px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.priorities-quickfilter-editor-label:focus { outline: none; border-color: #4a90d9; }
+.priorities-quickfilter-editor-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-bottom: 8px;
+}
+.priorities-quickfilter-editor-opt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: #55554f;
+  cursor: pointer;
+}
+.priorities-quickfilter-editor-error {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #d9534f;
+}
+.priorities-quickfilter-editor-actions { display: flex; gap: 8px; }
+
 @media (max-width: 1023px) {
   /* celular: linha de criação/filtro empilha (1 campo por linha, mais
      fácil de tocar); a TABELA em si continua rolando na horizontal (ver
@@ -1596,4 +1748,9 @@ html, body {
   .priorities-form-select,
   .priorities-form-text,
   .priorities-form-grid .priorities-multiselect { flex-basis: 100%; }
+  /* "Filtros rápidos" também empilha no celular — nome do grupo vira
+     título pequeno ACIMA dos botões, em vez de coluna fixa ao lado (84px
+     fixo sobraria pouco espaço pros botões numa tela estreita). */
+  .priorities-quickfilter-group { flex-direction: column; gap: 4px; }
+  .priorities-quickfilter-group-label { flex-basis: auto; padding-top: 0; }
 }

@@ -720,6 +720,58 @@ var PRIORIDADES_FORMA_OPTIONS = ["Chrome", "Claude", "E-mail", "Excel", "Explore
 var PRIORIDADES_PROGRAMACAO_OPTIONS = ["Auditorias", "DOI", "Fiscalização", "IA", "Legislação", "Notion", "Ofícios", "Pessoal", "Planilhas", "Processos", "Sistemas", "TCE"];
 var PRIORIDADES_TRIBUTO_OPTIONS = ["Amigos", "CadImob", "CadMob", "Casa", "Eletrônicos", "Família", "Financeiro", "Financeiros", "Funcional", "Geral", "IPTU", "IPTU/ITBI", "ITBI", "Notion", "OODC", "Profissional", "Saúde", "TCRS", "Vitor"];
 
+// Padrão inicial dos botões de "Filtros rápidos" (topo da Lista de
+// Prioridades — ver renderPrioritiesQuickFilters no app.js), usado só
+// enquanto NADA ainda foi salvo no Worker (GET /priorities-quickfilters
+// devolvendo quickFilters: null) — depois da primeira vez que o Georges
+// editar/salvar um botão, o que vem do Worker manda, isso aqui vira só
+// referência. Cada grupo é uma lista de botões { label, values: [...] } —
+// "values" tem que ser um subconjunto EXATO dos valores nas listas
+// PRIORIDADES_*_OPTIONS acima (mesmo texto). Em "tempo", cada botão junta
+// uma faixa de 2 valores brutos (não existe um valor bruto "até 5
+// minutos" — é sempre um agrupamento de opções vizinhas).
+var DEFAULT_QUICKFILTERS = {
+  tipo: [
+    { label: "PMF", values: ["PMF"] },
+    { label: "Pessoal", values: ["Pessoal"] },
+  ],
+  prioridade: [
+    { label: "1 - Imediato", values: ["1 - Imediato"] },
+    { label: "2 - Urgente", values: ["2 - Urgente"] },
+    { label: "3 - Alta", values: ["3 - Alta"] },
+    { label: "4 - Média", values: ["4 - Média"] },
+    { label: "5 - Baixa", values: ["5 - Baixa"] },
+    { label: "6 - Sem prioridade", values: ["6 - Sem prioridade"] },
+  ],
+  tempo: [
+    { label: "Até 5 minutos", values: ["Menos do que 5 minutos", "5 minutos"] },
+    { label: "Até 15 minutos", values: ["10 minutos", "15 minutos"] },
+    { label: "Até 45 minutos", values: ["30 minutos", "45 minutos"] },
+    { label: "Até 1 hora e meia", values: ["1 hora", "1 hora e meia"] },
+    { label: "2 horas ou mais", values: ["2 horas", "Mais do que 2 horas"] },
+  ],
+  forma: [
+    { label: "Chrome", values: ["Chrome"] },
+    { label: "WhatsApp", values: ["WhatsApp"] },
+    { label: "Tributos", values: ["Tributos"] },
+    { label: "Presencial", values: ["Presencial"] },
+    { label: "Excel", values: ["Excel"] },
+    { label: "Notion", values: ["Notion"] },
+  ],
+  programacao: [
+    { label: "Processos", values: ["Processos"] },
+    { label: "Ofícios", values: ["Ofícios"] },
+    { label: "Sistemas", values: ["Sistemas"] },
+    { label: "IA", values: ["IA"] },
+    { label: "Notion", values: ["Notion"] },
+  ],
+  tributo: [
+    { label: "IPTU", values: ["IPTU"] },
+    { label: "CadImob", values: ["CadImob"] },
+    { label: "Vitor", values: ["Vitor"] },
+  ],
+};
+
 const APP_CONFIG = {
   appTitle: "Meu hub",
   // Carimbo de "quando esse config.js foi editado por último" (data + hora,
@@ -727,7 +779,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-26 16:00",
+  appVersion: "2026-08-28 22:15",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -1323,6 +1375,26 @@ const APP_CONFIG = {
         forma: { label: "Forma", options: PRIORIDADES_FORMA_OPTIONS, multi: true },
         programacao: { label: "Programação", options: PRIORIDADES_PROGRAMACAO_OPTIONS },
         tributo: { label: "Tributo", options: PRIORIDADES_TRIBUTO_OPTIONS }
+      },
+      // "Filtros rápidos" (pedido do Georges): seção de botões no topo da
+      // página, um bloco por grupo — ver renderPrioritiesQuickFilters no
+      // app.js. Cada "key" abaixo é IGUAL ao nome do campo em priorityFields
+      // acima (tipo/prioridade/tempo/forma/programacao/tributo) — não é
+      // coincidência, é o nome da coluna que aquele grupo de botões filtra.
+      // "defaults" é o ponto de partida (ver DEFAULT_QUICKFILTERS lá em
+      // cima); o que o Georges editar/salvar depois fica no Worker (rota
+      // /priorities-quickfilters) e passa a mandar, isso aqui só é usado
+      // enquanto nada ainda foi salvo.
+      quickFilters: {
+        groups: [
+          { key: "tipo", label: "Tipo" },
+          { key: "prioridade", label: "Prioridade" },
+          { key: "tempo", label: "Tempo" },
+          { key: "forma", label: "Forma" },
+          { key: "programacao", label: "Programação" },
+          { key: "tributo", label: "Tributo" }
+        ],
+        defaults: DEFAULT_QUICKFILTERS
       }
     },
 
