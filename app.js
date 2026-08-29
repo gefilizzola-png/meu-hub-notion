@@ -2567,6 +2567,32 @@
       return out;
     }
 
+    // ordem alfabética SEMPRE dentro de cada divisória (pedido do Georges) —
+    // roda toda vez que "qfData" é (re)atribuído: 1ª carga (qfLoad, tanto no
+    // sucesso quanto no fallback de erro) e depois de salvar (qfSave, com o
+    // que volta do Worker). Não precisa reordenar em NENHUM outro momento
+    // (clicar pra ativar/desativar um botão não muda a lista, só
+    // qfActive) — mudar a ordem só quando a LISTA de botões muda evita
+    // reordenar o grid embaixo do dedo do usuário à toa. É seguro mexer nos
+    // ÍNDICES aqui porque "qfSave" já zera "qfActive[changedKey]" sempre que
+    // a lista daquele grupo muda (índice antigo podia não valer mais de
+    // qualquer forma, ver comentário lá) — os outros grupos nem mudam de
+    // conteúdo, então reordenar de novo dá o MESMO array de antes.
+    // EXCEÇÃO: "tempo" fica de fora — o Georges prefere a ordem
+    // CRONOLÓGICA (5min → 15min → 45min → 1h30 → 2h+) que já vem de
+    // config.js, e ordem alfabética bagunçaria essa sequência (ex: "Até 45
+    // minutos" viria antes de "Até 5 minutos" só por causa do texto).
+    var QF_GROUPS_NOT_ALPHA = ["tempo"];
+    function sortQfData(data) {
+      qfGroups.forEach(function (g) {
+        if (QF_GROUPS_NOT_ALPHA.indexOf(g.key) !== -1) return;
+        if (Array.isArray(data[g.key])) {
+          data[g.key].sort(function (a, b) { return (a.label || "").localeCompare(b.label || "", "pt-BR"); });
+        }
+      });
+      return data;
+    }
+
     // PUT substitui a config INTEIRA no Worker (mesmo padrão de "subitems"/
     // "forma" — nunca faz merge no servidor). Depois de salvar, some com a
     // seleção ATIVA do grupo mexido: os índices dos botões podem ter mudado
@@ -2579,7 +2605,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(qfData)
       }).then(handle401).then(function (r) { return r.json(); }).then(function (data) {
-        qfData = (data && data.quickFilters) || qfCloneDefaults();
+        qfData = sortQfData((data && data.quickFilters) || qfCloneDefaults());
         if (changedKey) qfActive[changedKey] = [];
         qfEditing = null;
         renderQfSection();
@@ -2819,10 +2845,11 @@
         .then(function (data) {
           qfData = (data && data.quickFilters) || qfCloneDefaults();
           qfGroups.forEach(function (g) { if (!Array.isArray(qfData[g.key])) qfData[g.key] = []; });
+          sortQfData(qfData);
           renderQfSection();
         })
         .catch(function () {
-          qfData = qfCloneDefaults();
+          qfData = sortQfData(qfCloneDefaults());
           renderQfSection();
         });
     }

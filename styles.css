@@ -1223,15 +1223,17 @@ html, body {
 .notes-item-star.flagged { color: #f08c00; }
 .notes-item-star.flagged svg { fill: currentColor; stroke: none; }
 /* estrela de destaque por SUBITEM, dentro da Lista de Prioridades (pedido
-   do Georges — mesmo mecanismo de ".notes-item-star" acima, só que menor
-   pra caber na linha estreita da checklist, do tamanho do "x" de apagar
-   subitem ao lado). */
+   do Georges — mesmo mecanismo de ".notes-item-star" acima). Do tamanho do
+   "x" de apagar subitem ao lado (".notes-subitem-del", 18px) — a 1ª versão
+   (16px/11px) ficou pequena demais pra enxergar o contorno da estrela; o
+   stroke também engrossa um pouco (2px em vez de 1.8px) pra não sumir nesse
+   tamanho reduzido. */
 .notes-subitem-star {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
 }
-.notes-subitem-star svg { width: 11px; height: 11px; }
+.notes-subitem-star svg { width: 14px; height: 14px; stroke-width: 2px; }
 /* data de criação de cada anotação — bem pequena, só referência. */
 .notes-item-date { flex-shrink: 0; font-size: 10.5px; color: #adaba5; }
 .notes-item-text { flex: 1; min-width: 0; font-size: 13.5px; color: #2f3a44; word-break: break-word; }
