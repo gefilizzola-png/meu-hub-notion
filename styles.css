@@ -1351,16 +1351,20 @@ html, body {
 .notes-subitem-add-row { display: flex; padding: 2px 8px; }
 .notes-subitem-add-row .notes-subitem-add-input { flex: 1; min-width: 0; }
 /* nota do SUBITEM (pedido do Georges — "notas vinculadas aos subitens"),
-   mesmo espírito visual de ".priorities-note-row/-textarea/-toggle.has-
-   note" (nota do item), só que menor e encaixada dentro da própria
-   checklist — reaproveita ".notes-subitem-del" como base de tamanho/cor do
-   ícone (ver classe dupla no app.js), só troca a cor quando já tem algo
-   escrito. "note-icon-svg" nasce 15x15 (mesmo tamanho do ícone de nota do
-   item — ver regra genérica lá em cima), um pouco grande pro botão de 18px
-   desse contexto; encolhe aqui só nesse escopo. */
-.notes-subitem-note-toggle.has-note { color: #c98a1f; }
-.notes-subitem-note-toggle.has-note:hover { background: #fdf2e0; color: #c98a1f; }
-.notes-subitem-note-toggle .note-icon-svg { width: 13px; height: 13px; }
+   mesmo espírito visual do botão de nota do item acima — 2ª rodada de
+   aumento (Georges: "continua muito pequeno e sem destaque visível"):
+   maior que o "x" de apagar ao lado (".notes-subitem-del", 18px) dessa
+   vez, e com FUNDO âmbar persistente (não só cor do ícone) quando já tem
+   algo escrito, pra ficar bem aparente mesmo sem passar o mouse. */
+.notes-subitem-note-toggle { width: 24px; height: 24px; }
+.notes-subitem-note-toggle .note-icon-svg { width: 16px; height: 16px; }
+.notes-subitem-note-toggle.has-note {
+  background: #fdf2e0;
+  color: #c98a1f;
+  box-shadow: inset 0 0 0 1px #f0c26a;
+  border-radius: 5px;
+}
+.notes-subitem-note-toggle.has-note:hover { background: #fbe7c8; }
 .notes-subitem-note-row { padding: 0 8px 4px; }
 .notes-subitem-note-row.collapsed { display: none; }
 .notes-subitem-note-textarea {
@@ -1712,11 +1716,20 @@ html, body {
   box-sizing: border-box;
 }
 .priorities-note-textarea:focus { outline: none; border-color: #4a90d9; background: #fff; }
-/* ícone do botão "criar/editar nota" muda de cor quando já existe algo
-   escrito, pra dar pra notar de relance quais itens têm nota sem abrir
-   todos (mesmo espírito de ".priorities-th-sortable.active"). */
-.priorities-note-toggle.has-note { color: #c98a1f; }
-.priorities-note-toggle.has-note:hover { background: #fdf2e0; color: #c98a1f; }
+/* botão de nota do ITEM — maior que o padrão de 22px (pedido do Georges:
+   "continua muito pequeno e sem destaque visível") e, quando já tem
+   conteúdo escrito, ganha um FUNDO âmbar persistente + borda (não só o
+   ícone preenchido) — fica bem aparente à primeira vista, sem precisar
+   passar o mouse, mesmo entre os outros botões da linha (nota/apagar). */
+.priorities-note-toggle { width: 28px; height: 28px; }
+.priorities-note-toggle .note-icon-svg { width: 19px; height: 19px; }
+.priorities-note-toggle.has-note {
+  background: #fdf2e0;
+  color: #c98a1f;
+  box-shadow: inset 0 0 0 1px #f0c26a;
+  border-radius: 6px;
+}
+.priorities-note-toggle.has-note:hover { background: #fbe7c8; }
 
 /* checkbox-dropdown de seleção múltipla (só "forma" hoje) — reaproveita
    ".filter-dropdown/.filter-trigger/.filter-menu/.filter-option" (já
@@ -1777,7 +1790,9 @@ html, body {
   font-size: 13.5px;
   font-weight: 600;
   color: #55554f;
+  cursor: pointer;
 }
+.priorities-subsection-title:hover { color: #2f3a44; }
 .priorities-subsection.collapsed .priorities-subsection-body { display: none; }
 
 /* toggle "Criação detalhada / Criação rápida" (pedido do Georges) — 2
@@ -1906,10 +1921,12 @@ html, body {
 .priorities-quickfilters-collapse-btn { width: 22px; height: 22px; }
 .priorities-quickfilters-title {
   margin: 0;
+  cursor: pointer;
   font-size: 13.5px;
   font-weight: 600;
   color: #55554f;
 }
+.priorities-quickfilters-title:hover { color: #2f3a44; }
 /* "N ativos" — só aparece com a seção RECOLHIDA e algum botão apertado,
    pra dar pra ver de relance que tem filtro rápido valendo mesmo sem abrir
    a seção de novo. */

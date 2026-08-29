@@ -2566,7 +2566,10 @@
     // Só olha o tamanho UMA vez, na hora de montar a página (não fica
     // ouvindo resize — vira a mesma ideia de "abre expandido/recolhido"
     // já usada pelas divisórias de Início, não precisa ser reativo).
-    var qfCollapsed = !!(window.matchMedia && window.matchMedia("(max-width: 1023px)").matches);
+    // sempre recolhida ao abrir a página (pedido do Georges — antes só no
+    // celular/tablet via matchMedia; agora é assim em qualquer tela,
+    // mesmo padrão já aplicado a "Criação" e "Pesquisa e Filtros Gerais").
+    var qfCollapsed = true;
 
     var qfSection = document.createElement("div");
     qfSection.className = "priorities-quickfilters";
@@ -2677,9 +2680,15 @@
       });
       header.appendChild(collapseToggle);
 
+      // clicar no NOME "Filtros rápidos" também expande/recolhe (pedido do
+      // Georges, mesma ideia de buildCollapsibleSection acima).
       var heading = document.createElement("h4");
       heading.className = "priorities-quickfilters-title";
       heading.textContent = "Filtros rápidos";
+      heading.addEventListener("click", function () {
+        qfCollapsed = !qfCollapsed;
+        renderQfSection();
+      });
       header.appendChild(heading);
 
       var activeCount = qfActiveCount();
@@ -3153,9 +3162,13 @@
       var icon = document.createElement("i");
       header.appendChild(toggleBtn);
       toggleBtn.appendChild(icon);
+      // clicar no PRÓPRIO NOME da divisória também expande/recolhe (pedido
+      // do Georges — antes só o botãozinho de seta funcionava). "cursor:
+      // pointer" (ver CSS) avisa que dá pra clicar ali também.
       var h = document.createElement("h4");
       h.className = "priorities-subsection-title";
       h.textContent = titleText;
+      h.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); });
       header.appendChild(h);
       var body = document.createElement("div");
       body.className = "priorities-subsection-body";
@@ -3483,22 +3496,21 @@
     var filterRow = document.createElement("div");
     filterRow.className = "priorities-form-grid priorities-filter-row";
     var filterSelects = {};
+    // "Filtros Gerais" (pedido do Georges: "permitir usar multi_select
+    // para filtrar os itens") — TODO campo de opção usa o checkbox-
+    // dropdown múltiplo aqui, mesmo os que são de valor ÚNICO no dado em
+    // si (tipo/prioridade/tempo/programacao — na criação e na célula da
+    // tabela continuam de valor único, ver isMultiField nesses outros
+    // lugares; só o FILTRO passa a aceitar marcar vários de uma vez, ex:
+    // "Prioridade: 1-Imediato OU 2-Urgente"). ".getValues()"/".onChange()"
+    // já eram a interface usada por Forma/Tributo aqui — agora vale pra
+    // todo mundo, então applyFilters (mais abaixo) não precisa mais
+    // distinguir isMultiField nesse ponto específico.
     fieldKeys.forEach(function (key) {
       var label = (fieldDefs[key] && fieldDefs[key].label) || key;
-      if (isMultiField(key)) {
-        var control = buildMultiCheckDropdown(key, label + ": Todos", "notes-filter-select");
-        filterSelects[key] = control;
-        filterRow.appendChild(control);
-        return;
-      }
-      var sel = makeSelect("notes-filter-select", key, true, label + ": Todos");
-      // prefixa cada opção com o nome do filtro, igual aos filtros de
-      // Anotações Rápidas (ex: "Tipo: PMF"), pra não ficar sem contexto.
-      Array.prototype.forEach.call(sel.options, function (o) {
-        if (o.value) o.textContent = label + ": " + o.value;
-      });
-      filterSelects[key] = sel;
-      filterRow.appendChild(sel);
+      var control = buildMultiCheckDropdown(key, label + ": Todos", "notes-filter-select");
+      filterSelects[key] = control;
+      filterRow.appendChild(control);
     });
     var statusSelect = document.createElement("select");
     statusSelect.className = "notes-filter-select";
@@ -3750,7 +3762,12 @@
     var allColumnKeys = columns.map(function (c) { return c.key; });
     var defaultVisibleColumnKeys;
     if (window.matchMedia && window.matchMedia("(min-width: 1024px)").matches) {
-      defaultVisibleColumnKeys = allColumnKeys.slice(); // tela grande: tudo visível já de cara
+      // tela grande: quase tudo visível já de cara — só Tempo e Forma ficam
+      // escondidas por padrão mesmo aqui (pedido do Georges: "mesmo no
+      // computador, pode exibir por padrão as colunas TEMPO e FORMA
+      // ocultas com botão para exibir"), continuam a 1 clique de distância
+      // no botão de colunas (ver updateColumnVisibility mais abaixo).
+      defaultVisibleColumnKeys = allColumnKeys.filter(function (k) { return k !== "tempo" && k !== "forma"; });
     } else if (window.matchMedia && window.matchMedia("(min-width: 640px)").matches) {
       // celular "aberto" (na horizontal/maior), tablet, ou tela menor de
       // computador (pedido do Georges).
@@ -3767,10 +3784,11 @@
     // estiver ativo (inclusive "Grupo", que apesar do nome mira a coluna
     // Programação — ver "field" em page.quickFilters no config.js).
     function hasActiveFilterForColumn(key) {
-      if (fieldKeys.indexOf(key) !== -1 && filterSelects[key]) {
-        if (isMultiField(key)) { if (filterSelects[key].getValues().length) return true; }
-        else if (filterSelects[key].value) return true;
-      }
+      // "Filtros Gerais" (pedido do Georges) — TODO campo de opção agora
+      // filtra por seleção múltipla ali (ver filterSelects mais abaixo),
+      // mesmo os que na tabela/criação continuam de valor único; por isso
+      // é sempre ".getValues()" aqui, sem distinguir isMultiField.
+      if (fieldKeys.indexOf(key) !== -1 && filterSelects[key] && filterSelects[key].getValues().length) return true;
       for (var gi = 0; gi < qfGroups.length; gi++) {
         var group = qfGroups[gi];
         var groupField = group.field || group.key;
@@ -3974,16 +3992,17 @@
         if (status === "done" && !it.done) return false;
         for (var i = 0; i < fieldKeys.length; i++) {
           var key = fieldKeys[i];
-          if (isMultiField(key)) {
-            var wantList = filterSelects[key].getValues();
-            if (wantList.length) {
-              var have = it[key] || [];
-              var anyMatch = wantList.some(function (w) { return have.indexOf(w) !== -1; });
-              if (!anyMatch) return false;
-            }
-          } else {
-            var want = filterSelects[key].value;
-            if (want && it[key] !== want) return false;
+          // "Filtros Gerais" (pedido do Georges) — TODOS os campos filtram
+          // por seleção múltipla agora (wantList = 1 ou mais valores
+          // marcados), não só Forma/Tributo (que já eram multi no DADO em
+          // si). Pra campo de valor único (tipo/prioridade/tempo/
+          // programacao) "have" vira um array de 1 posição só, pra caber
+          // no mesmo "some/indexOf" de baixo sem precisar de 2 caminhos.
+          var wantList = filterSelects[key].getValues();
+          if (wantList.length) {
+            var have = isMultiField(key) ? (it[key] || []) : (it[key] ? [it[key]] : []);
+            var anyMatch = wantList.some(function (w) { return have.indexOf(w) !== -1; });
+            if (!anyMatch) return false;
           }
         }
         // "Filtros rápidos" (ver qfActiveValues acima) — INDEPENDENTE do
@@ -4488,10 +4507,7 @@
     });
     searchInput.addEventListener("input", applyFilters);
     statusSelect.addEventListener("change", applyFilters);
-    fieldKeys.forEach(function (key) {
-      if (isMultiField(key)) filterSelects[key].onChange(applyFilters);
-      else filterSelects[key].addEventListener("change", applyFilters);
-    });
+    fieldKeys.forEach(function (key) { filterSelects[key].onChange(applyFilters); });
     clearBtn.addEventListener("click", function () {
       searchInput.value = "";
       statusSelect.value = "all";
