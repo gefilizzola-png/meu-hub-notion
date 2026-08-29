@@ -2470,8 +2470,12 @@
   function renderPrioritiesTable(container, page) {
     var fieldDefs = page.priorityFields || {};
     var fieldKeys = ["tipo", "prioridade", "tempo", "forma", "programacao", "tributo"];
-    var textKeys = ["origem", "assunto", "providencia"];
-    var textLabels = { origem: "Origem", assunto: "Assunto", providencia: "Providência" };
+    // "providencia" foi REMOVIDA como coluna (pedido do Georges — o texto
+    // que estava nela agora entra como subitem da checklist; ver migração
+    // migrateProvidenciaToSubitem no worker.js, roda sozinha no primeiro
+    // GET/PUT de cada item depois do deploy).
+    var textKeys = ["origem", "assunto"];
+    var textLabels = { origem: "Origem", assunto: "Assunto" };
 
     // as opções de cada uma das 6 colunas acima começam com o que vem do
     // config.js (fieldDefs[key].options — os valores "de fábrica"), mas o
@@ -3110,8 +3114,7 @@
     section.appendChild(creationSection.section);
 
     // ---- barra de filtros — um <select> por coluna de opção (+ "Todos"),
-    // status (Todas/Pendentes/Concluídas) e busca textual (Origem/Assunto/
-    // Providência).
+    // status (Todas/Pendentes/Concluídas) e busca textual (Origem/Assunto).
     var filterRow = document.createElement("div");
     filterRow.className = "priorities-form-grid priorities-filter-row";
     var filterSelects = {};
@@ -3153,7 +3156,7 @@
     var searchInput = document.createElement("input");
     searchInput.type = "text";
     searchInput.className = "notes-filter-input priorities-search-input";
-    searchInput.placeholder = "Pesquisar (Origem/Assunto/Providência)...";
+    searchInput.placeholder = "Pesquisar (Origem/Assunto)...";
     filterRow.appendChild(searchInput);
     searchSection.body.appendChild(filterRow);
     section.appendChild(searchSection.section);
@@ -3180,8 +3183,7 @@
       { key: "programacao", label: (fieldDefs.programacao && fieldDefs.programacao.label) || "Programação" },
       { key: "tributo", label: (fieldDefs.tributo && fieldDefs.tributo.label) || "Tributo" },
       { key: "origem", label: "Origem" },
-      { key: "assunto", label: "Assunto" },
-      { key: "providencia", label: "Providência" }
+      { key: "assunto", label: "Assunto" }
     ];
     // colunas "de opção" ordenam pela posição na lista fixa (ex: "1 -
     // Imediato" antes de "2 - Urgente"), não por ordem alfabética — pra
@@ -3387,10 +3389,10 @@
     } else if (window.matchMedia && window.matchMedia("(min-width: 640px)").matches) {
       // celular "aberto" (na horizontal/maior), tablet, ou tela menor de
       // computador (pedido do Georges).
-      defaultVisibleColumnKeys = ["tipo", "prioridade", "tributo", "origem", "assunto", "providencia"];
+      defaultVisibleColumnKeys = ["tipo", "prioridade", "tributo", "origem", "assunto"];
     } else {
       // celular fechado/tela pequena (pedido do Georges).
-      defaultVisibleColumnKeys = ["prioridade", "tributo", "origem", "assunto", "providencia"];
+      defaultVisibleColumnKeys = ["prioridade", "tributo", "origem", "assunto"];
     }
     var columnsExpanded = false;
 
@@ -3459,6 +3461,14 @@
     var thead = document.createElement("thead");
     var headRow = document.createElement("tr");
 
+    // coluna vazia mais à ESQUERDA de tudo — só existe pra abrigar o botão
+    // de expandir/recolher a checklist de cada linha (pedido do Georges:
+    // "à esquerda inclusive do checkbox"). Mesmo tratamento visual de
+    // th-check/th-actions (largura mínima, sem título).
+    var thToggle = document.createElement("th");
+    thToggle.className = "priorities-th priorities-th-toggle";
+    headRow.appendChild(thToggle);
+
     var thCheck = document.createElement("th");
     thCheck.className = "priorities-th priorities-th-check";
     headRow.appendChild(thCheck);
@@ -3474,9 +3484,9 @@
       var thArrow = document.createElement("span");
       thArrow.className = "priorities-th-arrow";
       th.appendChild(thLabel);
-      // engrenagem de "editar opções" — só nas 7 colunas de opção (as 3 de
-      // texto livre, Origem/Assunto/Providência, não têm lista fixa pra
-      // editar). "stopPropagation" pra não disparar o clique de ordenar.
+      // engrenagem de "editar opções" — só nas 6 colunas de opção (as 2 de
+      // texto livre, Origem/Assunto, não têm lista fixa pra editar).
+      // "stopPropagation" pra não disparar o clique de ordenar.
       if (fieldKeys.indexOf(col.key) !== -1) {
         var editIcon = document.createElement("i");
         editIcon.className = "ti ti-settings priorities-th-edit-options";
@@ -3623,7 +3633,7 @@
           }
         }
         if (q) {
-          var hay = ((it.origem || "") + " " + (it.assunto || "") + " " + (it.providencia || "")).toLowerCase();
+          var hay = ((it.origem || "") + " " + (it.assunto || "")).toLowerCase();
           if (hay.indexOf(q) === -1) return false;
         }
         return true;
@@ -3637,7 +3647,7 @@
         var emptyRow = document.createElement("tr");
         var emptyCell = document.createElement("td");
         emptyCell.className = "empty";
-        emptyCell.colSpan = columns.length + 2;
+        emptyCell.colSpan = columns.length + 3;
         emptyCell.textContent = allItems.length ? "Nenhum item bate com o filtro." : "Nenhum item ainda.";
         emptyRow.appendChild(emptyCell);
         tbody.appendChild(emptyRow);
@@ -3646,6 +3656,21 @@
       items.forEach(function (it) {
         var row = document.createElement("tr");
         row.className = "priorities-row" + (it.done ? " done" : "");
+
+        // botão de expandir/recolher a checklist — coluna própria, a mais à
+        // ESQUERDA de tudo (pedido do Georges: "à esquerda inclusive do
+        // checkbox"). Só o BOTÃO nasce aqui (perto do checkbox, mesma
+        // "linha de raciocínio" de antes); a lógica de show/hide
+        // (applySubitemsCollapsed) só pode ser montada mais abaixo, depois
+        // que "subitemsRow"/"subitemsWrap" existirem — o listener de clique
+        // é ligado lá, não aqui.
+        var toggleCell = document.createElement("td");
+        toggleCell.className = "priorities-toggle-cell";
+        var toggleSubitemsBtn = document.createElement("button");
+        toggleSubitemsBtn.type = "button";
+        toggleSubitemsBtn.className = "notes-item-addtag priorities-subitems-toggle";
+        toggleCell.appendChild(toggleSubitemsBtn);
+        row.appendChild(toggleCell);
 
         var checkCell = document.createElement("td");
         var check = document.createElement("input");
@@ -3719,18 +3744,6 @@
         addSubitemBtn.innerHTML = '<i class="ti ti-list-check"></i>';
         addSubitemBtn.title = "Adicionar item à checklist";
 
-        // botão de expandir/recolher a checklist (pedido do Georges) — só
-        // aparece quando o item JÁ TEM subitens (sem subitens não tem o que
-        // recolher; "addSubitemBtn" acima continua servindo pra criar o
-        // primeiro). Começa sempre recolhido — ver "subitemsExpanded" abaixo.
-        var toggleSubitemsBtn = document.createElement("button");
-        toggleSubitemsBtn.type = "button";
-        toggleSubitemsBtn.className = "notes-item-addtag priorities-subitems-toggle";
-        toggleSubitemsBtn.addEventListener("click", function () {
-          subitemsExpanded = !subitemsExpanded;
-          applySubitemsCollapsed();
-        });
-
         // botão de criar/editar nota do item (pedido do Georges — "além do
         // botão de criar tasks, queria poder criar nota também, para
         // alguns casos"). Diferente da checklist (que é uma LISTA de
@@ -3758,7 +3771,6 @@
         delBtn.addEventListener("click", function () { removeItem(it.id); });
 
         actionsCell.appendChild(addSubitemBtn);
-        actionsCell.appendChild(toggleSubitemsBtn);
         actionsCell.appendChild(addNoteBtn);
         actionsCell.appendChild(delBtn);
         row.appendChild(actionsCell);
@@ -3769,7 +3781,7 @@
         var subitemsRow = document.createElement("tr");
         subitemsRow.className = "priorities-subitems-row";
         var subitemsCell = document.createElement("td");
-        subitemsCell.colSpan = columns.length + 2;
+        subitemsCell.colSpan = columns.length + 3;
         var subitemsWrap = document.createElement("div");
         subitemsWrap.className = "notes-subitems";
         subitemsCell.appendChild(subitemsWrap);
@@ -3782,7 +3794,7 @@
         var noteRow = document.createElement("tr");
         noteRow.className = "priorities-note-row collapsed";
         var noteCell = document.createElement("td");
-        noteCell.colSpan = columns.length + 2;
+        noteCell.colSpan = columns.length + 3;
         var noteTextarea = document.createElement("textarea");
         noteTextarea.className = "priorities-note-textarea";
         noteTextarea.placeholder = "Nota do item...";
@@ -3804,6 +3816,14 @@
         // recolhido a cada renderização (recarregar a lista, filtrar etc.),
         // não é um estado guardado no item.
         var subitemsExpanded = false;
+
+        // listener do botão — só dá pra ligar aqui (não lá na criação do
+        // botão, mais acima) porque "applySubitemsCollapsed" só existe a
+        // partir desta linha.
+        toggleSubitemsBtn.addEventListener("click", function () {
+          subitemsExpanded = !subitemsExpanded;
+          applySubitemsCollapsed();
+        });
 
         function applySubitemsCollapsed() {
           var count = (it.subitems || []).length;
@@ -3926,7 +3946,7 @@
     }
 
     function loadItems() {
-      tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 2) + '">Carregando…</td></tr>';
+      tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 3) + '">Carregando…</td></tr>';
       authFetch(cfg.templateWorkerUrl + "/priorities")
         .then(handle401)
         .then(function (r) { return r.json(); })
@@ -3935,7 +3955,7 @@
           applyFilters();
           hideErr();
         })
-        .catch(function () { tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 2) + '">Não foi possível carregar a lista.</td></tr>'; });
+        .catch(function () { tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 3) + '">Não foi possível carregar a lista.</td></tr>'; });
     }
 
     function updateItem(id, patch) {

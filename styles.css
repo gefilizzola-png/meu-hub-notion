@@ -1539,8 +1539,7 @@ html, body {
 .priorities-table.hide-programacao .priorities-col-programacao,
 .priorities-table.hide-tributo .priorities-col-tributo,
 .priorities-table.hide-origem .priorities-col-origem,
-.priorities-table.hide-assunto .priorities-col-assunto,
-.priorities-table.hide-providencia .priorities-col-providencia {
+.priorities-table.hide-assunto .priorities-col-assunto {
   display: none;
 }
 .priorities-th {
@@ -1556,6 +1555,7 @@ html, body {
   white-space: nowrap;
   user-select: none;
 }
+.priorities-th-toggle,
 .priorities-th-check,
 .priorities-th-actions { width: 1%; }
 /* colunas clicáveis pra classificar — cursor de ponteiro + destaque leve
@@ -1565,7 +1565,7 @@ html, body {
 .priorities-th-sortable:hover { background: #eeece6; }
 .priorities-th-sortable.active { color: #4a90d9; }
 .priorities-th-arrow { margin-left: 4px; font-size: 10px; }
-/* engrenagem de "editar opções" (pedido do Georges) — só aparece nas 7
+/* engrenagem de "editar opções" (pedido do Georges) — só aparece nas 6
    colunas de opção. Fica meio apagada até passar o mouse, pra não competir
    visualmente com o nome da coluna/seta de ordenar. */
 .priorities-th-edit-options {
@@ -1604,6 +1604,11 @@ html, body {
   gap: 2px;
   white-space: nowrap;
 }
+/* célula mais à ESQUERDA de toda linha (pedido do Georges — "à esquerda
+   inclusive do checkbox"): abriga só o botão de expandir/recolher a
+   checklist daquela linha. Padding menor que o padrão pra não empurrar o
+   resto da tabela pra direita à toa. */
+.priorities-toggle-cell { padding-right: 2px !important; white-space: nowrap; }
 /* linha da checklist — sem borda própria (fica "colada" na linha do item
    acima dela); só existe visualmente quando tem sub-itens ou o campo de
    adicionar está aberto (".notes-subitems" vazio não ocupa espaço). */
