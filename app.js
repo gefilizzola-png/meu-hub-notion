@@ -3185,24 +3185,25 @@
     var creationSection = buildCollapsibleSection("Criação");
     var searchSection = buildCollapsibleSection("Pesquisa e Filtros Gerais");
 
-    // ---- alterna entre a criação DETALHADA (formRow, de sempre) e a
-    // criação RÁPIDA por etapas (quickWizardWrap, pedido do Georges — ver
-    // mais abaixo). Só um dos dois fica visível por vez; nasce em modo
-    // "detailed" (comportamento de sempre, ninguém precisa mudar nada pra
-    // continuar usando do jeito que já usava).
-    var creationMode = "detailed";
+    // ---- alterna entre a criação RÁPIDA por etapas (quickWizardWrap) e a
+    // DETALHADA (formRow, formulário de sempre com os 8 campos soltos). Só
+    // um dos dois fica visível por vez. Pedido do Georges: "Deixar Criação
+    // Rápida como padrão, com botão do lado esquerdo, e botão Criação
+    // Detalhada do lado direito" — nasce em modo "quick" e o botão
+    // correspondente vem primeiro no DOM (esquerda).
+    var creationMode = "quick";
     var modeToggleRow = document.createElement("div");
     modeToggleRow.className = "priorities-creation-mode-toggle";
-    var modeDetailedBtn = document.createElement("button");
-    modeDetailedBtn.type = "button";
-    modeDetailedBtn.className = "priorities-creation-mode-btn";
-    modeDetailedBtn.textContent = "Criação detalhada";
     var modeQuickBtn = document.createElement("button");
     modeQuickBtn.type = "button";
     modeQuickBtn.className = "priorities-creation-mode-btn";
     modeQuickBtn.textContent = "Criação rápida";
-    modeToggleRow.appendChild(modeDetailedBtn);
+    var modeDetailedBtn = document.createElement("button");
+    modeDetailedBtn.type = "button";
+    modeDetailedBtn.className = "priorities-creation-mode-btn";
+    modeDetailedBtn.textContent = "Criação detalhada";
     modeToggleRow.appendChild(modeQuickBtn);
+    modeToggleRow.appendChild(modeDetailedBtn);
     creationSection.body.appendChild(modeToggleRow);
     function applyCreationMode() {
       modeDetailedBtn.classList.toggle("active", creationMode === "detailed");
@@ -3268,10 +3269,14 @@
 
     var wizStep = 0;
     var wizData = null;
-    var WIZ_STEPS = ["tipo", "tributo", "programacao", "forma", "prioridade", "tempo", "final"];
+    // "subitem" e "nota" (pedido do Georges) vêm DEPOIS de "final" — o item
+    // já foi criado (POST) nesse ponto, então essas 2 etapas fazem um PUT
+    // no item recém-criado (wizData.createdId) em vez de fazer parte do
+    // body do POST. Cada uma tem sua própria opção de Pular.
+    var WIZ_STEPS = ["tipo", "tributo", "programacao", "forma", "prioridade", "tempo", "final", "subitem", "nota"];
 
     function resetWizard() {
-      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", origem: "", assunto: "" };
+      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", origem: "", assunto: "", createdId: null };
       wizStep = 0;
       renderWizardStep();
     }
@@ -3352,6 +3357,8 @@
 
       var stepKey = WIZ_STEPS[wizStep];
       if (stepKey === "final") { renderWizardFinalStep(); return; }
+      if (stepKey === "subitem") { renderWizardSubitemStep(); return; }
+      if (stepKey === "nota") { renderWizardNoteStep(); return; }
 
       var def = wizStepDef(stepKey);
       var title = document.createElement("div");
@@ -3461,6 +3468,107 @@
       assuntoInp.focus();
     }
 
+    // etapa opcional pós-criação (pedido do Georges: "dar possibilidade de
+    // criar subitem ou PULAR"). O item já existe (wizData.createdId) — um
+    // PUT com subitems:[{text}] cria o subitem (worker.js gera o id). Sem
+    // botão Voltar aqui de propósito: voltar reabriria Origem/Assunto e um
+    // segundo clique em "Criar" duplicaria o item.
+    function renderWizardSubitemStep() {
+      var title = document.createElement("div");
+      title.className = "priorities-wizard-step-title";
+      title.textContent = "Criar subitem (opcional)";
+      quickWizardWrap.appendChild(title);
+
+      var fieldsWrap = document.createElement("div");
+      fieldsWrap.className = "priorities-wizard-final-fields";
+      var subInp = document.createElement("input");
+      subInp.type = "text";
+      subInp.className = "priorities-form-text";
+      subInp.placeholder = "Texto do subitem";
+      subInp.addEventListener("keydown", function (e) { if (e.key === "Enter") addBtn.click(); });
+      fieldsWrap.appendChild(subInp);
+      quickWizardWrap.appendChild(fieldsWrap);
+
+      var controls = document.createElement("div");
+      controls.className = "priorities-wizard-controls";
+
+      var skipBtn = document.createElement("button");
+      skipBtn.type = "button";
+      skipBtn.className = "priorities-wizard-skip-btn";
+      skipBtn.textContent = "Pular";
+      skipBtn.addEventListener("click", function () { wizStep++; renderWizardStep(); });
+      controls.appendChild(skipBtn);
+
+      var addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "notes-add-btn priorities-wizard-next-btn";
+      addBtn.innerHTML = '<i class="ti ti-plus"></i> Criar subitem';
+      addBtn.addEventListener("click", function () {
+        var text = subInp.value.trim();
+        if (!text) { wizStep++; renderWizardStep(); return; }
+        addBtn.disabled = true;
+        updateItem(wizData.createdId, { subitems: [{ text: text }] }).then(function () {
+          wizStep++;
+          renderWizardStep();
+        }).finally(function () { addBtn.disabled = false; });
+      });
+      controls.appendChild(addBtn);
+      quickWizardWrap.appendChild(controls);
+
+      subInp.focus();
+    }
+
+    // etapa opcional pós-criação (pedido do Georges: "dar opção de criar
+    // nota ou PULAR") — mesmo padrão da etapa de subitem acima, mas com
+    // PUT {nota}. Reaproveita ".priorities-note-textarea" (mesma classe da
+    // nota do item já existente na tabela) pra manter o visual igual.
+    function renderWizardNoteStep() {
+      var title = document.createElement("div");
+      title.className = "priorities-wizard-step-title";
+      title.textContent = "Criar nota (opcional)";
+      quickWizardWrap.appendChild(title);
+
+      var fieldsWrap = document.createElement("div");
+      fieldsWrap.className = "priorities-wizard-final-fields";
+      var notaInp = document.createElement("textarea");
+      notaInp.className = "priorities-note-textarea";
+      notaInp.placeholder = "Nota do item...";
+      fieldsWrap.appendChild(notaInp);
+      quickWizardWrap.appendChild(fieldsWrap);
+
+      var controls = document.createElement("div");
+      controls.className = "priorities-wizard-controls";
+
+      var skipBtn = document.createElement("button");
+      skipBtn.type = "button";
+      skipBtn.className = "priorities-wizard-skip-btn";
+      skipBtn.textContent = "Pular";
+      // "nota" é a ÚLTIMA etapa — não tem próxima pra avançar, então
+      // termina o assistente aqui (volta pro passo 1, pronto pro próximo
+      // item) em vez de wizStep++.
+      skipBtn.addEventListener("click", function () { resetWizard(); loadItems(); });
+      controls.appendChild(skipBtn);
+
+      var saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "notes-add-btn priorities-wizard-next-btn";
+      saveBtn.innerHTML = '<i class="ti ti-plus"></i> Salvar nota';
+      saveBtn.addEventListener("click", function () {
+        var v = notaInp.value.trim();
+        if (!v) { resetWizard(); loadItems(); return; }
+        saveBtn.disabled = true;
+        // updateItem() já recarrega a tabela sozinho (ver definição acima)
+        // — só falta fechar o assistente aqui.
+        updateItem(wizData.createdId, { nota: v }).then(function () {
+          resetWizard();
+        }).finally(function () { saveBtn.disabled = false; });
+      });
+      controls.appendChild(saveBtn);
+      quickWizardWrap.appendChild(controls);
+
+      notaInp.focus();
+    }
+
     function submitQuickCreate(btn, assuntoInp) {
       var assunto = wizData.assunto.trim();
       if (!assunto) { assuntoInp.focus(); return; }
@@ -3479,9 +3587,14 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
-      }).then(handle401).then(function () {
-        resetWizard();
+      }).then(handle401).then(function (r) { return r.json(); }).then(function (data) {
+        // item criado — em vez de fechar o assistente aqui, avança pras
+        // etapas de subitem/nota opcionais (pedido do Georges), que fazem
+        // um PUT nesse mesmo item (wizData.createdId).
+        wizData.createdId = data.priority && data.priority.id;
         loadItems();
+        wizStep++;
+        renderWizardStep();
       }).catch(showErr).finally(function () { btn.disabled = false; });
     }
 
@@ -4418,8 +4531,12 @@
         .catch(function () { tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 3) + '">Não foi possível carregar a lista.</td></tr>'; });
     }
 
+    // devolve a Promise (não só dispara) porque o assistente de criação
+    // rápida (etapas "subitem"/"nota" — ver mais abaixo) precisa saber
+    // quando o PUT terminou pra só então avançar de etapa. Chamadores que
+    // não usam o retorno (maioria) continuam funcionando igual.
     function updateItem(id, patch) {
-      authFetch(cfg.templateWorkerUrl + "/priorities?id=" + encodeURIComponent(id), {
+      return authFetch(cfg.templateWorkerUrl + "/priorities?id=" + encodeURIComponent(id), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch)

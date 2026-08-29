@@ -1852,12 +1852,13 @@ html, body {
 }
 .priorities-wizard-back-btn:hover,
 .priorities-wizard-skip-btn:hover { border-color: #b9b9b3; background: #f7f7f5; color: #55554f; }
-.priorities-wizard-next-btn { margin-left: auto; }
+/* Continuar/Criar fica logo ao lado de Voltar/Pular (pedido do Georges —
+   antes ".priorities-wizard-next-btn" tinha "margin-left: auto" e ia parar
+   lá no canto direito da tela, longe dos outros controles). */
 .priorities-wizard-final-fields { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .priorities-wizard-final-fields .priorities-form-text { flex: 1 1 160px; }
 @media (max-width: 1023px) {
   .priorities-wizard-controls { flex-wrap: wrap; }
-  .priorities-wizard-next-btn { margin-left: 0; }
 }
 
 /* "leiaute mais bonito" pros filtros de "Pesquisa e Filtros Gerais" (pedido
