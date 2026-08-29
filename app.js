@@ -3342,6 +3342,83 @@
       return panel;
     }
 
+    // ---- Recolher/expandir colunas (pedido do Georges) — por padrão só
+    // mostra ALGUMAS colunas (menos numa tela pequena, mais numa tela
+    // grande — só olha o tamanho UMA vez, na hora de montar a página,
+    // mesma ideia das outras divisórias). Um botão mostra TODAS de uma vez
+    // (e volta a recolher pro padrão de novo, clicando outra vez). Além
+    // disso, aplicar um filtro (rápido OU geral) numa coluna que estava
+    // escondida REVELA ela sozinha, mesmo sem apertar o botão — faz
+    // sentido ver a coluna que você acabou de filtrar.
+    var allColumnKeys = columns.map(function (c) { return c.key; });
+    var defaultVisibleColumnKeys;
+    if (window.matchMedia && window.matchMedia("(min-width: 1024px)").matches) {
+      defaultVisibleColumnKeys = allColumnKeys.slice(); // tela grande: tudo visível já de cara
+    } else if (window.matchMedia && window.matchMedia("(min-width: 640px)").matches) {
+      defaultVisibleColumnKeys = ["tipo", "prioridade", "tempo", "assunto", "providencia"];
+    } else {
+      defaultVisibleColumnKeys = ["prioridade", "assunto"]; // celular pequeno: só o essencial
+    }
+    var columnsExpanded = false;
+
+    // uma coluna conta como "tem filtro aplicado" se o <select>/checkbox
+    // dela (barra de "Pesquisa e Filtros Gerais") estiver com algo
+    // marcado, OU se algum botão de "Filtros rápidos" que aponta pra ela
+    // estiver ativo (inclusive "Grupo", que apesar do nome mira a coluna
+    // Programação — ver "field" em page.quickFilters no config.js).
+    function hasActiveFilterForColumn(key) {
+      if (fieldKeys.indexOf(key) !== -1 && filterSelects[key]) {
+        if (isMultiField(key)) { if (filterSelects[key].getValues().length) return true; }
+        else if (filterSelects[key].value) return true;
+      }
+      for (var gi = 0; gi < qfGroups.length; gi++) {
+        var group = qfGroups[gi];
+        var groupField = group.field || group.key;
+        if (groupField === key && (qfActive[group.key] || []).length) return true;
+      }
+      return false;
+    }
+
+    function getEffectiveVisibleColumns() {
+      if (columnsExpanded) return allColumnKeys.slice();
+      var visible = defaultVisibleColumnKeys.slice();
+      allColumnKeys.forEach(function (key) {
+        if (visible.indexOf(key) === -1 && hasActiveFilterForColumn(key)) visible.push(key);
+      });
+      return visible;
+    }
+
+    // some/aparece via CSS (".priorities-table.hide-<key> .priorities-col-
+    // <key>") — mais barato que reconstruir a tabela, e não bagunça o
+    // scroll horizontal que já existe. Chamada de novo toda vez que um
+    // filtro muda (ver applyFilters) e ao clicar no botão de expandir.
+    function updateColumnVisibility() {
+      var visible = getEffectiveVisibleColumns();
+      allColumnKeys.forEach(function (key) {
+        table.classList.toggle("hide-" + key, visible.indexOf(key) === -1);
+      });
+      var hiddenCount = allColumnKeys.length - visible.length;
+      columnsToggleBtn.innerHTML = columnsExpanded
+        ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
+        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas' + (hiddenCount ? " (+" + hiddenCount + ")" : "");
+    }
+
+    var columnsToolbar = document.createElement("div");
+    columnsToolbar.className = "priorities-columns-toolbar";
+    var columnsToggleBtn = document.createElement("button");
+    columnsToggleBtn.type = "button";
+    columnsToggleBtn.className = "priorities-clear-btn priorities-columns-toggle-btn";
+    columnsToggleBtn.addEventListener("click", function () {
+      columnsExpanded = !columnsExpanded;
+      updateColumnVisibility();
+    });
+    columnsToolbar.appendChild(columnsToggleBtn);
+    // não faz sentido mostrar o botão se o padrão da tela já é "tudo
+    // visível" (telas grandes) — não teria o que expandir.
+    if (defaultVisibleColumnKeys.length < allColumnKeys.length) {
+      section.appendChild(columnsToolbar);
+    }
+
     var tableWrap = document.createElement("div");
     tableWrap.className = "priorities-table-wrap";
     var table = document.createElement("table");
@@ -3355,7 +3432,7 @@
 
     columns.forEach(function (col) {
       var th = document.createElement("th");
-      th.className = "priorities-th priorities-th-sortable";
+      th.className = "priorities-th priorities-th-sortable priorities-col-" + col.key;
       th.dataset.key = col.key;
       th.title = "Clique para classificar por " + col.label;
       var thLabel = document.createElement("span");
@@ -3415,6 +3492,10 @@
     // apontando pra ela, ver acima) — sem isso o cabeçalho ficaria "mudo"
     // até o primeiro clique, mesmo já ordenando por Prioridade por baixo.
     refreshHeaderIndicators();
+    // já aplica o padrão de colunas visíveis dessa tela desde o início —
+    // sem isso a tabela abriria com TODAS as colunas por um instante antes
+    // de esconder as que não são padrão.
+    updateColumnVisibility();
 
     var allItems = [];
 
@@ -3469,6 +3550,10 @@
     }
 
     function applyFilters() {
+      // roda ANTES de filtrar/desenhar a lista — reflete na hora qualquer
+      // coluna que passou a ter filtro ativo (ver hasActiveFilterForColumn),
+      // pra ela já aparecer revelada junto com o resultado filtrado.
+      updateColumnVisibility();
       var q = searchInput.value.trim().toLowerCase();
       var status = statusSelect.value;
       var filtered = allItems.filter(function (it) {
@@ -3541,6 +3626,7 @@
 
         fieldKeys.forEach(function (key) {
           var cell = document.createElement("td");
+          cell.className = "priorities-col-" + key;
           var label = (fieldDefs[key] && fieldDefs[key].label) || key;
           if (isMultiField(key)) {
             var control = buildMultiCheckDropdown(key, label, "priorities-cell-select");
@@ -3571,6 +3657,7 @@
 
         textKeys.forEach(function (key) {
           var cell = document.createElement("td");
+          cell.className = "priorities-col-" + key;
           var inp = document.createElement("input");
           inp.type = "text";
           inp.className = "priorities-cell-text";

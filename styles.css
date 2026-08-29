@@ -1475,6 +1475,30 @@ html, body {
 }
 .priorities-clear-btn:hover { background: #f7f7f5; }
 
+/* barra "Mostrar todas as colunas" (pedido do Georges): por padrão a tabela
+   já esconde algumas colunas conforme o tamanho da tela — ver
+   defaultVisibleColumnKeys/updateColumnVisibility no app.js. Reaproveita o
+   mesmo visual neutro do ".priorities-clear-btn". Só aparece quando faz
+   sentido, isto é, quando o padrão da tela já esconde alguma coluna. */
+.priorities-columns-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+.priorities-columns-toggle-btn {
+  background: #fff;
+  color: #55554f;
+  border: 0.5px solid #dcdcd8;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.priorities-columns-toggle-btn:hover { background: #f7f7f5; }
+
 /* tabela de verdade (pedido do Georges): cabeçalho fixo com o nome de cada
    coluna, clicável pra classificar — ver refreshHeaderIndicators/sortItems
    no app.js. ".priorities-table-wrap" dá o scroll horizontal no celular
@@ -1489,6 +1513,23 @@ html, body {
   border-collapse: collapse;
   width: 100%;
   min-width: 920px;
+}
+/* recolher/expandir colunas (pedido do Georges): cada coluna oculta por
+   padrão numa dada tela ganha "hide-<key>" na própria tabela (classe
+   dinâmica, ver updateColumnVisibility no app.js), e cada th/td daquela
+   coluna carrega "priorities-col-<key>" — a combinação dos dois esconde a
+   coluna inteira (cabeçalho + células) sem mexer no DOM/nas colunas
+   vizinhas. Reaparece sozinha se um filtro (rápido ou geral) tocar nela. */
+.priorities-table.hide-tipo .priorities-col-tipo,
+.priorities-table.hide-prioridade .priorities-col-prioridade,
+.priorities-table.hide-tempo .priorities-col-tempo,
+.priorities-table.hide-forma .priorities-col-forma,
+.priorities-table.hide-programacao .priorities-col-programacao,
+.priorities-table.hide-tributo .priorities-col-tributo,
+.priorities-table.hide-origem .priorities-col-origem,
+.priorities-table.hide-assunto .priorities-col-assunto,
+.priorities-table.hide-providencia .priorities-col-providencia {
+  display: none;
 }
 .priorities-th {
   position: sticky;
