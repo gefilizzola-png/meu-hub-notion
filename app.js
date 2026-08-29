@@ -4267,6 +4267,54 @@
         // a cor do contorno, pouco destaque) — mesmo SVG desenhado à mão da
         // estrela (ver makeNoteSvg acima), já que o ícone de fonte não tem
         // versão preenchida.
+        // botão com o ícone do Notion (pedido do Georges — "no canto
+        // direito", aqui dentro de actionsCell, que já é a célula mais à
+        // direita da linha). Sem link ainda: fica apagado (".priorities-
+        // notion-btn" sem ".linked" — ver styles.css) e um clique normal
+        // abre o popover pra colar o link (openNotionLinkPopover). Com link
+        // já colado: ganha o visual normal (opacity 1) e um clique normal
+        // abre a página direto numa aba nova — editar/desvincular exige
+        // clique direito (desktop) ou pressionar-e-segurar (celular), pra
+        // não colidir com o clique de abrir (decisão do Georges, ver
+        // conversa: escolheu essa opção mesmo sabendo que é menos óbvia que
+        // um 2º botão à parte).
+        var notionBtn = document.createElement("button");
+        notionBtn.type = "button";
+        var hasNotionLink = !!(it.notionUrl || "").trim();
+        notionBtn.className = "priorities-notion-btn" + (hasNotionLink ? " linked" : "");
+        var notionImg = document.createElement("img");
+        notionImg.src = IMG_ICONS.notion;
+        notionImg.alt = "";
+        notionBtn.appendChild(notionImg);
+        notionBtn.title = hasNotionLink
+          ? "Abrir no Notion (clique direito ou pressione e segure pra editar/remover)"
+          : "Colar link da página no Notion";
+
+        var notionLongPressTimer = null;
+        var notionLongPressFired = false;
+        notionBtn.addEventListener("touchstart", function () {
+          notionLongPressFired = false;
+          notionLongPressTimer = setTimeout(function () {
+            notionLongPressFired = true;
+            openNotionLinkPopover(it, notionBtn);
+          }, 550);
+        }, { passive: true });
+        ["touchend", "touchmove", "touchcancel"].forEach(function (evt) {
+          notionBtn.addEventListener(evt, function () { clearTimeout(notionLongPressTimer); });
+        });
+        notionBtn.addEventListener("contextmenu", function (e) {
+          e.preventDefault();
+          openNotionLinkPopover(it, notionBtn);
+        });
+        notionBtn.addEventListener("click", function (e) {
+          // o pressionar-e-segurar no celular já abriu o popover — evita
+          // que o "click" sintético disparado logo depois do touchend abra
+          // a página (ou o popover de novo) em cima.
+          if (notionLongPressFired) { e.preventDefault(); notionLongPressFired = false; return; }
+          if (hasNotionLink) window.open(it.notionUrl, "_blank", "noopener");
+          else openNotionLinkPopover(it, notionBtn);
+        });
+
         var addNoteBtn = document.createElement("button");
         addNoteBtn.type = "button";
         addNoteBtn.className = "notes-item-addtag priorities-note-toggle" + ((it.nota || "").trim() ? " has-note" : "");
@@ -4285,6 +4333,7 @@
         delBtn.title = "Apagar";
         delBtn.addEventListener("click", function () { removeItem(it.id); });
 
+        actionsCell.appendChild(notionBtn);
         actionsCell.appendChild(addNoteBtn);
         actionsCell.appendChild(delBtn);
         row.appendChild(actionsCell);
@@ -4546,6 +4595,106 @@
     function removeItem(id) {
       authFetch(cfg.templateWorkerUrl + "/priorities?id=" + encodeURIComponent(id), { method: "DELETE" })
         .then(handle401).then(loadItems).catch(showErr);
+    }
+
+    // popover pra colar/editar/remover o link do Notion vinculado ao item
+    // (pedido do Georges — botão com o ícone do Notion no canto da linha,
+    // ver actionsCell mais abaixo). Mesma lógica de posicionamento "fixed"
+    // viewport-aware de "positionMenu" (buildMultiCheckDropdown, mais
+    // acima) — abre pra baixo se couber, senão pra cima, sempre com
+    // top/bottom explicitamente setados (nunca "" — foi exatamente essa
+    // troca que causou o bug do menu invisível corrigido antes numa rodada
+    // passada). Só existe UM popover por vez (fecha qualquer outro aberto
+    // antes de abrir um novo).
+    function openNotionLinkPopover(it, anchorBtn) {
+      var already = document.querySelector(".priorities-notion-popover");
+      if (already) already.remove();
+
+      var hasLink = !!(it.notionUrl || "").trim();
+
+      var pop = document.createElement("div");
+      pop.className = "priorities-notion-popover";
+
+      var label = document.createElement("div");
+      label.className = "priorities-notion-popover-label";
+      label.textContent = "Link da página no Notion";
+      pop.appendChild(label);
+
+      var inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "priorities-form-text priorities-notion-popover-input";
+      inp.placeholder = "Cole aqui o link (https://www.notion.so/...)";
+      inp.value = it.notionUrl || "";
+      pop.appendChild(inp);
+
+      var controls = document.createElement("div");
+      controls.className = "priorities-wizard-controls";
+
+      if (hasLink) {
+        var removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "priorities-wizard-skip-btn";
+        removeBtn.textContent = "Remover link";
+        removeBtn.addEventListener("click", function () {
+          updateItem(it.id, { notionUrl: "" });
+          closePop();
+        });
+        controls.appendChild(removeBtn);
+      }
+
+      var saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "notes-add-btn priorities-wizard-next-btn";
+      saveBtn.textContent = "Salvar";
+      saveBtn.addEventListener("click", function () {
+        var v = inp.value.trim();
+        if (!v) { inp.focus(); return; }
+        updateItem(it.id, { notionUrl: v });
+        closePop();
+      });
+      controls.appendChild(saveBtn);
+      pop.appendChild(controls);
+
+      document.body.appendChild(pop);
+
+      function position() {
+        var rect = anchorBtn.getBoundingClientRect();
+        var margin = 8;
+        var popWidth = Math.max(pop.offsetWidth, 260);
+        var left = Math.min(rect.left, window.innerWidth - popWidth - margin);
+        left = Math.max(margin, left);
+        pop.style.position = "fixed";
+        pop.style.left = left + "px";
+        pop.style.minWidth = "260px";
+        var spaceBelow = window.innerHeight - rect.bottom - margin;
+        var spaceAbove = rect.top - margin;
+        if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+          pop.style.top = (rect.bottom + 4) + "px";
+          pop.style.bottom = "auto";
+        } else {
+          pop.style.top = "auto";
+          pop.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+        }
+      }
+      position();
+
+      function onOutside(e) {
+        if (!pop.contains(e.target) && e.target !== anchorBtn) closePop();
+      }
+      function onKeydown(e) {
+        if (e.key === "Escape") closePop();
+        else if (e.key === "Enter" && document.activeElement === inp) saveBtn.click();
+      }
+      function closePop() {
+        document.removeEventListener("mousedown", onOutside, true);
+        document.removeEventListener("keydown", onKeydown, true);
+        pop.remove();
+      }
+      document.addEventListener("mousedown", onOutside, true);
+      document.addEventListener("keydown", onKeydown, true);
+
+      inp.focus();
+      inp.select();
     }
 
     function putSubitems(it, subitems) {

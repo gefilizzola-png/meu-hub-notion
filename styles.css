@@ -1731,6 +1731,51 @@ html, body {
 }
 .priorities-note-toggle.has-note:hover { background: #fbe7c8; }
 
+/* botão com o ícone do Notion por item (pedido do Georges — link direto
+   pra página vinculada). Apagado (opacity baixa) sem link ainda; ganha o
+   visual normal (opacity 1 + leve destaque no fundo) assim que um link é
+   colado — mesmo princípio visual do "has-note" acima (estado
+   preenchido/vazio bem diferenciável à primeira vista). */
+.priorities-notion-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  opacity: 0.35;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.priorities-notion-btn img { width: 15px; height: 15px; }
+.priorities-notion-btn:hover { opacity: 0.6; background: #f2f2ef; }
+.priorities-notion-btn.linked { opacity: 1; }
+.priorities-notion-btn.linked:hover { background: #eaf2fb; opacity: 1; }
+
+/* popover de colar/editar/remover o link do Notion (openNotionLinkPopover
+   em app.js) — "fixed" com top/bottom calculados na hora (mesmo princípio
+   de posicionamento de ".filter-menu"/positionMenu, mais abaixo: sempre
+   define os DOIS, nunca deixa um deles "solto" pra não repetir o bug do
+   menu invisível de uma rodada anterior). */
+.priorities-notion-popover {
+  z-index: 200;
+  background: #fff;
+  border: 0.5px solid #dcdcd8;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  padding: 10px;
+  width: 280px;
+}
+.priorities-notion-popover-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #55554f;
+  margin-bottom: 6px;
+}
+.priorities-notion-popover-input { width: 100%; margin-bottom: 8px; box-sizing: border-box; }
+
 /* checkbox-dropdown de seleção múltipla (só "forma" hoje) — reaproveita
    ".filter-dropdown/.filter-trigger/.filter-menu/.filter-option" (já
    estilizadas mais acima, usadas pelos filtros de busca do resto do app),
