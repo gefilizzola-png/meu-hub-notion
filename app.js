@@ -3010,12 +3010,25 @@
         var spaceBelow = window.innerHeight - rect.bottom - margin;
         var spaceAbove = rect.top - margin;
         var maxHeightCap = 320;
-        menu.style.bottom = "";
-        menu.style.top = "";
+        // BUG real (Georges: "não exibe a lista" no caso de abrir pra cima):
+        // limpar "menu.style.top" com "" não REMOVE o "top: calc(100% + 4px)"
+        // que o CSS (".filter-menu") já define por padrão — só tira o valor
+        // inline, deixando a regra do CSS valer nesse caso. Resultado: no
+        // ramo "abre pra cima" a gente definia SÓ "bottom" (inline), mas
+        // "top" voltava a valer "calc(100% + 4px)" relativo à JANELA (não ao
+        // botão, já que é "fixed") — ou seja, quase 100% da altura da tela,
+        // BEM abaixo de onde "bottom" posicionava a base do menu. Com "top"
+        // abaixo de "bottom", a altura calculada (bottom menos top) dá
+        // negativa, o navegador zera a caixa e o menu simplesmente some,
+        // mesmo com ".open" aplicada. Precisa OVERPOR o CSS de propósito com
+        // "auto" (não limpar), nunca deixar os dois "top"/"bottom" com
+        // valor ao mesmo tempo.
         if (spaceBelow >= 160 || spaceBelow >= spaceAbove) {
           menu.style.top = (rect.bottom + 4) + "px";
+          menu.style.bottom = "auto";
           menu.style.maxHeight = Math.max(120, Math.min(maxHeightCap, spaceBelow)) + "px";
         } else {
+          menu.style.top = "auto";
           menu.style.bottom = (window.innerHeight - rect.top + 4) + "px";
           menu.style.maxHeight = Math.max(120, Math.min(maxHeightCap, spaceAbove)) + "px";
         }
