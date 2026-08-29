@@ -1601,6 +1601,55 @@ html, body {
 }
 .priorities-subitems-row:last-child > td { border-bottom: none; }
 .priorities-subitems-row .notes-subitems { padding-left: 30px; }
+/* checklist recolhida por padrão (pedido do Georges) — ".collapsed" some a
+   linha inteira sem precisar remontar o DOM (ver applySubitemsCollapsed no
+   app.js). Botão de expandir/recolher reaproveita ".notes-item-addtag"
+   (mesmo visual do botão de adicionar item), só que com o número de
+   subitens ao lado do ícone. */
+.priorities-subitems-row.collapsed { display: none; }
+.priorities-subitems-toggle { font-size: 11px; gap: 2px; padding: 0 6px; width: auto; }
+/* texto do subitem agora é editável (pedido do Georges): cursor de texto
+   avisa que dá pra clicar, e o <input> que aparece no lugar do <span>
+   reaproveita o mesmo visual de ".notes-subitem-add-input". */
+.notes-subitem-text { cursor: text; }
+.notes-subitem-edit-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: #262624;
+  border: 0.5px solid #4a90d9;
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: #fff;
+}
+.notes-subitem-edit-input:focus { outline: none; }
+
+/* nota do item (pedido do Georges — campo de texto livre à parte da
+   checklist) — mesmo padrão visual/estrutural da linha de checklist
+   (".priorities-subitems-row" acima): recolhida por padrão via
+   ".collapsed", textarea ocupando a largura toda. */
+.priorities-note-row.collapsed { display: none; }
+.priorities-note-row > td { padding: 0 8px 8px; border-bottom: 0.5px solid #f0efeb; }
+.priorities-note-row:last-child > td { border-bottom: none; }
+.priorities-note-textarea {
+  width: 100%;
+  min-height: 54px;
+  resize: vertical;
+  border: 0.5px solid #dcdcd8;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: #262624;
+  background: #fffdf7;
+  box-sizing: border-box;
+}
+.priorities-note-textarea:focus { outline: none; border-color: #4a90d9; background: #fff; }
+/* ícone do botão "criar/editar nota" muda de cor quando já existe algo
+   escrito, pra dar pra notar de relance quais itens têm nota sem abrir
+   todos (mesmo espírito de ".priorities-th-sortable.active"). */
+.priorities-note-toggle.has-note { color: #c98a1f; }
+.priorities-note-toggle.has-note:hover { background: #fdf2e0; color: #c98a1f; }
 
 /* checkbox-dropdown de seleção múltipla (só "forma" hoje) — reaproveita
    ".filter-dropdown/.filter-trigger/.filter-menu/.filter-option" (já
@@ -1692,6 +1741,14 @@ html, body {
 .priorities-filter-row .priorities-clear-btn {
   height: 34px;
   border-radius: 8px;
+}
+/* busca textual numa linha própria, abaixo dos filtros de coluna (pedido do
+   Georges) — "flex-basis: 100%" força a quebra de linha ANTES dela dentro
+   do mesmo ".priorities-filter-row" (flex-wrap), sem precisar de um
+   container separado. */
+.priorities-filter-row .priorities-search-input {
+  flex: 1 1 100%;
+  order: 99;
 }
 
 /* "Filtros rápidos" (pedido do Georges) — seção de botões-atalho no TOPO

@@ -3114,17 +3114,20 @@
       statusSelect.appendChild(opt);
     });
     statusSelect.value = "pending";
-    var searchInput = document.createElement("input");
-    searchInput.type = "text";
-    searchInput.className = "notes-filter-input";
-    searchInput.placeholder = "Pesquisar (Origem/Assunto/Providência)...";
     filterRow.appendChild(statusSelect);
-    filterRow.appendChild(searchInput);
     var clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "notes-add-btn priorities-clear-btn";
     clearBtn.textContent = "Limpar filtros";
     filterRow.appendChild(clearBtn);
+    // busca vai por último e numa linha própria (".priorities-search-input"
+    // força quebra abaixo dos demais filtros — ver CSS) — pedido do Georges
+    // pra separar a busca textual dos filtros de coluna.
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "notes-filter-input priorities-search-input";
+    searchInput.placeholder = "Pesquisar (Origem/Assunto/Providência)...";
+    filterRow.appendChild(searchInput);
     searchSection.body.appendChild(filterRow);
     section.appendChild(searchSection.section);
 
@@ -3355,9 +3358,12 @@
     if (window.matchMedia && window.matchMedia("(min-width: 1024px)").matches) {
       defaultVisibleColumnKeys = allColumnKeys.slice(); // tela grande: tudo visível já de cara
     } else if (window.matchMedia && window.matchMedia("(min-width: 640px)").matches) {
-      defaultVisibleColumnKeys = ["tipo", "prioridade", "tempo", "assunto", "providencia"];
+      // celular "aberto" (na horizontal/maior), tablet, ou tela menor de
+      // computador (pedido do Georges).
+      defaultVisibleColumnKeys = ["tipo", "prioridade", "tributo", "origem", "assunto", "providencia"];
     } else {
-      defaultVisibleColumnKeys = ["prioridade", "assunto"]; // celular pequeno: só o essencial
+      // celular fechado/tela pequena (pedido do Georges).
+      defaultVisibleColumnKeys = ["prioridade", "tributo", "origem", "assunto", "providencia"];
     }
     var columnsExpanded = false;
 
@@ -3686,6 +3692,37 @@
         addSubitemBtn.innerHTML = '<i class="ti ti-list-check"></i>';
         addSubitemBtn.title = "Adicionar item à checklist";
 
+        // botão de expandir/recolher a checklist (pedido do Georges) — só
+        // aparece quando o item JÁ TEM subitens (sem subitens não tem o que
+        // recolher; "addSubitemBtn" acima continua servindo pra criar o
+        // primeiro). Começa sempre recolhido — ver "subitemsExpanded" abaixo.
+        var toggleSubitemsBtn = document.createElement("button");
+        toggleSubitemsBtn.type = "button";
+        toggleSubitemsBtn.className = "notes-item-addtag priorities-subitems-toggle";
+        toggleSubitemsBtn.addEventListener("click", function () {
+          subitemsExpanded = !subitemsExpanded;
+          applySubitemsCollapsed();
+        });
+
+        // botão de criar/editar nota do item (pedido do Georges — "além do
+        // botão de criar tasks, queria poder criar nota também, para
+        // alguns casos"). Diferente da checklist (que é uma LISTA de
+        // subitens), a nota é UM campo de texto livre por item ("it.nota"
+        // — ver handlePrioritiesCreate/Update no worker.js), pensado pra
+        // observação/contexto solto, não pra tarefa. "has-note" só muda a
+        // cor do ícone quando já existe algo escrito, pra dar pra ver de
+        // relance quais itens têm nota sem precisar abrir todos.
+        var addNoteBtn = document.createElement("button");
+        addNoteBtn.type = "button";
+        addNoteBtn.className = "notes-item-addtag priorities-note-toggle" + ((it.nota || "").trim() ? " has-note" : "");
+        addNoteBtn.innerHTML = '<i class="ti ti-note"></i>';
+        addNoteBtn.title = (it.nota || "").trim() ? "Ver/editar nota" : "Criar nota";
+        addNoteBtn.addEventListener("click", function () {
+          noteExpanded = !noteExpanded;
+          applyNoteCollapsed();
+          if (noteExpanded) { noteTextarea.focus(); }
+        });
+
         var delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "notes-item-del";
@@ -3694,6 +3731,8 @@
         delBtn.addEventListener("click", function () { removeItem(it.id); });
 
         actionsCell.appendChild(addSubitemBtn);
+        actionsCell.appendChild(toggleSubitemsBtn);
+        actionsCell.appendChild(addNoteBtn);
         actionsCell.appendChild(delBtn);
         row.appendChild(actionsCell);
         tbody.appendChild(row);
@@ -3710,6 +3749,49 @@
         subitemsRow.appendChild(subitemsCell);
         tbody.appendChild(subitemsRow);
 
+        // nota do item — linha própria, sempre recolhida ao abrir (mesmo
+        // padrão da checklist), com uma <textarea> só (não é lista); salva
+        // ao perder o foco, só se o texto realmente mudou.
+        var noteRow = document.createElement("tr");
+        noteRow.className = "priorities-note-row collapsed";
+        var noteCell = document.createElement("td");
+        noteCell.colSpan = columns.length + 2;
+        var noteTextarea = document.createElement("textarea");
+        noteTextarea.className = "priorities-note-textarea";
+        noteTextarea.placeholder = "Nota do item...";
+        noteTextarea.value = it.nota || "";
+        noteTextarea.addEventListener("blur", function () {
+          var v = noteTextarea.value.trim();
+          if (v !== (it.nota || "")) updateItem(it.id, { nota: v });
+        });
+        noteCell.appendChild(noteTextarea);
+        noteRow.appendChild(noteCell);
+        tbody.appendChild(noteRow);
+
+        var noteExpanded = false;
+        function applyNoteCollapsed() {
+          noteRow.classList.toggle("collapsed", !noteExpanded);
+        }
+
+        // "sempre recolhido como padrão" (pedido do Georges) — recomeça
+        // recolhido a cada renderização (recarregar a lista, filtrar etc.),
+        // não é um estado guardado no item.
+        var subitemsExpanded = false;
+
+        function applySubitemsCollapsed() {
+          var count = (it.subitems || []).length;
+          subitemsRow.classList.toggle("collapsed", count > 0 && !subitemsExpanded);
+          if (count > 0) {
+            toggleSubitemsBtn.style.display = "";
+            toggleSubitemsBtn.innerHTML = '<i class="ti ti-chevron-' + (subitemsExpanded ? "up" : "down") + '"></i> ' + count;
+            toggleSubitemsBtn.title = subitemsExpanded ? "Ocultar checklist" : "Exibir checklist (" + count + (count === 1 ? " item" : " itens") + ")";
+          } else {
+            // sem subitens não tem o que expandir/recolher — some o botão
+            // (equivalente ao estado antigo, antes desse recurso existir).
+            toggleSubitemsBtn.style.display = "none";
+          }
+        }
+
         function renderSubitems() {
           subitemsWrap.innerHTML = "";
           (it.subitems || []).forEach(function (s) {
@@ -3723,9 +3805,36 @@
             subCheck.addEventListener("change", function () { toggleSubitem(it, s.id, subCheck.checked); });
             subRow.appendChild(subCheck);
 
+            // texto agora é editável (pedido do Georges — antes só dava pra
+            // marcar como feito ou excluir): clique entra em modo edição
+            // (vira <input>), Enter/blur salva, Escape cancela sem salvar.
             var subText = document.createElement("span");
             subText.className = "notes-subitem-text";
             subText.textContent = s.text;
+            subText.title = "Clique para editar";
+            subText.addEventListener("click", function () {
+              if (subRow.querySelector(".notes-subitem-edit-input")) return;
+              var editInput = document.createElement("input");
+              editInput.type = "text";
+              editInput.className = "notes-subitem-edit-input";
+              editInput.value = s.text;
+              subText.replaceWith(editInput);
+              editInput.focus();
+              editInput.select();
+              var doneEditing = false;
+              function commitEdit() {
+                if (doneEditing) return;
+                doneEditing = true;
+                var v = editInput.value.trim();
+                if (v && v !== s.text) editSubitem(it, s.id, v);
+                else renderSubitems(); // sem mudança (ou vazio) — só redesenha, sem chamar o Worker à toa
+              }
+              editInput.addEventListener("keydown", function (e) {
+                if (e.key === "Enter") commitEdit();
+                else if (e.key === "Escape") { doneEditing = true; renderSubitems(); }
+              });
+              editInput.addEventListener("blur", function () { commitEdit(); });
+            });
             subRow.appendChild(subText);
 
             var subDelBtn = document.createElement("button");
@@ -3740,8 +3849,13 @@
           });
         }
         renderSubitems();
+        applySubitemsCollapsed();
 
         addSubitemBtn.addEventListener("click", function () {
+          // expande a checklist ao adicionar (senão o campo novo nasceria
+          // escondido atrás do "recolhido por padrão").
+          subitemsExpanded = true;
+          applySubitemsCollapsed();
           if (subitemsWrap.querySelector(".notes-subitem-add-input")) return;
           var subInput = document.createElement("input");
           subInput.type = "text";
@@ -3803,6 +3917,16 @@
     function toggleSubitem(it, subitemId, done) {
       var newSubitems = (it.subitems || []).map(function (s) {
         return s.id === subitemId ? { id: s.id, text: s.text, done: done } : s;
+      });
+      putSubitems(it, newSubitems);
+    }
+    // edição do texto de um subitem já existente (pedido do Georges — antes
+    // só dava pra marcar como feito ou excluir). Mesmo padrão de
+    // toggleSubitem: substitui a lista inteira via putSubitems (PUT já
+    // sanitiza { id, text, done } no worker.js).
+    function editSubitem(it, subitemId, newText) {
+      var newSubitems = (it.subitems || []).map(function (s) {
+        return s.id === subitemId ? { id: s.id, text: newText, done: s.done } : s;
       });
       putSubitems(it, newSubitems);
     }

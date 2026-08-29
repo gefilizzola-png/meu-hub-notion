@@ -797,7 +797,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-29 09:15",
+  appVersion: "2026-08-29 16:05",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -1386,13 +1386,12 @@ const APP_CONFIG = {
         tipo: { label: "Tipo", options: PRIORIDADES_TIPO_OPTIONS },
         prioridade: { label: "Prioridade", options: PRIORIDADES_PRIORIDADE_OPTIONS },
         tempo: { label: "Tempo", options: PRIORIDADES_TEMPO_OPTIONS },
-        // "multi: true" — única coluna de seleção múltipla das 6 (pedido do
-        // Georges); vem/vai como array (ver PRIORITIES_FORMA/
-        // sanitizeOptionList no worker.js). As outras 5 continuam de
-        // seleção única.
+        // "multi: true" — colunas de seleção múltipla (pedido do Georges);
+        // vem/vai como array (ver PRIORITIES_MULTI_FIELDS/sanitizeOptionList
+        // no worker.js). As outras 4 continuam de seleção única.
         forma: { label: "Forma", options: PRIORIDADES_FORMA_OPTIONS, multi: true },
         programacao: { label: "Programação", options: PRIORIDADES_PROGRAMACAO_OPTIONS },
-        tributo: { label: "Tributo", options: PRIORIDADES_TRIBUTO_OPTIONS }
+        tributo: { label: "Tributo", options: PRIORIDADES_TRIBUTO_OPTIONS, multi: true }
       },
       // "Filtros rápidos" (pedido do Georges): seção de botões no topo da
       // página, um bloco por grupo — ver renderPrioritiesQuickFilters no
