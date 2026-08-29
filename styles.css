@@ -1222,6 +1222,15 @@ html, body {
 .notes-item-star:hover { background: #fdf6e3; color: #f08c00; }
 .notes-item-star.flagged { color: #f08c00; }
 .notes-item-star.flagged svg { fill: currentColor; stroke: none; }
+/* ícone de "nota" (página com a quina dobrada) — mesmo SVG desenhado à mão
+   pro botão de nota do item E do subitem (makeNoteSvg no app.js, ambos com
+   a classe ".has-note" quando já tem conteúdo escrito). Contorno vazio por
+   padrão; ".has-note" PREENCHE totalmente o ícone (pedido do Georges —
+   antes só mudava a cor do contorno, achou pouco destaque), mesma lógica
+   já usada na estrela acima. Como os 2 botões (item/subitem) compartilham
+   a classe ".has-note", essa regra genérica cobre os dois de uma vez. */
+.note-icon-svg { fill: none; stroke: currentColor; stroke-width: 1.6px; stroke-linejoin: round; stroke-linecap: round; }
+.has-note .note-icon-svg { fill: currentColor; stroke: none; }
 /* estrela de destaque por SUBITEM, dentro da Lista de Prioridades (pedido
    do Georges — mesmo mecanismo de ".notes-item-star" acima). 2ª rodada de
    aumento (Georges: "continua muito pequena" mesmo depois do 1º ajuste pra
@@ -1346,9 +1355,12 @@ html, body {
    note" (nota do item), só que menor e encaixada dentro da própria
    checklist — reaproveita ".notes-subitem-del" como base de tamanho/cor do
    ícone (ver classe dupla no app.js), só troca a cor quando já tem algo
-   escrito. */
+   escrito. "note-icon-svg" nasce 15x15 (mesmo tamanho do ícone de nota do
+   item — ver regra genérica lá em cima), um pouco grande pro botão de 18px
+   desse contexto; encolhe aqui só nesse escopo. */
 .notes-subitem-note-toggle.has-note { color: #c98a1f; }
 .notes-subitem-note-toggle.has-note:hover { background: #fdf2e0; color: #c98a1f; }
+.notes-subitem-note-toggle .note-icon-svg { width: 13px; height: 13px; }
 .notes-subitem-note-row { padding: 0 8px 4px; }
 .notes-subitem-note-row.collapsed { display: none; }
 .notes-subitem-note-textarea {

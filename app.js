@@ -1925,6 +1925,32 @@
     return svg;
   }
 
+  // ícone de "nota" (página com a quina dobrada) — mesmíssimo motivo do
+  // star acima: SVG desenhado à mão em vez de ícone de fonte, porque
+  // "tabler-icons.min.css" só traz os ícones OUTLINE (não tem "ti-note-
+  // filled"), e o Georges pediu o ícone TOTALMENTE preenchido quando a nota
+  // tem conteúdo, pra dar mais destaque (mesma ideia da estrela: contorno
+  // vazio por padrão, sólido quando marcado). 1º subpath = contorno da
+  // página com a quina superior direita cortada na diagonal (fechado, por
+  // isso funciona preenchido); 2º subpath = a "dobrinha" da quina (só um
+  // traço a mais, útil no contorno — em modo preenchido fica dentro da
+  // área já preenchida, sem prejudicar nada). Classe ".has-note" (mesma já
+  // usada nos botões de nota do item/subitem) troca contorno por
+  // preenchimento, igual ".notes-item-star.flagged" faz com a estrela.
+  var NOTE_SVG_PATH = "M7,3 L15,3 L19,7 L19,21 L7,21 Z M15,3 L15,7 L19,7";
+  function makeNoteSvg() {
+    var svgNS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "15");
+    svg.setAttribute("height", "15");
+    svg.setAttribute("class", "note-icon-svg");
+    var path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", NOTE_SVG_PATH);
+    svg.appendChild(path);
+    return svg;
+  }
+
   // "dd/mm hh:mm" bem pequeno, pro selo de data de criação de cada
   // anotação — mesmo formato usado em formatDateRangeExtra, só que a
   // partir de um ISO simples (n.createdAt), não de um objeto {start,end}
@@ -3787,13 +3813,15 @@
         // alguns casos"). Diferente da checklist (que é uma LISTA de
         // subitens), a nota é UM campo de texto livre por item ("it.nota"
         // — ver handlePrioritiesCreate/Update no worker.js), pensado pra
-        // observação/contexto solto, não pra tarefa. "has-note" só muda a
-        // cor do ícone quando já existe algo escrito, pra dar pra ver de
-        // relance quais itens têm nota sem precisar abrir todos.
+        // observação/contexto solto, não pra tarefa. "has-note" agora
+        // preenche o ícone TOTALMENTE (pedido do Georges — antes só mudava
+        // a cor do contorno, pouco destaque) — mesmo SVG desenhado à mão da
+        // estrela (ver makeNoteSvg acima), já que o ícone de fonte não tem
+        // versão preenchida.
         var addNoteBtn = document.createElement("button");
         addNoteBtn.type = "button";
         addNoteBtn.className = "notes-item-addtag priorities-note-toggle" + ((it.nota || "").trim() ? " has-note" : "");
-        addNoteBtn.innerHTML = '<i class="ti ti-note"></i>';
+        addNoteBtn.appendChild(makeNoteSvg());
         addNoteBtn.title = (it.nota || "").trim() ? "Ver/editar nota" : "Criar nota";
         addNoteBtn.addEventListener("click", function () {
           noteExpanded = !noteExpanded;
@@ -3951,14 +3979,15 @@
             // nota do SUBITEM (pedido do Georges — "conseguimos criar notas
             // vinculadas aos subitens... ícone de nota pra exibir as notas
             // existentes em cada subitem"). Mesmíssimo padrão da nota do
-            // item (texto livre solto, "has-note" muda a cor quando já tem
-            // algo escrito), só que a linha da textarea fica dentro da
-            // própria checklist, logo abaixo desse subitem (não lá embaixo
-            // da tabela como a nota do item) — ver subNoteRow mais abaixo.
+            // item (texto livre solto, "has-note" agora PREENCHE o ícone —
+            // ver makeNoteSvg acima), só que a linha da textarea fica dentro
+            // da própria checklist, logo abaixo desse subitem (não lá
+            // embaixo da tabela como a nota do item) — ver subNoteRow mais
+            // abaixo.
             var subNoteBtn = document.createElement("button");
             subNoteBtn.type = "button";
             subNoteBtn.className = "notes-subitem-del notes-subitem-note-toggle" + ((s.nota || "").trim() ? " has-note" : "");
-            subNoteBtn.innerHTML = '<i class="ti ti-note"></i>';
+            subNoteBtn.appendChild(makeNoteSvg());
             subNoteBtn.title = (s.nota || "").trim() ? "Ver/editar nota do subitem" : "Criar nota no subitem";
             subRow.appendChild(subNoteBtn);
 
