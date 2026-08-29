@@ -2938,6 +2938,138 @@
 
     function isMultiField(key) { return !!(fieldDefs[key] && fieldDefs[key].multi); }
 
+    // ---- visual "mais moderno" (pedido do Georges): cor por Tipo na linha
+    // inteira, gradiente de cor por Prioridade, campos de opção viram chips
+    // coloridos/arredondados (em vez do botão/select cru de antes) e ícones
+    // nos valores de Forma. NADA disso muda comportamento — mesmo <select>,
+    // mesmo checkbox-dropdown, mesmos filtros/colunas de sempre; só reveste
+    // visualmente o que já existia.
+    //
+    // paleta CATEGÓRICA (8 cores) — usada pra QUALQUER valor de texto que
+    // precise de uma cor consistente sem ter uma ordem natural (Tipo,
+    // Tributo, Programação, Forma): hash simples da string -> índice fixo
+    // na paleta, então o MESMO valor sempre cai na MESMA cor, em qualquer
+    // lugar do app (linha da tabela, chip da célula, chip do filtro, dot da
+    // lista de opções), sem precisar cadastrar cor por valor à mão — e
+    // funciona sozinho pra Tipo/Tributo/Programação novos que o Georges
+    // criar depois em "Editar opções".
+    var CATEGORY_PALETTE = [
+      { bg: "#eaf2fb", text: "#2b6cb0", accent: "#4a90d9" }, // azul
+      { bg: "#f1edfb", text: "#6b46c1", accent: "#8a63d2" }, // roxo
+      { bg: "#eaf6ec", text: "#2f9e44", accent: "#37b24d" }, // verde
+      { bg: "#fdf1e7", text: "#c2540a", accent: "#e8590c" }, // laranja
+      { bg: "#fbe9ef", text: "#c2255c", accent: "#d6336c" }, // rosa
+      { bg: "#e6f7f2", text: "#0b8a68", accent: "#0ca678" }, // teal
+      { bg: "#fef3e0", text: "#b06a00", accent: "#f08c00" }, // âmbar
+      { bg: "#eeeefb", text: "#4646c2", accent: "#5c5cd6" }, // índigo
+    ];
+    function hashString(s) {
+      var h = 0;
+      for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+      return Math.abs(h);
+    }
+    function colorForValue(value) {
+      return CATEGORY_PALETTE[hashString(String(value || "")) % CATEGORY_PALETTE.length];
+    }
+
+    // gradiente ORDINAL (6 cores, "farol esfriando") — só pra Prioridade,
+    // que tem ordem natural (1-Imediato -> 6-Sem prioridade). Usa a
+    // POSIÇÃO do valor na lista viva de opções (fieldDefs.prioridade.
+    // options — vem do Worker, editável), não o texto exato, então continua
+    // funcionando mesmo se o Georges renomear "1 - Imediato" pra outra
+    // coisa, contanto que a ordem (mais urgente primeiro) seja mantida. Se
+    // a lista tiver mais/menos que 6 níveis, interpola proporcionalmente.
+    var PRIORITY_GRADIENT = [
+      { bg: "#fdeceb", text: "#c92a2a", accent: "#e03131" }, // vermelho
+      { bg: "#fdf1e7", text: "#d9480f", accent: "#e8590c" }, // laranja
+      { bg: "#fef6e0", text: "#97650a", accent: "#f2b705" }, // âmbar
+      { bg: "#f6f8e3", text: "#66790a", accent: "#a9b83c" }, // oliva
+      { bg: "#eaf6ec", text: "#2f9e44", accent: "#40c057" }, // verde
+      { bg: "#f1f2f3", text: "#667085", accent: "#adb5bd" }, // cinza
+    ];
+    function priorityColorForOption(opt) {
+      var opts = (fieldDefs.prioridade && fieldDefs.prioridade.options) || [];
+      var i = opts.indexOf(opt);
+      if (i === -1) return colorForValue(opt); // não achou na lista viva — cai no hash genérico
+      var n = opts.length;
+      var idx = n <= 1 ? 0 : Math.round((i * (PRIORITY_GRADIENT.length - 1)) / (n - 1));
+      return PRIORITY_GRADIENT[idx];
+    }
+    // qualquer campo de opção usa a paleta categórica, EXCETO prioridade
+    // (gradiente ordinal acima).
+    function colorForField(key, value) {
+      return key === "prioridade" ? priorityColorForOption(value) : colorForValue(value);
+    }
+
+    // ícone por valor de Forma (pedido do Georges — "colocar ícones nos
+    // nomes/opções de cada tipo de FORMA"): os valores hoje são nomes de
+    // ferramentas reais, então mapeia pro ícone mais parecido. "Notion" é
+    // caso especial — usa o mesmo PNG (IMG_ICONS.notion) já usado no resto
+    // do app, não um ícone de fonte. Valor novo sem mapeamento (Forma é
+    // editável em "Editar opções") cai no ícone neutro "ti-tag", sem
+    // quebrar nada.
+    var FORMA_ICON_MAP = {
+      Chrome: "ti-brand-chrome",
+      WhatsApp: "ti-brand-whatsapp",
+      Word: "ti-file-text",
+      Excel: "ti-table",
+      "E-mail": "ti-mail",
+      Explorer: "ti-folder",
+      Notion: "__notion_png__",
+      Presencial: "ti-users",
+      Solar: "ti-apps",
+      SQL: "ti-database",
+      Tributos: "ti-receipt-2",
+      Claude: "ti-sparkles",
+    };
+    function appendFormaIcon(el, value) {
+      var iconClass = FORMA_ICON_MAP[value] || "ti-tag";
+      if (iconClass === "__notion_png__") {
+        var img = document.createElement("img");
+        img.src = IMG_ICONS.notion;
+        img.alt = "";
+        img.className = "priorities-chip-icon-img";
+        el.appendChild(img);
+      } else {
+        var ic = document.createElement("i");
+        ic.className = "ti " + iconClass;
+        el.appendChild(ic);
+      }
+    }
+
+    // chip colorido/arredondado pra UM valor de campo de opção — usado no
+    // trigger do checkbox-dropdown (Forma/Tributo, ver buildMultiCheckDropdown
+    // mais abaixo). Ícone só em Forma (appendFormaIcon acima).
+    function makeChip(key, value) {
+      var c = colorForField(key, value);
+      var chip = document.createElement("span");
+      chip.className = "priorities-chip";
+      chip.style.background = c.bg;
+      chip.style.color = c.text;
+      if (key === "forma") appendFormaIcon(chip, value);
+      chip.appendChild(document.createTextNode(value));
+      return chip;
+    }
+
+    // aplica o visual de "chip" num <select> NATIVO (Tipo/Prioridade na
+    // célula/criação — Tempo/Programação continuam neutros de propósito,
+    // não foi pedido cor pra esses dois). Precisa ser chamado de novo a
+    // cada troca de valor (change), já que CSS sozinho não consegue saber
+    // qual <option> está selecionada pra colorir a CAIXA fechada do select.
+    function applySelectChipStyle(sel, key) {
+      var v = sel.value;
+      if (!v || (key !== "tipo" && key !== "prioridade")) {
+        sel.style.background = "";
+        sel.style.color = "";
+        sel.style.borderColor = "";
+        return;
+      }
+      var c = colorForField(key, v);
+      sel.style.background = c.bg;
+      sel.style.color = c.text;
+      sel.style.borderColor = "transparent";
+    }
+
     // controle "genérico" que trata <select> (seleção única) e o
     // checkbox-dropdown abaixo (seleção múltipla, só "forma" hoje) da mesma
     // forma — quem usa não precisa saber qual dos dois é.
@@ -2983,10 +3115,28 @@
       var onCloseCb = null;
       var wasOpen = false;
 
+      // trigger agora monta CHIPS coloridos (makeChip, ver acima) em vez de
+      // texto puro — até 2 valores aparecem como chip; passando disso,
+      // resume num chip neutro "+N" (evita a caixa ficar enorme com Tributo,
+      // que tem quase 20 opções). Comportamento de seleção continua
+      // idêntico, só o que é MOSTRADO no botão fechado mudou.
       function updateTrigger() {
-        if (!values.length) triggerLabel.textContent = placeholderText;
-        else if (values.length <= 2) triggerLabel.textContent = values.join(", ");
-        else triggerLabel.textContent = values.length + " selecionadas";
+        triggerLabel.innerHTML = "";
+        if (!values.length) {
+          triggerLabel.textContent = placeholderText;
+          triggerLabel.classList.add("empty");
+          return;
+        }
+        triggerLabel.classList.remove("empty");
+        values.slice(0, 2).forEach(function (v) {
+          triggerLabel.appendChild(makeChip(key, v));
+        });
+        if (values.length > 2) {
+          var more = document.createElement("span");
+          more.className = "priorities-chip priorities-chip-more";
+          more.textContent = "+" + (values.length - 2);
+          triggerLabel.appendChild(more);
+        }
       }
       function updateRowsUI() {
         rowEntries.forEach(function (entry) {
@@ -3015,6 +3165,15 @@
       options.forEach(function (opt) {
         var row = document.createElement("div");
         row.className = "filter-option";
+        // dot colorido (mesma cor que o chip daquele valor em qualquer
+        // outro lugar do app — colorForField/makeChip acima) — ajuda a
+        // reconhecer o valor de relance em listas longas (Tributo tem quase
+        // 20 opções). Forma, além do dot, ganha o ícone da ferramenta.
+        var dot = document.createElement("span");
+        dot.className = "priorities-option-dot";
+        dot.style.background = colorForField(key, opt).accent;
+        row.appendChild(dot);
+        if (key === "forma") appendFormaIcon(row, opt);
         var lbl = document.createElement("span");
         lbl.textContent = opt;
         var check = document.createElement("i");
@@ -4176,6 +4335,17 @@
         var row = document.createElement("tr");
         row.className = "priorities-row" + (it.done ? " done" : "");
 
+        // cor de fundo da linha pelo TIPO (pedido do Georges — "pintando de
+        // cores diferentes as linhas de cada item de acordo com o TIPO").
+        // Fundo BEM leve (é a mesma cor "bg" da paleta usada nos chips, já
+        // pensada pra ser sutil) na linha inteira + borda esquerda sólida na
+        // primeira célula (border-left em <tr> não é confiável entre
+        // navegadores — por isso vai na célula, não na linha). Mesma cor
+        // some, sem sobrar retângulo cinza, quando o item não tem Tipo
+        // definido ainda.
+        var tipoColor = (it.tipo || "").trim() ? colorForValue(it.tipo) : null;
+        if (tipoColor) row.style.background = tipoColor.bg;
+
         // botão de expandir/recolher a checklist — coluna própria, a mais à
         // ESQUERDA de tudo (pedido do Georges: "à esquerda inclusive do
         // checkbox"). Só o BOTÃO nasce aqui (perto do checkbox, mesma
@@ -4185,6 +4355,7 @@
         // é ligado lá, não aqui.
         var toggleCell = document.createElement("td");
         toggleCell.className = "priorities-toggle-cell";
+        if (tipoColor) toggleCell.style.borderLeft = "3px solid " + tipoColor.accent;
         var toggleSubitemsBtn = document.createElement("button");
         toggleSubitemsBtn.type = "button";
         toggleSubitemsBtn.className = "notes-item-addtag priorities-subitems-toggle";
@@ -4222,9 +4393,11 @@
           } else {
             var sel = makeSelect("priorities-cell-select", key, true, label);
             sel.value = it[key] || "";
+            applySelectChipStyle(sel, key);
             sel.addEventListener("change", function () {
               var patch = {};
               patch[key] = sel.value;
+              applySelectChipStyle(sel, key);
               updateItem(it.id, patch);
             });
             cell.appendChild(sel);
@@ -4350,6 +4523,10 @@
         subitemsRow.dataset.itemId = it.id;
         var subitemsCell = document.createElement("td");
         subitemsCell.colSpan = columns.length + 3;
+        // mesmo tom do Tipo (ver "tipoColor" acima) — mantém a checklist
+        // "grudada" visualmente na linha do item quando expandida, em vez
+        // de voltar pro branco padrão no meio do bloco colorido.
+        if (tipoColor) subitemsCell.style.background = tipoColor.bg;
         var subitemsWrap = document.createElement("div");
         subitemsWrap.className = "notes-subitems";
         subitemsCell.appendChild(subitemsWrap);
@@ -4363,6 +4540,7 @@
         noteRow.className = "priorities-note-row collapsed";
         var noteCell = document.createElement("td");
         noteCell.colSpan = columns.length + 3;
+        if (tipoColor) noteCell.style.background = tipoColor.bg;
         var noteTextarea = document.createElement("textarea");
         noteTextarea.className = "priorities-note-textarea";
         noteTextarea.placeholder = "Nota do item...";
