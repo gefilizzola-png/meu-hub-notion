@@ -1780,6 +1780,71 @@ html, body {
 }
 .priorities-subsection.collapsed .priorities-subsection-body { display: none; }
 
+/* toggle "Criação detalhada / Criação rápida" (pedido do Georges) — 2
+   botões em par, o ativo ganha o mesmo fundo escuro de ".priorities-
+   quickfilter-btn.active" (mesma família visual). Fica ACIMA de qualquer
+   um dos dois formulários (formRow OU quickWizardWrap — só um por vez, ver
+   app.js). */
+.priorities-creation-mode-toggle { display: flex; gap: 6px; margin-bottom: 10px; }
+.priorities-creation-mode-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #55554f;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.priorities-creation-mode-btn:hover { border-color: #b9b9b3; }
+.priorities-creation-mode-btn.active { background: #2f3a44; border-color: #2f3a44; color: #fff; }
+
+/* assistente de criação rápida por etapas (pedido do Georges — Tipo ->
+   Tributo -> Programação -> Forma -> Prioridade -> Tempo -> Origem/
+   Assunto). Botões de cada etapa reaproveitam ".priorities-quickfilter-
+   btn/-buttons" (mesmo leiaute de pílula de "Filtros rápidos", como
+   pedido); só o que é específico do assistente (trilha, título da etapa,
+   controles de navegação) ganha classe própria aqui. */
+.priorities-wizard-trail {
+  font-size: 12px;
+  color: #8a8a84;
+  margin-bottom: 10px;
+  word-break: break-word;
+}
+.priorities-wizard-step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #55554f;
+  margin-bottom: 8px;
+}
+.priorities-wizard-buttons { margin-bottom: 10px; }
+.priorities-wizard-controls { display: flex; gap: 8px; align-items: center; }
+.priorities-wizard-back-btn,
+.priorities-wizard-skip-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #77776f;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.priorities-wizard-back-btn:hover,
+.priorities-wizard-skip-btn:hover { border-color: #b9b9b3; background: #f7f7f5; color: #55554f; }
+.priorities-wizard-next-btn { margin-left: auto; }
+.priorities-wizard-final-fields { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.priorities-wizard-final-fields .priorities-form-text { flex: 1 1 160px; }
+@media (max-width: 1023px) {
+  .priorities-wizard-controls { flex-wrap: wrap; }
+  .priorities-wizard-next-btn { margin-left: 0; }
+}
+
 /* "leiaute mais bonito" pros filtros de "Pesquisa e Filtros Gerais" (pedido
    do Georges — os filtros com LISTA, diferente dos botões de "Filtros
    rápidos") — escopado só dentro de ".priorities-filter-row" (não mexe nos

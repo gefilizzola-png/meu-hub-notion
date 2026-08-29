@@ -3172,6 +3172,38 @@
     var creationSection = buildCollapsibleSection("Criação");
     var searchSection = buildCollapsibleSection("Pesquisa e Filtros Gerais");
 
+    // ---- alterna entre a criação DETALHADA (formRow, de sempre) e a
+    // criação RÁPIDA por etapas (quickWizardWrap, pedido do Georges — ver
+    // mais abaixo). Só um dos dois fica visível por vez; nasce em modo
+    // "detailed" (comportamento de sempre, ninguém precisa mudar nada pra
+    // continuar usando do jeito que já usava).
+    var creationMode = "detailed";
+    var modeToggleRow = document.createElement("div");
+    modeToggleRow.className = "priorities-creation-mode-toggle";
+    var modeDetailedBtn = document.createElement("button");
+    modeDetailedBtn.type = "button";
+    modeDetailedBtn.className = "priorities-creation-mode-btn";
+    modeDetailedBtn.textContent = "Criação detalhada";
+    var modeQuickBtn = document.createElement("button");
+    modeQuickBtn.type = "button";
+    modeQuickBtn.className = "priorities-creation-mode-btn";
+    modeQuickBtn.textContent = "Criação rápida";
+    modeToggleRow.appendChild(modeDetailedBtn);
+    modeToggleRow.appendChild(modeQuickBtn);
+    creationSection.body.appendChild(modeToggleRow);
+    function applyCreationMode() {
+      modeDetailedBtn.classList.toggle("active", creationMode === "detailed");
+      modeQuickBtn.classList.toggle("active", creationMode === "quick");
+      formRow.style.display = creationMode === "detailed" ? "" : "none";
+      quickWizardWrap.style.display = creationMode === "quick" ? "" : "none";
+    }
+    modeDetailedBtn.addEventListener("click", function () { creationMode = "detailed"; applyCreationMode(); });
+    modeQuickBtn.addEventListener("click", function () {
+      creationMode = "quick";
+      applyCreationMode();
+      resetWizard();
+    });
+
     // ---- linha de criação — um <select> (ou checkbox-dropdown, pra "forma")
     // por coluna de opção + 3 campos de texto (Assunto é o único
     // obrigatório, igual "text" em Anotações Rápidas) + botão Adicionar.
@@ -3201,6 +3233,247 @@
     addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
     formRow.appendChild(addBtn);
     creationSection.body.appendChild(formRow);
+
+    // ---- "Criação rápida" (pedido do Georges): em vez de preencher os 8
+    // campos soltos de uma vez (formRow acima), pergunta um de cada vez em
+    // sequência — Tipo -> Tributo -> Programação -> Forma -> Prioridade ->
+    // Tempo -> Origem/Assunto — com botões no mesmo leiaute de pílula de
+    // "Filtros rápidos" (".priorities-quickfilter-btn", reaproveitado
+    // aqui). Tipo/Programação/Prioridade/Tempo são de escolha ÚNICA (clicar
+    // já avança pro próximo passo); Tributo/Forma são de escolha MÚLTIPLA
+    // (clicar liga/desliga, um botão "Continuar" à parte avança). Só
+    // Forma/Prioridade/Tempo têm "Pular" — Tipo/Tributo/Programação são
+    // considerados essenciais pro item fazer sentido, por isso não pulam.
+    // Tributo e Programação, além disso, aparecem ORDENADOS pelos mais
+    // usados na combinação já escolhida até ali (ver rankByUsage abaixo) —
+    // os outros 3 campos mantêm a ordem normal da lista (não foi pedido
+    // ordenar esses por uso).
+    var quickWizardWrap = document.createElement("div");
+    quickWizardWrap.className = "priorities-wizard";
+    creationSection.body.appendChild(quickWizardWrap);
+    applyCreationMode();
+
+    var wizStep = 0;
+    var wizData = null;
+    var WIZ_STEPS = ["tipo", "tributo", "programacao", "forma", "prioridade", "tempo", "final"];
+
+    function resetWizard() {
+      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", origem: "", assunto: "" };
+      wizStep = 0;
+      renderWizardStep();
+    }
+
+    // conta quantas vezes cada VALOR aparece entre os itens já existentes
+    // que passam em "matchFn", e devolve as opções vivas (fieldDefs[key].
+    // options) reordenadas — mais usada primeiro; empate mantém a ordem
+    // original da lista (Array.sort é estável). "getValues" extrai do item
+    // o(s) valor(es) do campo em questão (array pra multi-select, string
+    // solta pro resto).
+    function rankByUsage(key, matchFn, getValues) {
+      var counts = {};
+      allItems.forEach(function (it) {
+        if (!matchFn(it)) return;
+        var vals = getValues(it);
+        (Array.isArray(vals) ? vals : [vals]).forEach(function (v) {
+          if (v) counts[v] = (counts[v] || 0) + 1;
+        });
+      });
+      var options = (fieldDefs[key] && fieldDefs[key].options) || [];
+      return options.slice().sort(function (a, b) { return (counts[b] || 0) - (counts[a] || 0); });
+    }
+
+    function wizStepDef(key) {
+      if (key === "tipo") {
+        return { label: "Tipo", type: "single", skippable: false, options: function () { return (fieldDefs.tipo && fieldDefs.tipo.options) || []; } };
+      }
+      if (key === "tributo") {
+        return {
+          label: "Tributo", type: "multi", skippable: false,
+          options: function () {
+            return rankByUsage("tributo", function (it) { return it.tipo === wizData.tipo; }, function (it) { return it.tributo || []; });
+          },
+        };
+      }
+      if (key === "programacao") {
+        return {
+          label: "Programação", type: "single", skippable: false,
+          options: function () {
+            return rankByUsage("programacao", function (it) {
+              if (it.tipo !== wizData.tipo) return false;
+              if (!wizData.tributo.length) return true;
+              return (it.tributo || []).some(function (v) { return wizData.tributo.indexOf(v) !== -1; });
+            }, function (it) { return it.programacao; });
+          },
+        };
+      }
+      if (key === "forma") {
+        return { label: "Forma", type: "multi", skippable: true, options: function () { return (fieldDefs.forma && fieldDefs.forma.options) || []; } };
+      }
+      if (key === "prioridade") {
+        return { label: "Prioridade", type: "single", skippable: true, options: function () { return (fieldDefs.prioridade && fieldDefs.prioridade.options) || []; } };
+      }
+      if (key === "tempo") {
+        return { label: "Tempo", type: "single", skippable: true, options: function () { return (fieldDefs.tempo && fieldDefs.tempo.options) || []; } };
+      }
+      return null;
+    }
+
+    function renderWizardStep() {
+      quickWizardWrap.innerHTML = "";
+
+      // trilha do que já foi escolhido até aqui — só leitura, dá pra
+      // acompanhar o progresso sem precisar voltar pra conferir.
+      var trailParts = [];
+      if (wizData.tipo) trailParts.push(wizData.tipo);
+      if (wizData.tributo.length) trailParts.push(wizData.tributo.join("/"));
+      if (wizData.programacao) trailParts.push(wizData.programacao);
+      if (wizData.forma.length) trailParts.push(wizData.forma.join("/"));
+      if (wizData.prioridade) trailParts.push(wizData.prioridade);
+      if (wizData.tempo) trailParts.push(wizData.tempo);
+      if (trailParts.length) {
+        var trail = document.createElement("div");
+        trail.className = "priorities-wizard-trail";
+        trail.textContent = trailParts.join(" → ");
+        quickWizardWrap.appendChild(trail);
+      }
+
+      var stepKey = WIZ_STEPS[wizStep];
+      if (stepKey === "final") { renderWizardFinalStep(); return; }
+
+      var def = wizStepDef(stepKey);
+      var title = document.createElement("div");
+      title.className = "priorities-wizard-step-title";
+      title.textContent = def.label + (def.skippable ? "" : " *");
+      quickWizardWrap.appendChild(title);
+
+      var btnsWrap = document.createElement("div");
+      btnsWrap.className = "priorities-quickfilter-buttons priorities-wizard-buttons";
+      def.options().forEach(function (opt) {
+        var pill = document.createElement("button");
+        pill.type = "button";
+        var isActive = def.type === "multi" ? wizData[stepKey].indexOf(opt) !== -1 : wizData[stepKey] === opt;
+        pill.className = "priorities-quickfilter-btn" + (isActive ? " active" : "");
+        pill.textContent = opt;
+        pill.addEventListener("click", function () {
+          if (def.type === "multi") {
+            var idx = wizData[stepKey].indexOf(opt);
+            if (idx === -1) wizData[stepKey].push(opt); else wizData[stepKey].splice(idx, 1);
+            renderWizardStep();
+          } else {
+            wizData[stepKey] = opt;
+            wizStep++;
+            renderWizardStep();
+          }
+        });
+        btnsWrap.appendChild(pill);
+      });
+      quickWizardWrap.appendChild(btnsWrap);
+
+      var controls = document.createElement("div");
+      controls.className = "priorities-wizard-controls";
+      if (wizStep > 0) {
+        var backBtn = document.createElement("button");
+        backBtn.type = "button";
+        backBtn.className = "priorities-wizard-back-btn";
+        backBtn.innerHTML = '<i class="ti ti-arrow-left"></i> Voltar';
+        backBtn.addEventListener("click", function () { wizStep--; renderWizardStep(); });
+        controls.appendChild(backBtn);
+      }
+      if (def.skippable) {
+        var skipBtn = document.createElement("button");
+        skipBtn.type = "button";
+        skipBtn.className = "priorities-wizard-skip-btn";
+        skipBtn.textContent = "Pular";
+        skipBtn.addEventListener("click", function () {
+          wizData[stepKey] = def.type === "multi" ? [] : "";
+          wizStep++;
+          renderWizardStep();
+        });
+        controls.appendChild(skipBtn);
+      }
+      if (def.type === "multi") {
+        var nextBtn = document.createElement("button");
+        nextBtn.type = "button";
+        nextBtn.className = "notes-add-btn priorities-wizard-next-btn";
+        nextBtn.textContent = "Continuar";
+        nextBtn.addEventListener("click", function () { wizStep++; renderWizardStep(); });
+        controls.appendChild(nextBtn);
+      }
+      quickWizardWrap.appendChild(controls);
+    }
+
+    function renderWizardFinalStep() {
+      var title = document.createElement("div");
+      title.className = "priorities-wizard-step-title";
+      title.textContent = "Origem e Assunto";
+      quickWizardWrap.appendChild(title);
+
+      var fieldsWrap = document.createElement("div");
+      fieldsWrap.className = "priorities-wizard-final-fields";
+      var origemInp = document.createElement("input");
+      origemInp.type = "text";
+      origemInp.className = "priorities-form-text";
+      origemInp.placeholder = "Origem";
+      origemInp.value = wizData.origem;
+      origemInp.addEventListener("input", function () { wizData.origem = origemInp.value; });
+      fieldsWrap.appendChild(origemInp);
+
+      var assuntoInp = document.createElement("input");
+      assuntoInp.type = "text";
+      assuntoInp.className = "priorities-form-text";
+      assuntoInp.placeholder = "Assunto *";
+      assuntoInp.value = wizData.assunto;
+      assuntoInp.addEventListener("input", function () { wizData.assunto = assuntoInp.value; });
+      assuntoInp.addEventListener("keydown", function (e) { if (e.key === "Enter") submitQuickCreate(createBtn, assuntoInp); });
+      fieldsWrap.appendChild(assuntoInp);
+      quickWizardWrap.appendChild(fieldsWrap);
+
+      var controls = document.createElement("div");
+      controls.className = "priorities-wizard-controls";
+      var backBtn = document.createElement("button");
+      backBtn.type = "button";
+      backBtn.className = "priorities-wizard-back-btn";
+      backBtn.innerHTML = '<i class="ti ti-arrow-left"></i> Voltar';
+      backBtn.addEventListener("click", function () { wizStep--; renderWizardStep(); });
+      controls.appendChild(backBtn);
+
+      var createBtn = document.createElement("button");
+      createBtn.type = "button";
+      createBtn.className = "notes-add-btn priorities-wizard-next-btn";
+      createBtn.innerHTML = '<i class="ti ti-plus"></i> Criar';
+      createBtn.addEventListener("click", function () { submitQuickCreate(createBtn, assuntoInp); });
+      controls.appendChild(createBtn);
+      quickWizardWrap.appendChild(controls);
+
+      assuntoInp.focus();
+    }
+
+    function submitQuickCreate(btn, assuntoInp) {
+      var assunto = wizData.assunto.trim();
+      if (!assunto) { assuntoInp.focus(); return; }
+      var body = {
+        tipo: wizData.tipo,
+        tributo: wizData.tributo,
+        programacao: wizData.programacao,
+        forma: wizData.forma,
+        prioridade: wizData.prioridade,
+        tempo: wizData.tempo,
+        origem: wizData.origem.trim(),
+        assunto: assunto,
+      };
+      btn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/priorities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(handle401).then(function () {
+        resetWizard();
+        loadItems();
+      }).catch(showErr).finally(function () { btn.disabled = false; });
+    }
+
+    resetWizard();
+
     section.appendChild(creationSection.section);
 
     // ---- barra de filtros — um <select> por coluna de opção (+ "Todos"),
