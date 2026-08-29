@@ -1597,6 +1597,62 @@ html, body {
 .priorities-multiselect-trigger .ti-chevron-down { font-size: 11px; color: #999; flex-shrink: 0; }
 .priorities-multiselect:focus-within .priorities-multiselect-trigger { outline: none; border-color: #4a90d9; }
 
+/* "Criação" e "Pesquisa e Filtros Gerais" (pedido do Georges) — divisórias
+   recolhíveis (mesma ideia visual/mecânica de "Filtros rápidos" logo
+   abaixo: seta que recolhe/expande, recolhida por padrão no celular) pra
+   envolver a linha de criação de item e a barra de filtros por coluna/
+   busca, que antes ficavam soltas ocupando espaço sempre. Ver
+   buildCollapsibleSection no app.js. */
+.priorities-subsection {
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 0.5px solid rgba(240, 140, 0, 0.25);
+}
+.priorities-subsection-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.priorities-subsection-collapse-btn { width: 22px; height: 22px; }
+.priorities-subsection-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #55554f;
+}
+.priorities-subsection.collapsed .priorities-subsection-body { display: none; }
+
+/* "leiaute mais bonito" pros filtros de "Pesquisa e Filtros Gerais" (pedido
+   do Georges — os filtros com LISTA, diferente dos botões de "Filtros
+   rápidos") — escopado só dentro de ".priorities-filter-row" (não mexe nos
+   filtros de Anotações Rápidas, que usam as mesmas classes-base em outro
+   lugar do app): controles maiores, fundo branco, borda mais clara, mesmo
+   visual "premium" já usado no resto do app (".filter-trigger"), em vez do
+   cinza compacto padrão de ".notes-filter-select". */
+.priorities-filter-row {
+  gap: 10px;
+}
+.priorities-filter-row .notes-filter-select,
+.priorities-filter-row .notes-filter-input,
+.priorities-filter-row .priorities-multiselect-trigger {
+  height: 34px;
+  background: #fff;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  font-size: 13px;
+  color: #262624;
+}
+.priorities-filter-row .notes-filter-select:hover,
+.priorities-filter-row .notes-filter-input:hover,
+.priorities-filter-row .priorities-multiselect-trigger:hover { border-color: #b9b9b3; }
+.priorities-filter-row .notes-filter-select:focus,
+.priorities-filter-row .notes-filter-input:focus { outline: none; border-color: #4a90d9; background: #fff; }
+.priorities-filter-row .priorities-clear-btn {
+  height: 34px;
+  border-radius: 8px;
+}
+
 /* "Filtros rápidos" (pedido do Georges) — seção de botões-atalho no TOPO
    da Lista de Prioridades, ANTES até da linha de criação. Uma "divisória"
    (linha) por grupo — Tipo/Prioridade/Tempo/Forma/Programação/Tributo —

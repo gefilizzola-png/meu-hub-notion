@@ -2469,11 +2469,11 @@
   // Rápidas — daí não precisar de CSS novo pra essa parte.
   function renderPrioritiesTable(container, page) {
     var fieldDefs = page.priorityFields || {};
-    var fieldKeys = ["tipo", "grupo", "prioridade", "tempo", "forma", "programacao", "tributo"];
+    var fieldKeys = ["tipo", "prioridade", "tempo", "forma", "programacao", "tributo"];
     var textKeys = ["origem", "assunto", "providencia"];
     var textLabels = { origem: "Origem", assunto: "Assunto", providencia: "Providência" };
 
-    // as opções de cada uma das 7 colunas acima começam com o que vem do
+    // as opções de cada uma das 6 colunas acima começam com o que vem do
     // config.js (fieldDefs[key].options — os valores "de fábrica"), mas o
     // Georges pode editá-las pela própria página (ícone de engrenagem no
     // cabeçalho — ver buildFieldOptionsPanel mais abaixo), e nesse caso o
@@ -2738,7 +2738,12 @@
     function buildQfEditor(g, index) {
       var isNew = index === -1;
       var existing = isNew ? null : qfData[g.key][index];
-      var options = (fieldDefs[g.key] && fieldDefs[g.key].options) || [];
+      // "field" (quando existe) diz qual coluna de verdade esse grupo de
+      // botões representa — hoje só "grupo" tem isso (aponta pra
+      // "programacao", já que "Grupo" não é uma coluna própria; ver
+      // comentário em page.quickFilters no config.js). Os demais grupos
+      // não têm "field" e usam a própria "key" (comportamento de sempre).
+      var options = (fieldDefs[g.field || g.key] && fieldDefs[g.field || g.key].options) || [];
 
       var editor = document.createElement("div");
       editor.className = "priorities-quickfilter-editor";
@@ -3007,6 +3012,45 @@
       return wrap;
     }
 
+    // ---- "Criação" e "Pesquisa e Filtros Gerais" (pedido do Georges):
+    // mesma ideia de divisória recolhível de "Filtros rápidos" (botão de
+    // seta + recolhida por padrão no celular), só que pra linha de criação
+    // e pra barra de filtros por coluna/busca — que ANTES ficavam soltas,
+    // sempre visíveis, ocupando espaço mesmo quando não estão em uso.
+    // Helper genérico (não usado por "Filtros rápidos", que já tinha o
+    // próprio mecanismo pronto de antes — ver qfSection acima, não mexido).
+    function buildCollapsibleSection(titleText) {
+      var collapsed = !!(window.matchMedia && window.matchMedia("(max-width: 1023px)").matches);
+      var sec = document.createElement("div");
+      sec.className = "priorities-subsection";
+      var header = document.createElement("div");
+      header.className = "priorities-subsection-header";
+      var toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "query-collapse-btn priorities-subsection-collapse-btn";
+      toggleBtn.setAttribute("aria-label", "Recolher/expandir " + titleText);
+      var icon = document.createElement("i");
+      header.appendChild(toggleBtn);
+      toggleBtn.appendChild(icon);
+      var h = document.createElement("h4");
+      h.className = "priorities-subsection-title";
+      h.textContent = titleText;
+      header.appendChild(h);
+      var body = document.createElement("div");
+      body.className = "priorities-subsection-body";
+      function applyCollapsed() {
+        sec.classList.toggle("collapsed", collapsed);
+        icon.className = collapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
+      }
+      toggleBtn.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); });
+      applyCollapsed();
+      sec.appendChild(header);
+      sec.appendChild(body);
+      return { section: sec, body: body };
+    }
+    var creationSection = buildCollapsibleSection("Criação");
+    var searchSection = buildCollapsibleSection("Pesquisa e Filtros Gerais");
+
     // ---- linha de criação — um <select> (ou checkbox-dropdown, pra "forma")
     // por coluna de opção + 3 campos de texto (Assunto é o único
     // obrigatório, igual "text" em Anotações Rápidas) + botão Adicionar.
@@ -3035,7 +3079,8 @@
     addBtn.className = "notes-add-btn priorities-add-btn";
     addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
     formRow.appendChild(addBtn);
-    section.appendChild(formRow);
+    creationSection.body.appendChild(formRow);
+    section.appendChild(creationSection.section);
 
     // ---- barra de filtros — um <select> por coluna de opção (+ "Todos"),
     // status (Todas/Pendentes/Concluídas) e busca textual (Origem/Assunto/
@@ -3080,7 +3125,8 @@
     clearBtn.className = "notes-add-btn priorities-clear-btn";
     clearBtn.textContent = "Limpar filtros";
     filterRow.appendChild(clearBtn);
-    section.appendChild(filterRow);
+    searchSection.body.appendChild(filterRow);
+    section.appendChild(searchSection.section);
 
     var errorMsg = document.createElement("p");
     errorMsg.className = "notes-error";
@@ -3098,7 +3144,6 @@
     // scroll horizontal no celular (a tabela não encolhe, ela desliza).
     var columns = [
       { key: "tipo", label: (fieldDefs.tipo && fieldDefs.tipo.label) || "Tipo" },
-      { key: "grupo", label: (fieldDefs.grupo && fieldDefs.grupo.label) || "Grupo" },
       { key: "prioridade", label: (fieldDefs.prioridade && fieldDefs.prioridade.label) || "Prioridade" },
       { key: "tempo", label: (fieldDefs.tempo && fieldDefs.tempo.label) || "Tempo" },
       { key: "forma", label: (fieldDefs.forma && fieldDefs.forma.label) || "Forma" },
@@ -3112,7 +3157,11 @@
     // Imediato" antes de "2 - Urgente"), não por ordem alfabética — pra
     // Prioridade e Tempo isso é o que faz sentido; as de texto livre
     // ordenam por ordem alfabética normal. Vazio sempre vai pro final.
-    var sortState = { key: null, dir: 1 };
+    // Padrão (pedido do Georges): a lista sempre abre ordenada por
+    // Prioridade, independente dos filtros aplicados — só muda se ele
+    // clicar em cima do nome de outra coluna (comportamento de sempre,
+    // ver o clique no "th" mais abaixo).
+    var sortState = { key: "prioridade", dir: 1 };
 
     // ---- "Editar opções" de cada coluna (pedido do Georges — diferente
     // dos botões de "Filtros rápidos" lá em cima, isso aqui edita a lista
@@ -3362,6 +3411,10 @@
         }
       });
     }
+    // já mostra a seta em "Prioridade" desde o início (sortState já nasce
+    // apontando pra ela, ver acima) — sem isso o cabeçalho ficaria "mudo"
+    // até o primeiro clique, mesmo já ordenando por Prioridade por baixo.
+    refreshHeaderIndicators();
 
     var allItems = [];
 
@@ -3434,13 +3487,19 @@
             var want = filterSelects[key].value;
             if (want && it[key] !== want) return false;
           }
-          // "Filtros rápidos" (ver qfActiveValues acima) — INDEPENDENTE do
-          // filtro por coluna de cima, os dois se combinam com "E" (por
-          // isso não tem "else"/"continue" aqui: os dois passam pelo mesmo
-          // item, na mesma volta do for).
-          var qWant = qfActiveValues(key);
+        }
+        // "Filtros rápidos" (ver qfActiveValues acima) — INDEPENDENTE do
+        // filtro por coluna de cima, os dois se combinam com "E". Percorre
+        // os GRUPOS de atalho (não "fieldKeys") porque um grupo pode
+        // representar uma coluna diferente do seu próprio nome — hoje só
+        // "Grupo" faz isso (field: "programacao", ver page.quickFilters no
+        // config.js); os demais grupos usam a própria "key" como campo.
+        for (var gi = 0; gi < qfGroups.length; gi++) {
+          var group = qfGroups[gi];
+          var groupField = group.field || group.key;
+          var qWant = qfActiveValues(group.key);
           if (qWant) {
-            var qHave = isMultiField(key) ? (it[key] || []) : [it[key]];
+            var qHave = isMultiField(groupField) ? (it[groupField] || []) : [it[groupField]];
             var qMatch = qWant.some(function (w) { return qHave.indexOf(w) !== -1; });
             if (!qMatch) return false;
           }
