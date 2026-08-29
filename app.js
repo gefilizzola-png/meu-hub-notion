@@ -2473,6 +2473,37 @@
     var textKeys = ["origem", "assunto", "providencia"];
     var textLabels = { origem: "Origem", assunto: "Assunto", providencia: "Providência" };
 
+    // as opções de cada uma das 7 colunas acima começam com o que vem do
+    // config.js (fieldDefs[key].options — os valores "de fábrica"), mas o
+    // Georges pode editá-las pela própria página (ícone de engrenagem no
+    // cabeçalho — ver buildFieldOptionsPanel mais abaixo), e nesse caso o
+    // Worker (/priorities-options) passa a valer. Busca a versão salva UMA
+    // vez, aqui no início; se vier diferente do que já está desenhado (1ª
+    // vez que essa página é montada usando os valores de fábrica), remonta
+    // a página inteira UMA vez só com os valores certos — mesmo truque de
+    // "trocar tudo" já usado depois de salvar um filtro rápido ou uma
+    // opção. "page._priorityOptionsLoaded" evita fazer essa busca nas
+    // vezes seguintes (depois de editar um item, por exemplo) — só roda de
+    // novo se o Georges editar as opções pelo painel, que já chega com a
+    // resposta fresca em mãos e não precisa desse GET.
+    if (!page._priorityOptionsLoaded) {
+      authFetch(cfg.templateWorkerUrl + "/priorities-options")
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var liveOpts = (data && data.options) || {};
+          var changed = false;
+          fieldKeys.forEach(function (key) {
+            if (Array.isArray(liveOpts[key]) && fieldDefs[key]) {
+              if (JSON.stringify(fieldDefs[key].options || []) !== JSON.stringify(liveOpts[key])) changed = true;
+              fieldDefs[key].options = liveOpts[key];
+            }
+          });
+          page._priorityOptionsLoaded = true;
+          if (changed) { container.innerHTML = ""; renderPrioritiesTable(container, page); }
+        })
+        .catch(function () { page._priorityOptionsLoaded = true; });
+    }
+
     var section = document.createElement("div");
     section.className = "notes-block notes-block-accent priorities-block";
 
@@ -3083,6 +3114,185 @@
     // ordenam por ordem alfabética normal. Vazio sempre vai pro final.
     var sortState = { key: null, dir: 1 };
 
+    // ---- "Editar opções" de cada coluna (pedido do Georges — diferente
+    // dos botões de "Filtros rápidos" lá em cima, isso aqui edita a lista
+    // de opções DE VERDADE de cada campo, a mesma usada nos <select>/
+    // checkboxes de criar e editar item). Um ícone de engrenagem no
+    // cabeçalho de cada uma das 7 colunas "de opção" abre um painel
+    // flutuante (mesma classe ".filter-menu" das outras listas suspensas
+    // do app — reaproveita o posicionamento "fixed" que já escapa do
+    // scroll horizontal da tabela, e os listeners globais de clicar fora/
+    // rolar que já fecham ".filter-menu.open" sozinhos).
+    var optionsPanelOpenKey = null;
+
+    function toggleOptionsPanel(key, anchorEl) {
+      var existing = document.querySelector(".priorities-options-panel.open");
+      if (existing) {
+        var wasKey = existing.dataset.fieldKey;
+        existing.classList.remove("open");
+        existing.remove();
+        optionsPanelOpenKey = null;
+        if (wasKey === key) return; // só clicou pra fechar o mesmo painel
+      }
+      optionsPanelOpenKey = key;
+      var panel = buildFieldOptionsPanel(key);
+      panel.dataset.fieldKey = key;
+      document.body.appendChild(panel);
+      var rect = anchorEl.getBoundingClientRect();
+      panel.style.position = "fixed";
+      panel.style.top = (rect.bottom + 6) + "px";
+      panel.style.left = Math.max(8, Math.min(rect.left - 200, window.innerWidth - 300)) + "px";
+    }
+
+    // caixinha de gerenciar as opções de UM campo — lista com renomear (i)/
+    // excluir (x) por opção, mais uma linha de adicionar no final. Cada
+    // ação chama /priorities-options na hora (uma ação por vez — ver
+    // worker.js) e, se der certo, atualiza fieldDefs[key].options com a
+    // resposta fresca do Worker e remonta a página inteira (mesmo truque
+    // já usado depois de salvar um filtro rápido) — assim a linha de
+    // criação, a barra de filtros, a tabela E os outros painéis de opção
+    // ficam todos sincronizados de uma vez, sem precisar mexer em cada um
+    // na mão.
+    function buildFieldOptionsPanel(key) {
+      var label = (fieldDefs[key] && fieldDefs[key].label) || key;
+      var panel = document.createElement("div");
+      panel.className = "filter-menu priorities-options-panel open";
+
+      var title = document.createElement("div");
+      title.className = "priorities-options-panel-title";
+      title.textContent = "Opções de " + label;
+      panel.appendChild(title);
+
+      var errBox = document.createElement("p");
+      errBox.className = "priorities-options-panel-error";
+      errBox.style.display = "none";
+      panel.appendChild(errBox);
+      function showPanelErr(msg) { errBox.textContent = msg; errBox.style.display = "block"; }
+      function hidePanelErr() { errBox.style.display = "none"; }
+
+      var list = document.createElement("div");
+      list.className = "priorities-options-panel-list";
+      panel.appendChild(list);
+
+      var renamingValue = null; // valor da opção sendo renomeada agora, ou null
+
+      function callApi(body) {
+        return authFetch(cfg.templateWorkerUrl + "/priorities-options", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        }).then(handle401).then(function (r) { return r.json(); });
+      }
+
+      function applyFreshOptions(opts) {
+        if (opts && Array.isArray(opts[key]) && fieldDefs[key]) fieldDefs[key].options = opts[key];
+        panel.remove();
+        optionsPanelOpenKey = null;
+        container.innerHTML = "";
+        renderPrioritiesTable(container, page);
+      }
+
+      function renderPanelList() {
+        list.innerHTML = "";
+        var options = (fieldDefs[key] && fieldDefs[key].options) || [];
+        options.forEach(function (opt) {
+          var row = document.createElement("div");
+          row.className = "priorities-options-panel-row";
+          if (renamingValue === opt) {
+            var input = document.createElement("input");
+            input.type = "text";
+            input.className = "priorities-options-panel-input";
+            input.value = opt;
+            row.appendChild(input);
+            var saveBtnOpt = document.createElement("button");
+            saveBtnOpt.type = "button";
+            saveBtnOpt.className = "notes-add-btn";
+            saveBtnOpt.textContent = "Salvar";
+            saveBtnOpt.addEventListener("click", function () {
+              var newValue = input.value.trim();
+              if (!newValue || newValue === opt) { renamingValue = null; renderPanelList(); return; }
+              hidePanelErr();
+              callApi({ field: key, action: "rename", value: opt, newValue: newValue }).then(function (data) {
+                if (data && data.error) { showPanelErr(data.error); return; }
+                applyFreshOptions(data.options);
+              }).catch(function () { showPanelErr("Não foi possível salvar. Tente de novo."); });
+            });
+            input.addEventListener("keydown", function (e) { if (e.key === "Enter") saveBtnOpt.click(); });
+            var cancelBtnOpt = document.createElement("button");
+            cancelBtnOpt.type = "button";
+            cancelBtnOpt.className = "priorities-clear-btn";
+            cancelBtnOpt.textContent = "Cancelar";
+            cancelBtnOpt.addEventListener("click", function () { renamingValue = null; hidePanelErr(); renderPanelList(); });
+            row.appendChild(saveBtnOpt);
+            row.appendChild(cancelBtnOpt);
+          } else {
+            var span = document.createElement("span");
+            span.className = "priorities-options-panel-label";
+            span.textContent = opt;
+            row.appendChild(span);
+            var renameIcon = document.createElement("i");
+            renameIcon.className = "ti ti-pencil priorities-options-panel-action";
+            renameIcon.title = "Renomear";
+            renameIcon.addEventListener("click", function () { renamingValue = opt; hidePanelErr(); renderPanelList(); });
+            row.appendChild(renameIcon);
+            var delIcon = document.createElement("i");
+            delIcon.className = "ti ti-x priorities-options-panel-action";
+            delIcon.title = "Excluir";
+            delIcon.addEventListener("click", function () {
+              hidePanelErr();
+              callApi({ field: key, action: "delete", value: opt }).then(function (data) {
+                if (data && data.error) { showPanelErr(data.error); return; }
+                applyFreshOptions(data.options);
+              }).catch(function () { showPanelErr("Não foi possível excluir. Tente de novo."); });
+            });
+            row.appendChild(delIcon);
+          }
+          list.appendChild(row);
+        });
+      }
+      renderPanelList();
+
+      var addRow = document.createElement("div");
+      addRow.className = "priorities-options-panel-add";
+      var addInput = document.createElement("input");
+      addInput.type = "text";
+      addInput.className = "priorities-options-panel-input";
+      addInput.placeholder = "Nova opção...";
+      var addBtnOpt = document.createElement("button");
+      addBtnOpt.type = "button";
+      addBtnOpt.className = "notes-add-btn";
+      addBtnOpt.innerHTML = '<i class="ti ti-plus"></i>';
+      function doAddOption() {
+        var value = addInput.value.trim();
+        if (!value) return;
+        hidePanelErr();
+        callApi({ field: key, action: "add", value: value }).then(function (data) {
+          if (data && data.error) { showPanelErr(data.error); return; }
+          applyFreshOptions(data.options);
+        }).catch(function () { showPanelErr("Não foi possível adicionar. Tente de novo."); });
+      }
+      addBtnOpt.addEventListener("click", doAddOption);
+      addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") doAddOption(); });
+      addRow.appendChild(addInput);
+      addRow.appendChild(addBtnOpt);
+      panel.appendChild(addRow);
+
+      // some sozinho quando os listeners globais de clicar fora/rolar
+      // tiram a classe "open" (mesmo mecanismo do menu de buildMultiCheck
+      // Dropdown lá em cima) — sem isso o painel ficaria "fechado" (CSS
+      // display:none) mas continuaria pendurado no <body> pra sempre.
+      if (window.MutationObserver) {
+        new MutationObserver(function () {
+          if (!panel.classList.contains("open")) {
+            panel.remove();
+            if (optionsPanelOpenKey === key) optionsPanelOpenKey = null;
+          }
+        }).observe(panel, { attributes: true, attributeFilter: ["class"] });
+      }
+
+      return panel;
+    }
+
     var tableWrap = document.createElement("div");
     tableWrap.className = "priorities-table-wrap";
     var table = document.createElement("table");
@@ -3105,6 +3315,19 @@
       var thArrow = document.createElement("span");
       thArrow.className = "priorities-th-arrow";
       th.appendChild(thLabel);
+      // engrenagem de "editar opções" — só nas 7 colunas de opção (as 3 de
+      // texto livre, Origem/Assunto/Providência, não têm lista fixa pra
+      // editar). "stopPropagation" pra não disparar o clique de ordenar.
+      if (fieldKeys.indexOf(col.key) !== -1) {
+        var editIcon = document.createElement("i");
+        editIcon.className = "ti ti-settings priorities-th-edit-options";
+        editIcon.title = "Editar opções de " + col.label;
+        editIcon.addEventListener("click", function (e) {
+          e.stopPropagation();
+          toggleOptionsPanel(col.key, editIcon);
+        });
+        th.appendChild(editIcon);
+      }
       th.appendChild(thArrow);
       th.addEventListener("click", function () {
         if (sortState.key === col.key) sortState.dir = sortState.dir * -1;
