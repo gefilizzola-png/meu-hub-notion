@@ -1602,16 +1602,32 @@ html, body {
 .priorities-quickfilters-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
 }
+/* botão de recolher/expandir (".query-collapse-btn", já usado nas
+   exibições recolhíveis — ver qDef.collapsible) — só o tamanho muda um
+   pouco pra alinhar melhor do lado do título aqui. */
+.priorities-quickfilters-collapse-btn { width: 22px; height: 22px; }
 .priorities-quickfilters-title {
   margin: 0;
   font-size: 13.5px;
   font-weight: 600;
   color: #55554f;
 }
+/* "N ativos" — só aparece com a seção RECOLHIDA e algum botão apertado,
+   pra dar pra ver de relance que tem filtro rápido valendo mesmo sem abrir
+   a seção de novo. */
+.priorities-quickfilters-count {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #fff;
+  background: #4a90d9;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.priorities-quickfilters-edit-toggle { margin-left: auto; }
+.priorities-quickfilters-body { margin-top: 8px; }
+.priorities-quickfilters.collapsed .priorities-quickfilters-body { display: none; }
 .priorities-quickfilters-loading { margin: 0; font-size: 12.5px; color: #8a8a84; }
 /* mesmo visual do ".priorities-clear-btn" (botão neutro, borda fina) —
    só troca de cor quando o modo de edição está LIGADO, pra ficar bem

@@ -714,6 +714,9 @@ var BUSCA_ULTIMA_EDICAO_FILTER = { property: "✏️ Última edição", type: "l
 // que são quem de fato valida/aceita os valores no servidor — se um valor
 // mudar aqui, tem que mudar lá também (arquivos/runtimes separados).
 var PRIORIDADES_TIPO_OPTIONS = ["PMF", "Pessoal"];
+// "Grupo" (pedido do Georges): fica entre Tipo e Prioridade em toda parte —
+// seleção única, igual Tipo/Prioridade/Tempo/Programação/Tributo.
+var PRIORIDADES_GRUPO_OPTIONS = ["TCE / DOI", "Processos / Ofícios", "Sistemas / Planilhas", "Fiscalização / Auditorias", "Legislação / Estudos", "Notion / IA", "Pessoal"];
 var PRIORIDADES_PRIORIDADE_OPTIONS = ["1 - Imediato", "2 - Urgente", "3 - Alta", "4 - Média", "5 - Baixa", "6 - Sem prioridade"];
 var PRIORIDADES_TEMPO_OPTIONS = ["Menos do que 5 minutos", "5 minutos", "10 minutos", "15 minutos", "30 minutos", "45 minutos", "1 hora", "1 hora e meia", "2 horas", "Mais do que 2 horas"];
 var PRIORIDADES_FORMA_OPTIONS = ["Chrome", "Claude", "E-mail", "Excel", "Explorer", "Notion", "Presencial", "Solar", "SQL", "Tributos", "WhatsApp", "Word"];
@@ -733,6 +736,15 @@ var PRIORIDADES_TRIBUTO_OPTIONS = ["Amigos", "CadImob", "CadMob", "Casa", "Eletr
 var DEFAULT_QUICKFILTERS = {
   tipo: [
     { label: "PMF", values: ["PMF"] },
+    { label: "Pessoal", values: ["Pessoal"] },
+  ],
+  grupo: [
+    { label: "TCE / DOI", values: ["TCE / DOI"] },
+    { label: "Processos / Ofícios", values: ["Processos / Ofícios"] },
+    { label: "Sistemas / Planilhas", values: ["Sistemas / Planilhas"] },
+    { label: "Fiscalização / Auditorias", values: ["Fiscalização / Auditorias"] },
+    { label: "Legislação / Estudos", values: ["Legislação / Estudos"] },
+    { label: "Notion / IA", values: ["Notion / IA"] },
     { label: "Pessoal", values: ["Pessoal"] },
   ],
   prioridade: [
@@ -779,7 +791,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-28 22:15",
+  appVersion: "2026-08-28 22:35",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
   // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
   // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
@@ -1366,6 +1378,7 @@ const APP_CONFIG = {
       // página, o app.js só lê "page.*" de forma genérica.
       priorityFields: {
         tipo: { label: "Tipo", options: PRIORIDADES_TIPO_OPTIONS },
+        grupo: { label: "Grupo", options: PRIORIDADES_GRUPO_OPTIONS },
         prioridade: { label: "Prioridade", options: PRIORIDADES_PRIORIDADE_OPTIONS },
         tempo: { label: "Tempo", options: PRIORIDADES_TEMPO_OPTIONS },
         // "multi: true" — única coluna de seleção múltipla das 6 (pedido do
@@ -1388,6 +1401,7 @@ const APP_CONFIG = {
       quickFilters: {
         groups: [
           { key: "tipo", label: "Tipo" },
+          { key: "grupo", label: "Grupo" },
           { key: "prioridade", label: "Prioridade" },
           { key: "tempo", label: "Tempo" },
           { key: "forma", label: "Forma" },

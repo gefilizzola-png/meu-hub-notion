@@ -2469,7 +2469,7 @@
   // Rápidas — daí não precisar de CSS novo pra essa parte.
   function renderPrioritiesTable(container, page) {
     var fieldDefs = page.priorityFields || {};
-    var fieldKeys = ["tipo", "prioridade", "tempo", "forma", "programacao", "tributo"];
+    var fieldKeys = ["tipo", "grupo", "prioridade", "tempo", "forma", "programacao", "tributo"];
     var textKeys = ["origem", "assunto", "providencia"];
     var textLabels = { origem: "Origem", assunto: "Assunto", providencia: "Providência" };
 
@@ -2499,6 +2499,13 @@
     qfGroups.forEach(function (g) { qfActive[g.key] = []; });
     var qfEditMode = false;
     var qfEditing = null; // { key, index } do botão sendo criado/editado agora (index === -1 = "criando novo"), ou null = nenhum editor aberto
+    // recolhido por padrão em tela pequena (pedido do Georges — no celular
+    // essa seção sozinha já ocupa uma tela inteira de rolagem antes de
+    // chegar na tabela); em tela larga começa aberta, como sempre foi.
+    // Só olha o tamanho UMA vez, na hora de montar a página (não fica
+    // ouvindo resize — vira a mesma ideia de "abre expandido/recolhido"
+    // já usada pelas divisórias de Início, não precisa ser reativo).
+    var qfCollapsed = !!(window.matchMedia && window.matchMedia("(max-width: 1023px)").matches);
 
     var qfSection = document.createElement("div");
     qfSection.className = "priorities-quickfilters";
@@ -2549,15 +2556,53 @@
       }).catch(showErr);
     }
 
+    // conta quantos botões estão ativos ao todo (soma de todos os grupos)
+    // — mostrado do lado do título quando a seção está RECOLHIDA, pra dar
+    // pra ver de relance se tem algum filtro rápido valendo sem precisar
+    // abrir de novo.
+    function qfActiveCount() {
+      var total = 0;
+      qfGroups.forEach(function (g) { total += (qfActive[g.key] || []).length; });
+      return total;
+    }
+
     function renderQfSection() {
       qfSection.innerHTML = "";
+      qfSection.classList.toggle("collapsed", qfCollapsed);
 
       var header = document.createElement("div");
       header.className = "priorities-quickfilters-header";
+
+      // botão de recolher/expandir — mesmo visual/mecanismo já usado nas
+      // exibições com "qDef.collapsible" (".query-collapse-btn", seta que
+      // vira de baixo pra direita); aqui é sempre exibido (a seção inteira
+      // é sempre recolhível, não é opcional por página).
+      var collapseToggle = document.createElement("button");
+      collapseToggle.type = "button";
+      collapseToggle.className = "query-collapse-btn priorities-quickfilters-collapse-btn";
+      collapseToggle.setAttribute("aria-label", "Recolher/expandir Filtros rápidos");
+      var collapseIcon = document.createElement("i");
+      collapseIcon.className = qfCollapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
+      collapseToggle.appendChild(collapseIcon);
+      collapseToggle.addEventListener("click", function () {
+        qfCollapsed = !qfCollapsed;
+        renderQfSection();
+      });
+      header.appendChild(collapseToggle);
+
       var heading = document.createElement("h4");
       heading.className = "priorities-quickfilters-title";
       heading.textContent = "Filtros rápidos";
       header.appendChild(heading);
+
+      var activeCount = qfActiveCount();
+      if (qfCollapsed && activeCount) {
+        var countBadge = document.createElement("span");
+        countBadge.className = "priorities-quickfilters-count";
+        countBadge.textContent = activeCount === 1 ? "1 ativo" : activeCount + " ativos";
+        header.appendChild(countBadge);
+      }
+
       var editToggle = document.createElement("button");
       editToggle.type = "button";
       editToggle.className = "priorities-quickfilters-edit-toggle" + (qfEditMode ? " active" : "");
@@ -2567,16 +2612,27 @@
       editToggle.addEventListener("click", function () {
         qfEditMode = !qfEditMode;
         qfEditing = null;
+        // entrar no modo de edição sempre expande a seção — não dá pra
+        // editar os botões sem ver eles.
+        if (qfEditMode) qfCollapsed = false;
         renderQfSection();
       });
       header.appendChild(editToggle);
       qfSection.appendChild(header);
 
+      // tudo abaixo do cabeçalho mora dentro de ".priorities-quickfilters-
+      // body" — é esse wrapper que o CSS esconde quando a seção está
+      // ".collapsed" (mesma ideia de ".query-block-body" já usada nas
+      // exibições recolhíveis).
+      var body = document.createElement("div");
+      body.className = "priorities-quickfilters-body";
+      qfSection.appendChild(body);
+
       if (!qfData) {
         var loading = document.createElement("p");
         loading.className = "priorities-quickfilters-loading";
         loading.textContent = "Carregando…";
-        qfSection.appendChild(loading);
+        body.appendChild(loading);
         return;
       }
 
@@ -2637,7 +2693,7 @@
         }
 
         groupRow.appendChild(btnsWrap);
-        qfSection.appendChild(groupRow);
+        body.appendChild(groupRow);
 
         if (qfEditMode && qfEditing && qfEditing.key === g.key) {
           groupRow.appendChild(buildQfEditor(g, qfEditing.index));
@@ -3011,6 +3067,7 @@
     // scroll horizontal no celular (a tabela não encolhe, ela desliza).
     var columns = [
       { key: "tipo", label: (fieldDefs.tipo && fieldDefs.tipo.label) || "Tipo" },
+      { key: "grupo", label: (fieldDefs.grupo && fieldDefs.grupo.label) || "Grupo" },
       { key: "prioridade", label: (fieldDefs.prioridade && fieldDefs.prioridade.label) || "Prioridade" },
       { key: "tempo", label: (fieldDefs.tempo && fieldDefs.tempo.label) || "Tempo" },
       { key: "forma", label: (fieldDefs.forma && fieldDefs.forma.label) || "Forma" },
