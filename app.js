@@ -3794,7 +3794,13 @@
 
         function renderSubitems() {
           subitemsWrap.innerHTML = "";
-          (it.subitems || []).forEach(function (s) {
+          // sinalizadas primeiro (mesmo critério de ordenação usado em
+          // Anotações Rápidas — ver "flagged ? 1 : 0" no renderNotesBlock),
+          // sem mexer na ordem relativa das demais.
+          var sortedSubitems = (it.subitems || []).slice().sort(function (a, b) {
+            return (b.flagged ? 1 : 0) - (a.flagged ? 1 : 0);
+          });
+          sortedSubitems.forEach(function (s) {
             var subRow = document.createElement("div");
             subRow.className = "notes-subitem" + (s.done ? " done" : "");
 
@@ -3804,6 +3810,18 @@
             subCheck.checked = !!s.done;
             subCheck.addEventListener("change", function () { toggleSubitem(it, s.id, subCheck.checked); });
             subRow.appendChild(subCheck);
+
+            // estrela pra destacar o subitem mais relevante dentro do item
+            // (pedido do Georges — "assim como fizemos em Anotações
+            // Rápidas") — mesmíssimo mecanismo/ícone (makeStarSvg), só que
+            // por SUBITEM em vez de por anotação.
+            var subStarBtn = document.createElement("button");
+            subStarBtn.type = "button";
+            subStarBtn.className = "notes-item-star notes-subitem-star" + (s.flagged ? " flagged" : "");
+            subStarBtn.appendChild(makeStarSvg());
+            subStarBtn.title = s.flagged ? "Remover destaque" : "Destacar subitem";
+            subStarBtn.addEventListener("click", function () { toggleSubitemFlag(it, s.id, !s.flagged); });
+            subRow.appendChild(subStarBtn);
 
             // texto agora é editável (pedido do Georges — antes só dava pra
             // marcar como feito ou excluir): clique entra em modo edição
@@ -3911,22 +3929,31 @@
     }
     function addSubitem(it, text) {
       var newSubitems = (it.subitems || []).slice();
-      newSubitems.push({ id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), text: text, done: false });
+      newSubitems.push({ id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), text: text, done: false, flagged: false });
       putSubitems(it, newSubitems);
     }
     function toggleSubitem(it, subitemId, done) {
       var newSubitems = (it.subitems || []).map(function (s) {
-        return s.id === subitemId ? { id: s.id, text: s.text, done: done } : s;
+        return s.id === subitemId ? { id: s.id, text: s.text, done: done, flagged: !!s.flagged } : s;
       });
       putSubitems(it, newSubitems);
     }
     // edição do texto de um subitem já existente (pedido do Georges — antes
     // só dava pra marcar como feito ou excluir). Mesmo padrão de
     // toggleSubitem: substitui a lista inteira via putSubitems (PUT já
-    // sanitiza { id, text, done } no worker.js).
+    // sanitiza { id, text, done, flagged } no worker.js).
     function editSubitem(it, subitemId, newText) {
       var newSubitems = (it.subitems || []).map(function (s) {
-        return s.id === subitemId ? { id: s.id, text: newText, done: s.done } : s;
+        return s.id === subitemId ? { id: s.id, text: newText, done: s.done, flagged: !!s.flagged } : s;
+      });
+      putSubitems(it, newSubitems);
+    }
+    // estrela de destaque por subitem (pedido do Georges — "assim como
+    // fizemos em Anotações Rápidas", só que por subitem em vez de por
+    // anotação inteira). Mesmo padrão de toggleSubitem/editSubitem.
+    function toggleSubitemFlag(it, subitemId, flagged) {
+      var newSubitems = (it.subitems || []).map(function (s) {
+        return s.id === subitemId ? { id: s.id, text: s.text, done: s.done, flagged: flagged } : s;
       });
       putSubitems(it, newSubitems);
     }
