@@ -2990,9 +2990,35 @@
       function positionMenu() {
         var rect = trigger.getBoundingClientRect();
         menu.style.position = "fixed";
-        menu.style.top = (rect.bottom + 4) + "px";
         menu.style.left = rect.left + "px";
         menu.style.minWidth = Math.max(rect.width, 200) + "px";
+        // Quando a tabela tem poucas linhas (ex: filtro deixando só 1 item),
+        // o botão fica perto do topo da página, mas isso não impede que ele
+        // esteja perto do FIM da JANELA (barra de filtros/criação acima
+        // empurra tudo pra baixo). O menu é "fixed" (escapa do scroll
+        // horizontal da tabela — ver comentário acima), então o que passar
+        // da borda de baixo da janela simplesmente some, sem jeito de rolar
+        // até lá (posição fixed não participa do scroll da página). Aqui a
+        // gente mede o espaço livre embaixo x em cima do botão: se não
+        // couber pelo menos o "teto" de sempre (320px, ver CSS
+        // ".filter-menu") nem uma altura mínima razoável embaixo, o menu
+        // abre pra CIMA em vez de pra baixo; em qualquer um dos dois casos,
+        // a altura máxima é limitada ao espaço realmente disponível, então
+        // o scroll interno dele (".filter-menu { overflow-y: auto }") tem
+        // como aparecer e funcionar de verdade.
+        var margin = 8;
+        var spaceBelow = window.innerHeight - rect.bottom - margin;
+        var spaceAbove = rect.top - margin;
+        var maxHeightCap = 320;
+        menu.style.bottom = "";
+        menu.style.top = "";
+        if (spaceBelow >= 160 || spaceBelow >= spaceAbove) {
+          menu.style.top = (rect.bottom + 4) + "px";
+          menu.style.maxHeight = Math.max(120, Math.min(maxHeightCap, spaceBelow)) + "px";
+        } else {
+          menu.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+          menu.style.maxHeight = Math.max(120, Math.min(maxHeightCap, spaceAbove)) + "px";
+        }
       }
 
       trigger.addEventListener("click", function (e) {
