@@ -2690,6 +2690,28 @@
         header.appendChild(countBadge);
       }
 
+      // botão de limpar SÓ os Filtros rápidos (pedido do Georges) — só
+      // aparece quando tem pelo menos 1 botão apertado em algum grupo
+      // (expandido ou recolhido, não depende de "qfCollapsed"). Já existia
+      // um jeito de limpar tudo de uma vez (botão "Limpar filtros" lá em
+      // "Pesquisa e Filtros Gerais", que de quebra também solta os Filtros
+      // rápidos — ver clearBtn mais abaixo), mas esse fica direto aqui
+      // nessa seção, sem precisar abrir a outra.
+      if (activeCount) {
+        var clearQfBtn = document.createElement("button");
+        clearQfBtn.type = "button";
+        clearQfBtn.className = "priorities-quickfilters-clear-btn";
+        clearQfBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar';
+        clearQfBtn.title = "Limpar filtros rápidos";
+        clearQfBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          qfGroups.forEach(function (g) { qfActive[g.key] = []; });
+          renderQfSection();
+          applyFilters();
+        });
+        header.appendChild(clearQfBtn);
+      }
+
       var editToggle = document.createElement("button");
       editToggle.type = "button";
       editToggle.className = "priorities-quickfilters-edit-toggle" + (qfEditMode ? " active" : "");
@@ -3110,13 +3132,16 @@
 
     // ---- "Criação" e "Pesquisa e Filtros Gerais" (pedido do Georges):
     // mesma ideia de divisória recolhível de "Filtros rápidos" (botão de
-    // seta + recolhida por padrão no celular), só que pra linha de criação
-    // e pra barra de filtros por coluna/busca — que ANTES ficavam soltas,
-    // sempre visíveis, ocupando espaço mesmo quando não estão em uso.
-    // Helper genérico (não usado por "Filtros rápidos", que já tinha o
-    // próprio mecanismo pronto de antes — ver qfSection acima, não mexido).
+    // seta), só que pra linha de criação e pra barra de filtros por
+    // coluna/busca — que ANTES ficavam soltas, sempre visíveis, ocupando
+    // espaço mesmo quando não estão em uso. SEMPRE recolhida ao abrir a
+    // página (pedido do Georges — antes só recolhia no celular/tablet via
+    // matchMedia; agora é assim em QUALQUER tamanho de tela, computador
+    // incluso). Helper genérico (não usado por "Filtros rápidos", que já
+    // tinha o próprio mecanismo pronto de antes — ver qfSection acima, não
+    // mexido).
     function buildCollapsibleSection(titleText) {
-      var collapsed = !!(window.matchMedia && window.matchMedia("(max-width: 1023px)").matches);
+      var collapsed = true;
       var sec = document.createElement("div");
       sec.className = "priorities-subsection";
       var header = document.createElement("div");
@@ -3179,7 +3204,9 @@
     section.appendChild(creationSection.section);
 
     // ---- barra de filtros — um <select> por coluna de opção (+ "Todos"),
-    // status (Todas/Pendentes/Concluídas) e busca textual (Origem/Assunto).
+    // status (Todas/Pendentes/Concluídas) e busca textual ampla (pedido do
+    // Georges: todas as propriedades + subitens + notas — ver "hay" em
+    // applyFilters mais abaixo).
     var filterRow = document.createElement("div");
     filterRow.className = "priorities-form-grid priorities-filter-row";
     var filterSelects = {};
@@ -3221,7 +3248,7 @@
     var searchInput = document.createElement("input");
     searchInput.type = "text";
     searchInput.className = "notes-filter-input priorities-search-input";
-    searchInput.placeholder = "Pesquisar (Origem/Assunto)...";
+    searchInput.placeholder = "Pesquisar em tudo (campos, subitens, notas)...";
     filterRow.appendChild(searchInput);
     searchSection.body.appendChild(filterRow);
     section.appendChild(searchSection.section);
@@ -3703,7 +3730,24 @@
           }
         }
         if (q) {
-          var hay = ((it.origem || "") + " " + (it.assunto || "")).toLowerCase();
+          // busca ampliada (pedido do Georges — "pesquisar em todas as
+          // propriedades de cada item, nos subitens e inclusive nas
+          // notas"): junta TUDO que é texto pesquisável do item num "hay"
+          // só — os 6 campos de opção (tipo/prioridade/tempo/forma/
+          // programacao/tributo, cada um já é o VALOR escolhido, não a
+          // chave técnica — ex: "PMF", não "tipo"), origem, assunto, a nota
+          // do item, e de cada subitem o texto E a nota dele também.
+          var hayParts = [it.origem || "", it.assunto || "", it.nota || ""];
+          fieldKeys.forEach(function (key) {
+            var v = it[key];
+            if (Array.isArray(v)) hayParts.push(v.join(" "));
+            else if (v) hayParts.push(v);
+          });
+          (it.subitems || []).forEach(function (s) {
+            if (s.text) hayParts.push(s.text);
+            if (s.nota) hayParts.push(s.nota);
+          });
+          var hay = hayParts.join(" ").toLowerCase();
           if (hay.indexOf(q) === -1) return false;
         }
         return true;
@@ -3893,15 +3937,13 @@
         // antes só aparecia quando já existia pelo menos 1 subitem; agora é
         // ele mesmo quem "abre a porta" pro campo de criar o 1º subitem,
         // já que o botão avulso de "+" foi removido — ver renderSubitems
-        // mais abaixo). Ao ABRIR, foca direto no campo de novo subitem, pra
-        // já poder digitar sem precisar clicar de novo em nada.
+        // mais abaixo). NÃO foca mais o campo de novo subitem sozinho ao
+        // abrir (pedido do Georges — no celular isso abria o teclado na
+        // hora, sem ele ter pedido); só expande/mostra a linha, o campo
+        // continua lá pronto, mas quem decide clicar nele é o usuário.
         toggleSubitemsBtn.addEventListener("click", function () {
           subitemsExpanded = !subitemsExpanded;
           applySubitemsCollapsed();
-          if (subitemsExpanded) {
-            var addInput = subitemsWrap.querySelector(".notes-subitem-add-input");
-            if (addInput) addInput.focus();
-          }
         });
 
         function applySubitemsCollapsed() {
