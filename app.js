@@ -4309,6 +4309,22 @@
     // e o addRow dentro de renderSubitems) — pra dar pra digitar vários
     // subitens seguidos sem precisar clicar de novo a cada um.
     var pendingFocusSubitemAddId = null;
+    // ids dos itens cuja checklist está ABERTA agora (pedido do Georges —
+    // "quando faço uma alteração num subitem, a página recarrega e tenho
+    // que achar o item de novo e clicar pra exibir os subitens de novo").
+    // Fica NESTE escopo (fora de renderList/items.forEach, que roda de
+    // novo do zero a cada updateItem->loadItems), então sobrevive aos
+    // recarregamentos — cada linha, ao ser remontada, já nasce expandida
+    // se o id dela estiver aqui (ver "subitemsExpanded" dentro do
+    // items.forEach mais abaixo). Objeto simples usado como "set" (chave =
+    // id, presença = expandido), mesmo padrão de outros mapas do arquivo
+    // (ex: "qfActive"). "expandedNoteIds" é a mesma ideia pra nota do ITEM
+    // (chave = id do item); "expandedSubitemNoteIds" pra nota de cada
+    // SUBITEM (chave = id do subitem — já é um UUID próprio, então não
+    // precisa aninhar por item).
+    var expandedSubitemIds = {};
+    var expandedNoteIds = {};
+    var expandedSubitemNoteIds = {};
 
     function handle401(res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
@@ -4644,6 +4660,8 @@
         addNoteBtn.title = (it.nota || "").trim() ? "Ver/editar nota" : "Criar nota";
         addNoteBtn.addEventListener("click", function () {
           noteExpanded = !noteExpanded;
+          if (noteExpanded) expandedNoteIds[it.id] = true;
+          else delete expandedNoteIds[it.id];
           applyNoteCollapsed();
           if (noteExpanded) { noteTextarea.focus(); }
         });
@@ -4682,11 +4700,14 @@
         subitemsRow.appendChild(subitemsCell);
         tbody.appendChild(subitemsRow);
 
-        // nota do item — linha própria, sempre recolhida ao abrir (mesmo
-        // padrão da checklist), com uma <textarea> só (não é lista); salva
-        // ao perder o foco, só se o texto realmente mudou.
+        // nota do item — linha própria, recolhida por padrão (mesmo padrão
+        // da checklist), com uma <textarea> só (não é lista); salva ao
+        // perder o foco, só se o texto realmente mudou. Reabre sozinha
+        // depois de um reload se estava aberta antes (mesma ideia da
+        // checklist — ver "expandedNoteIds" e "noteExpanded" abaixo).
+        var noteExpanded = !!expandedNoteIds[it.id];
         var noteRow = document.createElement("tr");
-        noteRow.className = "priorities-note-row collapsed";
+        noteRow.className = "priorities-note-row" + (noteExpanded ? "" : " collapsed");
         var noteCell = document.createElement("td");
         noteCell.colSpan = columns.length + 3;
         if (tipoColor) noteCell.style.background = tipoColor.bg;
@@ -4702,15 +4723,16 @@
         noteRow.appendChild(noteCell);
         tbody.appendChild(noteRow);
 
-        var noteExpanded = false;
         function applyNoteCollapsed() {
           noteRow.classList.toggle("collapsed", !noteExpanded);
         }
 
-        // "sempre recolhido como padrão" (pedido do Georges) — recomeça
-        // recolhido a cada renderização (recarregar a lista, filtrar etc.),
-        // não é um estado guardado no item.
-        var subitemsExpanded = false;
+        // recolhido por padrão pra item "novo" (nunca aberto ainda), mas
+        // reabre sozinho se esse id estiver em "expandedSubitemIds" (pedido
+        // do Georges — continuar editando os subitens do mesmo item depois
+        // que updateItem recarrega a tabela inteira, sem precisar achar a
+        // linha de novo e clicar pra expandir outra vez).
+        var subitemsExpanded = !!expandedSubitemIds[it.id];
 
         // listener do botão — só dá pra ligar aqui (não lá na criação do
         // botão, mais acima) porque "applySubitemsCollapsed" só existe a
@@ -4724,6 +4746,12 @@
         // continua lá pronto, mas quem decide clicar nele é o usuário.
         toggleSubitemsBtn.addEventListener("click", function () {
           subitemsExpanded = !subitemsExpanded;
+          // grava/esquece esse id em "expandedSubitemIds" (ver comentário
+          // lá em cima) — é isso que faz a checklist continuar aberta
+          // depois do próximo reload, até o Georges clicar pra fechar de
+          // novo.
+          if (subitemsExpanded) expandedSubitemIds[it.id] = true;
+          else delete expandedSubitemIds[it.id];
           applySubitemsCollapsed();
         });
 
@@ -4827,8 +4855,13 @@
             // linha da nota do subitem — própria, logo abaixo dele, recolhida
             // por padrão (mesmo mecanismo de "collapsed" do noteRow do item,
             // só que por subitem). O botão acima só alterna essa classe.
+            // Reabre sozinha depois de um reload se estava aberta antes
+            // (id do subitem é um UUID próprio — crypto.randomUUID — então
+            // "expandedSubitemNoteIds" pode usar um mapa "achatado", sem
+            // precisar aninhar por item).
+            var subNoteExpanded = !!expandedSubitemNoteIds[s.id];
             var subNoteRow = document.createElement("div");
-            subNoteRow.className = "notes-subitem-note-row collapsed";
+            subNoteRow.className = "notes-subitem-note-row" + (subNoteExpanded ? "" : " collapsed");
             var subNoteTextarea = document.createElement("textarea");
             subNoteTextarea.className = "notes-subitem-note-textarea";
             subNoteTextarea.placeholder = "Nota do subitem...";
@@ -4843,6 +4876,8 @@
             subNoteBtn.addEventListener("click", function () {
               var expanding = subNoteRow.classList.contains("collapsed");
               subNoteRow.classList.toggle("collapsed", !expanding);
+              if (expanding) expandedSubitemNoteIds[s.id] = true;
+              else delete expandedSubitemNoteIds[s.id];
               if (expanding) subNoteTextarea.focus();
             });
           });
@@ -4895,6 +4930,18 @@
     }
 
     function loadItems() {
+      // guarda a posição de rolagem ANTES de trocar o corpo da tabela por
+      // "Carregando…" (pedido do Georges — "tenho que achar de novo aquele
+      // item que eu estava editando"): "Carregando…" é bem mais curto que
+      // a tabela de verdade, então por um instante a página encolhe e o
+      // navegador empurra a rolagem pra cima sozinho; quando a tabela real
+      // volta (bem mais alta de novo), a rolagem NÃO sobe de volta sozinha
+      // — por isso restaura à mão, depois que o "then" abaixo já desenhou
+      // tudo (ver requestAnimationFrame). Junto com "expandedSubitemIds"/
+      // "expandedNoteIds"/"expandedSubitemNoteIds" acima (que já fazem a
+      // checklist/nota do item que estava aberta continuar aberta), a tela
+      // volta bem perto de como estava antes do reload.
+      var savedScrollY = window.scrollY;
       tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 3) + '">Carregando…</td></tr>';
       authFetch(cfg.templateWorkerUrl + "/priorities")
         .then(handle401)
@@ -4903,6 +4950,7 @@
           allItems = data.priorities || [];
           applyFilters();
           hideErr();
+          requestAnimationFrame(function () { window.scrollTo(0, savedScrollY); });
         })
         .catch(function () { tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 3) + '">Não foi possível carregar a lista.</td></tr>'; });
     }
