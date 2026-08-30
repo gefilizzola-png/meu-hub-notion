@@ -705,14 +705,16 @@ var BUSCA_DATA_CRIACAO_FILTER = { property: "✨ Criado em", type: "created_time
 var BUSCA_ULTIMA_EDICAO_FILTER = { property: "✏️ Última edição", type: "last_edited_time", label: "Última edição" };
 
 // ---------------- Lista de Prioridades (página própria, sem Notion) ----------------
-// Listas fixas de opção pras 6 colunas "de opção" da tabela de Lista de
+// Listas fixas de opção pras colunas "de opção" da tabela de Lista de
 // Prioridades (ver pages.prioridades mais abaixo e renderPrioritiesTable no
-// app.js). Isso NÃO é um filtro de propriedade do Notion (não tem
-// "property"/"type" — são arrays simples de string) — é só pra montar os
-// <select> da tabela e dos filtros por coluna. Precisam bater EXATAMENTE
-// (mesmo texto, mesma ordem) com as constantes PRIORITIES_* no worker.js,
-// que são quem de fato valida/aceita os valores no servidor — se um valor
-// mudar aqui, tem que mudar lá também (arquivos/runtimes separados).
+// app.js) — Origem é a única EXCEÇÃO, sem lista fixa (ver
+// PRIORIDADES_ORIGEM_OPTIONS mais abaixo). Isso NÃO é um filtro de
+// propriedade do Notion (não tem "property"/"type" — são arrays simples de
+// string) — é só pra montar os <select>/dropdown da tabela e dos filtros
+// por coluna. Precisam bater EXATAMENTE (mesmo texto, mesma ordem) com as
+// constantes PRIORITIES_* no worker.js, que são quem de fato valida/aceita
+// os valores no servidor — se um valor mudar aqui, tem que mudar lá também
+// (arquivos/runtimes separados).
 var PRIORIDADES_TIPO_OPTIONS = ["PMF", "Pessoal"];
 var PRIORIDADES_PRIORIDADE_OPTIONS = ["1 - Imediato", "2 - Urgente", "3 - Alta", "4 - Média", "5 - Baixa", "6 - Sem prioridade"];
 var PRIORIDADES_TEMPO_OPTIONS = ["Menos do que 5 minutos", "5 minutos", "10 minutos", "15 minutos", "30 minutos", "45 minutos", "1 hora", "1 hora e meia", "2 horas", "Mais do que 2 horas"];
@@ -722,6 +724,15 @@ var PRIORIDADES_FORMA_OPTIONS = ["Chrome", "Claude", "E-mail", "Excel", "Explore
 // rápidos" (grupo "Grupo" — ver mais abaixo) funcionar.
 var PRIORIDADES_PROGRAMACAO_OPTIONS = ["Auditorias", "DOI", "Estudos", "Fiscalização", "IA", "Legislação", "Notion", "Ofícios", "Pessoal", "Planilhas", "Processos", "Sistemas", "TCE"];
 var PRIORIDADES_TRIBUTO_OPTIONS = ["Amigos", "CadImob", "CadMob", "Casa", "Eletrônicos", "Família", "Financeiro", "Financeiros", "Funcional", "Geral", "IPTU", "IPTU/ITBI", "ITBI", "Notion", "OODC", "Profissional", "Saúde", "TCRS", "Vitor"];
+// Origem virou multi_select também (pedido do Georges) — SEM lista "de
+// fábrica" aqui de propósito: sempre foi texto livre, então começa vazia;
+// quem realmente preenche na prática é o self-heal do worker.js
+// (seedOrigemOptionsFromItems, dentro de handlePrioritiesGet), que
+// autopreenche a partir dos valores DISTINTOS já usados nos itens
+// existentes assim que a página é aberta pela 1ª vez depois do deploy —
+// dali em diante o Georges cria/renomeia/exclui pelo ícone de engrenagem da
+// própria coluna, igual aos outros 6 campos.
+var PRIORIDADES_ORIGEM_OPTIONS = [];
 
 // Padrão inicial dos botões de "Filtros rápidos" (topo da Lista de
 // Prioridades — ver renderPrioritiesQuickFilters no app.js), usado só
@@ -797,7 +808,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-30 01:10",
+  appVersion: "2026-08-30 19:55",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1424,7 +1435,14 @@ const APP_CONFIG = {
         // no worker.js). As outras 4 continuam de seleção única.
         forma: { label: "Forma", options: PRIORIDADES_FORMA_OPTIONS, multi: true },
         programacao: { label: "Programação", options: PRIORIDADES_PROGRAMACAO_OPTIONS },
-        tributo: { label: "Tributo", options: PRIORIDADES_TRIBUTO_OPTIONS, multi: true }
+        tributo: { label: "Tributo", options: PRIORIDADES_TRIBUTO_OPTIONS, multi: true },
+        // Origem virou multi_select (pedido do Georges — "transformar Origem
+        // em lista múltipla, com a mesma possibilidade de eu editar as
+        // opções"): antes era texto livre (textKeys, no app.js); options
+        // começa vazia aqui (ver PRIORIDADES_ORIGEM_OPTIONS acima) — o
+        // self-heal do worker.js autopreenche na 1ª listagem, e a partir daí
+        // a fonte de verdade é o KV priority_options, igual aos outros.
+        origem: { label: "Origem", options: PRIORIDADES_ORIGEM_OPTIONS, multi: true }
       },
       // "Filtros rápidos" (pedido do Georges): seção de botões no topo da
       // página, um bloco por grupo — ver renderPrioritiesQuickFilters no

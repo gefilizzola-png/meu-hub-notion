@@ -1935,12 +1935,39 @@ html, body {
    stylesheet); esse box-shadow funciona em cima de qualquer cor de fundo. */
 .priorities-cell-select:focus { box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.35); }
 
-/* "Criação" e "Pesquisa e Filtros Gerais" (pedido do Georges) — divisórias
+/* "moderno, sem contorno da caixa... sem seta" (pedido do Georges) —
+   Prioridade/Programação (continuam <select> nativos) e o trigger de
+   Tributo (continua <button> do multiselect, com os chips arredondados de
+   cada opção intactos) ganham essa classe além da classe normal de tamanho
+   (".priorities-cell-select") — "appearance:none" mata a seta nativa do
+   <select> em qualquer navegador; o trigger não tem seta nativa (usa
+   ".ti-chevron-down" de fonte, escondido logo abaixo), só perde a borda/
+   fundo herdados de ".priorities-cell-select". Já sabe que ali tem uma
+   lista pra clicar, não precisa do contorno/seta pra avisar isso de novo.
+   Vem DEPOIS de ".priorities-cell-select"/".priorities-multiselect-trigger"
+   no arquivo de propósito, pra ganhar da borda delas na cascata (mesma
+   especificidade — 1 classe cada — quem vem por último no CSS vence). */
+.priorities-select-plain {
+  border: 0.5px solid transparent;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-left: 2px;
+}
+select.priorities-select-plain { cursor: pointer; }
+.priorities-select-plain:focus { border-color: transparent; background: #fff; }
+.priorities-multiselect-trigger.priorities-select-plain { padding-left: 2px; }
+.priorities-multiselect-trigger.priorities-select-plain .ti-chevron-down { display: none; }
+
+/* "Criação"/"Filtros Gerais"/"Itens" (pedido do Georges) — divisórias
    recolhíveis (mesma ideia visual/mecânica de "Filtros rápidos" logo
-   abaixo: seta que recolhe/expande, recolhida por padrão no celular) pra
-   envolver a linha de criação de item e a barra de filtros por coluna/
-   busca, que antes ficavam soltas ocupando espaço sempre. Ver
-   buildCollapsibleSection no app.js. */
+   abaixo: seta que recolhe/expande) pra envolver a linha de criação de
+   item, a barra de filtros por coluna e a tabela de verdade, que antes
+   ficavam soltas ocupando espaço sempre. As 3 primeiras (Criação/Filtros
+   Gerais/Filtros Rápidos) nascem recolhidas; "Itens" (a única com a tabela
+   dentro) nasce EXPANDIDA — ver buildCollapsibleSection(titleText,
+   startExpanded) no app.js. */
 .priorities-subsection {
   margin: 0 0 14px;
   padding-bottom: 12px;
@@ -2029,9 +2056,9 @@ html, body {
   .priorities-wizard-controls { flex-wrap: wrap; }
 }
 
-/* "leiaute mais bonito" pros filtros de "Pesquisa e Filtros Gerais" (pedido
-   do Georges — os filtros com LISTA, diferente dos botões de "Filtros
-   rápidos") — escopado só dentro de ".priorities-filter-row" (não mexe nos
+/* "leiaute mais bonito" pros filtros de "Filtros Gerais" (pedido do Georges
+   — os filtros com LISTA, diferente dos botões de "Filtros rápidos") —
+   escopado só dentro de ".priorities-filter-row" (não mexe nos
    filtros de Anotações Rápidas, que usam as mesmas classes-base em outro
    lugar do app): controles maiores, fundo branco, borda mais clara, mesmo
    visual "premium" já usado no resto do app (".filter-trigger"), em vez do
@@ -2058,14 +2085,30 @@ html, body {
   height: 34px;
   border-radius: 8px;
 }
-/* busca textual numa linha própria, abaixo dos filtros de coluna (pedido do
-   Georges) — "flex-basis: 100%" força a quebra de linha ANTES dela dentro
-   do mesmo ".priorities-filter-row" (flex-wrap), sem precisar de um
-   container separado. */
-.priorities-filter-row .priorities-search-input {
-  flex: 1 1 100%;
-  order: 99;
+/* busca textual SEMPRE VISÍVEL dentro da divisória "Itens" (pedido do
+   Georges — "para que eu consiga pesquisar de forma mais rápida... sem
+   precisar abrir a divisória Filtros Gerais"): não mora mais dentro de
+   ".priorities-filter-row"/".priorities-subsection-body" (que some quando a
+   divisória está recolhida) — fica entre o cabeçalho e o corpo de
+   "itemsSection" (ver app.js, "insertBefore"), por isso continua visível
+   mesmo com "Itens" recolhida. Mesmo espaçamento vertical do cabeçalho da
+   divisória (margin-bottom: 8px) pra manter o ritmo visual. */
+.priorities-items-searchbar {
+  display: flex;
+  margin: 0 0 10px;
 }
+.priorities-items-searchbar .priorities-search-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  background: #fff;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  font-size: 13px;
+}
+.priorities-items-searchbar .priorities-search-input:hover { border-color: #b9b9b3; }
+.priorities-items-searchbar .priorities-search-input:focus { outline: none; border-color: #4a90d9; }
 
 /* "Filtros rápidos" (pedido do Georges) — seção de botões-atalho no TOPO
    da Lista de Prioridades, ANTES até da linha de criação. Uma "divisória"

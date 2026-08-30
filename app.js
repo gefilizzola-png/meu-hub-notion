@@ -2487,21 +2487,32 @@
 
   // "page.priorities" — tabela "Lista de Prioridades" (pedido do Georges):
   // mesmo esquema de renderNotesBlock acima (guardado à parte no Cloudflare
-  // KV via Worker, rotas /priorities, nada a ver com o Notion), mas com 9
-  // colunas por item (6 "de opção" editáveis por <select>, 3 de texto
-  // livre) em vez de só texto+tags, e reaproveitando O MESMO mecanismo de
-  // checklist/subitens (mesmas classes CSS "notes-subitem*", mesmo padrão
-  // de "putSubitems substitui a lista inteira") já usado em Anotações
-  // Rápidas — daí não precisar de CSS novo pra essa parte.
+  // KV via Worker, rotas /priorities, nada a ver com o Notion), mas com 8
+  // colunas por item (7 "de opção" — editáveis por <select> ou checkbox-
+  // dropdown múltiplo — mais Assunto de texto livre) em vez de só
+  // texto+tags, e reaproveitando O MESMO mecanismo de checklist/subitens
+  // (mesmas classes CSS "notes-subitem*", mesmo padrão de "putSubitems
+  // substitui a lista inteira") já usado em Anotações Rápidas — daí não
+  // precisar de CSS novo pra essa parte.
   function renderPrioritiesTable(container, page) {
     var fieldDefs = page.priorityFields || {};
-    var fieldKeys = ["tipo", "prioridade", "tempo", "forma", "programacao", "tributo"];
+    // "origem" entrou aqui (pedido do Georges — "transformar Origem em
+    // lista múltipla, com a mesma possibilidade de eu editar as opções,
+    // multi_select"): antes era texto livre (textKeys, ver abaixo), agora é
+    // mais um campo "de opção" igual Tipo/Prioridade/etc — isso já basta pra
+    // cascatear sozinho em TODO lugar que usa "fieldKeys" genericamente
+    // (linha de criação, filtro de "Filtros Gerais", célula editável da
+    // tabela, engrenagem de "editar opções", corpo do POST/PUT), sem
+    // precisar tocar em cada um desses pontos à parte.
+    var fieldKeys = ["tipo", "prioridade", "tempo", "forma", "programacao", "tributo", "origem"];
     // "providencia" foi REMOVIDA como coluna (pedido do Georges — o texto
     // que estava nela agora entra como subitem da checklist; ver migração
     // migrateProvidenciaToSubitem no worker.js, roda sozinha no primeiro
-    // GET/PUT de cada item depois do deploy).
-    var textKeys = ["origem", "assunto"];
-    var textLabels = { origem: "Origem", assunto: "Assunto" };
+    // GET/PUT de cada item depois do deploy). "assunto" é o único campo de
+    // texto livre solto que sobrou (obrigatório, é o "identificador" da
+    // linha).
+    var textKeys = ["assunto"];
+    var textLabels = { assunto: "Assunto" };
 
     // as opções de cada uma das 6 colunas acima começam com o que vem do
     // config.js (fieldDefs[key].options — os valores "de fábrica"), mas o
@@ -2568,12 +2579,16 @@
     // já usada pelas divisórias de Início, não precisa ser reativo).
     // sempre recolhida ao abrir a página (pedido do Georges — antes só no
     // celular/tablet via matchMedia; agora é assim em qualquer tela,
-    // mesmo padrão já aplicado a "Criação" e "Pesquisa e Filtros Gerais").
+    // mesmo padrão já aplicado a "Criação" e "Filtros Gerais").
     var qfCollapsed = true;
 
     var qfSection = document.createElement("div");
     qfSection.className = "priorities-quickfilters";
-    section.appendChild(qfSection);
+    // NÃO anexa em "section" aqui na hora de criar (pedido do Georges —
+    // "Filtros Rápidos" virou a 3ª divisória, depois de Criação e Filtros
+    // Gerais, não mais a 1ª) — o appendChild de verdade acontece mais
+    // abaixo, depois de "searchSection.section", já na ORDEM final das 4
+    // divisórias (ver comentário perto de "section.appendChild(qfSection)").
 
     // devolve a lista (sem repetição) de valores brutos que os botões
     // ATIVOS daquele grupo representam, ou null se nenhum botão do grupo
@@ -2703,9 +2718,9 @@
       // aparece quando tem pelo menos 1 botão apertado em algum grupo
       // (expandido ou recolhido, não depende de "qfCollapsed"). Já existia
       // um jeito de limpar tudo de uma vez (botão "Limpar filtros" lá em
-      // "Pesquisa e Filtros Gerais", que de quebra também solta os Filtros
-      // rápidos — ver clearBtn mais abaixo), mas esse fica direto aqui
-      // nessa seção, sem precisar abrir a outra.
+      // "Filtros Gerais", que de quebra também solta os Filtros rápidos —
+      // ver clearBtn mais abaixo), mas esse fica direto aqui nessa seção,
+      // sem precisar abrir a outra.
       if (activeCount) {
         var clearQfBtn = document.createElement("button");
         clearQfBtn.type = "button";
@@ -2972,6 +2987,24 @@
       return CATEGORY_PALETTE[hashString(String(value || "")) % CATEGORY_PALETTE.length];
     }
 
+    // cores FIXAS pro Tipo (pedido do Georges — "não gostei das cores usadas
+    // nas linhas... com PMF de roxo e Pessoal de verde"): antes o Tipo caía
+    // na mesma paleta hash de 8 cores usada por Tributo/Programação/Forma, o
+    // que dava uma cor meio aleatória (e nada garantia que PMF/Pessoal
+    // ficassem visualmente bem distintos um do outro). Agora são só 2 cores
+    // ESCOLHIDAS à mão (azul institucional pra PMF, âmbar/dourado pra
+    // Pessoal — já usadas em outros pontos do app, então nada de cor nova
+    // "estranha" ao resto do visual), com um cinza neutro de reserva pra
+    // qualquer Tipo futuro que o Georges venha a criar em "Editar opções".
+    var TIPO_FIXED_COLORS = {
+      PMF: { bg: "#eaf2fb", text: "#2b6cb0", accent: "#4a90d9" },
+      Pessoal: { bg: "#fef3e0", text: "#b06a00", accent: "#f08c00" },
+    };
+    var TIPO_FALLBACK_COLOR = { bg: "#f1f2f3", text: "#667085", accent: "#adb5bd" };
+    function colorForTipo(value) {
+      return TIPO_FIXED_COLORS[value] || TIPO_FALLBACK_COLOR;
+    }
+
     // gradiente ORDINAL (6 cores, "farol esfriando") — só pra Prioridade,
     // que tem ordem natural (1-Imediato -> 6-Sem prioridade). Usa a
     // POSIÇÃO do valor na lista viva de opções (fieldDefs.prioridade.
@@ -2996,9 +3029,11 @@
       return PRIORITY_GRADIENT[idx];
     }
     // qualquer campo de opção usa a paleta categórica, EXCETO prioridade
-    // (gradiente ordinal acima).
+    // (gradiente ordinal acima) e tipo (2 cores fixas, colorForTipo acima).
     function colorForField(key, value) {
-      return key === "prioridade" ? priorityColorForOption(value) : colorForValue(value);
+      if (key === "prioridade") return priorityColorForOption(value);
+      if (key === "tipo") return colorForTipo(value);
+      return colorForValue(value);
     }
 
     // ícone por valor de Forma (pedido do Georges — "colocar ícones nos
@@ -3091,14 +3126,14 @@
     // "sizeClass" é a MESMA classe que o <select> normal usaria no mesmo
     // lugar (linha de criação/filtro/célula da tabela), pra ficar do
     // mesmo tamanho.
-    function buildMultiCheckDropdown(key, placeholderText, sizeClass) {
+    function buildMultiCheckDropdown(key, placeholderText, sizeClass, extraTriggerClass) {
       var options = (fieldDefs[key] && fieldDefs[key].options) || [];
       var wrap = document.createElement("div");
       wrap.className = "filter-dropdown priorities-multiselect";
 
       var trigger = document.createElement("button");
       trigger.type = "button";
-      trigger.className = "priorities-multiselect-trigger" + (sizeClass ? " " + sizeClass : "");
+      trigger.className = "priorities-multiselect-trigger" + (sizeClass ? " " + sizeClass : "") + (extraTriggerClass ? " " + extraTriggerClass : "");
       var triggerLabel = document.createElement("span");
       triggerLabel.className = "priorities-multiselect-label";
       var chevron = document.createElement("i");
@@ -3298,18 +3333,25 @@
       return wrap;
     }
 
-    // ---- "Criação" e "Pesquisa e Filtros Gerais" (pedido do Georges):
-    // mesma ideia de divisória recolhível de "Filtros rápidos" (botão de
-    // seta), só que pra linha de criação e pra barra de filtros por
-    // coluna/busca — que ANTES ficavam soltas, sempre visíveis, ocupando
-    // espaço mesmo quando não estão em uso. SEMPRE recolhida ao abrir a
+    // ---- "Criação", "Filtros Gerais" e "Itens" (pedido do Georges): mesma
+    // ideia de divisória recolhível de "Filtros rápidos" (botão de seta),
+    // só que pra linha de criação, pra barra de filtros por coluna e pra
+    // tabela de verdade — que ANTES ficavam soltas, sempre visíveis,
+    // ocupando espaço mesmo quando não estão em uso. As 3 primeiras
+    // (Criação/Filtros Gerais/Filtros Rápidos) SEMPRE recolhidas ao abrir a
     // página (pedido do Georges — antes só recolhia no celular/tablet via
     // matchMedia; agora é assim em QUALQUER tamanho de tela, computador
-    // incluso). Helper genérico (não usado por "Filtros rápidos", que já
-    // tinha o próprio mecanismo pronto de antes — ver qfSection acima, não
-    // mexido).
-    function buildCollapsibleSection(titleText) {
-      var collapsed = true;
+    // incluso); "Itens" é a exceção, nasce EXPANDIDA (ver "startExpanded"
+    // logo abaixo). Helper genérico (não usado por "Filtros rápidos", que
+    // já tinha o próprio mecanismo pronto de antes — ver qfSection acima,
+    // não mexido).
+    function buildCollapsibleSection(titleText, startExpanded) {
+      // "startExpanded" (pedido do Georges — a nova divisória "Itens" vem
+      // por último e é a que guarda a tabela de verdade, faz sentido já
+      // abrir com ela visível, diferente das outras 3 que continuam
+      // "recolhidas por padrão"). Sem o parâmetro (undefined/false), o
+      // padrão de sempre continua: nasce recolhida.
+      var collapsed = !startExpanded;
       var sec = document.createElement("div");
       sec.className = "priorities-subsection";
       var header = document.createElement("div");
@@ -3342,7 +3384,16 @@
       return { section: sec, body: body };
     }
     var creationSection = buildCollapsibleSection("Criação");
-    var searchSection = buildCollapsibleSection("Pesquisa e Filtros Gerais");
+    // renomeada de "Pesquisa e Filtros Gerais" pra só "Filtros Gerais"
+    // (pedido do Georges) — a busca saiu daqui, agora mora sempre visível
+    // dentro da nova divisória "Itens" mais abaixo (ver itemsSection).
+    var searchSection = buildCollapsibleSection("Filtros Gerais");
+    // nova divisória "Itens" (pedido do Georges — "vamos dar um nome pra
+    // divisória dos itens mesmo"), guarda a busca (sempre visível, fora do
+    // corpo recolhível — ver itemsSection.section.insertBefore mais abaixo)
+    // e a tabela de verdade. Único das 4 que nasce EXPANDIDO (é onde mora o
+    // conteúdo principal da página).
+    var itemsSection = buildCollapsibleSection("Itens", true);
 
     // ---- alterna entre a criação RÁPIDA por etapas (quickWizardWrap) e a
     // DETALHADA (formRow, formulário de sempre com os 8 campos soltos). Só
@@ -3435,7 +3486,9 @@
     var WIZ_STEPS = ["tipo", "tributo", "programacao", "forma", "prioridade", "tempo", "final", "subitem", "nota"];
 
     function resetWizard() {
-      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", origem: "", assunto: "", createdId: null };
+      // "origem" agora é array (virou multi_select — pedido do Georges),
+      // igual tributo/forma acima.
+      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", origem: [], assunto: "", createdId: null };
       wizStep = 0;
       renderWizardStep();
     }
@@ -3582,21 +3635,50 @@
     }
 
     function renderWizardFinalStep() {
+      // limpa antes de desenhar — normalmente essa função só é chamada UMA
+      // vez por navegação (via renderWizardStep, que já limpa antes de
+      // chamar), mas agora o clique numa pílula de Origem chama ESSA função
+      // de novo diretamente (só ela precisa remontar, não o assistente
+      // inteiro) — sem isso, cada clique empilharia um 2º título/pílulas/
+      // campo de Assunto por cima do anterior em vez de substituir.
+      quickWizardWrap.innerHTML = "";
       var title = document.createElement("div");
       title.className = "priorities-wizard-step-title";
       title.textContent = "Origem e Assunto";
       quickWizardWrap.appendChild(title);
 
+      // Origem virou multi_select (pedido do Georges) — mesmo leiaute de
+      // pílula (clica pra marcar/desmarcar) já usado nos passos de Tributo/
+      // Forma mais acima (ver renderWizardStep), só que direto aqui dentro
+      // (não é um "passo" próprio do WIZ_STEPS — continua junto de Assunto
+      // na mesma tela final). Sem opção nenhuma marcada, some sozinho
+      // (equivalente a "Pular" — Origem sempre foi opcional).
+      var origemOptions = (fieldDefs.origem && fieldDefs.origem.options) || [];
+      if (origemOptions.length) {
+        var origemLabel = document.createElement("div");
+        origemLabel.className = "priorities-wizard-step-title";
+        origemLabel.textContent = "Origem";
+        quickWizardWrap.appendChild(origemLabel);
+        var origemBtnsWrap = document.createElement("div");
+        origemBtnsWrap.className = "priorities-quickfilter-buttons priorities-wizard-buttons";
+        origemOptions.forEach(function (opt) {
+          var pill = document.createElement("button");
+          pill.type = "button";
+          var isActive = wizData.origem.indexOf(opt) !== -1;
+          pill.className = "priorities-quickfilter-btn" + (isActive ? " active" : "");
+          pill.textContent = opt;
+          pill.addEventListener("click", function () {
+            var idx = wizData.origem.indexOf(opt);
+            if (idx === -1) wizData.origem.push(opt); else wizData.origem.splice(idx, 1);
+            renderWizardFinalStep();
+          });
+          origemBtnsWrap.appendChild(pill);
+        });
+        quickWizardWrap.appendChild(origemBtnsWrap);
+      }
+
       var fieldsWrap = document.createElement("div");
       fieldsWrap.className = "priorities-wizard-final-fields";
-      var origemInp = document.createElement("input");
-      origemInp.type = "text";
-      origemInp.className = "priorities-form-text";
-      origemInp.placeholder = "Origem";
-      origemInp.value = wizData.origem;
-      origemInp.addEventListener("input", function () { wizData.origem = origemInp.value; });
-      fieldsWrap.appendChild(origemInp);
-
       var assuntoInp = document.createElement("input");
       assuntoInp.type = "text";
       assuntoInp.className = "priorities-form-text";
@@ -3738,7 +3820,7 @@
         forma: wizData.forma,
         prioridade: wizData.prioridade,
         tempo: wizData.tempo,
-        origem: wizData.origem.trim(),
+        origem: wizData.origem,
         assunto: assunto,
       };
       btn.disabled = true;
@@ -3799,16 +3881,33 @@
     clearBtn.className = "notes-add-btn priorities-clear-btn";
     clearBtn.textContent = "Limpar filtros";
     filterRow.appendChild(clearBtn);
-    // busca vai por último e numa linha própria (".priorities-search-input"
-    // força quebra abaixo dos demais filtros — ver CSS) — pedido do Georges
-    // pra separar a busca textual dos filtros de coluna.
+    searchSection.body.appendChild(filterRow);
+    section.appendChild(searchSection.section);
+    // "Filtros Rápidos" — 3ª divisória agora (pedido do Georges: Criação 1ª,
+    // Filtros Gerais 2ª, Filtros Rápidos 3ª, Itens 4ª/última) — o
+    // appendChild de verdade fica AQUI, não mais logo depois do título (ver
+    // comentário perto de "var qfSection = ...", lá em cima).
+    section.appendChild(qfSection);
+
+    // ---- busca textual ampla (pedido do Georges: "todas as propriedades +
+    // subitens + notas" — ver "hay" em applyFilters mais abaixo) SEMPRE
+    // VISÍVEL dentro da divisória "Itens" (pedido do Georges — "para que eu
+    // consiga pesquisar de forma mais rápida... sem precisar abrir a
+    // divisória Filtros Gerais"): antes morava dentro de "filterRow"/
+    // "searchSection.body" (some quando a divisória está recolhida); agora
+    // fica FORA do corpo recolhível de "itemsSection" (inserida entre o
+    // cabeçalho e o corpo — ver ".priorities-subsection.collapsed
+    // .priorities-subsection-body" no CSS, só o CORPO some ao recolher, o
+    // que fica fora continua visível mesmo com "Itens" recolhida).
+    var itemsSearchWrap = document.createElement("div");
+    itemsSearchWrap.className = "priorities-items-searchbar";
     var searchInput = document.createElement("input");
     searchInput.type = "text";
     searchInput.className = "notes-filter-input priorities-search-input";
     searchInput.placeholder = "Pesquisar em tudo (campos, subitens, notas)...";
-    filterRow.appendChild(searchInput);
-    searchSection.body.appendChild(filterRow);
-    section.appendChild(searchSection.section);
+    itemsSearchWrap.appendChild(searchInput);
+    itemsSection.section.insertBefore(itemsSearchWrap, itemsSection.body);
+    section.appendChild(itemsSection.section);
 
     var errorMsg = document.createElement("p");
     errorMsg.className = "notes-error";
@@ -3831,7 +3930,10 @@
       { key: "forma", label: (fieldDefs.forma && fieldDefs.forma.label) || "Forma" },
       { key: "programacao", label: (fieldDefs.programacao && fieldDefs.programacao.label) || "Programação" },
       { key: "tributo", label: (fieldDefs.tributo && fieldDefs.tributo.label) || "Tributo" },
-      { key: "origem", label: "Origem" },
+      // Origem virou campo "de opção" (multi_select — pedido do Georges),
+      // então o label agora vem de fieldDefs igual aos outros 6; só Assunto
+      // continua texto livre solto (textKeys, ver abaixo).
+      { key: "origem", label: (fieldDefs.origem && fieldDefs.origem.label) || "Origem" },
       { key: "assunto", label: "Assunto" }
     ];
     // colunas "de opção" ordenam pela posição na lista fixa (ex: "1 -
@@ -4051,7 +4153,7 @@
     var columnsExpanded = false;
 
     // uma coluna conta como "tem filtro aplicado" se o <select>/checkbox
-    // dela (barra de "Pesquisa e Filtros Gerais") estiver com algo
+    // dela (barra de "Filtros Gerais") estiver com algo
     // marcado, OU se algum botão de "Filtros rápidos" que aponta pra ela
     // estiver ativo (inclusive "Grupo", que apesar do nome mira a coluna
     // Programação — ver "field" em page.quickFilters no config.js).
@@ -4104,9 +4206,11 @@
     });
     columnsToolbar.appendChild(columnsToggleBtn);
     // não faz sentido mostrar o botão se o padrão da tela já é "tudo
-    // visível" (telas grandes) — não teria o que expandir.
+    // visível" (telas grandes) — não teria o que expandir. Vai dentro do
+    // corpo de "Itens" (pedido do Georges — divisória própria pra tabela),
+    // não mais solto direto em "section".
     if (defaultVisibleColumnKeys.length < allColumnKeys.length) {
-      section.appendChild(columnsToolbar);
+      itemsSection.body.appendChild(columnsToolbar);
     }
 
     var tableWrap = document.createElement("div");
@@ -4139,8 +4243,8 @@
       var thArrow = document.createElement("span");
       thArrow.className = "priorities-th-arrow";
       th.appendChild(thLabel);
-      // engrenagem de "editar opções" — só nas 6 colunas de opção (as 2 de
-      // texto livre, Origem/Assunto, não têm lista fixa pra editar).
+      // engrenagem de "editar opções" — só nas 7 colunas "de opção" (Assunto,
+      // única de texto livre que sobrou, não tem lista fixa pra editar).
       // "stopPropagation" pra não disparar o clique de ordenar.
       if (fieldKeys.indexOf(col.key) !== -1) {
         var editIcon = document.createElement("i");
@@ -4171,7 +4275,11 @@
     var tbody = document.createElement("tbody");
     table.appendChild(tbody);
     tableWrap.appendChild(table);
-    section.appendChild(tableWrap);
+    // tabela vai dentro do corpo de "Itens" (pedido do Georges), não mais
+    // solta direto em "section" — "itemsSection.section" já foi anexado a
+    // "section" mais acima (junto da busca sempre visível), então isso só
+    // completa o conteúdo que faltava dentro dela.
+    itemsSection.body.appendChild(tableWrap);
     container.appendChild(section);
 
     function refreshHeaderIndicators() {
@@ -4224,6 +4332,22 @@
       return min;
     }
 
+    // só pra Origem (pedido do Georges — "possibilidade de classificar em
+    // ordem alfabética (A-z ou z-A)"): diferente de Forma/Tributo (que
+    // ordenam pela POSIÇÃO cadastrada em "Editar opções", ver
+    // minOptionIndex acima), Origem não tem uma ordem "natural" própria —
+    // então usa o valor alfabeticamente MENOR entre os marcados no item, de
+    // verdade por texto (localeCompare), não por posição na lista.
+    function minAlphaValue(arr) {
+      arr = (arr || []).filter(Boolean);
+      if (!arr.length) return "";
+      var min = arr[0];
+      for (var i = 1; i < arr.length; i++) {
+        if (arr[i].localeCompare(min, "pt-BR") < 0) min = arr[i];
+      }
+      return min;
+    }
+
     function sortItems(items) {
       if (!sortState.key) return items;
       var key = sortState.key;
@@ -4232,7 +4356,17 @@
       var copy = items.slice();
       copy.sort(function (a, b) {
         var av, bv, cmp;
-        if (opts && multi) {
+        if (key === "origem") {
+          av = minAlphaValue(a.origem);
+          bv = minAlphaValue(b.origem);
+          // item sem Origem nenhuma sempre vai pro FIM, em qualquer direção
+          // (mesma convenção do ramo de texto livre mais abaixo — só o
+          // empate entre 2 valores preenchidos é que inverte com A-Z/Z-A).
+          if (!av && bv) return 1;
+          if (av && !bv) return -1;
+          cmp = av.localeCompare(bv, "pt-BR");
+          return cmp * sortState.dir;
+        } else if (opts && multi) {
           av = minOptionIndex(a[key], opts);
           bv = minOptionIndex(b[key], opts);
           cmp = av - bv;
@@ -4297,11 +4431,13 @@
           // busca ampliada (pedido do Georges — "pesquisar em todas as
           // propriedades de cada item, nos subitens e inclusive nas
           // notas"): junta TUDO que é texto pesquisável do item num "hay"
-          // só — os 6 campos de opção (tipo/prioridade/tempo/forma/
-          // programacao/tributo, cada um já é o VALOR escolhido, não a
-          // chave técnica — ex: "PMF", não "tipo"), origem, assunto, a nota
-          // do item, e de cada subitem o texto E a nota dele também.
-          var hayParts = [it.origem || "", it.assunto || "", it.nota || ""];
+          // só — os 7 campos de opção (tipo/prioridade/tempo/forma/
+          // programacao/tributo/origem, cada um já é o VALOR escolhido, não
+          // a chave técnica — ex: "PMF", não "tipo" — ver fieldKeys.forEach
+          // abaixo, Origem entra sozinho por ali agora que virou fieldKey),
+          // assunto, a nota do item, e de cada subitem o texto E a nota dele
+          // também.
+          var hayParts = [it.assunto || "", it.nota || ""];
           fieldKeys.forEach(function (key) {
             var v = it[key];
             if (Array.isArray(v)) hayParts.push(v.join(" "));
@@ -4343,7 +4479,7 @@
         // navegadores — por isso vai na célula, não na linha). Mesma cor
         // some, sem sobrar retângulo cinza, quando o item não tem Tipo
         // definido ainda.
-        var tipoColor = (it.tipo || "").trim() ? colorForValue(it.tipo) : null;
+        var tipoColor = (it.tipo || "").trim() ? colorForTipo(it.tipo) : null;
         if (tipoColor) row.style.background = tipoColor.bg;
 
         // botão de expandir/recolher a checklist — coluna própria, a mais à
@@ -4377,7 +4513,13 @@
           cell.className = "priorities-col-" + key;
           var label = (fieldDefs[key] && fieldDefs[key].label) || key;
           if (isMultiField(key)) {
-            var control = buildMultiCheckDropdown(key, label, "priorities-cell-select");
+            // "moderno, sem o retângulo da caixa" (pedido do Georges) só no
+            // TRIBUTO da célula — mantém a caixinha arredondada de cada
+            // opção (chip, já pronta), só tira a moldura/seta do botão que
+            // abre a lista. Origem/Forma continuam com a caixa normal (não
+            // foi pedido pra esses 2).
+            var plainTrigger = key === "tributo" ? "priorities-select-plain" : null;
+            var control = buildMultiCheckDropdown(key, label, "priorities-cell-select", plainTrigger);
             control.setValues(it[key] || []);
             // "onClose" (não "onChange") — salva só quando o menu fecha,
             // com o valor final já com todas as marcações feitas. Salvar a
@@ -4392,6 +4534,13 @@
             cell.appendChild(control);
           } else {
             var sel = makeSelect("priorities-cell-select", key, true, label);
+            // "moderno, sem contorno... sem seta" (pedido do Georges) em
+            // Prioridade e Programação — já sabe que ali abre uma lista,
+            // não precisa da moldura/seta padrão do <select>. Tipo já fica
+            // sem contorno sozinho quando tem valor (ver applySelectChipStyle
+            // logo abaixo); Tempo continua com a caixa normal (não foi
+            // pedido pra esse).
+            if (key === "prioridade" || key === "programacao") sel.classList.add("priorities-select-plain");
             sel.value = it[key] || "";
             applySelectChipStyle(sel, key);
             sel.addEventListener("change", function () {
