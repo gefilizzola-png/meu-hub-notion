@@ -4996,10 +4996,52 @@
     var globalIdx = 0;
     var renderedSomething = false;
 
+    // "quickButtons" (pedido do Georges — "página bem simples... conterá
+    // botões modernos com links pras nossas páginas principais", ver
+    // pages.entrada em config.js): grade de cards grandes coloridos, um por
+    // link "principal". Quando a página tem isso, a lista "items" comum
+    // (mais abaixo) NÃO é desenhada aqui — mas continua existindo intacta
+    // no config.js, porque buildIndex()/buildTreeNode() (árvore do menu
+    // lateral + índice de busca) leem "items" DIRETO do cfg.pages, sem
+    // passar por renderContent. Ou seja: páginas que só aparecem em
+    // "items" (ex: Central, Biblioteca) continuam 100% alcançáveis pelo
+    // menu/busca, só não repetidas aqui embaixo dos botões grandes — o que
+    // mantém a página "simples" de verdade, sem duplicar conteúdo.
+    if (page.quickButtons && page.quickButtons.length) {
+      var qbWrap = document.createElement("div");
+      qbWrap.className = "quick-buttons-grid";
+      page.quickButtons.forEach(function (qb) {
+        var card = document.createElement("a");
+        card.className = "quick-button-card";
+        card.href = "#" + qb.target;
+        card.style.setProperty("--qb-color", qb.color || "#4a90d9");
+        card.addEventListener("click", function (e) {
+          if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          navigate(qb.target);
+        });
+        var iconWrap = document.createElement("span");
+        iconWrap.className = "quick-button-icon";
+        var ic = document.createElement("i");
+        ic.className = "ti ti-" + (qb.icon || "circle");
+        iconWrap.appendChild(ic);
+        card.appendChild(iconWrap);
+        var lbl = document.createElement("span");
+        lbl.className = "quick-button-label";
+        lbl.textContent = qb.label;
+        card.appendChild(lbl);
+        qbWrap.appendChild(card);
+      });
+      container.appendChild(qbWrap);
+      renderedSomething = true;
+    }
+
     // "items" soltos (sem caixa) — comportamento de sempre. Numa página com
     // "dynamicQueries" (ex: Reuniões), serve pra botões fixos no topo (ex:
-    // links diretos pras visualizações do Notion).
-    if (flatItems.length) {
+    // links diretos pras visualizações do Notion). Pulado quando a página
+    // já tem "quickButtons" (ver acima) — "items" continua alimentando a
+    // árvore/busca de qualquer forma.
+    if (flatItems.length && !page.quickButtons) {
       var plainWrap = document.createElement("div");
       // "page.itemsCompact" (opcional) — botões baixos em vez do cartão alto
       // padrão (ex: os 4 links de visualização no topo de Reuniões).
@@ -5329,9 +5371,50 @@
     renderContent(pageId);
     renderTree();
     renderSidePanel(pageId);
+    updateSetHomeBtn();
 
     if (push) history.pushState({ pageId: pageId }, "", "#" + pageId);
   }
+
+  // ---------------- "página inicial configurável" (pedido do Georges) ----------------
+  // Botão no header (index.html, #setHomeBtn) que define a página ATUAL
+  // como a que abre primeiro — em vez de fixo no config.js (que exigiria
+  // deploy pra trocar), fica salvo na KV do Worker (GET/PUT /home-page, ver
+  // worker.js) e sincroniza em qualquer aparelho logado. "homePageId" é a
+  // MESMA variável usada em todo o resto do app pra decidir "qual página é
+  // a home" (Esc, botão voltar, página inicial) — reatribuída aqui, então
+  // tudo que já lia "homePageId" antes passa a valer o novo valor sem
+  // precisar mexer em mais nada.
+  function updateSetHomeBtn() {
+    var btn = document.getElementById("setHomeBtn");
+    if (!btn) return;
+    var isHome = currentId === homePageId;
+    btn.classList.toggle("active", isHome);
+    btn.title = isHome ? "Esta já é a página inicial" : "Definir como página inicial";
+  }
+
+  function setCurrentAsHomePage() {
+    if (currentId === homePageId) return; // já é — nada a fazer
+    var btn = document.getElementById("setHomeBtn");
+    var targetId = currentId;
+    if (btn) btn.disabled = true;
+    authFetch(cfg.templateWorkerUrl + "/home-page", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId: targetId })
+    }).then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      if (!res.ok) throw new Error("Falha ao salvar a página inicial");
+      homePageId = targetId;
+      updateSetHomeBtn();
+      document.getElementById("backBtn").classList.toggle("hidden", currentId === homePageId);
+    }).catch(function (err) {
+      console.warn(err);
+    }).finally(function () { if (btn) btn.disabled = false; });
+  }
+
+  var setHomeBtnEl = document.getElementById("setHomeBtn");
+  if (setHomeBtnEl) setHomeBtnEl.addEventListener("click", setCurrentAsHomePage);
 
   function navigate(pageId) {
     closeSearch();
@@ -5537,9 +5620,26 @@
 
     buildIndex();
     collectSearchInputs();
-    var initial = location.hash.replace("#", "") || homePageId;
-    history.replaceState({ pageId: initial }, "", "#" + initial);
-    render(initial, false);
+
+    // busca o override de "página inicial" salvo na KV (ver /home-page no
+    // worker.js — botão #setHomeBtn) ANTES de decidir qual página abrir.
+    // "homePageId" só é reatribuído se o valor salvo existir e apontar pra
+    // uma página que realmente existe hoje em cfg.pages (evita travar o
+    // boot numa página que o Georges tenha removido do config.js depois de
+    // ter marcado ela como home). Falha de rede/401 aqui NUNCA trava o
+    // boot — só cai de volta no "homePage"/"startPage" fixo do config.js,
+    // como sempre foi.
+    authFetch(cfg.templateWorkerUrl + "/home-page")
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (data && data.homePage && cfg.pages[data.homePage]) homePageId = data.homePage;
+      })
+      .catch(function () {})
+      .finally(function () {
+        var initial = location.hash.replace("#", "") || homePageId;
+        history.replaceState({ pageId: initial }, "", "#" + initial);
+        render(initial, false);
+      });
   }
 
   if (window.Auth) {

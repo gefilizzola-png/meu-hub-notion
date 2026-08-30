@@ -283,6 +283,32 @@ html, body {
 }
 .back-btn:active { background: #f0f0ee; }
 .back-btn.hidden { visibility: hidden; }
+/* "página inicial configurável" (pedido do Georges) — botão no cabeçalho,
+   visível em QUALQUER página (diferente do back-btn, que é só mobile).
+   Mesmo tamanho/formato de ".back-btn"/".menu-toggle-btn" pra ficar do
+   mesmo "peso" visual. ".active" (já é a home — ver updateSetHomeBtn em
+   app.js) fica preenchido em verde, mesma lógica de "estado
+   preenchido/vazio bem diferenciável" já usada em ".priorities-note-
+   toggle.has-note"/".priorities-notion-btn.linked". */
+.set-home-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 17px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.set-home-btn:hover { background: #f4f4f2; color: #666; }
+.set-home-btn:active { background: #f0f0ee; }
+.set-home-btn.active { color: #2f9e44; background: #eaf6ec; }
+.set-home-btn.active:hover { background: #dcf0e0; }
+.set-home-btn:disabled { opacity: 0.5; cursor: default; }
 .breadcrumb {
   flex: 1;
   min-width: 0;
@@ -451,6 +477,54 @@ html, body {
 }
 .item-sub-badge-stacked::after {
   content: none;
+}
+
+/* ---------- "quickButtons" — grade de botões grandes (pedido do Georges:
+   página "Início", era "Entrada" — "botões modernos com links pras nossas
+   páginas principais") ---------- */
+.quick-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.quick-button-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 14px;
+  border: 0.5px solid #ececea;
+  background: #fff;
+  text-decoration: none;
+  color: #262624;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+.quick-button-card:hover {
+  border-color: var(--qb-color, #4a90d9);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+  transform: translateY(-1px);
+}
+.quick-button-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--qb-color, #4a90d9);
+  color: #fff;
+  font-size: 19px;
+}
+.quick-button-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2f3a44;
+}
+@media (max-width: 1023px) {
+  .quick-buttons-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .quick-button-card { padding: 14px; }
 }
 
 /* ---------- grouped pages: visual boxes inside the same page ---------- */

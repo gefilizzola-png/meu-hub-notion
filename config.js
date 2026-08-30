@@ -797,16 +797,20 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-30 00:30",
-  // "startPage" continua sendo a RAIZ da árvore do menu lateral (Entrada
-  // tem que seguir sendo a raiz — é dela que "Criar páginas"/"Eventos"/
-  // "Central"/"Categorias"/"Biblioteca" são alcançados; se startPage virasse
-  // "inicio" aqui, essas páginas ficariam inacessíveis pelo menu, porque
-  // buildIndex()/buildTreeNode() só percorrem a árvore a partir de
-  // "startPage"). "homePage" é um campo NOVO, separado — só decide qual
-  // tela abre primeiro (e quando o botão "voltar"/Esc consideram "já
-  // estou na home") sem mexer na raiz da árvore. Pedido do Georges: Início
-  // sempre abre primeiro.
+  appVersion: "2026-08-30 01:10",
+  // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
+  // com KEY "entrada" (título "Início" desde a rodada da página inicial
+  // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
+  // dela que "Criar páginas"/"Eventos"/"Central"/"Categorias"/"Biblioteca"
+  // são alcançados; se startPage virasse "inicio" aqui, essas páginas
+  // ficariam inacessíveis pelo menu, porque buildIndex()/buildTreeNode()
+  // só percorrem a árvore a partir de "startPage". "homePage" é o valor
+  // PADRÃO (usado quando ninguém nunca clicou em "Definir como página
+  // inicial" — ver #setHomeBtn no app.js/GET /home-page no worker.js, que
+  // sobrescreve isso em tempo real via KV, sem precisar editar aqui) — só
+  // decide qual tela abre primeiro (e quando o botão "voltar"/Esc
+  // consideram "já estou na home") sem mexer na raiz da árvore. Aponta pra
+  // key "inicio" (título "Painel do Dia" hoje, era "Início").
   startPage: "entrada",
   homePage: "inicio",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
@@ -854,10 +858,30 @@ const APP_CONFIG = {
   ],
 
   pages: {
+    // era "Entrada" — pedido do Georges: essa é a página que agora se
+    // chama "Início" (o antigo "Início", com o resumo do dia, virou
+    // "Painel do Dia", ver mais abaixo). A KEY interna continua "entrada"
+    // de propósito (só o "title" mudou) — trocar a key exigiria atualizar
+    // TODO "target: 'entrada'" espalhado pelo config.js/app.js (startPage,
+    // etc.) à toa, risco sem benefício nenhum já que ninguém vê a key, só o
+    // title. "items" continua com a lista COMPLETA de sempre (inclusive
+    // Criar páginas/Eventos/Central/Categorias/Biblioteca) — é dela que a
+    // árvore do menu lateral e a busca alcançam essas páginas (ver
+    // buildIndex/buildTreeNode, que percorrem a partir de "startPage"); só
+    // o CONTEÚDO da página ganhou "quickButtons" (grade de botões grandes,
+    // ver renderContent em app.js) com um recorte de 4 links "principais",
+    // pedido explicitamente do Georges — os outros continuam acessíveis
+    // pelo menu/busca, só não aparecem nos botões grandes.
     entrada: {
-      title: "Entrada",
+      title: "Início",
+      quickButtons: [
+        { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
+        { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
+        { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
+        { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" }
+      ],
       items: [
-        { label: "Início", type: "page", target: "inicio", icon: "home" },
+        { label: "Painel do Dia", type: "page", target: "inicio", icon: "home" },
         { label: "Anotações Rápidas", type: "page", target: "anotacoes", icon: "notes" },
         { label: "Lista de Prioridades", type: "page", target: "prioridades", icon: "list-check" },
         { label: "Criar páginas", type: "page", target: "criar_paginas", icon: "file-plus" },
@@ -884,8 +908,17 @@ const APP_CONFIG = {
     // Favoritas sem sair do app (navegação interna, mesmo destino do link
     // https://gefilizzola-png.github.io/meu-hub-notion/#favoritas que o
     // Georges pediu). "weather: true" = previsão de hoje.
+    // era "Início" — pedido do Georges: essa página (resumo do dia: tempo,
+    // Hoje/Amanhã, Itens Prioritários, Anotações Rápidas) passou a se
+    // chamar "Painel do Dia", já que o nome "Início" foi pra "entrada"
+    // acima. KEY interna continua "inicio" de propósito (mesma lógica do
+    // comentário de "entrada" acima — só o "title" mudou, ninguém vê a
+    // key). "homePage" no topo do config.js continua apontando pra essa
+    // key ("inicio") — o Georges pode trocar isso a qualquer momento pelo
+    // botão "Definir como página inicial" (ver handleHomePage* no
+    // worker.js / setHomeBtn no app.js), sem precisar editar aqui.
     inicio: {
-      title: "Início",
+      title: "Painel do Dia",
       itemsCompact: true,
       // painel retrátil do lado direito — ver comentário de SIDEPANEL_LINKS
       // acima. Só existe nessa página por enquanto.

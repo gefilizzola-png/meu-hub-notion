@@ -49,6 +49,11 @@
       <button class="menu-toggle-btn" id="menuToggleBtn" aria-label="Mostrar/recolher menu"><i class="ti ti-menu-2"></i></button>
       <button class="back-btn mobile-only" id="backBtn" aria-label="Voltar"><i class="ti ti-chevron-left"></i></button>
       <div class="breadcrumb" id="breadcrumb"></div>
+      <!-- "página inicial configurável" (pedido do Georges): define a página
+           ATUAL como a que abre primeiro quando o app é aberto — fica
+           preenchido/destacado quando a página aberta já é a home (ver
+           updateSetHomeBtn em app.js, chamado a cada render(pageId)). -->
+      <button class="set-home-btn" id="setHomeBtn" type="button" title="Definir como página inicial"><i class="ti ti-home"></i></button>
       <div class="header-search">
         <div class="search-field-wrap">
           <i class="ti ti-search"></i>
