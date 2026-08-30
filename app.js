@@ -3086,25 +3086,6 @@
       return chip;
     }
 
-    // aplica o visual de "chip" num <select> NATIVO (Tipo/Prioridade na
-    // célula/criação — Tempo/Programação continuam neutros de propósito,
-    // não foi pedido cor pra esses dois). Precisa ser chamado de novo a
-    // cada troca de valor (change), já que CSS sozinho não consegue saber
-    // qual <option> está selecionada pra colorir a CAIXA fechada do select.
-    function applySelectChipStyle(sel, key) {
-      var v = sel.value;
-      if (!v || (key !== "tipo" && key !== "prioridade")) {
-        sel.style.background = "";
-        sel.style.color = "";
-        sel.style.borderColor = "";
-        return;
-      }
-      var c = colorForField(key, v);
-      sel.style.background = c.bg;
-      sel.style.color = c.text;
-      sel.style.borderColor = "transparent";
-    }
-
     // controle "genérico" que trata <select> (seleção única) e o
     // checkbox-dropdown abaixo (seleção múltipla, só "forma" hoje) da mesma
     // forma — quem usa não precisa saber qual dos dois é.
@@ -3126,7 +3107,17 @@
     // "sizeClass" é a MESMA classe que o <select> normal usaria no mesmo
     // lugar (linha de criação/filtro/célula da tabela), pra ficar do
     // mesmo tamanho.
-    function buildMultiCheckDropdown(key, placeholderText, sizeClass, extraTriggerClass) {
+    // "singleMode" (pedido do Georges — "faça todas as colunas nesse
+    // leiaute de exibição", igual ao print da coluna Origem: caixa
+    // arredondada com contorno, chip colorido e seta): reaproveita esse
+    // MESMO controle pras 4 colunas de valor ÚNICO da célula (Tipo/
+    // Prioridade/Tempo/Programação), não só pras de seleção múltipla —
+    // clicar numa opção já SUBSTITUI o valor e fecha o menu na hora (em vez
+    // de marcar/desmarcar e deixar aberto, como no multi de verdade).
+    // "getValues()" continua devolvendo array (0 ou 1 posição) mesmo em
+    // singleMode — quem usa o controle decide extrair a string (ver
+    // renderList mais abaixo).
+    function buildMultiCheckDropdown(key, placeholderText, sizeClass, extraTriggerClass, singleMode) {
       var options = (fieldDefs[key] && fieldDefs[key].options) || [];
       var wrap = document.createElement("div");
       wrap.className = "filter-dropdown priorities-multiselect";
@@ -3217,6 +3208,15 @@
         row.appendChild(check);
         row.addEventListener("click", function (e) {
           e.stopPropagation();
+          if (singleMode) {
+            // valor único (Tipo/Prioridade/Tempo/Programação na célula) —
+            // escolher já substitui e fecha, igual um <select> nativo de
+            // sempre se comportava; não marca/desmarca nem deixa o menu
+            // aberto pra outra escolha.
+            menu.classList.remove("open");
+            setValues([opt]);
+            return;
+          }
           var idx = values.indexOf(opt);
           var next = values.slice();
           if (idx === -1) next.push(opt); else next.splice(idx, 1);
@@ -4528,45 +4528,33 @@
           var cell = document.createElement("td");
           cell.className = "priorities-col-" + key;
           var label = (fieldDefs[key] && fieldDefs[key].label) || key;
-          if (isMultiField(key)) {
-            // "moderno, sem o retângulo da caixa" (pedido do Georges) só no
-            // TRIBUTO da célula — mantém a caixinha arredondada de cada
-            // opção (chip, já pronta), só tira a moldura/seta do botão que
-            // abre a lista. Origem/Forma continuam com a caixa normal (não
-            // foi pedido pra esses 2).
-            var plainTrigger = key === "tributo" ? "priorities-select-plain" : null;
-            var control = buildMultiCheckDropdown(key, label, "priorities-cell-select", plainTrigger);
-            control.setValues(it[key] || []);
-            // "onClose" (não "onChange") — salva só quando o menu fecha,
-            // com o valor final já com todas as marcações feitas. Salvar a
-            // CADA clique recarregaria a lista inteira no meio da seleção
-            // (updateItem -> loadItems -> tbody reconstruído do zero),
-            // derrubando o próprio menu que o usuário estava usando.
-            control.onClose(function (vals) {
-              var patch = {};
-              patch[key] = vals;
-              updateItem(it.id, patch);
-            });
-            cell.appendChild(control);
-          } else {
-            var sel = makeSelect("priorities-cell-select", key, true, label);
-            // "moderno, sem contorno... sem seta" (pedido do Georges) em
-            // Prioridade e Programação — já sabe que ali abre uma lista,
-            // não precisa da moldura/seta padrão do <select>. Tipo já fica
-            // sem contorno sozinho quando tem valor (ver applySelectChipStyle
-            // logo abaixo); Tempo continua com a caixa normal (não foi
-            // pedido pra esse).
-            if (key === "prioridade" || key === "programacao") sel.classList.add("priorities-select-plain");
-            sel.value = it[key] || "";
-            applySelectChipStyle(sel, key);
-            sel.addEventListener("change", function () {
-              var patch = {};
-              patch[key] = sel.value;
-              applySelectChipStyle(sel, key);
-              updateItem(it.id, patch);
-            });
-            cell.appendChild(sel);
-          }
+          // "Faça todas as colunas nesse leiaute de exibição" (pedido do
+          // Georges, a partir do print da coluna Origem) — as 6 colunas de
+          // opção da célula (Tipo/Prioridade/Tempo/Forma/Programação/
+          // Tributo, e Origem) usam agora o MESMO controle
+          // (buildMultiCheckDropdown), com a MESMA caixa arredondada com
+          // contorno, chip colorido e seta. Isso reverte a rodada anterior
+          // ("sem caixa/sem seta" em Prioridade/Programação/Tributo) e troca
+          // Tipo/Tempo, que eram <select> nativo, pro mesmo controle — sem
+          // exceção "plain" nenhuma. Campos de valor único usam
+          // singleMode:true (5º parâmetro) — clicar numa opção já
+          // substitui e fecha o menu, igual um <select> de sempre; getValues
+          // continua em array (0 ou 1 posição), por isso o unwrap pra
+          // string logo abaixo antes de mandar pro updateItem.
+          var multi = isMultiField(key);
+          var control = buildMultiCheckDropdown(key, label, "priorities-cell-select", null, !multi);
+          control.setValues(multi ? (it[key] || []) : (it[key] ? [it[key]] : []));
+          // "onClose" (não "onChange") — salva só quando o menu fecha, com
+          // o valor final já definido. Salvar a CADA clique recarregaria a
+          // lista inteira no meio da seleção (updateItem -> loadItems ->
+          // tbody reconstruído do zero), derrubando o próprio menu que o
+          // usuário estava usando.
+          control.onClose(function (vals) {
+            var patch = {};
+            patch[key] = multi ? vals : (vals[0] || "");
+            updateItem(it.id, patch);
+          });
+          cell.appendChild(control);
           row.appendChild(cell);
         });
 

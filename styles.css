@@ -1935,31 +1935,6 @@ html, body {
    stylesheet); esse box-shadow funciona em cima de qualquer cor de fundo. */
 .priorities-cell-select:focus { box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.35); }
 
-/* "moderno, sem contorno da caixa... sem seta" (pedido do Georges) —
-   Prioridade/Programação (continuam <select> nativos) e o trigger de
-   Tributo (continua <button> do multiselect, com os chips arredondados de
-   cada opção intactos) ganham essa classe além da classe normal de tamanho
-   (".priorities-cell-select") — "appearance:none" mata a seta nativa do
-   <select> em qualquer navegador; o trigger não tem seta nativa (usa
-   ".ti-chevron-down" de fonte, escondido logo abaixo), só perde a borda/
-   fundo herdados de ".priorities-cell-select". Já sabe que ali tem uma
-   lista pra clicar, não precisa do contorno/seta pra avisar isso de novo.
-   Vem DEPOIS de ".priorities-cell-select"/".priorities-multiselect-trigger"
-   no arquivo de propósito, pra ganhar da borda delas na cascata (mesma
-   especificidade — 1 classe cada — quem vem por último no CSS vence). */
-.priorities-select-plain {
-  border: 0.5px solid transparent;
-  background: transparent;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  padding-left: 2px;
-}
-select.priorities-select-plain { cursor: pointer; }
-.priorities-select-plain:focus { border-color: transparent; background: #fff; }
-.priorities-multiselect-trigger.priorities-select-plain { padding-left: 2px; }
-.priorities-multiselect-trigger.priorities-select-plain .ti-chevron-down { display: none; }
-
 /* "Criação"/"Filtros Gerais"/"Itens" (pedido do Georges) — divisórias
    recolhíveis (mesma ideia visual/mecânica de "Filtros rápidos" logo
    abaixo: seta que recolhe/expande) pra envolver a linha de criação de
