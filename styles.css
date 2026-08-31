@@ -2359,4 +2359,183 @@ html, body {
   padding-top: 8px;
   border-top: 0.5px solid #ececea;
 }
+
+/* ---------------- "Programação" — timer dos slots fixos do dia (pedido do Georges) ----------------
+   Divisória nova, 1ª da página (ver app.js — "section.appendChild(scheduleSection.section)"
+   antes de Criação). Reaproveita tokens visuais já usados no resto da
+   Lista de Prioridades: mesma pílula de ".priorities-quickfilter-btn" pros
+   botões de slot pendente, mesmo cinza/laranja/verde do resto da página. */
+.priorities-schedule-loading { font-size: 12.5px; color: #928f86; }
+
+/* card do timer ATIVO — fundo escuro (mesmo tom de ".priorities-quickfilter-
+   btn.active") pra destacar claramente qual slot tá rodando AGORA, bem
+   diferente dos botões claros de "pendente" logo abaixo. */
+.priorities-schedule-active {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #2f3a44;
+  margin-bottom: 12px;
+}
+.priorities-schedule-active-label {
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+/* fonte monoespaçada (tabular-nums também, pra dígito não "dançar" de
+   largura a cada segundo) — é um relógio, precisa ler de relance. */
+.priorities-schedule-timer {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+/* passou do tempo (decisão do Georges: NÃO para sozinho em 00:00:00,
+   continua contando "tempo extra") — vermelho suave avisa sem gritar. */
+.priorities-schedule-timer.overtime { color: #ff8a80; }
+.priorities-schedule-complete-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: none;
+  background: #fff;
+  color: #2f3a44;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.priorities-schedule-complete-btn:hover { background: #eef0f2; }
+
+.priorities-schedule-pending { margin-bottom: 12px; }
+.priorities-schedule-pending-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #928f86;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+/* botão de slot pendente — mesma pílula clara de ".priorities-quickfilter-
+   btn", com a duração destacada do lado direito (mesmo "HH:MM" do print
+   que o Georges mandou). */
+.priorities-schedule-slot-btn {
+  height: 32px;
+  padding: 0 12px;
+  margin: 0 6px 6px 0;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #55554f;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.priorities-schedule-slot-btn:hover { border-color: #f08c00; color: #2f3a44; }
+.priorities-schedule-slot-label { flex: 1 1 auto; text-align: left; }
+.priorities-schedule-slot-duration {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #b06a00;
+  background: #fef3e0;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+/* mini-seletor de valor (slot composto, ex: "Ofícios / Processos") — pede
+   qual dos 2 valores de Programação vale pro timer que tá começando. */
+.priorities-schedule-choose {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: -2px 0 8px 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fbfbfa;
+  border: 0.5px solid #ececea;
+}
+.priorities-schedule-choose-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 0.5px solid #4a90d9;
+  background: #fff;
+  color: #4a90d9;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.priorities-schedule-choose-btn:hover { background: #4a90d9; color: #fff; }
+
+/* slots já concluídos hoje — linha discreta com o tempo REAL gasto (pode
+   passar do orçamento, sem problema, é só informativo). */
+.priorities-schedule-done { margin-bottom: 12px; }
+.priorities-schedule-done-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #928f86;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+.priorities-schedule-done-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: #78876b;
+}
+.priorities-schedule-done-row .ti-check { color: #78876b; }
+.priorities-schedule-done-row span:first-of-type { flex: 1 1 auto; }
+.priorities-schedule-done-time {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: #928f86;
+}
+
+/* top 5 itens (pendentes, por Prioridade) do valor de Programação ativo
+   agora — mesma pílula de ".priorities-chip" pra Prioridade, texto do
+   Assunto ao lado. */
+.priorities-schedule-items {
+  padding-top: 10px;
+  border-top: 0.5px solid #ececea;
+}
+.priorities-schedule-items-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #928f86;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+.priorities-schedule-items-empty { font-size: 12.5px; color: #928f86; }
+.priorities-schedule-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.priorities-schedule-item-text {
+  font-size: 12.5px;
+  color: #3a3a35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .priorities-options-panel-add .notes-add-btn { padding: 0 10px; flex-shrink: 0; }

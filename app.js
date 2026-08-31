@@ -1,5 +1,13 @@
 (function () {
   var cfg = APP_CONFIG;
+  // timer ao vivo da divisória "Programação" (Lista de Prioridades, pedido
+  // do Georges) — precisa ficar num escopo que SOBREVIVE a
+  // renderPrioritiesTable (setInterval não morre sozinho quando o
+  // container.innerHTML é trocado por outra página); renderContent (mais
+  // abaixo) limpa esse handle toda vez que troca de página, pra não deixar
+  // um "relógio" invisível rodando pra sempre em segundo plano depois que o
+  // Georges sai da Lista de Prioridades.
+  var scheduleTickInterval = null;
   // "homePage" (tela que sempre abre primeiro, ex: Início) é diferente de
   // "startPage" (raiz da árvore do menu lateral, ex: Entrada — precisa
   // continuar sendo a raiz pra "Criar páginas"/"Eventos"/etc. continuarem
@@ -3383,6 +3391,276 @@
       sec.appendChild(body);
       return { section: sec, body: body };
     }
+    // ---- "Programação" (pedido do Georges): agenda de slots FIXOS do dia
+    // (TCE 3h, DOI 1h, Ofícios/Processos 1h30 etc. — ver
+    // PRIORIDADES_SCHEDULE_SLOTS no config.js, page.scheduleSlots aqui).
+    // Cada timer é iniciado NA MÃO pelo Georges (nunca sozinho) — a ORDEM
+    // de início é livre (ele escolhe qual slot pendente começar a seguir),
+    // só a DURAÇÃO de cada um é fixa. Iniciar um slot novo encerra sozinho
+    // o que já tava rodando (ver handlePrioritiesScheduleStart no
+    // worker.js); "Concluir" fecha o ativo sem iniciar outro (pro último
+    // slot do dia). Progresso mora no Worker por DATA (chave
+    // "priority_schedule:<hoje em São Paulo>") — reseta sozinho todo dia
+    // (data nova = registro novo, tudo pendente de novo) e sobrevive a
+    // recarregar a página ou trocar de aparelho no meio do expediente.
+    var scheduleSlots = page.scheduleSlots || [];
+    var scheduleTotalMinutes = scheduleSlots.reduce(function (sum, s) { return sum + (s.minutes || 0); }, 0);
+    // data de hoje (São Paulo) no formato YYYY-MM-DD que o Worker espera —
+    // reaproveita saoPauloToday() (já usado pelas abas de "Início") só pra
+    // não duplicar a lógica de fuso horário em 2 lugares.
+    function scheduleDateStr() {
+      var d = saoPauloToday();
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    }
+    // "HH:MM" pro RÓTULO de duração de cada slot (mesmo formato do print
+    // que o Georges mandou — "03:00", "01:30" etc.), diferente do contador
+    // AO VIVO do timer ativo (esse tem segundos também — ver fmtCountdown).
+    function fmtSlotDuration(minutes) {
+      return pad2(Math.floor(minutes / 60)) + ":" + pad2(minutes % 60);
+    }
+    // "HH:MM:SS", com "-" na frente quando negativo (slot passou do tempo
+    // — decisão do Georges: o timer NÃO para sozinho em 00:00:00, continua
+    // contando "tempo extra" até ele mesmo encerrar o slot).
+    function fmtCountdown(totalSeconds) {
+      var neg = totalSeconds < 0;
+      var abs = Math.abs(totalSeconds);
+      var h = Math.floor(abs / 3600), m = Math.floor((abs % 3600) / 60), s = Math.floor(abs % 60);
+      return (neg ? "-" : "") + pad2(h) + ":" + pad2(m) + ":" + pad2(s);
+    }
+
+    var scheduleState = null; // { active: {id,value,startedAt}|null, completed: [...] }, ainda null até o 1º GET voltar
+    // slot com mais de 1 "values" (ex: "Ofícios / Processos") esperando o
+    // Georges escolher QUAL dos valores vale pro timer que tá prestes a
+    // começar — null = nenhum escolhendo agora.
+    var scheduleChoosingSlot = null;
+
+    function loadSchedule() {
+      authFetch(cfg.templateWorkerUrl + "/priorities-schedule?date=" + encodeURIComponent(scheduleDateStr()))
+        .then(handle401).then(function (r) { return r.json(); })
+        .then(function (data) {
+          scheduleState = data;
+          renderScheduleBody();
+        })
+        .catch(function () { /* falha silenciosa, mesma tolerância de outras seções secundárias da página */ });
+    }
+
+    function startScheduleSlot(slot, value) {
+      authFetch(cfg.templateWorkerUrl + "/priorities-schedule/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: scheduleDateStr(), id: slot.id, value: value || "" })
+      }).then(handle401).then(function (r) { return r.json(); })
+        .then(function (data) {
+          scheduleState = data;
+          scheduleChoosingSlot = null;
+          renderScheduleBody();
+        }).catch(showErr);
+    }
+
+    function completeScheduleActive() {
+      authFetch(cfg.templateWorkerUrl + "/priorities-schedule/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: scheduleDateStr() })
+      }).then(handle401).then(function (r) { return r.json(); })
+        .then(function (data) {
+          scheduleState = data;
+          renderScheduleBody();
+        }).catch(showErr);
+    }
+
+    // slots que ainda não rodaram HOJE (nem estão ativos, nem já
+    // concluídos) — cada slot roda 1 vez por dia, igual o "orçamento" de
+    // 8h do print (não é uma fila que se repete).
+    function schedulePendingSlots() {
+      var doneIds = {};
+      (scheduleState.completed || []).forEach(function (c) { doneIds[c.id] = true; });
+      if (scheduleState.active) doneIds[scheduleState.active.id] = true;
+      return scheduleSlots.filter(function (s) { return !doneIds[s.id]; });
+    }
+
+    function renderScheduleBody() {
+      scheduleSection.body.innerHTML = "";
+      if (!scheduleState) {
+        var loading = document.createElement("div");
+        loading.className = "priorities-schedule-loading";
+        loading.textContent = "Carregando…";
+        scheduleSection.body.appendChild(loading);
+        return;
+      }
+
+      // ---- timer do slot ATIVO agora ----
+      if (scheduleState.active) {
+        var activeSlot = scheduleSlots.filter(function (s) { return s.id === scheduleState.active.id; })[0];
+        var activeCard = document.createElement("div");
+        activeCard.className = "priorities-schedule-active";
+        var activeLabel = document.createElement("div");
+        activeLabel.className = "priorities-schedule-active-label";
+        activeLabel.textContent = (activeSlot ? activeSlot.label : scheduleState.active.id) +
+          (scheduleState.active.value ? " — " + scheduleState.active.value : "");
+        activeCard.appendChild(activeLabel);
+        var timerEl = document.createElement("div");
+        timerEl.className = "priorities-schedule-timer";
+        activeCard.appendChild(timerEl);
+        var completeBtn = document.createElement("button");
+        completeBtn.type = "button";
+        completeBtn.className = "priorities-schedule-complete-btn";
+        completeBtn.innerHTML = '<i class="ti ti-check"></i> Concluir';
+        completeBtn.addEventListener("click", completeScheduleActive);
+        activeCard.appendChild(completeBtn);
+        scheduleSection.body.appendChild(activeCard);
+
+        var durationSeconds = (activeSlot ? activeSlot.minutes : 0) * 60;
+        var startedAtMs = new Date(scheduleState.active.startedAt).getTime();
+        (function tick() {
+          var elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+          var remaining = durationSeconds - elapsed;
+          timerEl.textContent = fmtCountdown(remaining);
+          timerEl.classList.toggle("overtime", remaining < 0);
+        })();
+        if (scheduleTickInterval) clearInterval(scheduleTickInterval);
+        scheduleTickInterval = setInterval(function () {
+          var elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+          var remaining = durationSeconds - elapsed;
+          timerEl.textContent = fmtCountdown(remaining);
+          timerEl.classList.toggle("overtime", remaining < 0);
+        }, 1000);
+      } else if (scheduleTickInterval) {
+        clearInterval(scheduleTickInterval);
+        scheduleTickInterval = null;
+      }
+
+      // ---- slots pendentes (o Georges escolhe qual iniciar a seguir) ----
+      var pending = schedulePendingSlots();
+      if (pending.length) {
+        var pendingWrap = document.createElement("div");
+        pendingWrap.className = "priorities-schedule-pending";
+        var pendingTitle = document.createElement("div");
+        pendingTitle.className = "priorities-schedule-pending-title";
+        pendingTitle.textContent = scheduleState.active ? "Trocar para outro slot" : "Escolha o próximo slot";
+        pendingWrap.appendChild(pendingTitle);
+        pending.forEach(function (slot) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "priorities-schedule-slot-btn";
+          var lbl = document.createElement("span");
+          lbl.className = "priorities-schedule-slot-label";
+          lbl.textContent = slot.label;
+          var dur = document.createElement("span");
+          dur.className = "priorities-schedule-slot-duration";
+          dur.textContent = fmtSlotDuration(slot.minutes);
+          btn.appendChild(lbl);
+          btn.appendChild(dur);
+          btn.addEventListener("click", function () {
+            // slot "composto" (mais de 1 valor de Programação, ex:
+            // "Ofícios / Processos") pede pra escolher QUAL dos 2 antes de
+            // iniciar de vez — reabre/fecha o mini-seletor ao clicar de
+            // novo no mesmo botão.
+            if (slot.values.length > 1) {
+              scheduleChoosingSlot = (scheduleChoosingSlot && scheduleChoosingSlot.id === slot.id) ? null : slot;
+              renderScheduleBody();
+            } else {
+              startScheduleSlot(slot, slot.values[0]);
+            }
+          });
+          pendingWrap.appendChild(btn);
+          if (scheduleChoosingSlot && scheduleChoosingSlot.id === slot.id) {
+            var chooseWrap = document.createElement("div");
+            chooseWrap.className = "priorities-schedule-choose";
+            slot.values.forEach(function (v) {
+              var vBtn = document.createElement("button");
+              vBtn.type = "button";
+              vBtn.className = "priorities-schedule-choose-btn";
+              vBtn.textContent = v;
+              vBtn.addEventListener("click", function () { startScheduleSlot(slot, v); });
+              chooseWrap.appendChild(vBtn);
+            });
+            pendingWrap.appendChild(chooseWrap);
+          }
+        });
+        scheduleSection.body.appendChild(pendingWrap);
+      }
+
+      // ---- slots já concluídos hoje ----
+      if ((scheduleState.completed || []).length) {
+        var doneWrap = document.createElement("div");
+        doneWrap.className = "priorities-schedule-done";
+        var doneTitle = document.createElement("div");
+        doneTitle.className = "priorities-schedule-done-title";
+        doneTitle.textContent = "Concluídos hoje";
+        doneWrap.appendChild(doneTitle);
+        scheduleState.completed.forEach(function (c) {
+          var slotDef = scheduleSlots.filter(function (s) { return s.id === c.id; })[0];
+          var row = document.createElement("div");
+          row.className = "priorities-schedule-done-row";
+          var icon = document.createElement("i");
+          icon.className = "ti ti-check";
+          row.appendChild(icon);
+          var txt = document.createElement("span");
+          txt.textContent = (slotDef ? slotDef.label : c.id) + (c.value ? " — " + c.value : "");
+          row.appendChild(txt);
+          var spent = document.createElement("span");
+          spent.className = "priorities-schedule-done-time";
+          var spentSeconds = Math.round((new Date(c.endedAt).getTime() - new Date(c.startedAt).getTime()) / 1000);
+          spent.textContent = fmtCountdown(spentSeconds);
+          row.appendChild(spent);
+          doneWrap.appendChild(row);
+        });
+        scheduleSection.body.appendChild(doneWrap);
+      }
+
+      // ---- top 5 itens (pendentes, ordenados por Prioridade) do valor de
+      // Programação que tá rodando agora, pedido do Georges: "quando eu
+      // selecionar uma programação, ele me exibe... os 5 primeiros itens
+      // dessa programação, classificados pela Prioridade". "programacao" é
+      // campo de valor ÚNICO (não é um dos 3 multi_select), por isso
+      // comparação direta (===), não indexOf num array.
+      if (scheduleState.active && scheduleState.active.value) {
+        var activeValue = scheduleState.active.value;
+        var prioOpts = (fieldDefs.prioridade && fieldDefs.prioridade.options) || [];
+        var matching = allItems.filter(function (it) {
+          return !it.done && it.programacao === activeValue;
+        }).sort(function (a, b) {
+          var av = prioOpts.indexOf(a.prioridade || ""); if (av === -1) av = prioOpts.length;
+          var bv = prioOpts.indexOf(b.prioridade || ""); if (bv === -1) bv = prioOpts.length;
+          return av - bv;
+        }).slice(0, 5);
+
+        var itemsWrap = document.createElement("div");
+        itemsWrap.className = "priorities-schedule-items";
+        var itemsTitle = document.createElement("div");
+        itemsTitle.className = "priorities-schedule-items-title";
+        itemsTitle.textContent = "Top 5 — " + activeValue;
+        itemsWrap.appendChild(itemsTitle);
+        if (!matching.length) {
+          var noItems = document.createElement("div");
+          noItems.className = "priorities-schedule-items-empty";
+          noItems.textContent = "Nenhum item pendente com Programação = " + activeValue + ".";
+          itemsWrap.appendChild(noItems);
+        } else {
+          matching.forEach(function (it) {
+            var row = document.createElement("div");
+            row.className = "priorities-schedule-item-row";
+            if (it.prioridade) row.appendChild(makeChip("prioridade", it.prioridade));
+            var txt = document.createElement("span");
+            txt.className = "priorities-schedule-item-text";
+            txt.textContent = it.assunto || "(sem assunto)";
+            row.appendChild(txt);
+            itemsWrap.appendChild(row);
+          });
+        }
+        scheduleSection.body.appendChild(itemsWrap);
+      }
+    }
+
+    // total do dia no próprio título (ex: "Programação — 08:00"), igual o
+    // print que o Georges mandou ("Slots ... 08:00") — mais simples que
+    // ensinar buildCollapsibleSection a aceitar um badge extra no
+    // cabeçalho só pra essa 1 divisória. Nasce EXPANDIDA (é a 1ª coisa que
+    // o Georges vai querer ver ao abrir a página de manhã).
+    var scheduleSection = buildCollapsibleSection("Programação — " + fmtSlotDuration(scheduleTotalMinutes), true);
+    loadSchedule();
+
     var creationSection = buildCollapsibleSection("Criação");
     // renomeada de "Pesquisa e Filtros Gerais" pra só "Filtros Gerais"
     // (pedido do Georges) — a busca saiu daqui, agora mora sempre visível
@@ -3841,6 +4119,11 @@
 
     resetWizard();
 
+    // "Programação" vem PRIMEIRO (pedido implícito do Georges — é a 1ª
+    // coisa que ele vai querer ver/usar ao abrir a página de manhã, bem
+    // antes de mexer em Criação/Filtros/Itens). Nasce expandida (ver
+    // "buildCollapsibleSection(..., true)" acima).
+    section.appendChild(scheduleSection.section);
     section.appendChild(creationSection.section);
 
     // ---- barra de filtros — um <select> por coluna de opção (+ "Todos"),
@@ -4938,6 +5221,15 @@
           allItems = data.priorities || [];
           applyFilters();
           hideErr();
+          // top 5 itens da divisória "Programação" (mais acima) depende de
+          // "allItems" — sem isso, marcar um item como concluído (ou criar
+          // um novo) durante um slot ativo só atualizaria aquela listinha
+          // na próxima vez que um slot iniciasse/encerrasse, não agora.
+          // "scheduleState" só existe depois do 1º GET de /priorities-
+          // schedule voltar (ver loadSchedule) — sem essa checagem, um
+          // reload de itens rápido demais chamaria renderScheduleBody antes
+          // da hora e mostraria "Carregando…" por cima do que já tinha.
+          if (scheduleState) renderScheduleBody();
           requestAnimationFrame(function () { window.scrollTo(0, savedScrollY); });
         })
         .catch(function () { tbody.innerHTML = '<tr><td class="empty" colspan="' + (columns.length + 3) + '">Não foi possível carregar a lista.</td></tr>'; });
@@ -5156,6 +5448,10 @@
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
+    // sai da Lista de Prioridades (ou recarrega ela) com um timer da
+    // "Programação" rodando -> mata o intervalo antigo primeiro (ver
+    // comentário de "scheduleTickInterval" lá no topo do arquivo).
+    if (scheduleTickInterval) { clearInterval(scheduleTickInterval); scheduleTickInterval = null; }
 
     if (page.weather) renderWeatherWidget(container, typeof page.weather === "number" ? page.weather : 0);
 

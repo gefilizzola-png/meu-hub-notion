@@ -721,8 +721,10 @@ var PRIORIDADES_TEMPO_OPTIONS = ["Menos do que 5 minutos", "5 minutos", "10 minu
 var PRIORIDADES_FORMA_OPTIONS = ["Chrome", "Claude", "E-mail", "Excel", "Explorer", "Notion", "Presencial", "Solar", "SQL", "Tributos", "WhatsApp", "Word"];
 // "Estudos" adicionado (pedido do Georges) — precisa existir como valor
 // válido de Programação pro botão "Legislação / Estudos" de "Filtros
-// rápidos" (grupo "Grupo" — ver mais abaixo) funcionar.
-var PRIORIDADES_PROGRAMACAO_OPTIONS = ["Auditorias", "DOI", "Estudos", "Fiscalização", "IA", "Legislação", "Notion", "Ofícios", "Pessoal", "Planilhas", "Processos", "Sistemas", "TCE"];
+// rápidos" (grupo "Grupo" — ver mais abaixo) funcionar. "Arquivos"
+// adicionado depois (pedido do Georges — nova divisória "Programação" mais
+// abaixo, slot "Legislação / Notion / IA / Arquivos" precisa desse valor).
+var PRIORIDADES_PROGRAMACAO_OPTIONS = ["Arquivos", "Auditorias", "DOI", "Estudos", "Fiscalização", "IA", "Legislação", "Notion", "Ofícios", "Pessoal", "Planilhas", "Processos", "Sistemas", "TCE"];
 var PRIORIDADES_TRIBUTO_OPTIONS = ["Amigos", "CadImob", "CadMob", "Casa", "Eletrônicos", "Família", "Financeiro", "Financeiros", "Funcional", "Geral", "IPTU", "IPTU/ITBI", "ITBI", "Notion", "OODC", "Profissional", "Saúde", "TCRS", "Vitor"];
 // Origem virou multi_select também (pedido do Georges) — SEM lista "de
 // fábrica" aqui de propósito: sempre foi texto livre, então começa vazia;
@@ -733,6 +735,36 @@ var PRIORIDADES_TRIBUTO_OPTIONS = ["Amigos", "CadImob", "CadMob", "Casa", "Eletr
 // dali em diante o Georges cria/renomeia/exclui pelo ícone de engrenagem da
 // própria coluna, igual aos outros 6 campos.
 var PRIORIDADES_ORIGEM_OPTIONS = [];
+
+// ---------------- "Programação" — slots fixos do dia (pedido do Georges) ----------------
+// Divisória nova (ver pages.prioridades.scheduleSlots mais abaixo e o bloco
+// "Programação" dentro de renderPrioritiesTable no app.js — função
+// renderScheduleBody) — uma agenda de blocos de tempo
+// FIXOS que o Georges tenta cumprir todo dia (baseado no print que ele
+// mandou: 3h TCE, 1h DOI, 1h30 Ofícios/Processos, 1h Sistemas/Planilhas, 1h
+// Fiscalização/Auditorias, 30min Legislação/Notion/IA/Arquivos — soma 8h,
+// o expediente inteiro). A ORDEM em que os slots são iniciados no dia é
+// livre (o Georges escolhe qual começar a seguir, não precisa ser essa
+// ordem daqui) — só a DURAÇÃO de cada um é fixa.
+//
+// Cada slot: { id (identificador ESTÁVEL, nunca muda mesmo se o label for
+// editado futuramente — é o que o Worker guarda em priority_schedule),
+// label (texto exibido), minutes (duração do timer), values (1 ou mais
+// valores da coluna Programação que esse slot representa — precisam
+// existir em PRIORIDADES_PROGRAMACAO_OPTIONS acima) }. Slot com mais de 1
+// "values" (ex: "Ofícios / Processos") pede pro Georges escolher QUAL dos
+// 2 valores vale pro timer que tá começando, antes de iniciar (ver
+// renderScheduleBody no app.js) — é assim que ele consegue ver os itens certos
+// (top 5 por Prioridade) filtrados pelo valor específico escolhido, não
+// os 2 misturados.
+var PRIORIDADES_SCHEDULE_SLOTS = [
+  { id: "tce", label: "TCE", minutes: 180, values: ["TCE"] },
+  { id: "doi", label: "DOI", minutes: 60, values: ["DOI"] },
+  { id: "oficios_processos", label: "Ofícios / Processos", minutes: 90, values: ["Ofícios", "Processos"] },
+  { id: "sistemas_planilhas", label: "Sistemas / Planilhas", minutes: 60, values: ["Sistemas", "Planilhas"] },
+  { id: "fiscalizacao_auditorias", label: "Fiscalização / Auditorias", minutes: 60, values: ["Fiscalização", "Auditorias"] },
+  { id: "legislacao_notion_ia_arquivos", label: "Legislação / Notion / IA / Arquivos", minutes: 30, values: ["Legislação", "Notion", "IA", "Arquivos"] },
+];
 
 // Padrão inicial dos botões de "Filtros rápidos" (topo da Lista de
 // Prioridades — ver renderPrioritiesQuickFilters no app.js), usado só
@@ -808,7 +840,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-30 20:17",
+  appVersion: "2026-08-30 20:57",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1421,6 +1453,11 @@ const APP_CONFIG = {
     prioridades: {
       title: "Lista de Prioridades",
       priorities: true,
+      // "Programação" (pedido do Georges): agenda fixa dos slots do dia
+      // (ver PRIORIDADES_SCHEDULE_SLOTS acima e renderScheduleBody no
+      // app.js) — igual o resto daqui, pendurado no objeto da página pra
+      // manter o app.js genérico.
+      scheduleSlots: PRIORIDADES_SCHEDULE_SLOTS,
       // listas de opção de cada coluna "de opção" — passadas explicitamente
       // aqui (em vez de renderPrioritiesTable ler as constantes globais
       // direto) pra seguir o mesmo padrão do resto do config.js: tudo que
