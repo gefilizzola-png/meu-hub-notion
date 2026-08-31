@@ -4454,6 +4454,26 @@
     });
     updateSearchClearBtn();
     itemsSearchWrap.appendChild(searchClearBtn);
+    // "Só pendentes" (pedido do Georges: "a busca... deve pesquisar
+    // inclusive em itens CONCLUÍDOS, com botão para eu pesquisar somente em
+    // PENDENTES se assim desejar") — desligado por padrão, ou seja, a busca
+    // por texto passa a IGNORAR o filtro de status de "Filtros Gerais"
+    // (statusSelect, que continua "pending" por padrão pra quando NÃO tem
+    // texto digitado) e enxergar tudo, concluído incluso; ligar esse botão
+    // restringe só os RESULTADOS DE BUSCA aos pendentes (ver applyFilters
+    // mais abaixo — só entra em jogo quando "q" tem texto).
+    var searchOnlyPending = false;
+    var searchScopeBtn = document.createElement("button");
+    searchScopeBtn.type = "button";
+    searchScopeBtn.className = "priorities-search-scope-btn";
+    searchScopeBtn.innerHTML = '<i class="ti ti-filter"></i> Só pendentes';
+    searchScopeBtn.title = "Restringir a busca só a itens pendentes";
+    searchScopeBtn.addEventListener("click", function () {
+      searchOnlyPending = !searchOnlyPending;
+      searchScopeBtn.classList.toggle("active", searchOnlyPending);
+      applyFilters();
+    });
+    itemsSearchWrap.appendChild(searchScopeBtn);
     itemsSection.section.insertBefore(itemsSearchWrap, itemsSection.body);
     section.appendChild(itemsSection.section);
 
@@ -4482,8 +4502,19 @@
       // então o label agora vem de fieldDefs igual aos outros 6; só Assunto
       // continua texto livre solto (textKeys, ver abaixo).
       { key: "origem", label: (fieldDefs.origem && fieldDefs.origem.label) || "Origem" },
-      { key: "assunto", label: "Assunto" }
+      { key: "assunto", label: "Assunto" },
+      // "Criado em"/"Atualizado em" (pedido do Georges — "conseguimos
+      // marcar quando um item foi criado e alterado, para eu exibir os
+      // criados/alterados mais recentemente") — só leitura (sem engrenagem
+      // de editar opções, ver "fieldKeys.indexOf(col.key)" mais abaixo, que
+      // não inclui essas 2), mas SORTÁVEIS igual as outras (clique no
+      // cabeçalho). "dateKeys" (não fieldKeys/textKeys) porque a célula
+      // delas não é editável — ver o loop de renderização de linha mais
+      // abaixo, que usa esse array à parte.
+      { key: "createdAt", label: "Criado em" },
+      { key: "updatedAt", label: "Atualizado em" },
     ];
+    var dateKeys = ["createdAt", "updatedAt"];
     // colunas "de opção" ordenam pela posição na lista fixa (ex: "1 -
     // Imediato" antes de "2 - Urgente"), não por ordem alfabética — pra
     // Prioridade e Tempo isso é o que faz sentido; as de texto livre
@@ -4689,7 +4720,11 @@
       // computador, pode exibir por padrão as colunas TEMPO e FORMA
       // ocultas com botão para exibir"), continuam a 1 clique de distância
       // no botão de colunas (ver updateColumnVisibility mais abaixo).
-      defaultVisibleColumnKeys = allColumnKeys.filter(function (k) { return k !== "tempo" && k !== "forma"; });
+      // "Criado em"/"Atualizado em" (dateKeys) entram na mesma regra —
+      // úteis pra ORDENAR (clicar no cabeçalho já funciona mesmo
+      // escondidas, ver th.addEventListener mais abaixo), mas não
+      // precisam ocupar espaço na tabela o tempo todo.
+      defaultVisibleColumnKeys = allColumnKeys.filter(function (k) { return k !== "tempo" && k !== "forma" && dateKeys.indexOf(k) === -1; });
     } else if (window.matchMedia && window.matchMedia("(min-width: 640px)").matches) {
       // celular "aberto" (na horizontal/maior), tablet, ou tela menor de
       // computador (pedido do Georges).
@@ -4806,8 +4841,19 @@
       }
       th.appendChild(thArrow);
       th.addEventListener("click", function () {
-        if (sortState.key === col.key) sortState.dir = sortState.dir * -1;
-        else { sortState.key = col.key; sortState.dir = 1; }
+        if (sortState.key === col.key) {
+          sortState.dir = sortState.dir * -1;
+        } else {
+          sortState.key = col.key;
+          // "Criado em"/"Atualizado em" (pedido do Georges — "exibir
+          // aqueles criados ou alterados mais recentemente"): 1º clique já
+          // mostra o mais RECENTE primeiro (dir=-1), diferente das outras
+          // colunas (dir=1 — ex: "1 - Imediato" antes de "2 - Urgente", A
+          // antes de Z). Datas ISO comparam certo por ordem alfabética
+          // (localeCompare) no ramo genérico de sortItems, então só o
+          // sentido inicial do clique precisa desse tratamento especial.
+          sortState.dir = dateKeys.indexOf(col.key) !== -1 ? -1 : 1;
+        }
         refreshHeaderIndicators();
         applyFilters();
       });
@@ -4958,8 +5004,17 @@
       var q = searchInput.value.trim().toLowerCase();
       var status = statusSelect.value;
       var filtered = allItems.filter(function (it) {
-        if (status === "pending" && it.done) return false;
-        if (status === "done" && !it.done) return false;
+        // com texto de busca digitado, o status vem do botão "Só
+        // pendentes" da própria barra (pedido do Georges — busca acha
+        // CONCLUÍDOS por padrão), IGNORANDO o filtro de status geral de
+        // "Filtros Gerais"; sem texto, continua exatamente como sempre foi
+        // (statusSelect manda, "pending" por padrão).
+        if (q) {
+          if (searchOnlyPending && it.done) return false;
+        } else {
+          if (status === "pending" && it.done) return false;
+          if (status === "done" && !it.done) return false;
+        }
         for (var i = 0; i < fieldKeys.length; i++) {
           var key = fieldKeys[i];
           // "Filtros Gerais" (pedido do Georges) — TODOS os campos filtram
@@ -5125,6 +5180,16 @@
           inp.addEventListener("blur", commit);
           inp.addEventListener("keydown", function (e) { if (e.key === "Enter") inp.blur(); });
           cell.appendChild(inp);
+          row.appendChild(cell);
+        });
+
+        // "Criado em"/"Atualizado em" (pedido do Georges) — só leitura,
+        // mesmo formato "dd/mm hh:mm" já usado na data de criação das
+        // Anotações Rápidas (formatNoteDate, ver mais acima no arquivo).
+        dateKeys.forEach(function (key) {
+          var cell = document.createElement("td");
+          cell.className = "priorities-col-" + key + " priorities-cell-date";
+          cell.textContent = formatNoteDate(it[key]);
           row.appendChild(cell);
         });
 
