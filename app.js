@@ -2638,7 +2638,11 @@
     // CRONOLÓGICA (5min → 15min → 45min → 1h30 → 2h+) que já vem de
     // config.js, e ordem alfabética bagunçaria essa sequência (ex: "Até 45
     // minutos" viria antes de "Até 5 minutos" só por causa do texto).
-    var QF_GROUPS_NOT_ALPHA = ["tempo"];
+    // "status" entrou aqui também (pedido do Georges — Filtro Rápido
+    // Pendente/Concluído) — alfabética inverteria a ordem (Concluído vem
+    // antes de Pendente no alfabeto), enquanto a ordem NATURAL de sempre
+    // (mesma do <select> de "Filtros Gerais") é Pendente primeiro.
+    var QF_GROUPS_NOT_ALPHA = ["tempo", "status"];
     function sortQfData(data) {
       qfGroups.forEach(function (g) {
         if (QF_GROUPS_NOT_ALPHA.indexOf(g.key) !== -1) return;
@@ -5041,7 +5045,14 @@
           var groupField = group.field || group.key;
           var qWant = qfActiveValues(group.key);
           if (qWant) {
-            var qHave = isMultiField(groupField) ? (it[groupField] || []) : [it[groupField]];
+            // "Status" (pedido do Georges — Filtro Rápido Pendente/
+            // Concluído) é CAMPO VIRTUAL — o item não tem "it.status", tem
+            // "it.done" booleano (ver priorityFields.status no config.js).
+            // Traduz aqui em vez de tentar ler "it[groupField]" direto
+            // (sempre undefined pra esse grupo).
+            var qHave = (group.key === "status")
+              ? [it.done ? "Concluído" : "Pendente"]
+              : (isMultiField(groupField) ? (it[groupField] || []) : [it[groupField]]);
             var qMatch = qWant.some(function (w) { return qHave.indexOf(w) !== -1; });
             if (!qMatch) return false;
           }

@@ -777,6 +777,16 @@ var PRIORIDADES_SCHEDULE_SLOTS = [
 // botão junta uma faixa de 2 valores brutos vizinhos (não existe um valor
 // bruto "até 5 minutos" nem "TCE / DOI" — é sempre um agrupamento).
 var DEFAULT_QUICKFILTERS = {
+  // "Status" (pedido do Georges) — só 2 botões fixos possíveis, sempre os
+  // mesmos (ver priorityFields.status acima, que limita o editor de botões
+  // a exatamente essas 2 opções). Ordem Pendente antes de Concluído de
+  // propósito (mesma ordem do <select> de "Filtros Gerais" — "app.js" tem
+  // "status" na lista QF_GROUPS_NOT_ALPHA pra não deixar a ordenação
+  // alfabética de sempre inverter isso).
+  status: [
+    { label: "Pendente", values: ["Pendente"] },
+    { label: "Concluído", values: ["Concluído"] },
+  ],
   tipo: [
     { label: "PMF", values: ["PMF"] },
     { label: "Pessoal", values: ["Pessoal"] },
@@ -831,6 +841,15 @@ var DEFAULT_QUICKFILTERS = {
     { label: "CadImob", values: ["CadImob"] },
     { label: "Vitor", values: ["Vitor"] },
   ],
+  // "Origem" (pedido do Georges — "criar a opção de pesquisar com as
+  // opções de Origem, já que se tornou lista de opções") — começa VAZIO de
+  // propósito: diferente dos outros campos, Origem nunca teve uma lista
+  // fixa "de fábrica" (PRIORIDADES_ORIGEM_OPTIONS = [], self-heal do
+  // worker.js autopreenche com os valores que já existiam nos itens — ver
+  // seedOrigemOptionsFromItems). Sem saber esses valores de antemão aqui,
+  // fica pro Georges criar os botões que quiser em "Editar filtros" (já vai
+  // achar as opções certas no editor, elas já existem a essa altura).
+  origem: [],
 };
 
 const APP_CONFIG = {
@@ -840,7 +859,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-31 00:11",
+  appVersion: "2026-08-31 00:24",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1479,7 +1498,19 @@ const APP_CONFIG = {
         // começa vazia aqui (ver PRIORIDADES_ORIGEM_OPTIONS acima) — o
         // self-heal do worker.js autopreenche na 1ª listagem, e a partir daí
         // a fonte de verdade é o KV priority_options, igual aos outros.
-        origem: { label: "Origem", options: PRIORIDADES_ORIGEM_OPTIONS, multi: true }
+        origem: { label: "Origem", options: PRIORIDADES_ORIGEM_OPTIONS, multi: true },
+        // "status" (pedido do Georges: "incluir a opção de filtrar pelo
+        // status, pendente ou concluído" em Filtros Rápidos) — campo
+        // VIRTUAL, só existe aqui pra alimentar o editor de botões do
+        // Filtro Rápido "Status" (buildQfEditor no app.js lê
+        // fieldDefs[key].options pra montar os checkboxes); NÃO é uma
+        // coluna de verdade do item (o item tem "done" booleano, não um
+        // campo "status" string) — por isso não entra em fieldKeys (não
+        // vira coluna da tabela nem ganha engrenagem de "editar opções").
+        // A tradução done<->"Pendente"/"Concluído" mora só no app.js
+        // (applyFilters, casamento do Filtro Rápido) e no worker.js
+        // (validação do PUT /priorities-quickfilters).
+        status: { label: "Status", options: ["Pendente", "Concluído"] }
       },
       // "Filtros rápidos" (pedido do Georges): seção de botões no topo da
       // página, um bloco por grupo — ver renderPrioritiesQuickFilters no
@@ -1494,13 +1525,20 @@ const APP_CONFIG = {
       // passa a mandar, isso aqui só é usado enquanto nada ainda foi salvo.
       quickFilters: {
         groups: [
+          // "Status" (pedido do Georges) vem PRIMEIRO — é o recorte mais
+          // básico (pendente/concluído), faz sentido ser o 1º a decidir.
+          { key: "status", label: "Status" },
           { key: "tipo", label: "Tipo" },
           { key: "grupo", label: "Grupo", field: "programacao" },
           { key: "prioridade", label: "Prioridade" },
           { key: "tempo", label: "Tempo" },
           { key: "forma", label: "Forma" },
           { key: "programacao", label: "Programação" },
-          { key: "tributo", label: "Tributo" }
+          { key: "tributo", label: "Tributo" },
+          // "Origem" (pedido do Georges — "já que se tornou lista de
+          // opções") — igual Tributo/Programação, sem "field" (a própria
+          // chave "origem" já é o campo real do item).
+          { key: "origem", label: "Origem" }
         ],
         defaults: DEFAULT_QUICKFILTERS
       }
