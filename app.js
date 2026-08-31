@@ -4572,6 +4572,7 @@
       var label = (fieldDefs[key] && fieldDefs[key].label) || key;
       var panel = document.createElement("div");
       panel.className = "filter-menu priorities-options-panel open";
+      panel.addEventListener("click", function (e) { e.stopPropagation(); });
 
       var title = document.createElement("div");
       title.className = "priorities-options-panel-title";
