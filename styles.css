@@ -2071,11 +2071,13 @@ html, body {
 .priorities-items-searchbar {
   display: flex;
   margin: 0 0 10px;
+  position: relative;
 }
 .priorities-items-searchbar .priorities-search-input {
   flex: 1 1 auto;
   width: 100%;
   min-width: 0;
+  padding: 0 30px 0 10px;
   height: 34px;
   background: #fff;
   border-radius: 8px;
@@ -2084,6 +2086,31 @@ html, body {
 }
 .priorities-items-searchbar .priorities-search-input:hover { border-color: #b9b9b3; }
 .priorities-items-searchbar .priorities-search-input:focus { outline: none; border-color: #4a90d9; }
+/* botão "x" pra limpar a busca (pedido do Georges) — fica DENTRO da barra,
+   sobreposto ao input via position:absolute, só some/aparece via JS
+   (updateSearchClearBtn) conforme tem texto digitado ou não. */
+.priorities-search-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  color: #9a9a94;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+}
+.priorities-search-clear-btn:hover {
+  background: #eeeee9;
+  color: #5a5a54;
+}
 
 /* "Filtros rápidos" (pedido do Georges) — seção de botões-atalho no TOPO
    da Lista de Prioridades, ANTES até da linha de criação. Uma "divisória"

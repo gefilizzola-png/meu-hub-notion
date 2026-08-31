@@ -4166,10 +4166,29 @@
       skipBtn.addEventListener("click", function () { wizStep++; renderWizardStep(); });
       controls.appendChild(skipBtn);
 
+      // "criar mais um subitem" (pedido do Georges) — salva o subitem
+      // digitado mas NÃO avança de etapa, só re-renderiza a própria etapa
+      // (limpa o campo e foca de novo) pra ele poder emendar outro. Fica
+      // entre Pular e Prosseguir, com o mesmo visual neutro do Pular (é uma
+      // ação "fica aqui", diferente da ação primária de avançar).
+      var addMoreBtn = document.createElement("button");
+      addMoreBtn.type = "button";
+      addMoreBtn.className = "priorities-wizard-skip-btn";
+      addMoreBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar outro subitem';
+      addMoreBtn.addEventListener("click", function () {
+        var text = subInp.value.trim();
+        if (!text) { subInp.focus(); return; }
+        addMoreBtn.disabled = true;
+        updateItem(wizData.createdId, { subitems: [{ text: text }] }).then(function () {
+          renderWizardStep();
+        }).finally(function () { addMoreBtn.disabled = false; });
+      });
+      controls.appendChild(addMoreBtn);
+
       var addBtn = document.createElement("button");
       addBtn.type = "button";
       addBtn.className = "notes-add-btn priorities-wizard-next-btn";
-      addBtn.innerHTML = '<i class="ti ti-plus"></i> Criar subitem';
+      addBtn.innerHTML = '<i class="ti ti-arrow-right"></i> Prosseguir';
       addBtn.addEventListener("click", function () {
         var text = subInp.value.trim();
         if (!text) { wizStep++; renderWizardStep(); return; }
@@ -4337,6 +4356,27 @@
     searchInput.className = "notes-filter-input priorities-search-input";
     searchInput.placeholder = "Pesquisar em tudo (campos, subitens, notas)...";
     itemsSearchWrap.appendChild(searchInput);
+    // botão "x" pra limpar a busca (pedido do Georges — "hoje tenho que
+    // excluir manualmente o que digitei") — fica DENTRO da barra
+    // (posicionado em cima do input via CSS), só aparece quando tem algo
+    // digitado (ver updateSearchClearBtn, chamado no "input" mais abaixo
+    // e aqui mesmo pra já nascer escondido).
+    var searchClearBtn = document.createElement("button");
+    searchClearBtn.type = "button";
+    searchClearBtn.className = "priorities-search-clear-btn";
+    searchClearBtn.innerHTML = '<i class="ti ti-x"></i>';
+    searchClearBtn.title = "Limpar pesquisa";
+    function updateSearchClearBtn() {
+      searchClearBtn.style.display = searchInput.value ? "flex" : "none";
+    }
+    searchClearBtn.addEventListener("click", function () {
+      searchInput.value = "";
+      updateSearchClearBtn();
+      applyFilters();
+      searchInput.focus();
+    });
+    updateSearchClearBtn();
+    itemsSearchWrap.appendChild(searchClearBtn);
     itemsSection.section.insertBefore(itemsSearchWrap, itemsSection.body);
     section.appendChild(itemsSection.section);
 
@@ -5574,11 +5614,15 @@
     textKeys.forEach(function (key) {
       formTextInputs[key].addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
     });
-    searchInput.addEventListener("input", applyFilters);
+    searchInput.addEventListener("input", function () {
+      updateSearchClearBtn();
+      applyFilters();
+    });
     statusSelect.addEventListener("change", applyFilters);
     fieldKeys.forEach(function (key) { filterSelects[key].onChange(applyFilters); });
     clearBtn.addEventListener("click", function () {
       searchInput.value = "";
+      updateSearchClearBtn();
       statusSelect.value = "all";
       fieldKeys.forEach(function (key) { resetControl(filterSelects[key]); });
       // "Limpar filtros" também solta os botões de "Filtros rápidos" que
