@@ -3934,7 +3934,16 @@
     function resetWizard() {
       // "origem" agora é array (virou multi_select — pedido do Georges),
       // igual tributo/forma acima.
-      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", origem: [], assunto: "", createdId: null };
+      // "pendingSubitems" (fix de bug — Georges: "quando eu crio somente 1
+      // subitem, ele grava corretamente. Mas se eu crio um e depois clico
+      // em Adicionar outro subitem, ele grava somente o segundo") — o PUT
+      // pro Worker SUBSTITUI o array "subitems" inteiro (mesma regra usada
+      // em addSubitem() lá na tabela principal, que também manda o array
+      // JÁ mesclado — o Worker nunca mescla sozinho, ver
+      // handlePrioritiesUpdate). Guardar aqui os subitens já confirmados
+      // NESSE item do assistente e sempre reenviar a lista INTEIRA (não só
+      // o texto novo) resolve — ver commitWizardSubitem mais abaixo.
+      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", origem: [], assunto: "", createdId: null, pendingSubitems: [] };
       wizStep = 0;
       renderWizardStep();
     }
@@ -3994,11 +4003,18 @@
       return null;
     }
 
-    function renderWizardStep() {
-      quickWizardWrap.innerHTML = "";
-
-      // trilha do que já foi escolhido até aqui — só leitura, dá pra
-      // acompanhar o progresso sem precisar voltar pra conferir.
+    // trilha do que já foi escolhido até aqui (pedido do Georges: "achei
+    // bem legal [a linha de trilha]... mantenha a continuidade dela pra eu
+    // conseguir visualizar o que estou criando" — ANTES só as etapas
+    // "tipo"..."tempo" (dentro de renderWizardStep) desenhavam essa linha;
+    // as etapas finais (Origem/Assunto, subitem, nota) remontam o
+    // quickWizardWrap do zero em funções PRÓPRIAS e não chamavam esse
+    // trecho, por isso a trilha sumia. Virou uma função à parte,
+    // reaproveitada pelas 4 funções de render (renderWizardStep +
+    // renderWizardFinalStep + renderWizardSubitemStep + renderWizardNoteStep)
+    // — inclui Origem/Assunto também, já que essas 2 só existem a partir da
+    // etapa final em diante.
+    function buildWizardTrail() {
       var trailParts = [];
       if (wizData.tipo) trailParts.push(wizData.tipo);
       if (wizData.tributo.length) trailParts.push(wizData.tributo.join("/"));
@@ -4006,12 +4022,20 @@
       if (wizData.forma.length) trailParts.push(wizData.forma.join("/"));
       if (wizData.prioridade) trailParts.push(wizData.prioridade);
       if (wizData.tempo) trailParts.push(wizData.tempo);
-      if (trailParts.length) {
-        var trail = document.createElement("div");
-        trail.className = "priorities-wizard-trail";
-        trail.textContent = trailParts.join(" → ");
-        quickWizardWrap.appendChild(trail);
-      }
+      if (wizData.origem && wizData.origem.length) trailParts.push(wizData.origem.join("/"));
+      if (wizData.assunto) trailParts.push(wizData.assunto);
+      if (!trailParts.length) return null;
+      var trail = document.createElement("div");
+      trail.className = "priorities-wizard-trail";
+      trail.textContent = trailParts.join(" → ");
+      return trail;
+    }
+
+    function renderWizardStep() {
+      quickWizardWrap.innerHTML = "";
+
+      var trail = buildWizardTrail();
+      if (trail) quickWizardWrap.appendChild(trail);
 
       var stepKey = WIZ_STEPS[wizStep];
       if (stepKey === "final") { renderWizardFinalStep(); return; }
@@ -4069,7 +4093,13 @@
         });
         controls.appendChild(skipBtn);
       }
-      if (def.type === "multi") {
+      // "Continuar" só aparece DEPOIS de marcar pelo menos 1 opção (pedido
+      // do Georges — "a única forma de prosseguir... seria selecionando um
+      // item e clicando no botão CONTINUAR (que seria exibido somente após
+      // selecionar um item) ou clicando no botão PULAR"). Campo de escolha
+      // única (def.type !== "multi") nunca teve esse botão — clicar na
+      // pílula já avança sozinho, continua igual.
+      if (def.type === "multi" && wizData[stepKey].length > 0) {
         var nextBtn = document.createElement("button");
         nextBtn.type = "button";
         nextBtn.className = "notes-add-btn priorities-wizard-next-btn";
@@ -4088,6 +4118,8 @@
       // inteiro) — sem isso, cada clique empilharia um 2º título/pílulas/
       // campo de Assunto por cima do anterior em vez de substituir.
       quickWizardWrap.innerHTML = "";
+      var trailFinal = buildWizardTrail();
+      if (trailFinal) quickWizardWrap.appendChild(trailFinal);
       var title = document.createElement("div");
       title.className = "priorities-wizard-step-title";
       title.textContent = "Origem e Assunto";
@@ -4161,6 +4193,9 @@
     // botão Voltar aqui de propósito: voltar reabriria Origem/Assunto e um
     // segundo clique em "Criar" duplicaria o item.
     function renderWizardSubitemStep() {
+      quickWizardWrap.innerHTML = "";
+      var trailSub = buildWizardTrail();
+      if (trailSub) quickWizardWrap.appendChild(trailSub);
       var title = document.createElement("div");
       title.className = "priorities-wizard-step-title";
       title.textContent = "Criar subitem (opcional)";
@@ -4190,7 +4225,11 @@
       // digitado mas NÃO avança de etapa, só re-renderiza a própria etapa
       // (limpa o campo e foca de novo) pra ele poder emendar outro. Fica
       // entre Pular e Prosseguir, com o mesmo visual neutro do Pular (é uma
-      // ação "fica aqui", diferente da ação primária de avançar).
+      // ação "fica aqui", diferente da ação primária de avançar). Usa
+      // commitWizardSubitem (ver definição acima de resetWizard) — MESCLA
+      // com os subitens já confirmados nesse item antes de mandar o PUT,
+      // em vez de reenviar só o texto novo (bug corrigido: 2º subitem
+      // apagava o 1º porque o PUT anterior mandava só "[{text}]").
       var addMoreBtn = document.createElement("button");
       addMoreBtn.type = "button";
       addMoreBtn.className = "priorities-wizard-skip-btn";
@@ -4199,7 +4238,7 @@
         var text = subInp.value.trim();
         if (!text) { subInp.focus(); return; }
         addMoreBtn.disabled = true;
-        updateItem(wizData.createdId, { subitems: [{ text: text }] }).then(function () {
+        commitWizardSubitem(text).then(function () {
           renderWizardStep();
         }).finally(function () { addMoreBtn.disabled = false; });
       });
@@ -4213,7 +4252,7 @@
         var text = subInp.value.trim();
         if (!text) { wizStep++; renderWizardStep(); return; }
         addBtn.disabled = true;
-        updateItem(wizData.createdId, { subitems: [{ text: text }] }).then(function () {
+        commitWizardSubitem(text).then(function () {
           wizStep++;
           renderWizardStep();
         }).finally(function () { addBtn.disabled = false; });
@@ -4229,6 +4268,9 @@
     // PUT {nota}. Reaproveita ".priorities-note-textarea" (mesma classe da
     // nota do item já existente na tabela) pra manter o visual igual.
     function renderWizardNoteStep() {
+      quickWizardWrap.innerHTML = "";
+      var trailNote = buildWizardTrail();
+      if (trailNote) quickWizardWrap.appendChild(trailNote);
       var title = document.createElement("div");
       title.className = "priorities-wizard-step-title";
       title.textContent = "Criar nota (opcional)";
@@ -4273,6 +4315,21 @@
       quickWizardWrap.appendChild(controls);
 
       notaInp.focus();
+    }
+
+    // adiciona UM subitem ao item do assistente, mesclando com os que essa
+    // MESMA passagem pelo assistente já confirmou (wizData.pendingSubitems)
+    // antes de mandar o PUT — o Worker substitui "subitems" inteiro a cada
+    // PUT (não mescla sozinho, ver addSubitem() na tabela principal, que
+    // segue a mesma regra), então mandar só "[{text}]" de novo apagaria
+    // qualquer subitem criado num clique anterior de "Adicionar outro
+    // subitem" (bug relatado pelo Georges). Mesmo formato de objeto que
+    // addSubitem() usa lá na tabela, pra ficar idêntico ao que a tabela
+    // principal mostraria depois.
+    function commitWizardSubitem(text) {
+      var entry = { id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), text: text, done: false, flagged: false, nota: "" };
+      wizData.pendingSubitems.push(entry);
+      return updateItem(wizData.createdId, { subitems: wizData.pendingSubitems.slice() });
     }
 
     function submitQuickCreate(btn, assuntoInp) {
