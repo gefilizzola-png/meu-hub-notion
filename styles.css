@@ -2525,15 +2525,34 @@ html, body {
   margin-bottom: 6px;
 }
 .priorities-schedule-items-empty { font-size: 12.5px; color: #928f86; }
+/* cada item do Top 5 virou 2 linhas (pedido do Georges — "trazer mais
+   dados sobre os itens, pra eu identificar melhor do que se trata"):
+   ".priorities-schedule-item-main" (chip de Prioridade + Assunto, igual já
+   era) em cima, ".priorities-schedule-item-meta" (Tributo/Origem/Tempo,
+   texto pequeno e discreto) embaixo — só aparece quando o item tem algum
+   desses 3 campos preenchido. */
 .priorities-schedule-item-row {
+  padding: 6px 0;
+  border-bottom: 0.5px solid #f3f2ee;
+}
+.priorities-schedule-item-row:last-child { border-bottom: none; }
+.priorities-schedule-item-main {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
 }
 .priorities-schedule-item-text {
   font-size: 12.5px;
   color: #3a3a35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.priorities-schedule-item-meta {
+  margin-top: 3px;
+  margin-left: 2px;
+  font-size: 11px;
+  color: #928f86;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

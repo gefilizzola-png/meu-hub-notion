@@ -3641,11 +3641,33 @@
           matching.forEach(function (it) {
             var row = document.createElement("div");
             row.className = "priorities-schedule-item-row";
-            if (it.prioridade) row.appendChild(makeChip("prioridade", it.prioridade));
+
+            // linha principal: chip de Prioridade + Assunto (igual já era).
+            var main = document.createElement("div");
+            main.className = "priorities-schedule-item-main";
+            if (it.prioridade) main.appendChild(makeChip("prioridade", it.prioridade));
             var txt = document.createElement("span");
             txt.className = "priorities-schedule-item-text";
             txt.textContent = it.assunto || "(sem assunto)";
-            row.appendChild(txt);
+            main.appendChild(txt);
+            row.appendChild(main);
+
+            // linha de metadados (pedido do Georges — "trazer mais dados
+            // sobre os itens, pra eu identificar melhor do que se trata"):
+            // Tributo/Origem (multi_select, junta os valores com vírgula)
+            // e Tempo estimado (valor único), texto pequeno e discreto —
+            // só entra na linha o que o item realmente tiver preenchido.
+            var metaParts = [];
+            if ((it.tributo || []).length) metaParts.push("Tributo: " + it.tributo.join(", "));
+            if ((it.origem || []).length) metaParts.push("Origem: " + it.origem.join(", "));
+            if (it.tempo) metaParts.push(it.tempo);
+            if (metaParts.length) {
+              var meta = document.createElement("div");
+              meta.className = "priorities-schedule-item-meta";
+              meta.textContent = metaParts.join(" · ");
+              row.appendChild(meta);
+            }
+
             itemsWrap.appendChild(row);
           });
         }
