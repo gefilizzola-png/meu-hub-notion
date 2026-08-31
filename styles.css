@@ -2525,12 +2525,12 @@ html, body {
   margin-bottom: 6px;
 }
 .priorities-schedule-items-empty { font-size: 12.5px; color: #928f86; }
-/* cada item do Top 5 virou 2 linhas (pedido do Georges — "trazer mais
-   dados sobre os itens, pra eu identificar melhor do que se trata"):
-   ".priorities-schedule-item-main" (chip de Prioridade + Assunto, igual já
-   era) em cima, ".priorities-schedule-item-meta" (Tributo/Origem/Tempo,
-   texto pequeno e discreto) embaixo — só aparece quando o item tem algum
-   desses 3 campos preenchido. */
+/* cada item do Top 5 (pedido do Georges) — linha única "Tributo - Origem -
+   Assunto" (só entra o que o item tiver preenchido), chip de Prioridade na
+   frente; se o item tem subitens, ganha um botão de seta que expande/
+   recolhe o conteúdo deles logo abaixo (".priorities-schedule-item-
+   subitems"), só leitura (marcar/editar subitem continua na tabela
+   principal, aqui é resumo rápido pra identificar o item). */
 .priorities-schedule-item-row {
   padding: 6px 0;
   border-bottom: 0.5px solid #f3f2ee;
@@ -2542,19 +2542,40 @@ html, body {
   gap: 8px;
 }
 .priorities-schedule-item-text {
+  flex: 1 1 auto;
   font-size: 12.5px;
   color: #3a3a35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.priorities-schedule-item-meta {
-  margin-top: 3px;
-  margin-left: 2px;
-  font-size: 11px;
+.priorities-schedule-item-subitems-toggle {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #928f86;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
+.priorities-schedule-item-subitems-toggle:hover { color: #2f3a44; }
+.priorities-schedule-item-subitems {
+  margin: 4px 0 0 26px;
+  padding-left: 8px;
+  border-left: 0.5px solid #ececea;
+}
+.priorities-schedule-subitem-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+  color: #55554f;
+}
+.priorities-schedule-subitem-row .ti { font-size: 13px; color: #b9b9b3; flex-shrink: 0; }
+.priorities-schedule-subitem-row.done { color: #b9b9b3; text-decoration: line-through; }
+.priorities-schedule-subitem-row.done .ti { color: #78876b; }
 .priorities-options-panel-add .notes-add-btn { padding: 0 10px; flex-shrink: 0; }

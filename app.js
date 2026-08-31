@@ -3433,6 +3433,14 @@
     // Georges escolher QUAL dos valores vale pro timer que tá prestes a
     // começar — null = nenhum escolhendo agora.
     var scheduleChoosingSlot = null;
+    // subitens expandidos no Top 5 (pedido do Georges — "nas linhas de
+    // baixo, o conteúdo dos subitens com botão de expandir e recolher"),
+    // chave = id do item — mesmo padrão de "expandedSubitemIds" já usado na
+    // tabela principal: precisa ficar FORA de renderScheduleBody (que
+    // reconstrói tudo do zero a cada chamada) pra sobreviver a um reload
+    // (start/complete de slot, ou um loadItems() disparado por outra
+    // edição enquanto o Top 5 tá aberto).
+    var scheduleItemSubitemsExpanded = {};
 
     function loadSchedule() {
       authFetch(cfg.templateWorkerUrl + "/priorities-schedule?date=" + encodeURIComponent(scheduleDateStr()))
@@ -3642,30 +3650,64 @@
             var row = document.createElement("div");
             row.className = "priorities-schedule-item-row";
 
-            // linha principal: chip de Prioridade + Assunto (igual já era).
+            // linha única (pedido do Georges — "Tributo - Origem -
+            // Assunto", ex: "IPTU - Lançamento anual - IPTU 2027"):
+            // Tributo/Origem são multi_select (array), junta cada um com
+            // ", " se tiver mais de 1 valor; só entra na linha o que o
+            // item realmente tiver preenchido (Assunto é obrigatório,
+            // sempre aparece). Chip de Prioridade continua na frente,
+            // igual já era.
             var main = document.createElement("div");
             main.className = "priorities-schedule-item-main";
             if (it.prioridade) main.appendChild(makeChip("prioridade", it.prioridade));
+            var textParts = [];
+            if ((it.tributo || []).length) textParts.push(it.tributo.join(", "));
+            if ((it.origem || []).length) textParts.push(it.origem.join(", "));
+            textParts.push(it.assunto || "(sem assunto)");
             var txt = document.createElement("span");
             txt.className = "priorities-schedule-item-text";
-            txt.textContent = it.assunto || "(sem assunto)";
+            txt.textContent = textParts.join(" - ");
             main.appendChild(txt);
+
+            // botão de expandir/recolher os subitens (pedido do Georges —
+            // "nas linhas de baixo, o conteúdo dos subitens com botão de
+            // expandir e recolher") — só aparece se o item TEM subitem;
+            // igual a tabela principal, é só leitura aqui (marcar/editar
+            // subitem continua sendo função da tabela mais abaixo, esse
+            // Top 5 é um resumo rápido pra identificar o item).
+            var subitems = it.subitems || [];
+            if (subitems.length) {
+              var toggleBtn = document.createElement("button");
+              toggleBtn.type = "button";
+              toggleBtn.className = "priorities-schedule-item-subitems-toggle";
+              var expanded = !!scheduleItemSubitemsExpanded[it.id];
+              var icon = document.createElement("i");
+              icon.className = expanded ? "ti ti-chevron-down" : "ti ti-chevron-right";
+              toggleBtn.appendChild(icon);
+              toggleBtn.addEventListener("click", function () {
+                if (scheduleItemSubitemsExpanded[it.id]) delete scheduleItemSubitemsExpanded[it.id];
+                else scheduleItemSubitemsExpanded[it.id] = true;
+                renderScheduleBody();
+              });
+              main.appendChild(toggleBtn);
+            }
             row.appendChild(main);
 
-            // linha de metadados (pedido do Georges — "trazer mais dados
-            // sobre os itens, pra eu identificar melhor do que se trata"):
-            // Tributo/Origem (multi_select, junta os valores com vírgula)
-            // e Tempo estimado (valor único), texto pequeno e discreto —
-            // só entra na linha o que o item realmente tiver preenchido.
-            var metaParts = [];
-            if ((it.tributo || []).length) metaParts.push("Tributo: " + it.tributo.join(", "));
-            if ((it.origem || []).length) metaParts.push("Origem: " + it.origem.join(", "));
-            if (it.tempo) metaParts.push(it.tempo);
-            if (metaParts.length) {
-              var meta = document.createElement("div");
-              meta.className = "priorities-schedule-item-meta";
-              meta.textContent = metaParts.join(" · ");
-              row.appendChild(meta);
+            if (subitems.length && scheduleItemSubitemsExpanded[it.id]) {
+              var subWrap = document.createElement("div");
+              subWrap.className = "priorities-schedule-item-subitems";
+              subitems.forEach(function (s) {
+                var subRow = document.createElement("div");
+                subRow.className = "priorities-schedule-subitem-row" + (s.done ? " done" : "");
+                var subIcon = document.createElement("i");
+                subIcon.className = s.done ? "ti ti-square-check" : "ti ti-square";
+                subRow.appendChild(subIcon);
+                var subTxt = document.createElement("span");
+                subTxt.textContent = s.text;
+                subRow.appendChild(subTxt);
+                subWrap.appendChild(subRow);
+              });
+              row.appendChild(subWrap);
             }
 
             itemsWrap.appendChild(row);
