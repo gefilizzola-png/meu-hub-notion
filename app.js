@@ -5013,10 +5013,18 @@
         // pendentes" da própria barra (pedido do Georges — busca acha
         // CONCLUÍDOS por padrão), IGNORANDO o filtro de status geral de
         // "Filtros Gerais"; sem texto, continua exatamente como sempre foi
-        // (statusSelect manda, "pending" por padrão).
+        // (statusSelect manda, "pending" por padrão) — EXCETO quando algum
+        // Filtro Rápido está ativo (pedido do Georges — ele achou "Origem:
+        // Teste" quebrado, mas na real o item batia certinho e só estava
+        // escondido pelo status "Pendente" padrão de Filtros Gerais, que
+        // fica fora da tela recolhido; confuso ficar preso a um filtro que
+        // nem aparece). Com Filtro Rápido ativo, quem quiser só pendentes/só
+        // concluídos usa o próprio Filtro Rápido "Status" (grupo abaixo já
+        // filtra certo por it.done) em vez do seletor escondido.
+        var qfAnyActive = qfActiveCount() > 0;
         if (q) {
           if (searchOnlyPending && it.done) return false;
-        } else {
+        } else if (!qfAnyActive) {
           if (status === "pending" && it.done) return false;
           if (status === "done" && !it.done) return false;
         }
