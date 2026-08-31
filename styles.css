@@ -2582,6 +2582,28 @@ html, body {
   font-size: 11.5px;
   color: #928f86;
 }
+/* "marcar como não realizado" (pedido do Georges) — botãozinho só-ícone no
+   fim de cada linha de "Concluídos hoje", discreto até passar o mouse (não
+   pode competir visualmente com o "check" verde nem com o tempo gasto). */
+.priorities-schedule-done-undo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  color: #b9b6ac;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+}
+.priorities-schedule-done-undo-btn:hover {
+  background: #eeeee9;
+  color: #55554f;
+}
 
 /* top 5 itens (pendentes, por Prioridade) do valor de Programação ativo
    agora — mesma pílula de ".priorities-chip" pra Prioridade, texto do

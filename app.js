@@ -3492,6 +3492,14 @@
     function resumeScheduleActive() { postSchedule("resume"); }
     function restartScheduleActive() { postSchedule("restart"); }
     function undoScheduleAction() { postSchedule("undo"); }
+    // "marcar como não realizado" em cada item de "Concluídos hoje" (pedido
+    // do Georges: "para que eu possa recomeçá-lo se quiser") — tira só
+    // AQUELE registro de "completed" (por posição no array, já que o "id"
+    // de um registro concluído é o id do SLOT, não único — o mesmo slot
+    // pode ter sido concluído mais de uma vez no dia). O slot correspondente
+    // volta sozinho pra lista de pendentes (ver schedulePendingSlots), sem
+    // precisar de nenhuma lógica extra aqui — só recarrega o dia.
+    function uncompleteScheduleEntry(index) { postSchedule("uncomplete", { index: index }); }
 
     // espelha EXATAMENTE activeElapsedSeconds do worker.js (mesma fórmula:
     // accumulatedSeconds + trecho rodando agora, se "running") — só que
@@ -3673,7 +3681,7 @@
         doneTitle.className = "priorities-schedule-done-title";
         doneTitle.textContent = "Concluídos hoje";
         doneWrap.appendChild(doneTitle);
-        scheduleState.completed.forEach(function (c) {
+        scheduleState.completed.forEach(function (c, idx) {
           var slotDef = scheduleSlots.filter(function (s) { return s.id === c.id; })[0];
           var row = document.createElement("div");
           row.className = "priorities-schedule-done-row";
@@ -3693,6 +3701,18 @@
           // "tempo gasto" no slot).
           spent.textContent = fmtCountdown(c.elapsedSeconds || 0);
           row.appendChild(spent);
+          // "marcar como não realizado" (pedido do Georges) — some com ESSE
+          // registro específico de "completed" (index = posição no array
+          // que a gente acabou de percorrer, igual o Worker espera — ver
+          // handlePrioritiesScheduleUncomplete). O slot volta sozinho pra
+          // "Escolha o próximo slot" acima, pronto pra recomeçar do zero.
+          var undoEntryBtn = document.createElement("button");
+          undoEntryBtn.type = "button";
+          undoEntryBtn.className = "priorities-schedule-done-undo-btn";
+          undoEntryBtn.title = "Marcar como não realizado";
+          undoEntryBtn.innerHTML = '<i class="ti ti-arrow-back-up"></i>';
+          undoEntryBtn.addEventListener("click", function () { uncompleteScheduleEntry(idx); });
+          row.appendChild(undoEntryBtn);
           doneWrap.appendChild(row);
         });
         scheduleSection.body.appendChild(doneWrap);
