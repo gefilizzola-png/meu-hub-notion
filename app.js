@@ -3345,12 +3345,21 @@
     // ideia de divisória recolhível de "Filtros rápidos" (botão de seta),
     // só que pra linha de criação, pra barra de filtros por coluna e pra
     // tabela de verdade — que ANTES ficavam soltas, sempre visíveis,
-    // ocupando espaço mesmo quando não estão em uso. As 3 primeiras
-    // (Criação/Filtros Gerais/Filtros Rápidos) SEMPRE recolhidas ao abrir a
+    // ocupando espaço mesmo quando não estão em uso. Criação/Filtros
+    // Gerais/Filtros Rápidos/Programação SEMPRE recolhidas ao ABRIR a
     // página (pedido do Georges — antes só recolhia no celular/tablet via
     // matchMedia; agora é assim em QUALQUER tamanho de tela, computador
-    // incluso); "Itens" é a exceção, nasce EXPANDIDA (ver "startExpanded"
-    // logo abaixo). Helper genérico (não usado por "Filtros rápidos", que
+    // incluso; Programação entrou nesse grupo depois, mesmo pedido);
+    // "Itens" é a exceção, nasce EXPANDIDA (ver "startExpanded" logo
+    // abaixo). Se o Georges EXPANDIR qualquer uma na mão, continua
+    // expandida enquanto ele mexe na página (edita item, inicia/pausa slot
+    // etc. — só re-renderizam a TABELA/CORPO de dentro, nunca essas
+    // divisórias em si); só volta a nascer recolhida (salvo Itens) da
+    // PRÓXIMA vez que a página inteira remontar — ao navegar pra ela de
+    // novo, ou depois de editar as opções de uma coluna (única ação que
+    // remonta a página inteira no meio do caminho, por precisar reconstruir
+    // os <select>/dropdowns com a lista nova). Helper genérico (não usado
+    // por "Filtros rápidos", que
     // já tinha o próprio mecanismo pronto de antes — ver qfSection acima,
     // não mexido).
     function buildCollapsibleSection(titleText, startExpanded) {
@@ -3452,11 +3461,18 @@
         .catch(function () { /* falha silenciosa, mesma tolerância de outras seções secundárias da página */ });
     }
 
-    function startScheduleSlot(slot, value) {
-      authFetch(cfg.templateWorkerUrl + "/priorities-schedule/start", {
+    // única função por trás de start/complete/pausar/retomar/reiniciar/
+    // desfazer — todas fazem exatamente a mesma coisa (POST num endpoint
+    // "/priorities-schedule/<ação>" com { date, ...extra }, e o corpo da
+    // resposta já É o dia inteiro atualizado), só muda a rota e o corpo
+    // extra. Evita repetir o mesmo "then(handle401).then(...).catch(...)"
+    // 6 vezes.
+    function postSchedule(action, extraBody) {
+      var body = Object.assign({ date: scheduleDateStr() }, extraBody || {});
+      return authFetch(cfg.templateWorkerUrl + "/priorities-schedule/" + action, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: scheduleDateStr(), id: slot.id, value: value || "" })
+        body: JSON.stringify(body)
       }).then(handle401).then(function (r) { return r.json(); })
         .then(function (data) {
           scheduleState = data;
@@ -3465,16 +3481,29 @@
         }).catch(showErr);
     }
 
-    function completeScheduleActive() {
-      authFetch(cfg.templateWorkerUrl + "/priorities-schedule/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: scheduleDateStr() })
-      }).then(handle401).then(function (r) { return r.json(); })
-        .then(function (data) {
-          scheduleState = data;
-          renderScheduleBody();
-        }).catch(showErr);
+    function startScheduleSlot(slot, value) { postSchedule("start", { id: slot.id, value: value || "" }); }
+    function completeScheduleActive() { postSchedule("complete"); }
+    // pausar/retomar/reiniciar (pedido do Georges — "quero poder pausar o
+    // timer, reiniciá-lo") e desfazer (pedido do Georges — "voltar à
+    // situação anterior caso eu tenha o iniciado ou o concluído por
+    // engano") — ver worker.js pros detalhes de cada um (accumulatedSeconds/
+    // running/resumedAt no active, e "previous" pro desfazer de 1 nível).
+    function pauseScheduleActive() { postSchedule("pause"); }
+    function resumeScheduleActive() { postSchedule("resume"); }
+    function restartScheduleActive() { postSchedule("restart"); }
+    function undoScheduleAction() { postSchedule("undo"); }
+
+    // espelha EXATAMENTE activeElapsedSeconds do worker.js (mesma fórmula:
+    // accumulatedSeconds + trecho rodando agora, se "running") — só que
+    // calculado no CLIENTE, a cada tick do relógio local, pra não precisar
+    // bater no Worker toda hora só pra saber quantos segundos já passaram.
+    function scheduleActiveElapsedSeconds(active) {
+      var acc = (active && active.accumulatedSeconds) || 0;
+      if (active && active.running && active.resumedAt) {
+        var extra = (Date.now() - new Date(active.resumedAt).getTime()) / 1000;
+        if (extra > 0) acc += extra;
+      }
+      return acc;
     }
 
     // slots que ainda não rodaram HOJE (nem estão ativos, nem já
@@ -3497,42 +3526,89 @@
         return;
       }
 
+      // ---- "Desfazer última ação" (pedido do Georges — "voltar à
+      // situação anterior caso eu tenha o iniciado ou o concluído por
+      // engano") — só aparece quando existe "previous" pra restaurar
+      // (qualquer ação recente: start/complete/pausar/retomar/reiniciar).
+      // Fica no TOPO da divisória, fora do card do timer, porque também
+      // precisa funcionar quando NÃO tem slot ativo agora (ex: concluiu
+      // por engano — undo tem que trazer ele de volta como ativo).
+      if (scheduleState.previous) {
+        var undoBtn = document.createElement("button");
+        undoBtn.type = "button";
+        undoBtn.className = "priorities-schedule-undo-btn";
+        undoBtn.innerHTML = '<i class="ti ti-arrow-back-up"></i> Desfazer última ação';
+        undoBtn.addEventListener("click", undoScheduleAction);
+        scheduleSection.body.appendChild(undoBtn);
+      }
+
       // ---- timer do slot ATIVO agora ----
       if (scheduleState.active) {
-        var activeSlot = scheduleSlots.filter(function (s) { return s.id === scheduleState.active.id; })[0];
+        var activeData = scheduleState.active;
+        var activeSlot = scheduleSlots.filter(function (s) { return s.id === activeData.id; })[0];
         var activeCard = document.createElement("div");
-        activeCard.className = "priorities-schedule-active";
+        activeCard.className = "priorities-schedule-active" + (activeData.running ? "" : " paused");
         var activeLabel = document.createElement("div");
         activeLabel.className = "priorities-schedule-active-label";
-        activeLabel.textContent = (activeSlot ? activeSlot.label : scheduleState.active.id) +
-          (scheduleState.active.value ? " — " + scheduleState.active.value : "");
+        activeLabel.textContent = (activeSlot ? activeSlot.label : activeData.id) +
+          (activeData.value ? " — " + activeData.value : "") +
+          (activeData.running ? "" : " (pausado)");
         activeCard.appendChild(activeLabel);
         var timerEl = document.createElement("div");
         timerEl.className = "priorities-schedule-timer";
         activeCard.appendChild(timerEl);
+
+        // pausar/retomar/reiniciar/concluir (pedido do Georges) — os 4
+        // ficam juntos numa linha só de botões, dentro do card escuro do
+        // timer ativo.
+        var activeBtnRow = document.createElement("div");
+        activeBtnRow.className = "priorities-schedule-active-btns";
+
+        var pauseResumeBtn = document.createElement("button");
+        pauseResumeBtn.type = "button";
+        pauseResumeBtn.className = "priorities-schedule-pause-btn";
+        if (activeData.running) {
+          pauseResumeBtn.innerHTML = '<i class="ti ti-player-pause"></i> Pausar';
+          pauseResumeBtn.addEventListener("click", pauseScheduleActive);
+        } else {
+          pauseResumeBtn.innerHTML = '<i class="ti ti-player-play"></i> Retomar';
+          pauseResumeBtn.addEventListener("click", resumeScheduleActive);
+        }
+        activeBtnRow.appendChild(pauseResumeBtn);
+
+        var restartBtn = document.createElement("button");
+        restartBtn.type = "button";
+        restartBtn.className = "priorities-schedule-restart-btn";
+        restartBtn.innerHTML = '<i class="ti ti-refresh"></i> Reiniciar';
+        restartBtn.addEventListener("click", restartScheduleActive);
+        activeBtnRow.appendChild(restartBtn);
+
         var completeBtn = document.createElement("button");
         completeBtn.type = "button";
         completeBtn.className = "priorities-schedule-complete-btn";
         completeBtn.innerHTML = '<i class="ti ti-check"></i> Concluir';
         completeBtn.addEventListener("click", completeScheduleActive);
-        activeCard.appendChild(completeBtn);
+        activeBtnRow.appendChild(completeBtn);
+
+        activeCard.appendChild(activeBtnRow);
         scheduleSection.body.appendChild(activeCard);
 
+        // "elapsed" agora vem de accumulatedSeconds + trecho rodando (ver
+        // scheduleActiveElapsedSeconds) em vez de "agora menos startedAt"
+        // puro — precisa disso pra PAUSAR congelar o número de verdade.
         var durationSeconds = (activeSlot ? activeSlot.minutes : 0) * 60;
-        var startedAtMs = new Date(scheduleState.active.startedAt).getTime();
-        (function tick() {
-          var elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+        function tickActive() {
+          var elapsed = scheduleActiveElapsedSeconds(activeData);
           var remaining = durationSeconds - elapsed;
           timerEl.textContent = fmtCountdown(remaining);
           timerEl.classList.toggle("overtime", remaining < 0);
-        })();
+        }
+        tickActive();
         if (scheduleTickInterval) clearInterval(scheduleTickInterval);
-        scheduleTickInterval = setInterval(function () {
-          var elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
-          var remaining = durationSeconds - elapsed;
-          timerEl.textContent = fmtCountdown(remaining);
-          timerEl.classList.toggle("overtime", remaining < 0);
-        }, 1000);
+        // só precisa de fato "tiquetaquear" quando tá RODANDO — pausado o
+        // número não muda sozinho (tickActive() já foi chamado 1x acima
+        // pra desenhar o valor congelado certo).
+        if (activeData.running) scheduleTickInterval = setInterval(tickActive, 1000);
       } else if (scheduleTickInterval) {
         clearInterval(scheduleTickInterval);
         scheduleTickInterval = null;
@@ -3609,8 +3685,13 @@
           row.appendChild(txt);
           var spent = document.createElement("span");
           spent.className = "priorities-schedule-done-time";
-          var spentSeconds = Math.round((new Date(c.endedAt).getTime() - new Date(c.startedAt).getTime()) / 1000);
-          spent.textContent = fmtCountdown(spentSeconds);
+          // "elapsedSeconds" já vem PRONTO do Worker (calculado com
+          // accumulatedSeconds na hora de concluir) — não dá mais pra
+          // calcular como "endedAt menos startedAt" feito antes, porque
+          // isso incluiria qualquer tempo que o slot ficou PAUSADO no meio
+          // do caminho (pedido do Georges: pausar não pode contar como
+          // "tempo gasto" no slot).
+          spent.textContent = fmtCountdown(c.elapsedSeconds || 0);
           row.appendChild(spent);
           doneWrap.appendChild(row);
         });
@@ -3720,9 +3801,12 @@
     // total do dia no próprio título (ex: "Programação — 08:00"), igual o
     // print que o Georges mandou ("Slots ... 08:00") — mais simples que
     // ensinar buildCollapsibleSection a aceitar um badge extra no
-    // cabeçalho só pra essa 1 divisória. Nasce EXPANDIDA (é a 1ª coisa que
-    // o Georges vai querer ver ao abrir a página de manhã).
-    var scheduleSection = buildCollapsibleSection("Programação — " + fmtSlotDuration(scheduleTotalMinutes), true);
+    // cabeçalho só pra essa 1 divisória. Nasce RECOLHIDA (pedido do
+    // Georges — "a divisória de Programação também deve sempre ficar
+    // recolhida quando eu abrir a página a primeira vez"), igual as outras
+    // 3 (só "Itens" nasce expandida); reverte a decisão anterior de nascer
+    // expandida.
+    var scheduleSection = buildCollapsibleSection("Programação — " + fmtSlotDuration(scheduleTotalMinutes));
     loadSchedule();
 
     var creationSection = buildCollapsibleSection("Criação");
@@ -4185,8 +4269,8 @@
 
     // "Programação" vem PRIMEIRO (pedido implícito do Georges — é a 1ª
     // coisa que ele vai querer ver/usar ao abrir a página de manhã, bem
-    // antes de mexer em Criação/Filtros/Itens). Nasce expandida (ver
-    // "buildCollapsibleSection(..., true)" acima).
+    // antes de mexer em Criação/Filtros/Itens). Nasce RECOLHIDA, igual as
+    // outras 3 (só "Itens" nasce expandida).
     section.appendChild(scheduleSection.section);
     section.appendChild(creationSection.section);
 

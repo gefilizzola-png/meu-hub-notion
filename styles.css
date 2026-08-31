@@ -2367,9 +2367,33 @@ html, body {
    botões de slot pendente, mesmo cinza/laranja/verde do resto da página. */
 .priorities-schedule-loading { font-size: 12.5px; color: #928f86; }
 
+/* "Desfazer última ação" (pedido do Georges — "voltar à situação anterior
+   caso eu tenha o iniciado ou o concluído por engano") — pílula discreta
+   TRACEJADA (não é uma ação do dia-a-dia, não devia competir visualmente
+   com os botões de slot/timer), fica sozinha acima do card do timer. */
+.priorities-schedule-undo-btn {
+  height: 28px;
+  padding: 0 12px;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  border: 1px dashed #b9b9b3;
+  background: #fff;
+  color: #78876b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.priorities-schedule-undo-btn:hover { border-color: #78876b; background: #f3f6f0; }
+
 /* card do timer ATIVO — fundo escuro (mesmo tom de ".priorities-quickfilter-
    btn.active") pra destacar claramente qual slot tá rodando AGORA, bem
-   diferente dos botões claros de "pendente" logo abaixo. */
+   diferente dos botões claros de "pendente" logo abaixo. PAUSADO (pedido
+   do Georges — "quero poder pausar o timer") troca pro tom neutro
+   acastanhado — precisa ficar óbvio de relance que aquele timer NÃO tá
+   contando agora, sem precisar ler o texto "(pausado)" do rótulo. */
 .priorities-schedule-active {
   display: flex;
   align-items: center;
@@ -2380,6 +2404,7 @@ html, body {
   background: #2f3a44;
   margin-bottom: 12px;
 }
+.priorities-schedule-active.paused { background: #6b6459; }
 .priorities-schedule-active-label {
   color: #fff;
   font-size: 13.5px;
@@ -2400,13 +2425,23 @@ html, body {
 /* passou do tempo (decisão do Georges: NÃO para sozinho em 00:00:00,
    continua contando "tempo extra") — vermelho suave avisa sem gritar. */
 .priorities-schedule-timer.overtime { color: #ff8a80; }
-.priorities-schedule-complete-btn {
+/* congelado (pausado) — leve transparência, reforça "esse número não tá
+   se mexendo agora" sem precisar de mais nenhum elemento novo na tela. */
+.priorities-schedule-active.paused .priorities-schedule-timer { opacity: 0.75; }
+
+/* linha com os 3 botões do timer ativo (pausar/retomar, reiniciar,
+   concluir) — largura cheia (quebra pra baixo do rótulo+relógio), pra não
+   espremer tudo numa linha só em tela estreita. */
+.priorities-schedule-active-btns {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.priorities-schedule-active-btns button {
   height: 30px;
   padding: 0 12px;
   border-radius: 999px;
-  border: none;
-  background: #fff;
-  color: #2f3a44;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -2415,7 +2450,19 @@ html, body {
   gap: 6px;
   flex-shrink: 0;
 }
+/* "Concluir" continua sendo a ação PRIMÁRIA (fundo branco sólido, mesmo
+   visual de antes) — Pausar/Retomar e Reiniciar são secundárias
+   (contorno claro sobre o fundo escuro do card, sem preencher). */
+.priorities-schedule-complete-btn { border: none; background: #fff; color: #2f3a44; }
 .priorities-schedule-complete-btn:hover { background: #eef0f2; }
+.priorities-schedule-pause-btn,
+.priorities-schedule-restart-btn {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #fff;
+}
+.priorities-schedule-pause-btn:hover,
+.priorities-schedule-restart-btn:hover { background: rgba(255, 255, 255, 0.12); }
 
 .priorities-schedule-pending { margin-bottom: 12px; }
 .priorities-schedule-pending-title {
