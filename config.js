@@ -859,7 +859,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-31 00:37",
+  appVersion: "2026-08-31 00:44",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
