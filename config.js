@@ -739,6 +739,14 @@ var PRIORIDADES_ORIGEM_OPTIONS = [];
 // feito) — opção única, mesmo tratamento de tipo/prioridade/tempo/
 // programacao acima (não é multi_select).
 var PRIORIDADES_PERIODO_OPTIONS = ["Manhã", "Tarde", "Noite", "Final de Semana", "Expediente"];
+// Subordem de Período usada como CRITÉRIO DE DESEMPATE quando a tabela está
+// ordenada por Prioridade (pedido do Georges — "primeiro apresentaria todas
+// com Prioridade = 1 - Imediato e, dentre estas, a ordem de Período").
+// String vazia "" = "Qualquer" (item sem Período definido) — o Georges
+// pediu essa posição especificamente ENTRE Noite e Final de Semana, por
+// isso não é só reaproveitar PRIORIDADES_PERIODO_OPTIONS (ordem diferente,
+// e ali "sem valor" sempre vai pro fim). Ver sortItems() no app.js.
+var PRIORIDADES_PERIODO_SORT_ORDER = ["Manhã", "Expediente", "Tarde", "Noite", "", "Final de Semana"];
 
 // ---------------- "Programação" — slots fixos do dia (pedido do Georges) ----------------
 // Divisória nova (ver pages.prioridades.scheduleSlots mais abaixo e o bloco
@@ -898,7 +906,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-31 23:56",
+  appVersion: "2026-09-01 01:04",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1528,7 +1536,7 @@ const APP_CONFIG = {
         // "Período" (pedido do Georges — em que parte do dia o item deve
         // ser feito) — opção única, mesmo tratamento de tipo/prioridade/
         // tempo/programacao (sem "multi: true").
-        periodo: { label: "Período", options: PRIORIDADES_PERIODO_OPTIONS },
+        periodo: { label: "Período", options: PRIORIDADES_PERIODO_OPTIONS, sortOrder: PRIORIDADES_PERIODO_SORT_ORDER },
         // "multi: true" — colunas de seleção múltipla (pedido do Georges);
         // vem/vai como array (ver PRIORITIES_MULTI_FIELDS/sanitizeOptionList
         // no worker.js). As outras 4 continuam de seleção única.

@@ -5351,6 +5351,22 @@
           av = opts.indexOf(a[key] || ""); if (av === -1) av = opts.length;
           bv = opts.indexOf(b[key] || ""); if (bv === -1) bv = opts.length;
           cmp = av - bv;
+          // desempate por Período (pedido do Georges — "primeiro Prioridade
+          // = 1 - Imediato e, dentre estas, a ordem de Período"), só quando
+          // a ordenação ATUAL é por Prioridade e as duas linhas empataram
+          // na Prioridade em si. Usa a subordem própria de periodo.sortOrder
+          // (Manhã/Expediente/Tarde/Noite/Qualquer/Final de Semana — "" =
+          // "Qualquer", item sem Período definido), não a ordem de
+          // fieldDefs.periodo.options (essa é só pro dropdown/coluna
+          // Período em si). Mesma direção (sortState.dir) do clique em
+          // Prioridade, pra inverter tudo junto quando o Georges clicar de
+          // novo pra Z-A.
+          if (cmp === 0 && key === "prioridade" && fieldDefs.periodo && fieldDefs.periodo.sortOrder) {
+            var pOrder = fieldDefs.periodo.sortOrder;
+            var ap = pOrder.indexOf(a.periodo || ""); if (ap === -1) ap = pOrder.length;
+            var bp = pOrder.indexOf(b.periodo || ""); if (bp === -1) bp = pOrder.length;
+            cmp = ap - bp;
+          }
         } else {
           av = (a[key] || "");
           bv = (b[key] || "");
