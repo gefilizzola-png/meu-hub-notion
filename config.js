@@ -735,6 +735,10 @@ var PRIORIDADES_TRIBUTO_OPTIONS = ["Amigos", "CadImob", "CadMob", "Casa", "Eletr
 // dali em diante o Georges cria/renomeia/exclui pelo ícone de engrenagem da
 // própria coluna, igual aos outros 6 campos.
 var PRIORIDADES_ORIGEM_OPTIONS = [];
+// "Período" (pedido do Georges — em que parte do dia o item deve ser
+// feito) — opção única, mesmo tratamento de tipo/prioridade/tempo/
+// programacao acima (não é multi_select).
+var PRIORIDADES_PERIODO_OPTIONS = ["Manhã", "Tarde", "Noite", "Final de Semana", "Expediente"];
 
 // ---------------- "Programação" — slots fixos do dia (pedido do Georges) ----------------
 // Divisória nova (ver pages.prioridades.scheduleSlots mais abaixo e o bloco
@@ -821,6 +825,15 @@ var DEFAULT_QUICKFILTERS = {
     { label: "Até 1 hora e meia", values: ["1 hora", "1 hora e meia"] },
     { label: "2 horas ou mais", values: ["2 horas", "Mais do que 2 horas"] },
   ],
+  // "Período" (pedido do Georges) — botão fixo pra cada um dos 5 valores
+  // possíveis (mesma ideia de "status" acima).
+  periodo: [
+    { label: "Manhã", values: ["Manhã"] },
+    { label: "Tarde", values: ["Tarde"] },
+    { label: "Noite", values: ["Noite"] },
+    { label: "Final de Semana", values: ["Final de Semana"] },
+    { label: "Expediente", values: ["Expediente"] },
+  ],
   forma: [
     { label: "Chrome", values: ["Chrome"] },
     { label: "WhatsApp", values: ["WhatsApp"] },
@@ -859,7 +872,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-31 00:54",
+  appVersion: "2026-08-31 22:02",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1486,6 +1499,10 @@ const APP_CONFIG = {
         tipo: { label: "Tipo", options: PRIORIDADES_TIPO_OPTIONS },
         prioridade: { label: "Prioridade", options: PRIORIDADES_PRIORIDADE_OPTIONS },
         tempo: { label: "Tempo", options: PRIORIDADES_TEMPO_OPTIONS },
+        // "Período" (pedido do Georges — em que parte do dia o item deve
+        // ser feito) — opção única, mesmo tratamento de tipo/prioridade/
+        // tempo/programacao (sem "multi: true").
+        periodo: { label: "Período", options: PRIORIDADES_PERIODO_OPTIONS },
         // "multi: true" — colunas de seleção múltipla (pedido do Georges);
         // vem/vai como array (ver PRIORITIES_MULTI_FIELDS/sanitizeOptionList
         // no worker.js). As outras 4 continuam de seleção única.
@@ -1532,6 +1549,9 @@ const APP_CONFIG = {
           { key: "grupo", label: "Grupo", field: "programacao" },
           { key: "prioridade", label: "Prioridade" },
           { key: "tempo", label: "Tempo" },
+          // "Período" (pedido do Georges) — sem "field" (a própria chave
+          // "periodo" já é o campo real do item, igual Tributo/Origem).
+          { key: "periodo", label: "Período" },
           { key: "forma", label: "Forma" },
           { key: "programacao", label: "Programação" },
           { key: "tributo", label: "Tributo" },

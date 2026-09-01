@@ -2512,7 +2512,12 @@
     // (linha de criação, filtro de "Filtros Gerais", célula editável da
     // tabela, engrenagem de "editar opções", corpo do POST/PUT), sem
     // precisar tocar em cada um desses pontos à parte.
-    var fieldKeys = ["tipo", "prioridade", "tempo", "forma", "programacao", "tributo", "origem"];
+    // "periodo" (pedido do Georges — Manhã/Tarde/Noite/Final de Semana/
+    // Expediente) entrou aqui igual "origem" entrou antes — 1 linha nessa
+    // lista já cascateia sozinho pra linha de criação, filtro de "Filtros
+    // Gerais", célula editável da tabela, engrenagem de "editar opções" e
+    // corpo do POST/PUT.
+    var fieldKeys = ["tipo", "prioridade", "tempo", "periodo", "forma", "programacao", "tributo", "origem"];
     // "providencia" foi REMOVIDA como coluna (pedido do Georges — o texto
     // que estava nela agora entra como subitem da checklist; ver migração
     // migrateProvidenciaToSubitem no worker.js, roda sozinha no primeiro
@@ -3933,7 +3938,10 @@
     // já foi criado (POST) nesse ponto, então essas 2 etapas fazem um PUT
     // no item recém-criado (wizData.createdId) em vez de fazer parte do
     // body do POST. Cada uma tem sua própria opção de Pular.
-    var WIZ_STEPS = ["tipo", "tributo", "programacao", "forma", "prioridade", "tempo", "final", "subitem", "nota"];
+    // "periodo" (pedido do Georges — Manhã/Tarde/Noite/Final de Semana/
+    // Expediente) entrou como mais uma etapa, logo depois de Tempo (as 2
+    // são sobre "quando" fazer o item).
+    var WIZ_STEPS = ["tipo", "tributo", "programacao", "forma", "prioridade", "tempo", "periodo", "final", "subitem", "nota"];
 
     function resetWizard() {
       // "origem" agora é array (virou multi_select — pedido do Georges),
@@ -3947,62 +3955,47 @@
       // handlePrioritiesUpdate). Guardar aqui os subitens já confirmados
       // NESSE item do assistente e sempre reenviar a lista INTEIRA (não só
       // o texto novo) resolve — ver commitWizardSubitem mais abaixo.
-      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", origem: [], assunto: "", createdId: null, pendingSubitems: [] };
+      wizData = { tipo: "", tributo: [], programacao: "", forma: [], prioridade: "", tempo: "", periodo: "", origem: [], assunto: "", createdId: null, pendingSubitems: [] };
       wizStep = 0;
       renderWizardStep();
     }
 
-    // conta quantas vezes cada VALOR aparece entre os itens já existentes
-    // que passam em "matchFn", e devolve as opções vivas (fieldDefs[key].
-    // options) reordenadas — mais usada primeiro; empate mantém a ordem
-    // original da lista (Array.sort é estável). "getValues" extrai do item
-    // o(s) valor(es) do campo em questão (array pra multi-select, string
-    // solta pro resto).
-    function rankByUsage(key, matchFn, getValues) {
-      var counts = {};
-      allItems.forEach(function (it) {
-        if (!matchFn(it)) return;
-        var vals = getValues(it);
-        (Array.isArray(vals) ? vals : [vals]).forEach(function (v) {
-          if (v) counts[v] = (counts[v] || 0) + 1;
-        });
-      });
+    // ordem alfabética SEMPRE (pedido do Georges: "classifique as opções de
+    // cada propriedade em ordem alfabética mesmo" — a tentativa anterior de
+    // ordenar pelos "mais usados" na combinação já escolhida, função
+    // "rankByUsage" que morava aqui, não funcionou como ele queria e foi
+    // removida). Usada em TODA etapa do assistente que lista opções de um
+    // campo — EXCETO Tempo, que continua na ordem CRONOLÓGICA de sempre
+    // (mesma exceção já usada em Filtros Rápidos, ver QF_GROUPS_NOT_ALPHA
+    // lá em cima — alfabetizar bagunçaria "Até 45 minutos" vindo antes de
+    // "Até 5 minutos").
+    function wizSortedOptions(key) {
       var options = (fieldDefs[key] && fieldDefs[key].options) || [];
-      return options.slice().sort(function (a, b) { return (counts[b] || 0) - (counts[a] || 0); });
+      if (key === "tempo") return options;
+      return options.slice().sort(function (a, b) { return a.localeCompare(b, "pt-BR", { sensitivity: "base" }); });
     }
 
     function wizStepDef(key) {
       if (key === "tipo") {
-        return { label: "Tipo", type: "single", skippable: false, options: function () { return (fieldDefs.tipo && fieldDefs.tipo.options) || []; } };
+        return { label: "Tipo", type: "single", skippable: false, options: function () { return wizSortedOptions("tipo"); } };
       }
       if (key === "tributo") {
-        return {
-          label: "Tributo", type: "multi", skippable: false,
-          options: function () {
-            return rankByUsage("tributo", function (it) { return it.tipo === wizData.tipo; }, function (it) { return it.tributo || []; });
-          },
-        };
+        return { label: "Tributo", type: "multi", skippable: false, options: function () { return wizSortedOptions("tributo"); } };
       }
       if (key === "programacao") {
-        return {
-          label: "Programação", type: "single", skippable: false,
-          options: function () {
-            return rankByUsage("programacao", function (it) {
-              if (it.tipo !== wizData.tipo) return false;
-              if (!wizData.tributo.length) return true;
-              return (it.tributo || []).some(function (v) { return wizData.tributo.indexOf(v) !== -1; });
-            }, function (it) { return it.programacao; });
-          },
-        };
+        return { label: "Programação", type: "single", skippable: false, options: function () { return wizSortedOptions("programacao"); } };
       }
       if (key === "forma") {
-        return { label: "Forma", type: "multi", skippable: true, options: function () { return (fieldDefs.forma && fieldDefs.forma.options) || []; } };
+        return { label: "Forma", type: "multi", skippable: true, options: function () { return wizSortedOptions("forma"); } };
       }
       if (key === "prioridade") {
-        return { label: "Prioridade", type: "single", skippable: true, options: function () { return (fieldDefs.prioridade && fieldDefs.prioridade.options) || []; } };
+        return { label: "Prioridade", type: "single", skippable: true, options: function () { return wizSortedOptions("prioridade"); } };
       }
       if (key === "tempo") {
-        return { label: "Tempo", type: "single", skippable: true, options: function () { return (fieldDefs.tempo && fieldDefs.tempo.options) || []; } };
+        return { label: "Tempo", type: "single", skippable: true, options: function () { return wizSortedOptions("tempo"); } };
+      }
+      if (key === "periodo") {
+        return { label: "Período", type: "single", skippable: true, options: function () { return wizSortedOptions("periodo"); } };
       }
       return null;
     }
@@ -4026,6 +4019,7 @@
       if (wizData.forma.length) trailParts.push(wizData.forma.join("/"));
       if (wizData.prioridade) trailParts.push(wizData.prioridade);
       if (wizData.tempo) trailParts.push(wizData.tempo);
+      if (wizData.periodo) trailParts.push(wizData.periodo);
       if (wizData.origem && wizData.origem.length) trailParts.push(wizData.origem.join("/"));
       if (wizData.assunto) trailParts.push(wizData.assunto);
       if (!trailParts.length) return null;
@@ -4033,6 +4027,64 @@
       trail.className = "priorities-wizard-trail";
       trail.textContent = trailParts.join(" → ");
       return trail;
+    }
+
+    // "criar opção nova sem sair da Criação Rápida" (pedido do Georges: "por
+    // ex, criar uma nova opção de Origem na própria tela de criação, sem
+    // perder o que eu já tinha selecionado para o item que está sendo
+    // criado") — 1 caixinha de "+ nova opção" logo abaixo das pílulas de
+    // CADA etapa do assistente (e também dentro do bloco de Origem na etapa
+    // final, ver renderWizardFinalStep). Chama a MESMA rota /priorities-
+    // options (action:"add") já usada na engrenagem de "Editar opções" da
+    // coluna (buildFieldOptionsPanel mais abaixo) — ao dar certo, atualiza
+    // fieldDefs[key].options com a resposta fresca do Worker e chama
+    // "onAdded" (quem decide o que fazer com o valor novo: marcar e
+    // re-renderizar SÓ a etapa atual — nunca reseta o assistente, então
+    // tudo que já foi escolhido nas outras etapas continua intacto em
+    // wizData).
+    function buildWizardAddOptionRow(key, onAdded) {
+      var wrap = document.createElement("div");
+      wrap.className = "priorities-wizard-add-option";
+      var input = document.createElement("input");
+      input.type = "text";
+      input.className = "priorities-wizard-add-option-input";
+      input.placeholder = "Nova opção de " + ((fieldDefs[key] && fieldDefs[key].label) || key) + "...";
+      var addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "priorities-wizard-add-option-btn";
+      addBtn.innerHTML = '<i class="ti ti-plus"></i>';
+      addBtn.title = "Criar nova opção";
+      var errEl = document.createElement("p");
+      errEl.className = "priorities-wizard-add-option-error";
+      errEl.style.display = "none";
+      function doAdd() {
+        var value = input.value.trim();
+        if (!value) return;
+        errEl.style.display = "none";
+        addBtn.disabled = true;
+        authFetch(cfg.templateWorkerUrl + "/priorities-options", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ field: key, action: "add", value: value })
+        }).then(handle401).then(function (r) { return r.json(); }).then(function (data) {
+          addBtn.disabled = false;
+          if (data && data.error) { errEl.textContent = data.error; errEl.style.display = "block"; return; }
+          if (data && data.options && Array.isArray(data.options[key]) && fieldDefs[key]) {
+            fieldDefs[key].options = data.options[key];
+          }
+          onAdded(value);
+        }).catch(function () {
+          addBtn.disabled = false;
+          errEl.textContent = "Não foi possível adicionar. Tente de novo.";
+          errEl.style.display = "block";
+        });
+      }
+      addBtn.addEventListener("click", doAdd);
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") doAdd(); });
+      wrap.appendChild(input);
+      wrap.appendChild(addBtn);
+      wrap.appendChild(errEl);
+      return wrap;
     }
 
     function renderWizardStep() {
@@ -4074,6 +4126,22 @@
         btnsWrap.appendChild(pill);
       });
       quickWizardWrap.appendChild(btnsWrap);
+
+      // opção nova sem perder o que já foi escolhido (ver
+      // buildWizardAddOptionRow acima) — etapa de escolha única já AVANÇA
+      // sozinha ao criar+marcar (mesmo comportamento de clicar numa pílula
+      // pronta); etapa múltipla só marca e continua na mesma etapa (mesmo
+      // comportamento de marcar uma pílula pronta — precisa do "Continuar").
+      quickWizardWrap.appendChild(buildWizardAddOptionRow(stepKey, function (newValue) {
+        if (def.type === "multi") {
+          if (wizData[stepKey].indexOf(newValue) === -1) wizData[stepKey].push(newValue);
+          renderWizardStep();
+        } else {
+          wizData[stepKey] = newValue;
+          wizStep++;
+          renderWizardStep();
+        }
+      }));
 
       var controls = document.createElement("div");
       controls.className = "priorities-wizard-controls";
@@ -4134,13 +4202,16 @@
       // Forma mais acima (ver renderWizardStep), só que direto aqui dentro
       // (não é um "passo" próprio do WIZ_STEPS — continua junto de Assunto
       // na mesma tela final). Sem opção nenhuma marcada, some sozinho
-      // (equivalente a "Pular" — Origem sempre foi opcional).
-      var origemOptions = (fieldDefs.origem && fieldDefs.origem.options) || [];
+      // (equivalente a "Pular" — Origem sempre foi opcional). Ordem
+      // alfabética igual as outras etapas (ver wizSortedOptions acima —
+      // Origem também entra na regra "cada propriedade em ordem
+      // alfabética").
+      var origemOptions = wizSortedOptions("origem");
+      var origemLabel = document.createElement("div");
+      origemLabel.className = "priorities-wizard-step-title";
+      origemLabel.textContent = "Origem";
+      quickWizardWrap.appendChild(origemLabel);
       if (origemOptions.length) {
-        var origemLabel = document.createElement("div");
-        origemLabel.className = "priorities-wizard-step-title";
-        origemLabel.textContent = "Origem";
-        quickWizardWrap.appendChild(origemLabel);
         var origemBtnsWrap = document.createElement("div");
         origemBtnsWrap.className = "priorities-quickfilter-buttons priorities-wizard-buttons";
         origemOptions.forEach(function (opt) {
@@ -4158,6 +4229,14 @@
         });
         quickWizardWrap.appendChild(origemBtnsWrap);
       }
+      // opção nova sem perder Tipo/Tributo/Programação/etc já escolhidos
+      // nas etapas anteriores nem o Assunto já digitado (ver
+      // buildWizardAddOptionRow acima) — Origem é múltipla, então só marca
+      // e re-renderiza a etapa final, igual clicar numa pílula pronta.
+      quickWizardWrap.appendChild(buildWizardAddOptionRow("origem", function (newValue) {
+        if (wizData.origem.indexOf(newValue) === -1) wizData.origem.push(newValue);
+        renderWizardFinalStep();
+      }));
 
       var fieldsWrap = document.createElement("div");
       fieldsWrap.className = "priorities-wizard-final-fields";
@@ -4346,6 +4425,7 @@
         forma: wizData.forma,
         prioridade: wizData.prioridade,
         tempo: wizData.tempo,
+        periodo: wizData.periodo,
         origem: wizData.origem,
         assunto: assunto,
       };
@@ -4499,6 +4579,9 @@
       { key: "tipo", label: (fieldDefs.tipo && fieldDefs.tipo.label) || "Tipo" },
       { key: "prioridade", label: (fieldDefs.prioridade && fieldDefs.prioridade.label) || "Prioridade" },
       { key: "tempo", label: (fieldDefs.tempo && fieldDefs.tempo.label) || "Tempo" },
+      // "Período" (pedido do Georges) — mesmo tratamento das outras
+      // colunas "de opção" acima.
+      { key: "periodo", label: (fieldDefs.periodo && fieldDefs.periodo.label) || "Período" },
       { key: "forma", label: (fieldDefs.forma && fieldDefs.forma.label) || "Forma" },
       { key: "programacao", label: (fieldDefs.programacao && fieldDefs.programacao.label) || "Programação" },
       { key: "tributo", label: (fieldDefs.tributo && fieldDefs.tributo.label) || "Tributo" },
