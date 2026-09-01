@@ -865,6 +865,32 @@ var DEFAULT_QUICKFILTERS = {
   origem: [],
 };
 
+// "Visualizações" (pedido do Georges — botões que abrem exibições PRONTAS
+// da Lista de Prioridades, ex: "Rápidos" = itens até 15 minutos, "Noturnos"
+// = Período = Noite). Diferente de DEFAULT_QUICKFILTERS acima (grupos
+// fixos, um botão liga só o valor daquele grupo): aqui cada item da lista
+// já é um CONJUNTO de valores em VÁRIOS campos de uma vez + um status —
+// ativar SUBSTITUI Filtros Gerais/Filtros Rápidos inteiros (decisão do
+// Georges), só 1 fica ativa por vez (como aba). Serve só de PONTO DE
+// PARTIDA (igual DEFAULT_QUICKFILTERS) — o Georges pode criar/editar/
+// excluir as dele direto na página ("Editar visualizações"), e a partir daí
+// o que estiver salvo no Worker (/priorities-views) manda, isso aqui vira
+// só referência caso nunca tenha salvo nada.
+var DEFAULT_PRIORITY_VIEWS = [
+  {
+    id: "rapidos",
+    label: "Rápidos",
+    status: "pending",
+    filters: { tempo: ["Menos do que 5 minutos", "5 minutos", "10 minutos", "15 minutos"] },
+  },
+  {
+    id: "noturnos",
+    label: "Noturnos",
+    status: "pending",
+    filters: { periodo: ["Noite"] },
+  },
+];
+
 const APP_CONFIG = {
   appTitle: "Meu hub",
   // Carimbo de "quando esse config.js foi editado por último" (data + hora,
@@ -872,7 +898,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-08-31 22:02",
+  appVersion: "2026-08-31 23:56",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1561,7 +1587,13 @@ const APP_CONFIG = {
           { key: "origem", label: "Origem" }
         ],
         defaults: DEFAULT_QUICKFILTERS
-      }
+      },
+      // "Visualizações" (pedido do Georges) — ver DEFAULT_PRIORITY_VIEWS
+      // acima. "defaults" é o ponto de partida (mesma ideia de
+      // quickFilters.defaults acima) — o que o Georges criar/editar/
+      // excluir em "Editar visualizações" fica salvo no Worker (rota
+      // /priorities-views) e passa a mandar a partir daí.
+      views: { defaults: DEFAULT_PRIORITY_VIEWS }
     },
 
     criar_paginas: {

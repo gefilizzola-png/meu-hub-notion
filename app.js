@@ -2825,6 +2825,10 @@
             var pos = qfActive[g.key].indexOf(idx);
             if (pos === -1) qfActive[g.key].push(idx); else qfActive[g.key].splice(pos, 1);
             renderQfSection();
+            // ver comentário de deactivateActiveView (mais abaixo, perto de
+            // "var viewsSection") — mexer manualmente num Filtro Rápido
+            // enquanto uma Visualização está destacada solta o destaque.
+            if (typeof deactivateActiveView === "function") deactivateActiveView();
             applyFilters();
           });
           btnsWrap.appendChild(pill);
@@ -3407,7 +3411,16 @@
       applyCollapsed();
       sec.appendChild(header);
       sec.appendChild(body);
-      return { section: sec, body: body };
+      // "collapse()"/"expand()" (pedido do Georges — ativar uma
+      // Visualização recolhe Programação/Criação/Filtros Gerais/Filtros
+      // Rápidos na hora e garante Itens expandida) — mesma variável
+      // "collapsed" de sempre, só exposta pra fora pra poder ser mudada
+      // por código em vez de só por clique do usuário.
+      return {
+        section: sec, body: body,
+        collapse: function () { collapsed = true; applyCollapsed(); },
+        expand: function () { collapsed = false; applyCollapsed(); },
+      };
     }
     // ---- "Programação" (pedido do Georges): agenda de slots FIXOS do dia
     // (TCE 3h, DOI 1h, Ofícios/Processos 1h30 etc. — ver
@@ -4447,10 +4460,276 @@
 
     resetWizard();
 
-    // "Programação" vem PRIMEIRO (pedido implícito do Georges — é a 1ª
-    // coisa que ele vai querer ver/usar ao abrir a página de manhã, bem
-    // antes de mexer em Criação/Filtros/Itens). Nasce RECOLHIDA, igual as
-    // outras 3 (só "Itens" nasce expandida).
+    // ---- "Visualizações" (pedido do Georges: "botões que abrirão
+    // diferentes tipos de exibição desta Lista de Tarefas, como Rápidos
+    // (até 15 minutos), Noturnos (período = Noite)... ou crie uma forma de
+    // eu mesmo poder criar novas visualizações") — fica no TOPO DE VERDADE
+    // da página (antes até de "Programação"), leiaute PRÓPRIO em CARD
+    // (diferente da pílula de "Filtros rápidos" — ver CSS
+    // ".priorities-view-btn"), pra ficar claramente separado como "atalho
+    // de tela inteira" e não só mais um filtro de coluna. Cada view é um
+    // CONJUNTO de valores em VÁRIOS campos de uma vez (não só 1 grupo, como
+    // Filtros Rápidos) + um status — ativar SUBSTITUI Filtros Gerais e
+    // Filtros Rápidos por inteiro e recolhe as outras divisórias (decisão
+    // do Georges); só 1 fica ativa por vez, como uma aba (clicar na mesma
+    // de novo desativa, clicar numa diferente troca). Dá pra criar/editar/
+    // excluir as views direto aqui ("Editar visualizações"), mesmo espírito
+    // self-serve do editor de Filtros Rápidos.
+    var viewsConfig = page.views || { defaults: [] };
+    var viewsData = null; // preenchido depois do GET (ou dos "defaults" se nunca salvou nada)
+    var activeViewId = null; // id da view ativa agora, ou null — só 1 por vez
+    var viewsEditMode = false;
+    var viewsEditing = null; // index da view sendo criada/editada (-1 = nova), ou null
+
+    var viewsSection = document.createElement("div");
+    viewsSection.className = "priorities-views-section";
+
+    function viewsCloneDefaults() {
+      return (viewsConfig.defaults || []).map(function (v) {
+        return {
+          id: v.id, label: v.label, status: v.status || "pending",
+          filters: Object.assign({}, v.filters || {}),
+        };
+      });
+    }
+
+    // chamado sempre que o Georges mexe MANUALMENTE em qualquer filtro fora
+    // daqui (Filtros Gerais, Filtros Rápidos, busca, Status) enquanto uma
+    // view está destacada como ativa — o filtro de verdade já não bate mais
+    // com a definição salva da view, então o destaque teria que sumir (ver
+    // ponto de chamada mais abaixo, perto de "loadItems();" no fim da
+    // função).
+    function deactivateActiveView() {
+      if (!activeViewId) return;
+      activeViewId = null;
+      renderViewsSection();
+    }
+
+    // ativar SUBSTITUI Filtros Gerais + Filtros Rápidos + busca (decisão do
+    // Georges — resultado sempre previsível, exatamente o que a view
+    // define) e recolhe Programação/Criação/Filtros Gerais/Filtros Rápidos,
+    // garantindo "Itens" expandida (onde o resultado aparece). Clicar na
+    // MESMA view já ativa desliga (toggle) e volta tudo pro neutro.
+    function applyView(view) {
+      var turningOff = activeViewId === view.id;
+      activeViewId = turningOff ? null : view.id;
+      fieldKeys.forEach(function (key) {
+        filterSelects[key].setValues(turningOff ? [] : ((view.filters && view.filters[key]) || []));
+      });
+      statusSelect.value = turningOff ? "pending" : (view.status || "pending");
+      searchInput.value = "";
+      updateSearchClearBtn();
+      qfGroups.forEach(function (g) { qfActive[g.key] = []; });
+      if (!turningOff) {
+        qfCollapsed = true;
+        scheduleSection.collapse();
+        creationSection.collapse();
+        searchSection.collapse();
+        itemsSection.expand();
+      }
+      renderQfSection();
+      renderViewsSection();
+      applyFilters();
+    }
+
+    function buildViewEditor(index) {
+      var isNew = index === -1;
+      var existing = isNew ? null : viewsData[index];
+      var editor = document.createElement("div");
+      editor.className = "priorities-view-editor";
+
+      var nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "priorities-view-editor-label";
+      nameInput.placeholder = "Nome da visualização";
+      nameInput.value = existing ? existing.label : "";
+      editor.appendChild(nameInput);
+
+      var statusLabel = document.createElement("div");
+      statusLabel.className = "priorities-view-editor-sublabel";
+      statusLabel.textContent = "Status";
+      editor.appendChild(statusLabel);
+      var statusWrap = document.createElement("div");
+      statusWrap.className = "priorities-quickfilter-buttons";
+      var selectedStatus = existing ? (existing.status || "pending") : "pending";
+      var statusBtnEntries = [];
+      [["pending", "Pendente"], ["done", "Concluído"], ["all", "Todas"]].forEach(function (pair) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "priorities-quickfilter-btn" + (selectedStatus === pair[0] ? " active" : "");
+        b.textContent = pair[1];
+        b.addEventListener("click", function () {
+          selectedStatus = pair[0];
+          statusBtnEntries.forEach(function (entry) { entry.btn.classList.toggle("active", entry.value === selectedStatus); });
+        });
+        statusWrap.appendChild(b);
+        statusBtnEntries.push({ btn: b, value: pair[0] });
+      });
+      editor.appendChild(statusWrap);
+
+      var fieldsLabel = document.createElement("div");
+      fieldsLabel.className = "priorities-view-editor-sublabel";
+      fieldsLabel.textContent = "Filtros";
+      editor.appendChild(fieldsLabel);
+      var fieldsWrap = document.createElement("div");
+      fieldsWrap.className = "priorities-view-editor-fields";
+      var fieldControls = {};
+      fieldKeys.forEach(function (key) {
+        var label = (fieldDefs[key] && fieldDefs[key].label) || key;
+        var control = buildMultiCheckDropdown(key, label + ": Nenhum", "notes-filter-select");
+        control.setValues(existing ? ((existing.filters && existing.filters[key]) || []) : []);
+        fieldControls[key] = control;
+        fieldsWrap.appendChild(control);
+      });
+      editor.appendChild(fieldsWrap);
+
+      var editorErr = document.createElement("p");
+      editorErr.className = "priorities-quickfilter-editor-error";
+      editorErr.style.display = "none";
+      editor.appendChild(editorErr);
+
+      var actions = document.createElement("div");
+      actions.className = "priorities-quickfilter-editor-actions";
+      var saveBtnV = document.createElement("button");
+      saveBtnV.type = "button";
+      saveBtnV.className = "notes-add-btn";
+      saveBtnV.textContent = "Salvar";
+      saveBtnV.addEventListener("click", function () {
+        var label = nameInput.value.trim();
+        if (!label) {
+          editorErr.textContent = "Escolha um nome pra visualização.";
+          editorErr.style.display = "block";
+          return;
+        }
+        var newView = { id: existing ? existing.id : "", label: label, status: selectedStatus, filters: {} };
+        fieldKeys.forEach(function (key) { newView.filters[key] = fieldControls[key].getValues(); });
+        var nextList = viewsData.slice();
+        if (isNew) nextList.push(newView); else nextList[index] = newView;
+        viewsSave(nextList);
+      });
+      var cancelBtnV = document.createElement("button");
+      cancelBtnV.type = "button";
+      cancelBtnV.className = "priorities-clear-btn";
+      cancelBtnV.textContent = "Cancelar";
+      cancelBtnV.addEventListener("click", function () { viewsEditing = null; renderViewsSection(); });
+      actions.appendChild(saveBtnV);
+      actions.appendChild(cancelBtnV);
+      editor.appendChild(actions);
+
+      return editor;
+    }
+
+    function viewsSave(nextList) {
+      return authFetch(cfg.templateWorkerUrl + "/priorities-views", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ views: nextList })
+      }).then(handle401).then(function (r) { return r.json(); }).then(function (data) {
+        viewsData = (data && Array.isArray(data.views)) ? data.views : nextList;
+        // view ativa pode ter sido excluída na edição — solta o destaque
+        // (os filtros de verdade continuam aplicados, só o card não faz
+        // mais sentido continuar "aceso" apontando pra algo que não existe
+        // mais).
+        if (activeViewId && !viewsData.some(function (v) { return v.id === activeViewId; })) activeViewId = null;
+        viewsEditing = null;
+        renderViewsSection();
+      }).catch(showErr);
+    }
+
+    function renderViewsSection() {
+      viewsSection.innerHTML = "";
+      if (!viewsData) {
+        var loading = document.createElement("p");
+        loading.className = "priorities-quickfilters-loading";
+        loading.textContent = "Carregando…";
+        viewsSection.appendChild(loading);
+        return;
+      }
+
+      var header = document.createElement("div");
+      header.className = "priorities-views-header";
+      var heading = document.createElement("h4");
+      heading.className = "priorities-views-title";
+      heading.textContent = "Visualizações";
+      header.appendChild(heading);
+      var editToggle = document.createElement("button");
+      editToggle.type = "button";
+      editToggle.className = "priorities-quickfilters-edit-toggle" + (viewsEditMode ? " active" : "");
+      editToggle.innerHTML = viewsEditMode
+        ? '<i class="ti ti-check"></i> Concluir edição'
+        : '<i class="ti ti-pencil"></i> Editar visualizações';
+      editToggle.addEventListener("click", function () {
+        viewsEditMode = !viewsEditMode;
+        viewsEditing = null;
+        renderViewsSection();
+      });
+      header.appendChild(editToggle);
+      viewsSection.appendChild(header);
+
+      var cardsWrap = document.createElement("div");
+      cardsWrap.className = "priorities-views-cards";
+      viewsData.forEach(function (view, idx) {
+        var card = document.createElement("button");
+        card.type = "button";
+        card.className = "priorities-view-btn" + (activeViewId === view.id ? " active" : "");
+        var cardLabel = document.createElement("span");
+        cardLabel.className = "priorities-view-btn-label";
+        cardLabel.textContent = view.label;
+        card.appendChild(cardLabel);
+        if (viewsEditMode) {
+          var removeX = document.createElement("i");
+          removeX.className = "ti ti-x priorities-view-btn-remove";
+          removeX.title = "Excluir";
+          removeX.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var nextList = viewsData.filter(function (_, i2) { return i2 !== idx; });
+            viewsSave(nextList);
+          });
+          card.appendChild(removeX);
+        }
+        card.addEventListener("click", function () {
+          if (viewsEditMode) { viewsEditing = idx; renderViewsSection(); return; }
+          applyView(view);
+        });
+        cardsWrap.appendChild(card);
+      });
+      if (viewsEditMode) {
+        var addCard = document.createElement("button");
+        addCard.type = "button";
+        addCard.className = "priorities-view-btn priorities-view-btn-add";
+        addCard.innerHTML = '<i class="ti ti-plus"></i> Nova';
+        addCard.addEventListener("click", function () { viewsEditing = -1; renderViewsSection(); });
+        cardsWrap.appendChild(addCard);
+      }
+      viewsSection.appendChild(cardsWrap);
+
+      if (viewsEditMode && viewsEditing !== null) {
+        viewsSection.appendChild(buildViewEditor(viewsEditing));
+      }
+    }
+
+    function viewsLoad() {
+      authFetch(cfg.templateWorkerUrl + "/priorities-views")
+        .then(handle401)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          viewsData = (data && data.views) || viewsCloneDefaults();
+          renderViewsSection();
+        })
+        .catch(function () {
+          viewsData = viewsCloneDefaults();
+          renderViewsSection();
+        });
+    }
+
+    renderViewsSection();
+    viewsLoad();
+    section.appendChild(viewsSection);
+
+    // "Programação" vem logo depois de Visualizações (pedido implícito do
+    // Georges — é a 1ª coisa que ele vai querer ver/usar ao abrir a página
+    // de manhã, bem antes de mexer em Criação/Filtros/Itens). Nasce
+    // RECOLHIDA, igual as outras 3 (só "Itens" nasce expandida).
     section.appendChild(scheduleSection.section);
     section.appendChild(creationSection.section);
 
@@ -5859,12 +6138,24 @@
     textKeys.forEach(function (key) {
       formTextInputs[key].addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
     });
+    // "deactivateActiveView()" nos 4 pontos abaixo (busca/status/filtros
+    // gerais/limpar) — pedido implícito do Georges: se uma Visualização
+    // está destacada e ele mexe manualmente em QUALQUER outro filtro, o
+    // filtro de verdade já não bate mais com o que a view define, então o
+    // card não devia continuar "aceso" (ver comentário de
+    // deactivateActiveView, lá em cima perto de "var viewsSection").
     searchInput.addEventListener("input", function () {
       updateSearchClearBtn();
+      deactivateActiveView();
       applyFilters();
     });
-    statusSelect.addEventListener("change", applyFilters);
-    fieldKeys.forEach(function (key) { filterSelects[key].onChange(applyFilters); });
+    statusSelect.addEventListener("change", function () {
+      deactivateActiveView();
+      applyFilters();
+    });
+    fieldKeys.forEach(function (key) {
+      filterSelects[key].onChange(function () { deactivateActiveView(); applyFilters(); });
+    });
     clearBtn.addEventListener("click", function () {
       searchInput.value = "";
       updateSearchClearBtn();
@@ -5875,6 +6166,7 @@
       // a barra de filtros de cima toda limpa — ia confundir).
       qfGroups.forEach(function (g) { qfActive[g.key] = []; });
       renderQfSection();
+      deactivateActiveView();
       applyFilters();
     });
 

@@ -2201,6 +2201,111 @@ html, body {
   .priorities-items-searchbar .priorities-search-input { flex-basis: 100%; }
 }
 
+/* "Visualizações" (pedido do Georges) — botões que abrem exibições PRONTAS
+   da Lista de Prioridades (ex: "Rápidos", "Noturnos"), leiaute PRÓPRIO em
+   CARD (bem diferente da pílula de "Filtros rápidos" logo abaixo), fica no
+   TOPO DE VERDADE da página — antes até de "Programação". */
+.priorities-views-section {
+  margin: 0 0 14px;
+  padding-bottom: 14px;
+  border-bottom: 0.5px solid rgba(240, 140, 0, 0.25);
+}
+.priorities-views-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.priorities-views-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #55554f;
+}
+.priorities-views-header .priorities-quickfilters-edit-toggle { margin-left: auto; }
+.priorities-views-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+/* card — mais alto/largo que a pílula de Filtros Rápidos de propósito
+   (pedido do Georges: "crie um leiaute para estes botões"), acento em
+   ROXO quando ativo (cor própria, não reaproveita o cinza-escuro de
+   Filtros Rápidos/Filtros Gerais — ajuda a bater o olho e saber na hora
+   que é uma Visualização "ligada", diferente de filtro comum). */
+.priorities-view-btn {
+  position: relative;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid #dcdcd8;
+  background: #fff;
+  color: #55554f;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.priorities-view-btn:hover { border-color: #b9a3d9; background: #faf8fd; }
+.priorities-view-btn.active {
+  background: #6b4fa0;
+  border-color: #6b4fa0;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(107, 79, 160, 0.35);
+}
+.priorities-view-btn-label { white-space: nowrap; }
+.priorities-view-btn-remove {
+  font-size: 13px;
+  color: #b9b9b3;
+  margin-left: 2px;
+}
+.priorities-view-btn.active .priorities-view-btn-remove { color: rgba(255, 255, 255, 0.75); }
+.priorities-view-btn-remove:hover { color: #d9534f; }
+.priorities-view-btn-add {
+  border-style: dashed;
+  color: #6b4fa0;
+  background: #fff;
+}
+.priorities-view-btn-add:hover { border-color: #6b4fa0; background: #faf8fd; }
+/* caixinha de criar/editar 1 visualização — nome + status (3 botões) +
+   grade de filtros (1 checkbox-dropdown por campo, reaproveita
+   ".notes-filter-select" já usado em Filtros Gerais). */
+.priorities-view-editor {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 0.5px solid #dcdcd8;
+  background: #fbfbfa;
+}
+.priorities-view-editor-label {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  font-size: 13px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+.priorities-view-editor-label:focus { outline: none; border-color: #6b4fa0; }
+.priorities-view-editor-sublabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #8a8a84;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 10px 0 6px;
+}
+.priorities-view-editor-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* "Filtros rápidos" (pedido do Georges) — seção de botões-atalho no TOPO
    da Lista de Prioridades, ANTES até da linha de criação. Uma "divisória"
    (linha) por grupo — Tipo/Prioridade/Tempo/Forma/Programação/Tributo —
