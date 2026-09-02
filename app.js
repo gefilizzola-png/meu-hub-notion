@@ -1959,6 +1959,29 @@
     return svg;
   }
 
+  // ícone de "pin" (fixar) — mesmíssimo motivo do star/note acima: SVG
+  // desenhado à mão em vez de ícone de fonte, pra funcionar preenchido
+  // (pedido do Georges: "quando eu clicar e marcar como Diário, o ícone
+  // fica preenchido; quando não estiver marcado, fica opaco") sem depender
+  // de existir uma variante "-filled" na fonte. Contorno de "gota"
+  // clássico de marcador de mapa — 1 subpath só, fecha sozinho, funciona
+  // tanto preenchido quanto só contorno. Usado na nova coluna "Diário" da
+  // Lista de Prioridades (ver renderList mais abaixo).
+  var PIN_SVG_PATH = "M12 2C8.14 2 5 5.14 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.86-3.14-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z";
+  function makePinSvg() {
+    var svgNS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "15");
+    svg.setAttribute("height", "15");
+    svg.setAttribute("class", "priorities-daily-icon-svg");
+    var path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", PIN_SVG_PATH);
+    path.setAttribute("fill-rule", "evenodd");
+    svg.appendChild(path);
+    return svg;
+  }
+
   // "dd/mm hh:mm" bem pequeno, pro selo de data de criação de cada
   // anotação — mesmo formato usado em formatDateRangeExtra, só que a
   // partir de um ISO simples (n.createdAt), não de um objeto {start,end}
@@ -2647,7 +2670,10 @@
     // Pendente/Concluído) — alfabética inverteria a ordem (Concluído vem
     // antes de Pendente no alfabeto), enquanto a ordem NATURAL de sempre
     // (mesma do <select> de "Filtros Gerais") é Pendente primeiro.
-    var QF_GROUPS_NOT_ALPHA = ["tempo", "status"];
+    // "diario" (pedido do Georges) — mesmo motivo de "status" acima, campo
+    // virtual com só 2 botões fixos (a ordem alfabética até bateria por
+    // acaso aqui, mas fica explícito pra não depender de coincidência).
+    var QF_GROUPS_NOT_ALPHA = ["tempo", "status", "diario"];
     function sortQfData(data) {
       qfGroups.forEach(function (g) {
         if (QF_GROUPS_NOT_ALPHA.indexOf(g.key) !== -1) return;
@@ -4463,11 +4489,13 @@
     // ---- "Visualizações" (pedido do Georges: "botões que abrirão
     // diferentes tipos de exibição desta Lista de Tarefas, como Rápidos
     // (até 15 minutos), Noturnos (período = Noite)... ou crie uma forma de
-    // eu mesmo poder criar novas visualizações") — fica no TOPO DE VERDADE
-    // da página (antes até de "Programação"), leiaute PRÓPRIO em CARD
-    // (diferente da pílula de "Filtros rápidos" — ver CSS
-    // ".priorities-view-btn"), pra ficar claramente separado como "atalho
-    // de tela inteira" e não só mais um filtro de coluna. Cada view é um
+    // eu mesmo poder criar novas visualizações"). Vira divisória
+    // recolhível NORMAL (pedido do Georges — "crie uma divisória chamada
+    // Visualizações, que por padrão sempre estará recolhida quando a
+    // página for aberta"), mesmo buildCollapsibleSection das outras 4,
+    // mas continua a PRIMEIRA da página (antes de Programação) — os cards
+    // de dentro continuam com leiaute PRÓPRIO (ver CSS ".priorities-view-
+    // btn"), diferente da pílula de "Filtros rápidos". Cada view é um
     // CONJUNTO de valores em VÁRIOS campos de uma vez (não só 1 grupo, como
     // Filtros Rápidos) + um status — ativar SUBSTITUI Filtros Gerais e
     // Filtros Rápidos por inteiro e recolhe as outras divisórias (decisão
@@ -4481,13 +4509,15 @@
     var viewsEditMode = false;
     var viewsEditing = null; // index da view sendo criada/editada (-1 = nova), ou null
 
-    var viewsSection = document.createElement("div");
-    viewsSection.className = "priorities-views-section";
+    // "false" (2º parâmetro) — nasce RECOLHIDA (pedido do Georges), igual
+    // Programação/Criação/Filtros Gerais (só "Itens" nasce expandida).
+    var viewsSection = buildCollapsibleSection("Visualizações", false);
 
     function viewsCloneDefaults() {
       return (viewsConfig.defaults || []).map(function (v) {
         return {
           id: v.id, label: v.label, status: v.status || "pending",
+          diario: v.diario || "all",
           filters: Object.assign({}, v.filters || {}),
         };
       });
@@ -4517,6 +4547,9 @@
         filterSelects[key].setValues(turningOff ? [] : ((view.filters && view.filters[key]) || []));
       });
       statusSelect.value = turningOff ? "pending" : (view.status || "pending");
+      // "Diário" na visualização (pedido do Georges) — mesmo padrão de
+      // status acima, volta pra "all" ao desligar a view.
+      diarioSelect.value = turningOff ? "all" : (view.diario || "all");
       searchInput.value = "";
       updateSearchClearBtn();
       qfGroups.forEach(function (g) { qfActive[g.key] = []; });
@@ -4567,6 +4600,32 @@
       });
       editor.appendChild(statusWrap);
 
+      // "Diário" na visualização (pedido do Georges — "crie a opção de
+      // filtro para esta nova propriedade em todas as divisórias") — mesmo
+      // controle de 3 botões do Status acima, campo virtual à parte
+      // (nunca entra em "filters", que só tem os 8 campos de opção reais).
+      var diarioLabel = document.createElement("div");
+      diarioLabel.className = "priorities-view-editor-sublabel";
+      diarioLabel.textContent = "Diário";
+      editor.appendChild(diarioLabel);
+      var diarioWrap = document.createElement("div");
+      diarioWrap.className = "priorities-quickfilter-buttons";
+      var selectedDiario = existing ? (existing.diario || "all") : "all";
+      var diarioBtnEntries = [];
+      [["all", "Todos"], ["yes", "Só diários"], ["no", "Só não diários"]].forEach(function (pair) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "priorities-quickfilter-btn" + (selectedDiario === pair[0] ? " active" : "");
+        b.textContent = pair[1];
+        b.addEventListener("click", function () {
+          selectedDiario = pair[0];
+          diarioBtnEntries.forEach(function (entry) { entry.btn.classList.toggle("active", entry.value === selectedDiario); });
+        });
+        diarioWrap.appendChild(b);
+        diarioBtnEntries.push({ btn: b, value: pair[0] });
+      });
+      editor.appendChild(diarioWrap);
+
       var fieldsLabel = document.createElement("div");
       fieldsLabel.className = "priorities-view-editor-sublabel";
       fieldsLabel.textContent = "Filtros";
@@ -4601,7 +4660,7 @@
           editorErr.style.display = "block";
           return;
         }
-        var newView = { id: existing ? existing.id : "", label: label, status: selectedStatus, filters: {} };
+        var newView = { id: existing ? existing.id : "", label: label, status: selectedStatus, diario: selectedDiario, filters: {} };
         fieldKeys.forEach(function (key) { newView.filters[key] = fieldControls[key].getValues(); });
         var nextList = viewsData.slice();
         if (isNew) nextList.push(newView); else nextList[index] = newView;
@@ -4637,21 +4696,22 @@
     }
 
     function renderViewsSection() {
-      viewsSection.innerHTML = "";
+      viewsSection.body.innerHTML = "";
       if (!viewsData) {
         var loading = document.createElement("p");
         loading.className = "priorities-quickfilters-loading";
         loading.textContent = "Carregando…";
-        viewsSection.appendChild(loading);
+        viewsSection.body.appendChild(loading);
         return;
       }
 
+      // sem "heading" próprio aqui (pedido do Georges — virou divisória
+      // recolhível normal, o título "Visualizações" já vem do cabeçalho da
+      // própria divisória — ver buildCollapsibleSection) — só o botão de
+      // editar continua dentro do corpo, empurrado pra direita via CSS
+      // (".priorities-views-header .priorities-quickfilters-edit-toggle").
       var header = document.createElement("div");
       header.className = "priorities-views-header";
-      var heading = document.createElement("h4");
-      heading.className = "priorities-views-title";
-      heading.textContent = "Visualizações";
-      header.appendChild(heading);
       var editToggle = document.createElement("button");
       editToggle.type = "button";
       editToggle.className = "priorities-quickfilters-edit-toggle" + (viewsEditMode ? " active" : "");
@@ -4664,7 +4724,7 @@
         renderViewsSection();
       });
       header.appendChild(editToggle);
-      viewsSection.appendChild(header);
+      viewsSection.body.appendChild(header);
 
       var cardsWrap = document.createElement("div");
       cardsWrap.className = "priorities-views-cards";
@@ -4672,6 +4732,14 @@
         var card = document.createElement("button");
         card.type = "button";
         card.className = "priorities-view-btn" + (activeViewId === view.id ? " active" : "");
+        // ícone pequeno antes do nome (pedido do Georges — "visual mais
+        // legal") — mesmo ícone pra toda visualização (não dá pra escolher
+        // 1 por view sem complicar o editor à toa); só decorativo, ajuda a
+        // bater o olho e diferenciar de "Filtros rápidos" (que não tem
+        // ícone nenhum nas pílulas).
+        var cardIcon = document.createElement("i");
+        cardIcon.className = "ti ti-layout-grid-add priorities-view-btn-icon";
+        card.appendChild(cardIcon);
         var cardLabel = document.createElement("span");
         cardLabel.className = "priorities-view-btn-label";
         cardLabel.textContent = view.label;
@@ -4701,10 +4769,10 @@
         addCard.addEventListener("click", function () { viewsEditing = -1; renderViewsSection(); });
         cardsWrap.appendChild(addCard);
       }
-      viewsSection.appendChild(cardsWrap);
+      viewsSection.body.appendChild(cardsWrap);
 
       if (viewsEditMode && viewsEditing !== null) {
-        viewsSection.appendChild(buildViewEditor(viewsEditing));
+        viewsSection.body.appendChild(buildViewEditor(viewsEditing));
       }
     }
 
@@ -4724,7 +4792,7 @@
 
     renderViewsSection();
     viewsLoad();
-    section.appendChild(viewsSection);
+    section.appendChild(viewsSection.section);
 
     // "Programação" vem logo depois de Visualizações (pedido implícito do
     // Georges — é a 1ª coisa que ele vai querer ver/usar ao abrir a página
@@ -4766,6 +4834,22 @@
     });
     statusSelect.value = "pending";
     filterRow.appendChild(statusSelect);
+    // "Diário" em Filtros Gerais (pedido do Georges — "criar a opção de
+    // filtro para esta nova propriedade em todas as divisórias que fizemos
+    // algum tipo de filtro"). Campo VIRTUAL (it.diario é booleano, não uma
+    // lista de opções), por isso é um <select> PRÓPRIO à parte, igual
+    // statusSelect acima — não entra no loop de fieldKeys/buildMultiCheck
+    // Dropdown (esse é só pros 8 campos "de opção" de verdade).
+    var diarioSelect = document.createElement("select");
+    diarioSelect.className = "notes-filter-select";
+    [["all", "Diário: Todos"], ["yes", "Diário: Só diários"], ["no", "Diário: Só não diários"]].forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      diarioSelect.appendChild(opt);
+    });
+    diarioSelect.value = "all";
+    filterRow.appendChild(diarioSelect);
     var clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "notes-add-btn priorities-clear-btn";
@@ -4791,14 +4875,25 @@
     // que fica fora continua visível mesmo com "Itens" recolhida).
     var itemsSearchWrap = document.createElement("div");
     itemsSearchWrap.className = "priorities-items-searchbar";
+    // "priorities-search-input-box" (pedido do Georges — corrige bug: o
+    // botão "x" de limpar ficava sobreposto ao botão "Só pendentes")—
+    // ANTES o "x" era position:absolute relativo à BARRA INTEIRA
+    // (itemsSearchWrap), então "right:6px" sempre caía na pontinha direita
+    // de TODA a barra, onde "Só pendentes" também mora (2º item do flex).
+    // Envolvendo só o input+botão "x" numa caixinha própria com
+    // "position: relative", o "x" passa a ficar ancorado no canto do
+    // INPUT (que agora tem padding-right sobrando só pra ele), nunca mais
+    // encostando no botão vizinho, não importa o tamanho da tela.
+    var searchInputBox = document.createElement("div");
+    searchInputBox.className = "priorities-search-input-box";
     var searchInput = document.createElement("input");
     searchInput.type = "text";
     searchInput.className = "notes-filter-input priorities-search-input";
     searchInput.placeholder = "Pesquisar em tudo (campos, subitens, notas)...";
-    itemsSearchWrap.appendChild(searchInput);
+    searchInputBox.appendChild(searchInput);
     // botão "x" pra limpar a busca (pedido do Georges — "hoje tenho que
-    // excluir manualmente o que digitei") — fica DENTRO da barra
-    // (posicionado em cima do input via CSS), só aparece quando tem algo
+    // excluir manualmente o que digitei") — fica DENTRO da caixinha do
+    // input (posicionado em cima dele via CSS), só aparece quando tem algo
     // digitado (ver updateSearchClearBtn, chamado no "input" mais abaixo
     // e aqui mesmo pra já nascer escondido).
     var searchClearBtn = document.createElement("button");
@@ -4816,7 +4911,8 @@
       searchInput.focus();
     });
     updateSearchClearBtn();
-    itemsSearchWrap.appendChild(searchClearBtn);
+    searchInputBox.appendChild(searchClearBtn);
+    itemsSearchWrap.appendChild(searchInputBox);
     // "Só pendentes" (pedido do Georges: "a busca... deve pesquisar
     // inclusive em itens CONCLUÍDOS, com botão para eu pesquisar somente em
     // PENDENTES se assim desejar") — desligado por padrão, ou seja, a busca
@@ -5182,6 +5278,19 @@
     thCheck.className = "priorities-th priorities-th-check";
     headRow.appendChild(thCheck);
 
+    // coluna "Diário" (pedido do Georges — "coluna bem simples... só um
+    // ícone, pra eu marcar e selecionar quais são os itens diários que
+    // ficarão fixados") — mesmo tratamento de thCheck/thToggle acima
+    // (largura mínima, sem título de texto, só um ícone de referência no
+    // cabeçalho). Fica FORA de "columns" de propósito (não é um campo "de
+    // opção" — não tem engrenagem de editar opções, não entra no botão de
+    // recolher/expandir colunas, sempre visível).
+    var thDiario = document.createElement("th");
+    thDiario.className = "priorities-th priorities-th-diario";
+    thDiario.title = "Diário (fixa o item no topo da lista)";
+    thDiario.innerHTML = '<i class="ti ti-pin"></i>';
+    headRow.appendChild(thDiario);
+
     columns.forEach(function (col) {
       var th = document.createElement("th");
       th.className = "priorities-th priorities-th-sortable priorities-col-" + col.key;
@@ -5406,6 +5515,13 @@
           if (status === "pending" && it.done) return false;
           if (status === "done" && !it.done) return false;
         }
+        // "Diário" em Filtros Gerais (pedido do Georges) — INDEPENDENTE do
+        // status/busca acima, sempre vale quando não está em "Todos"
+        // (diferente do status "pending" padrão, "all" aqui não some com
+        // nada escondido — a maioria dos itens não é Diário mesmo).
+        var diarioWant = diarioSelect.value;
+        if (diarioWant === "yes" && !it.diario) return false;
+        if (diarioWant === "no" && it.diario) return false;
         for (var i = 0; i < fieldKeys.length; i++) {
           var key = fieldKeys[i];
           // "Filtros Gerais" (pedido do Georges) — TODOS os campos filtram
@@ -5437,8 +5553,13 @@
             // "it.done" booleano (ver priorityFields.status no config.js).
             // Traduz aqui em vez de tentar ler "it[groupField]" direto
             // (sempre undefined pra esse grupo).
+            // "Diário" (pedido do Georges) é CAMPO VIRTUAL igual "Status"
+            // acima — o item tem "it.diario" booleano, não "it.diario"
+            // string "Diário"/"Não diário".
             var qHave = (group.key === "status")
               ? [it.done ? "Concluído" : "Pendente"]
+              : (group.key === "diario")
+              ? [it.diario ? "Diário" : "Não diário"]
               : (isMultiField(groupField) ? (it[groupField] || []) : [it[groupField]]);
             var qMatch = qWant.some(function (w) { return qHave.indexOf(w) !== -1; });
             if (!qMatch) return false;
@@ -5472,19 +5593,54 @@
       renderList(sortItems(filtered));
     }
 
+      // "+4" (não mais "+3") — toggle/check/actions de sempre MAIS a nova
+      // coluna "Diário" (thDiario acima), nenhuma das 4 faz parte de
+      // "columns".
+      var EXTRA_COLS = 4;
+
     function renderList(items) {
       tbody.innerHTML = "";
       if (!items.length) {
         var emptyRow = document.createElement("tr");
         var emptyCell = document.createElement("td");
         emptyCell.className = "empty";
-        emptyCell.colSpan = columns.length + 3;
+        emptyCell.colSpan = columns.length + EXTRA_COLS;
         emptyCell.textContent = allItems.length ? "Nenhum item bate com o filtro." : "Nenhum item ainda.";
         emptyRow.appendChild(emptyCell);
         tbody.appendChild(emptyRow);
         return;
       }
-      items.forEach(function (it) {
+
+      // "Diário" fixado no topo (pedido do Georges — "permitir que eu fixe
+      // no topo da lista os itens diários... separar os itens diários numa
+      // divisória dentro da tabela"): só insere as 2 linhas separadoras
+      // quando REALMENTE há uma mistura dos 2 grupos no resultado atual
+      // (senão vira ruído sem sentido — ex: o próprio filtro "Diário: Só
+      // diários" já deixaria só um grupo). Preserva a ordenação normal
+      // (sortItems, já aplicada em "items") DENTRO de cada grupo — filter()
+      // mantém a ordem relativa. "renderItems" troca items.forEach lá
+      // embaixo; o resto do bloco (toda a lógica de linha/subitens/nota)
+      // continua exatamente igual, só ganha o "if (it.__groupHeader)" logo
+      // no início pra desviar pras 2 linhas de separador.
+      var diarios = items.filter(function (it) { return it.diario; });
+      var rest = items.filter(function (it) { return !it.diario; });
+      var renderItems = items;
+      if (diarios.length && rest.length) {
+        renderItems = [{ __groupHeader: "📌 Diários" }]
+          .concat(diarios, [{ __groupHeader: "Todos os itens" }], rest);
+      }
+
+      renderItems.forEach(function (it) {
+        if (it.__groupHeader) {
+          var groupRow = document.createElement("tr");
+          groupRow.className = "priorities-group-header-row";
+          var groupCell = document.createElement("td");
+          groupCell.colSpan = columns.length + EXTRA_COLS;
+          groupCell.textContent = it.__groupHeader;
+          groupRow.appendChild(groupCell);
+          tbody.appendChild(groupRow);
+          return;
+        }
         var row = document.createElement("tr");
         row.className = "priorities-row" + (it.done ? " done" : "");
 
@@ -5524,6 +5680,25 @@
         check.addEventListener("change", function () { updateItem(it.id, { done: check.checked }); });
         checkCell.appendChild(check);
         row.appendChild(checkCell);
+
+        // "Diário" (pedido do Georges — "coluna bem simples... só um
+        // ícone, pra eu marcar e selecionar quais são os itens diários que
+        // ficarão fixados. Quando eu clicar e marcar, o ícone fica
+        // preenchido. Quando não estiver marcado, fica opaco"). Mesmo
+        // padrão de botão-com-SVG-desenhado-à-mão de makeStarSvg/
+        // makeNoteSvg (contorno vazio + opaco por padrão, ".active" troca
+        // pra preenchido + opacidade cheia — ver CSS ".priorities-daily-
+        // btn"). Um clique já salva na hora (não precisa confirmar nada).
+        var diarioCell = document.createElement("td");
+        diarioCell.className = "priorities-diario-cell";
+        var diarioBtn = document.createElement("button");
+        diarioBtn.type = "button";
+        diarioBtn.className = "priorities-daily-btn" + (it.diario ? " active" : "");
+        diarioBtn.title = it.diario ? "Remover de Diário" : "Marcar como Diário (fixa no topo da lista)";
+        diarioBtn.appendChild(makePinSvg());
+        diarioBtn.addEventListener("click", function () { updateItem(it.id, { diario: !it.diario }); });
+        diarioCell.appendChild(diarioBtn);
+        row.appendChild(diarioCell);
 
         fieldKeys.forEach(function (key) {
           var cell = document.createElement("td");
@@ -6169,6 +6344,12 @@
       deactivateActiveView();
       applyFilters();
     });
+    // "Diário" em Filtros Gerais (pedido do Georges) — mesmo tratamento de
+    // statusSelect acima.
+    diarioSelect.addEventListener("change", function () {
+      deactivateActiveView();
+      applyFilters();
+    });
     fieldKeys.forEach(function (key) {
       filterSelects[key].onChange(function () { deactivateActiveView(); applyFilters(); });
     });
@@ -6176,6 +6357,7 @@
       searchInput.value = "";
       updateSearchClearBtn();
       statusSelect.value = "all";
+      diarioSelect.value = "all";
       fieldKeys.forEach(function (key) { resetControl(filterSelects[key]); });
       // "Limpar filtros" também solta os botões de "Filtros rápidos" que
       // estiverem apertados (senão a tabela continuava filtrada mesmo com

@@ -799,6 +799,13 @@ var DEFAULT_QUICKFILTERS = {
     { label: "Pendente", values: ["Pendente"] },
     { label: "Concluído", values: ["Concluído"] },
   ],
+  // "Diário" (pedido do Georges — coluna nova pra fixar itens no topo da
+  // tabela) — mesmo tratamento de "status" acima: campo virtual, só 2
+  // botões fixos possíveis.
+  diario: [
+    { label: "Diário", values: ["Diário"] },
+    { label: "Não diário", values: ["Não diário"] },
+  ],
   tipo: [
     { label: "PMF", values: ["PMF"] },
     { label: "Pessoal", values: ["Pessoal"] },
@@ -906,7 +913,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-01 01:04",
+  appVersion: "2026-09-01 22:20",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1561,7 +1568,14 @@ const APP_CONFIG = {
         // A tradução done<->"Pendente"/"Concluído" mora só no app.js
         // (applyFilters, casamento do Filtro Rápido) e no worker.js
         // (validação do PUT /priorities-quickfilters).
-        status: { label: "Status", options: ["Pendente", "Concluído"] }
+        status: { label: "Status", options: ["Pendente", "Concluído"] },
+        // "Diário" (pedido do Georges: "crie a opção de filtro para esta
+        // nova propriedade em todas as divisórias que fizemos algum tipo
+        // de filtro/visualização") — campo VIRTUAL igual "status" acima,
+        // só existe aqui pra alimentar o editor de botões do Filtro Rápido
+        // "Diário" e o controle de "Filtros Gerais"; o item de verdade tem
+        // "diario" booleano, não uma string.
+        diario: { label: "Diário", options: ["Diário", "Não diário"] }
       },
       // "Filtros rápidos" (pedido do Georges): seção de botões no topo da
       // página, um bloco por grupo — ver renderPrioritiesQuickFilters no
@@ -1579,6 +1593,9 @@ const APP_CONFIG = {
           // "Status" (pedido do Georges) vem PRIMEIRO — é o recorte mais
           // básico (pendente/concluído), faz sentido ser o 1º a decidir.
           { key: "status", label: "Status" },
+          // "Diário" (pedido do Georges) — logo depois de Status, mesmo
+          // espírito de recorte básico rápido.
+          { key: "diario", label: "Diário" },
           { key: "tipo", label: "Tipo" },
           { key: "grupo", label: "Grupo", field: "programacao" },
           { key: "prioridade", label: "Prioridade" },

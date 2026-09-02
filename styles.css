@@ -1698,7 +1698,9 @@ html, body {
 }
 .priorities-th-toggle,
 .priorities-th-check,
+.priorities-th-diario,
 .priorities-th-actions { width: 1%; }
+.priorities-th-diario { text-align: center; color: #b9b9b3; }
 /* colunas clicáveis pra classificar — cursor de ponteiro + destaque leve
    no hover avisam que dá pra clicar; ".active" (coluna que está
    ordenando agora) ganha cor de destaque + a seta ▲/▼ ao lado do nome. */
@@ -1750,6 +1752,51 @@ html, body {
    checklist daquela linha. Padding menor que o padrão pra não empurrar o
    resto da tabela pra direita à toa. */
 .priorities-toggle-cell { padding-right: 2px !important; white-space: nowrap; }
+/* "Diário" (pedido do Georges — coluna simples pra fixar itens no topo da
+   lista). Botão com o SVG de pin desenhado à mão (ver makePinSvg no
+   app.js) — OPACO/contorno por padrão, PREENCHIDO + opacidade cheia
+   quando marcado (pedido literal do Georges: "quando eu clicar e marcar
+   como Diário, o ícone fica preenchido; quando não estiver marcado, fica
+   opaco"). Mesma família visual dos botões de estrela/nota já existentes
+   na tabela. */
+.priorities-diario-cell { padding: 0 4px !important; text-align: center; white-space: nowrap; }
+.priorities-daily-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 6px;
+  color: #55554f;
+  opacity: 0.35;
+}
+.priorities-daily-btn:hover { background: #eeeee9; opacity: 0.7; }
+.priorities-daily-icon-svg { fill: none; stroke: currentColor; stroke-width: 1.6; }
+.priorities-daily-btn.active {
+  color: #d98c2b;
+  opacity: 1;
+}
+.priorities-daily-btn.active .priorities-daily-icon-svg { fill: currentColor; }
+/* linha separadora entre o grupo "📌 Diários" e "Todos os itens" (pedido
+   do Georges — "separar os itens diários numa divisória dentro da
+   tabela"), só aparece quando os 2 grupos coexistem no resultado atual
+   (ver renderList no app.js). Texto pequeno, maiúsculo, fundo levemente
+   diferente da linha normal — dá pra bater o olho sem competir com o
+   conteúdo de verdade das linhas de item. */
+.priorities-group-header-row td {
+  padding: 6px 10px !important;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8a84;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f4f1ea;
+  border-bottom: 0.5px solid #e4e0d6 !important;
+}
 /* linha da checklist — sem borda própria (fica "colada" na linha do item
    acima dela); só existe visualmente quando tem sub-itens ou o campo de
    adicionar está aberto (".notes-subitems" vazio não ocupa espaço). */
@@ -2129,7 +2176,19 @@ html, body {
   align-items: center;
   gap: 8px;
   margin: 0 0 10px;
+}
+/* caixinha própria só do input+botão "x" (pedido do Georges — corrige bug
+   do "x" sobreposto ao botão "Só pendentes": antes "position:relative"
+   ficava na BARRA INTEIRA, então o "x" (position:absolute, right:6px)
+   ancorava no canto direito de TUDO, onde "Só pendentes" também mora.
+   Agora "position:relative" fica só aqui, o "x" ancora no canto do INPUT,
+   nunca mais encosta no botão vizinho). */
+.priorities-search-input-box {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 .priorities-items-searchbar .priorities-search-input {
   flex: 1 1 auto;
@@ -2144,9 +2203,10 @@ html, body {
 }
 .priorities-items-searchbar .priorities-search-input:hover { border-color: #b9b9b3; }
 .priorities-items-searchbar .priorities-search-input:focus { outline: none; border-color: #4a90d9; }
-/* botão "x" pra limpar a busca (pedido do Georges) — fica DENTRO da barra,
-   sobreposto ao input via position:absolute, só some/aparece via JS
-   (updateSearchClearBtn) conforme tem texto digitado ou não. */
+/* botão "x" pra limpar a busca (pedido do Georges) — fica DENTRO da
+   caixinha do input, sobreposto a ele via position:absolute, só
+   some/aparece via JS (updateSearchClearBtn) conforme tem texto digitado
+   ou não. */
 .priorities-search-clear-btn {
   position: absolute;
   right: 6px;
@@ -2198,67 +2258,69 @@ html, body {
 }
 @media (max-width: 640px) {
   .priorities-items-searchbar { flex-wrap: wrap; }
-  .priorities-items-searchbar .priorities-search-input { flex-basis: 100%; }
+  .priorities-search-input-box { flex-basis: 100%; }
 }
 
 /* "Visualizações" (pedido do Georges) — botões que abrem exibições PRONTAS
-   da Lista de Prioridades (ex: "Rápidos", "Noturnos"), leiaute PRÓPRIO em
-   CARD (bem diferente da pílula de "Filtros rápidos" logo abaixo), fica no
-   TOPO DE VERDADE da página — antes até de "Programação". */
-.priorities-views-section {
-  margin: 0 0 14px;
-  padding-bottom: 14px;
-  border-bottom: 0.5px solid rgba(240, 140, 0, 0.25);
-}
+   da Lista de Prioridades (ex: "Rápidos", "Noturnos"). Virou divisória
+   recolhível normal (".priorities-subsection", igual Programação/Criação/
+   Filtros Gerais/Itens — pedido do Georges: "recolhida por padrão quando a
+   página for aberta, posso clicar pra expandir/recolher"), por isso não
+   tem mais borda/margem própria aqui — só o CONTEÚDO de dentro (header com
+   o botão de editar + a grade de cards) continua com leiaute PRÓPRIO,
+   diferente da pílula de "Filtros rápidos".*/
 .priorities-views-header {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 10px;
 }
-.priorities-views-title {
-  margin: 0;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #55554f;
-}
 .priorities-views-header .priorities-quickfilters-edit-toggle { margin-left: auto; }
 .priorities-views-cards {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
-/* card — mais alto/largo que a pílula de Filtros Rápidos de propósito
-   (pedido do Georges: "crie um leiaute para estes botões"), acento em
-   ROXO quando ativo (cor própria, não reaproveita o cinza-escuro de
-   Filtros Rápidos/Filtros Gerais — ajuda a bater o olho e saber na hora
-   que é uma Visualização "ligada", diferente de filtro comum). */
+/* card — menor/mais discreto que antes (pedido do Georges: "diminua o
+   tamanho dos botões... visual mais legal"), mas ainda maior que a pílula
+   de Filtros Rápidos (28px) — meio-termo, com ícone + acento ROXO quando
+   ativo (cor própria, não reaproveita o cinza-escuro de Filtros Rápidos/
+   Filtros Gerais — ajuda a bater o olho e saber na hora que é uma
+   Visualização "ligada", diferente de filtro comum). Transição suave no
+   hover/active pra ficar mais "vivo". */
 .priorities-view-btn {
   position: relative;
-  height: 44px;
-  padding: 0 18px;
-  border-radius: 12px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9px;
   border: 1px solid #dcdcd8;
   background: #fff;
   color: #55554f;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }
-.priorities-view-btn:hover { border-color: #b9a3d9; background: #faf8fd; }
+.priorities-view-btn-icon { font-size: 13px; color: #b9a3d9; }
+.priorities-view-btn:hover {
+  border-color: #b9a3d9;
+  background: #faf8fd;
+  transform: translateY(-1px);
+}
 .priorities-view-btn.active {
   background: #6b4fa0;
   border-color: #6b4fa0;
   color: #fff;
   box-shadow: 0 2px 6px rgba(107, 79, 160, 0.35);
 }
+.priorities-view-btn.active .priorities-view-btn-icon { color: #fff; }
 .priorities-view-btn-label { white-space: nowrap; }
 .priorities-view-btn-remove {
-  font-size: 13px;
+  font-size: 12px;
   color: #b9b9b3;
   margin-left: 2px;
 }
