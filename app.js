@@ -2048,7 +2048,42 @@
       notesTitleLinks.appendChild(notesTitleLink);
       title.appendChild(notesTitleLinks);
     }
+
+    // botão de recolher/expandir (pedido do Georges — "sempre exibir a
+    // divisória 'Anotações rápidas' recolhida como padrão" DENTRO do
+    // Painel do Dia; a página própria "anotacoes" continua abrindo
+    // expandida, já que lá é o conteúdo principal da tela). Mesmo padrão
+    // ".query-collapse-btn" usado em renderDynamicQueryBlockReady — só que
+    // aqui o wrapper escondido chama-se ".notes-block-body" (o bloco de
+    // notas não tem a classe "query-block", então reaproveita só o visual
+    // do botão, não a regra de CSS ".query-block.collapsed").
+    var notesCollapsed = currentId !== "anotacoes";
+    section.classList.add("notes-block-collapsible");
+    var notesCollapseBtn = document.createElement("button");
+    notesCollapseBtn.type = "button";
+    notesCollapseBtn.className = "query-collapse-btn";
+    notesCollapseBtn.setAttribute("aria-label", "Recolher/expandir Anotações rápidas");
+    var notesCollapseIcon = document.createElement("i");
+    function applyNotesCollapsed() {
+      section.classList.toggle("collapsed", notesCollapsed);
+      notesCollapseIcon.className = notesCollapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
+    }
+    notesCollapseBtn.appendChild(notesCollapseIcon);
+    notesCollapseBtn.addEventListener("click", function () {
+      notesCollapsed = !notesCollapsed;
+      applyNotesCollapsed();
+    });
+    title.appendChild(notesCollapseBtn);
+    applyNotesCollapsed();
     section.appendChild(title);
+
+    // tudo que vem depois do título (criar/filtrar/lista) mora dentro de
+    // ".notes-block-body" — é esse wrapper que ".collapsed" (CSS) esconde,
+    // deixando só o título+botão visíveis quando a divisória está
+    // recolhida.
+    var notesBody = document.createElement("div");
+    notesBody.className = "notes-block-body";
+    section.appendChild(notesBody);
 
     // linha de criação — "notes-text-input" ficou mais estreita/baixa (era
     // igual à barra de tags antes) pra sobrar espaço pra barra de filtros
@@ -2070,7 +2105,7 @@
     formRow.appendChild(textInput);
     formRow.appendChild(tagsInput);
     formRow.appendChild(addBtn);
-    section.appendChild(formRow);
+    notesBody.appendChild(formRow);
 
     // barra de filtros — texto (pesquisa no corpo da anotação), tag (lista
     // montada a partir das tags que já existem nas anotações carregadas) e
@@ -2132,7 +2167,7 @@
     filterRow.appendChild(statusSelect);
     filterRow.appendChild(flaggedSelect);
     filterRow.appendChild(sortSelect);
-    section.appendChild(filterRow);
+    notesBody.appendChild(filterRow);
 
     // aviso de erro (escondido por padrão) — criar/editar/apagar uma
     // anotação sem isso falhava CALADO quando a chamada ao Worker dava
@@ -2145,7 +2180,7 @@
     var errorMsg = document.createElement("p");
     errorMsg.className = "notes-error";
     errorMsg.style.display = "none";
-    section.appendChild(errorMsg);
+    notesBody.appendChild(errorMsg);
 
     function showNotesError(err) {
       errorMsg.textContent = "Não foi possível salvar: " + ((err && err.message) || "erro desconhecido") + ". Tente de novo.";
@@ -2157,7 +2192,7 @@
 
     var listWrap = document.createElement("div");
     listWrap.className = "notes-list";
-    section.appendChild(listWrap);
+    notesBody.appendChild(listWrap);
     container.appendChild(section);
 
     // guarda a última lista buscada no Worker — os 3 filtros acima mexem só
@@ -2523,6 +2558,148 @@
     sortSelect.addEventListener("change", applyFilters);
 
     loadNotes();
+  }
+
+  // "page.priorityMiniList" (pedido do Georges — Painel do Dia): versão
+  // ENXUTA da "Lista de Prioridades" (a tabela completa mora só na página
+  // "prioridades" própria, ver renderPrioritiesTable abaixo) — mostra só os
+  // itens pendentes cujo Prioridade está marcado nos "pills" de filtro
+  // (padrão: só "1 - Imediato" e "2 - Urgente", pedido literal do
+  // Georges), num grid de cards simples (mesmo ".content-plain" já usado
+  // por "Itens Prioritários"/dynamicQuery, ver buildItemEl). NUNCA cria/
+  // edita/apaga nada — só lê /priorities (GET) e navega pra página
+  // "prioridades" se o Georges quiser mexer de verdade. "Não precisa criar
+  // filtros de todas as colunas" (pedido literal) — só o pill de
+  // Prioridade, igual ele pediu.
+  function renderPriorityMiniBlock(container, page) {
+    var section = document.createElement("div");
+    section.className = "query-block priority-mini-block";
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    var titleText = document.createElement("span");
+    titleText.textContent = "🚩 Lista de Prioridades";
+    title.appendChild(titleText);
+
+    // atalho pra página própria (mesmo padrão de renderNotesBlock acima) —
+    // só aparece fora da própria página "prioridades", senão seria um link
+    // pra ela mesma.
+    if (currentId !== "prioridades") {
+      var miniTitleLinks = document.createElement("span");
+      miniTitleLinks.className = "query-title-links";
+      var miniTitleLink = document.createElement("a");
+      miniTitleLink.className = "query-title-link";
+      miniTitleLink.title = "Abrir Lista de Prioridades no app";
+      miniTitleLink.href = "#prioridades";
+      miniTitleLink.addEventListener("click", function (e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate("prioridades");
+      });
+      var miniTitleLinkIcon = document.createElement("i");
+      miniTitleLinkIcon.className = "ti ti-apps";
+      miniTitleLink.appendChild(miniTitleLinkIcon);
+      miniTitleLinks.appendChild(miniTitleLink);
+      title.appendChild(miniTitleLinks);
+    }
+
+    // botão de recolher/expandir (mesmo padrão ".query-collapse-btn" das
+    // demais divisórias de Início) — nasce EXPANDIDA (o Georges só pediu
+    // pra filtrar por padrão nos urgentes, não pra nascer recolhida — ele
+    // quer bater o olho nos urgentes assim que abre o Painel do Dia).
+    section.classList.add("query-block-collapsible");
+    var collapseBtn = document.createElement("button");
+    collapseBtn.type = "button";
+    collapseBtn.className = "query-collapse-btn";
+    collapseBtn.setAttribute("aria-label", "Recolher/expandir");
+    var collapseIcon = document.createElement("i");
+    collapseIcon.className = "ti ti-chevron-down";
+    collapseBtn.appendChild(collapseIcon);
+    collapseBtn.addEventListener("click", function () {
+      var willCollapse = !section.classList.contains("collapsed");
+      section.classList.toggle("collapsed", willCollapse);
+      collapseIcon.className = willCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
+    });
+    title.appendChild(collapseBtn);
+    section.appendChild(title);
+
+    var body = document.createElement("div");
+    body.className = "query-block-body";
+    section.appendChild(body);
+
+    // pills de Prioridade (multi-select, igual o padrão de filtro rápido já
+    // usado em outros lugares do app — ver ".financeiro-account-tag") —
+    // lista de opções vem da config estática da página "prioridades" de
+    // VERDADE (mesma usada na criação/coluna da tabela completa; "page"
+    // aqui é a página "inicio", que não tem "priorityFields" próprio, então
+    // busca direto em cfg.pages — não precisa da versão "ao vivo" da KV
+    // aqui, essa mini-lista é só leitura). Padrão: só os 2 primeiros níveis
+    // (mais urgentes) marcados.
+    var prioridadeOptions = (cfg.pages.prioridades && cfg.pages.prioridades.priorityFields &&
+      cfg.pages.prioridades.priorityFields.prioridade && cfg.pages.prioridades.priorityFields.prioridade.options) || [];
+    var activeLevels = {};
+    prioridadeOptions.slice(0, 2).forEach(function (opt) { activeLevels[opt] = true; });
+
+    var filterRow = document.createElement("div");
+    filterRow.className = "priority-mini-filters";
+    body.appendChild(filterRow);
+
+    var resultsWrap = document.createElement("div");
+    resultsWrap.className = "content-plain";
+    body.appendChild(resultsWrap);
+
+    var allItems = [];
+    var ownerPageId = currentId;
+
+    function renderResults() {
+      resultsWrap.innerHTML = "";
+      var filtered = allItems.filter(function (it) { return !it.done && activeLevels[it.prioridade]; });
+      if (!filtered.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nada por aqui — nenhum item pendente nas prioridades marcadas acima.";
+        resultsWrap.appendChild(empty);
+        return;
+      }
+      filtered.forEach(function (it) {
+        var sub = [{ text: it.prioridade || "Sem prioridade" }];
+        if (it.tipo) sub.push({ text: it.tipo });
+        resultsWrap.appendChild(buildItemEl({ label: it.assunto || "(sem assunto)", type: "page", target: "prioridades", sub: sub }, 100));
+      });
+    }
+
+    prioridadeOptions.forEach(function (opt) {
+      var pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "priority-mini-tag" + (activeLevels[opt] ? " active" : "");
+      pill.textContent = opt;
+      pill.addEventListener("click", function () {
+        if (activeLevels[opt]) delete activeLevels[opt];
+        else activeLevels[opt] = true;
+        pill.classList.toggle("active", !!activeLevels[opt]);
+        renderResults();
+      });
+      filterRow.appendChild(pill);
+    });
+
+    container.appendChild(section);
+
+    resultsWrap.innerHTML = '<p class="empty">Carregando…</p>';
+    authFetch(cfg.templateWorkerUrl + "/priorities")
+      .then(function (res) {
+        if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+        return res;
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (currentId !== ownerPageId) return;
+        allItems = data.priorities || [];
+        renderResults();
+      })
+      .catch(function () {
+        if (currentId !== ownerPageId) return;
+        resultsWrap.innerHTML = '<p class="empty">Não foi possível carregar a lista.</p>';
+      });
   }
 
   // "page.priorities" — tabela "Lista de Prioridades" (pedido do Georges):
@@ -4996,6 +5173,10 @@
     // ver o clique no "th" mais abaixo).
     var sortState = { key: "prioridade", dir: 1 };
 
+    // ---- Estado de recolher/expandir de cada divisória (Fixo/Diários/
+    // Todos os itens). Padrão pedido pelo Georges: todas abrem expandidas.
+    var collapsedGroups = { fixo: false, diarios: false, todos: false };
+
     // ---- "Editar opções" de cada coluna (pedido do Georges — diferente
     // dos botões de "Filtros rápidos" lá em cima, isso aqui edita a lista
     // de opções DE VERDADE de cada campo, a mesma usada nos <select>/
@@ -5286,6 +5467,16 @@
     var thCheck = document.createElement("th");
     thCheck.className = "priorities-th priorities-th-check";
     headRow.appendChild(thCheck);
+
+    // coluna "Fixo" (pedido do Georges — itens fixados no topo da lista,
+    // fora da divisória "Diários") — mesmo tratamento de thDiario abaixo
+    // (largura mínima, sem título de texto, só um ícone de referência no
+    // cabeçalho). Fica FORA de "columns" de propósito, igual thDiario.
+    var thFixo = document.createElement("th");
+    thFixo.className = "priorities-th priorities-th-fixo";
+    thFixo.title = "Fixo (mantém o item fixado no topo da lista)";
+    thFixo.innerHTML = '<i class="ti ti-star"></i>';
+    headRow.appendChild(thFixo);
 
     // coluna "Diário" (pedido do Georges — "coluna bem simples... só um
     // ícone, pra eu marcar e selecionar quais são os itens diários que
@@ -5602,10 +5793,10 @@
       renderList(sortItems(filtered));
     }
 
-      // "+4" (não mais "+3") — toggle/check/actions de sempre MAIS a nova
-      // coluna "Diário" (thDiario acima), nenhuma das 4 faz parte de
-      // "columns".
-      var EXTRA_COLS = 4;
+      // "+5" (não mais "+4") — toggle/check/actions de sempre MAIS as novas
+      // colunas "Fixo" (thFixo) e "Diário" (thDiario acima), nenhuma das 5
+      // faz parte de "columns".
+      var EXTRA_COLS = 5;
 
     function renderList(items) {
       tbody.innerHTML = "";
@@ -5620,23 +5811,35 @@
         return;
       }
 
-      // "Diário" fixado no topo (pedido do Georges — "permitir que eu fixe
-      // no topo da lista os itens diários... separar os itens diários numa
-      // divisória dentro da tabela"): só insere as 2 linhas separadoras
-      // quando REALMENTE há uma mistura dos 2 grupos no resultado atual
-      // (senão vira ruído sem sentido — ex: o próprio filtro "Diário: Só
-      // diários" já deixaria só um grupo). Preserva a ordenação normal
+      // 3 divisórias (pedido do Georges — "FIXO"/"DIÁRIOS"/"TODOS OS
+      // ITENS", cada uma com botão de expandir/recolher, por padrão todas
+      // expandidas): "Fixo" = fixado no topo mas NÃO diário (o próprio
+      // Georges pediu "alguns itens que não são DIÁRIOS, mas quero deixar
+      // fixos"); "Diários" continua igual de antes; "Todos os itens" é o
+      // resto (nem fixo nem diário) — mesma convenção de nome já usada
+      // (não é "todos" no sentido literal, é "os itens que sobraram", pra
+      // não repetir os já mostrados em cima). Preserva a ordenação normal
       // (sortItems, já aplicada em "items") DENTRO de cada grupo — filter()
-      // mantém a ordem relativa. "renderItems" troca items.forEach lá
-      // embaixo; o resto do bloco (toda a lógica de linha/subitens/nota)
-      // continua exatamente igual, só ganha o "if (it.__groupHeader)" logo
-      // no início pra desviar pras 2 linhas de separador.
-      var diarios = items.filter(function (it) { return it.diario; });
-      var rest = items.filter(function (it) { return !it.diario; });
+      // mantém a ordem relativa. Só mostra os cabeçalhos quando há mais de
+      // 1 grupo não-vazio no resultado atual (senão vira ruído sem sentido
+      // — ex: o próprio filtro "Diário: Só diários" já deixaria só um
+      // grupo, fica uma lista plana igual antes). "collapsedGroups"
+      // (estado declarado lá em cima, junto com sortState) guarda recolher/
+      // expandir POR grupo — clicar no cabeçalho ou na setinha alterna e
+      // chama applyFilters() de novo pra redesenhar.
+      var groupDefs = [
+        { key: "fixo", label: "⭐ Fixo", items: items.filter(function (it) { return it.fixo && !it.diario; }) },
+        { key: "diarios", label: "📌 Diários", items: items.filter(function (it) { return it.diario; }) },
+        { key: "todos", label: "Todos os itens", items: items.filter(function (it) { return !it.fixo && !it.diario; }) },
+      ];
+      var nonEmptyGroups = groupDefs.filter(function (g) { return g.items.length; });
       var renderItems = items;
-      if (diarios.length && rest.length) {
-        renderItems = [{ __groupHeader: "📌 Diários" }]
-          .concat(diarios, [{ __groupHeader: "Todos os itens" }], rest);
+      if (nonEmptyGroups.length > 1) {
+        renderItems = [];
+        nonEmptyGroups.forEach(function (g) {
+          renderItems.push({ __groupHeader: g.label, __groupKey: g.key, __groupCount: g.items.length });
+          if (!collapsedGroups[g.key]) renderItems = renderItems.concat(g.items);
+        });
       }
 
       renderItems.forEach(function (it) {
@@ -5645,7 +5848,28 @@
           groupRow.className = "priorities-group-header-row";
           var groupCell = document.createElement("td");
           groupCell.colSpan = columns.length + EXTRA_COLS;
-          groupCell.textContent = it.__groupHeader;
+          var groupKey = it.__groupKey;
+          var isCollapsed = !!collapsedGroups[groupKey];
+          var groupToggle = document.createElement("button");
+          groupToggle.type = "button";
+          groupToggle.className = "query-collapse-btn priorities-group-collapse-btn";
+          groupToggle.setAttribute("aria-label", "Recolher/expandir " + it.__groupHeader);
+          var groupIcon = document.createElement("i");
+          groupIcon.className = isCollapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
+          groupToggle.appendChild(groupIcon);
+          groupToggle.addEventListener("click", function () {
+            collapsedGroups[groupKey] = !collapsedGroups[groupKey];
+            applyFilters();
+          });
+          groupCell.appendChild(groupToggle);
+          var groupLabel = document.createElement("span");
+          groupLabel.className = "priorities-group-header-label";
+          groupLabel.textContent = it.__groupHeader + " (" + it.__groupCount + ")";
+          groupLabel.addEventListener("click", function () {
+            collapsedGroups[groupKey] = !collapsedGroups[groupKey];
+            applyFilters();
+          });
+          groupCell.appendChild(groupLabel);
           groupRow.appendChild(groupCell);
           tbody.appendChild(groupRow);
           return;
@@ -5689,6 +5913,23 @@
         check.addEventListener("change", function () { updateItem(it.id, { done: check.checked }); });
         checkCell.appendChild(check);
         row.appendChild(checkCell);
+
+        // coluna "Fixo" (pedido do Georges — itens que não são Diários mas
+        // ele quer deixar fixados no topo da lista, numa divisória própria
+        // "FIXO"). Mesmíssimo padrão da coluna Diário logo abaixo, só troca
+        // o ícone (estrela em vez de pin) e o campo salvo.
+        var fixoCell = document.createElement("td");
+        fixoCell.className = "priorities-fixo-cell";
+        var fixoBtn = document.createElement("button");
+        fixoBtn.type = "button";
+        fixoBtn.className = "priorities-fixo-btn" + (it.fixo ? " active" : "");
+        fixoBtn.title = it.fixo ? "Remover de Fixo" : "Marcar como Fixo (fixa no topo da lista)";
+        var fixoSvg = makeStarSvg();
+        fixoSvg.classList.add("priorities-fixo-icon-svg");
+        fixoBtn.appendChild(fixoSvg);
+        fixoBtn.addEventListener("click", function () { updateItem(it.id, { fixo: !it.fixo }); });
+        fixoCell.appendChild(fixoBtn);
+        row.appendChild(fixoCell);
 
         // "Diário" (pedido do Georges — "coluna bem simples... só um
         // ícone, pra eu marcar e selecionar quais são os itens diários que
@@ -6489,6 +6730,19 @@
     return { notionPaid: notionPaid, manuallyPaid: manuallyPaid, isPaid: isPaid, paidDateStr: paidDateStr };
   }
 
+  // "Valor Pago" (Notion) vence quando a própria conta já veio marcada como
+  // paga PELO NOTION (pedido do Georges) — "Valor a pagar" só é o valor
+  // certo enquanto a conta ainda está em aberto; depois de paga, o valor
+  // real pode ter sido outro (juros, multa, pagamento parcial etc.), e
+  // quem sabe disso é só o "Valor Pago" que a automação do Georges grava.
+  // O override "pago manualmente" (KV, sem confirmação do Notion ainda)
+  // NÃO tem um "valor pago" próprio — nesse caso continua mostrando "Valor
+  // a pagar" mesmo, é só uma sinalização provisória do Georges.
+  function financeiroDisplayValue(it, info) {
+    if (info.notionPaid && typeof it.valorPago === "number") return it.valorPago;
+    return it.valorAPagar;
+  }
+
   function renderFinanceiroContasMensais(container, page, monthOverride, activeAccountsOverride) {
     var month = monthOverride || financeiroCurrentMonth();
     var isCurrentMonth = month === financeiroCurrentMonth();
@@ -6653,9 +6907,11 @@
       var items = contasData.items || [];
       var total = 0, paid = 0;
       items.forEach(function (it) {
-        var v = typeof it.valorAPagar === "number" ? it.valorAPagar : 0;
+        var info = financeiroPaidInfo(it, overrides);
+        var raw = financeiroDisplayValue(it, info);
+        var v = typeof raw === "number" ? raw : 0;
         total += v;
-        if (financeiroPaidInfo(it, overrides).isPaid) paid += v;
+        if (info.isPaid) paid += v;
       });
       totalValueEl.textContent = financeiroFormatBRL(total);
       paidValueEl.textContent = financeiroFormatBRL(paid);
@@ -6728,7 +6984,10 @@
   function financeiroSortValue(it, key, overrides) {
     if (key === "conta") return (it.accountLabel || "").toLowerCase();
     if (key === "vencimento") return (it.vencimento && it.vencimento.start) || "";
-    if (key === "valor") return typeof it.valorAPagar === "number" ? it.valorAPagar : -Infinity;
+    if (key === "valor") {
+      var raw = financeiroDisplayValue(it, financeiroPaidInfo(it, overrides));
+      return typeof raw === "number" ? raw : -Infinity;
+    }
     if (key === "status") return financeiroPaidInfo(it, overrides).isPaid ? 1 : 0;
     return "";
   }
@@ -6769,20 +7028,36 @@
 
     items = financeiroSortItems(items, sortState, overrides);
 
+    // "todas as competências" (accountKeys ativo) — o Worker devolve
+    // "month: null" nesse modo (ver handleFinanceiroContasGet); só nesse
+    // modo a coluna "Forma de Pagamento" aparece (pedido do Georges —
+    // "quando exibir todas as competências... traga também a Forma de
+    // Pagamento"). "Competência" (pedido do Georges) aparece nos DOIS
+    // modos.
+    var allCompetencias = !contasData.month;
+
     var table = document.createElement("table");
     table.className = "financeiro-table";
 
     // "sortKey" (opcional) — só as 4 colunas que o Georges pediu pra
-    // classificar (Conta/Vencimento/Valor a pagar/Status); Código de
-    // barras e Ação ficam de fora (não fazem sentido ordenadas).
+    // classificar (Conta/Vencimento/Valor/Status); Competência, Forma de
+    // Pagamento, Código de barras e Ação ficam de fora (não fazem sentido
+    // ordenadas).
     var COLS = [
       { label: "Conta", cls: "financeiro-th-conta", sortKey: "conta" },
       { label: "Vencimento", cls: "financeiro-th-vencimento", sortKey: "vencimento" },
-      { label: "Valor a pagar", cls: "financeiro-th-valor", sortKey: "valor" },
-      { label: "Código de barras", cls: "financeiro-th-cod" },
-      { label: "Status", cls: "financeiro-th-status", sortKey: "status" },
-      { label: "", cls: "financeiro-th-acao" },
+      { label: "Competência", cls: "financeiro-th-competencia" },
+      // "Valor" (não mais só "Valor a pagar") — essa coluna agora mostra o
+      // Valor Pago (Notion) quando a conta já foi confirmada como paga, ou
+      // o Valor a pagar enquanto ainda está em aberto (financeiroDisplayValue).
+      { label: "Valor", cls: "financeiro-th-valor", sortKey: "valor" },
     ];
+    if (allCompetencias) {
+      COLS.push({ label: "Forma de Pagamento", cls: "financeiro-th-forma" });
+    }
+    COLS.push({ label: "Código de barras", cls: "financeiro-th-cod" });
+    COLS.push({ label: "Status", cls: "financeiro-th-status", sortKey: "status" });
+    COLS.push({ label: "", cls: "financeiro-th-acao" });
     var thead = document.createElement("thead");
     var headRow = document.createElement("tr");
     COLS.forEach(function (col) {
@@ -6819,11 +7094,59 @@
 
     var tbody = document.createElement("tbody");
 
+    // célula "—" simples, reaproveitada pelas linhas "não encontrada"
+    // abaixo (conta mapeada, mas sem nenhuma página no Notion nesse mês —
+    // ver missing/missingReason no worker.js).
+    function dashCell(cls) {
+      var td = document.createElement("td");
+      td.className = cls;
+      td.textContent = "—";
+      return td;
+    }
+
     items.forEach(function (it) {
+      var row = document.createElement("tr");
+
+      // "conta mapeada, mas sem página no Notion nesse mês" (pedido do
+      // Georges — "não posso ser induzido a erro... e esquecer dessa
+      // conta"): linha sempre visível, só com o nome da conta e um aviso —
+      // sem valor/código/competência/forma (dados que a gente não tem),
+      // sem botão de marcar como pago (não existe pageId pra vincular o
+      // override na KV).
+      if (it.missing) {
+        row.className = "financeiro-row is-missing";
+
+        var contaCellM = document.createElement("td");
+        contaCellM.className = "financeiro-conta-cell";
+        contaCellM.textContent = it.accountLabel;
+        row.appendChild(contaCellM);
+
+        row.appendChild(dashCell("financeiro-venc-cell"));
+        row.appendChild(dashCell("financeiro-competencia-cell"));
+        row.appendChild(dashCell("financeiro-valor-cell"));
+        if (allCompetencias) row.appendChild(dashCell("financeiro-forma-cell"));
+        row.appendChild(dashCell("financeiro-cod-cell"));
+
+        var statusCellM = document.createElement("td");
+        statusCellM.className = "financeiro-status-cell";
+        var tagM = document.createElement("span");
+        tagM.className = "financeiro-tag financeiro-tag-missing";
+        tagM.textContent = it.missingReason === "error" ? "Erro ao consultar" : "Não encontrada no Notion";
+        tagM.title = it.missingReason === "error"
+          ? "A consulta a essa base falhou — veja o aviso no topo da tabela."
+          : "Nenhuma página encontrada nessa base pra esse mês. Confirme se a automação já processou a fatura.";
+        statusCellM.appendChild(tagM);
+        row.appendChild(statusCellM);
+
+        row.appendChild(dashCell("financeiro-action-cell"));
+
+        tbody.appendChild(row);
+        return;
+      }
+
       var info = financeiroPaidInfo(it, overrides);
       var notionPaid = info.notionPaid, manuallyPaid = info.manuallyPaid, isPaid = info.isPaid, paidDateStr = info.paidDateStr;
 
-      var row = document.createElement("tr");
       row.className = "financeiro-row" + (isPaid ? " is-paid" : " is-pending");
 
       var contaCell = document.createElement("td");
@@ -6836,10 +7159,22 @@
       vencCell.textContent = financeiroFormatDate(it.vencimento && it.vencimento.start);
       row.appendChild(vencCell);
 
+      var compCell = document.createElement("td");
+      compCell.className = "financeiro-competencia-cell";
+      compCell.textContent = it.competencia || "—";
+      row.appendChild(compCell);
+
       var valorCell = document.createElement("td");
       valorCell.className = "financeiro-valor-cell";
-      valorCell.textContent = financeiroFormatBRL(it.valorAPagar);
+      valorCell.textContent = financeiroFormatBRL(financeiroDisplayValue(it, info));
       row.appendChild(valorCell);
+
+      if (allCompetencias) {
+        var formaCell = document.createElement("td");
+        formaCell.className = "financeiro-forma-cell";
+        formaCell.textContent = (it.formaPagamento && it.formaPagamento.name) || "—";
+        row.appendChild(formaCell);
+      }
 
       var codCell = document.createElement("td");
       codCell.className = "financeiro-cod-cell";
@@ -7085,7 +7420,7 @@
       var info = financeiroPaidInfo(it, overrides);
       var sub = [
         { text: financeiroFormatDate(it.vencimento.start) },
-        { text: financeiroFormatBRL(it.valorAPagar) },
+        { text: financeiroFormatBRL(financeiroDisplayValue(it, info)) },
         { text: info.isPaid ? "Pago" : "Pendente", color: info.isPaid ? "#2f9e44" : "#b9770e" },
       ];
       itemsWrap.appendChild(buildItemEl({ label: it.accountLabel, type: "notion", url: it.url, sub: sub }, 100 + idx));
@@ -7116,7 +7451,7 @@
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
     var hasTabs = !!(page.tabs && page.tabs.length);
 
-    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorities && !page.financeiroContasMensais) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -7323,6 +7658,22 @@
         container.appendChild(dividerNotes);
       }
       renderNotesBlock(container);
+      renderedSomething = true;
+    }
+
+    // "page.priorityMiniList" (opcional, pedido do Georges — Painel do
+    // Dia) — versão enxuta da Lista de Prioridades (só urgentes por
+    // padrão, com pills de filtro), ver renderPriorityMiniBlock. Mesma
+    // posição de "page.notes" acima (perto do fim da página, antes da
+    // tabela completa de "page.priorities" — que só existe na página
+    // "prioridades" de verdade, nunca junto com esta).
+    if (page.priorityMiniList) {
+      if (renderedSomething) {
+        var dividerPriorityMini = document.createElement("hr");
+        dividerPriorityMini.className = "content-divider";
+        container.appendChild(dividerPriorityMini);
+      }
+      renderPriorityMiniBlock(container, page);
       renderedSomething = true;
     }
 

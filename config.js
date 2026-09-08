@@ -938,7 +938,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-08 00:48",
+  appVersion: "2026-09-08 13:18",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1533,7 +1533,13 @@ const APP_CONFIG = {
       // Bloco de anotações rápidas/lista de tarefas (texto livre + tags),
       // guardado à parte no Cloudflare KV via Worker — nunca no Notion. Ver
       // renderNotesBlock no app.js e as rotas /notes no worker.js.
-      notes: true
+      notes: true,
+      // Mini-lista "🚩 Lista de Prioridades" (pedido do Georges — Painel do
+      // Dia): versão enxuta, só urgentes por padrão, com pills de filtro.
+      // Mesmo KV/rotas /priorities de sempre — só leitura aqui, a tabela
+      // completa continua na página "prioridades" própria. Ver
+      // renderPriorityMiniBlock no app.js.
+      priorityMiniList: true
     },
 
     // Página própria pra Anotações Rápidas (pedido do Georges): mesmo bloco

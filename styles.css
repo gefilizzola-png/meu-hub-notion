@@ -1183,6 +1183,12 @@ html, body {
   border-radius: 10px;
   padding: 12px 14px 14px;
 }
+/* recolher/expandir (pedido do Georges — "sempre exibir a divisória
+   'Anotações rápidas' recolhida como padrão" dentro do Painel do Dia) —
+   mesma ideia de ".query-block.collapsed .query-block-body", só que o
+   bloco de notas não usa a classe "query-block" (tem visual próprio,
+   ".notes-block-accent"), então ganha a própria regra aqui. */
+.notes-block.collapsed .notes-block-body { display: none; }
 .notes-form-row {
   display: flex;
   gap: 8px;
@@ -1698,8 +1704,10 @@ html, body {
 }
 .priorities-th-toggle,
 .priorities-th-check,
+.priorities-th-fixo,
 .priorities-th-diario,
 .priorities-th-actions { width: 1%; }
+.priorities-th-fixo,
 .priorities-th-diario { text-align: center; color: #b9b9b3; }
 /* colunas clicáveis pra classificar — cursor de ponteiro + destaque leve
    no hover avisam que dá pra clicar; ".active" (coluna que está
@@ -1781,14 +1789,43 @@ html, body {
   opacity: 1;
 }
 .priorities-daily-btn.active .priorities-daily-icon-svg { fill: currentColor; }
-/* linha separadora entre o grupo "📌 Diários" e "Todos os itens" (pedido
-   do Georges — "separar os itens diários numa divisória dentro da
-   tabela"), só aparece quando os 2 grupos coexistem no resultado atual
-   (ver renderList no app.js). Texto pequeno, maiúsculo, fundo levemente
-   diferente da linha normal — dá pra bater o olho sem competir com o
-   conteúdo de verdade das linhas de item. */
+/* "Fixo" (pedido do Georges — itens que não são Diários mas ele quer
+   deixar fixados no topo da lista, numa divisória própria "FIXO"). Mesma
+   família visual de ".priorities-daily-btn" acima, só troca a cor de
+   destaque (roxo em vez de laranja) pra diferenciar rapidinho as 2
+   colunas de relance. */
+.priorities-fixo-cell { padding: 0 4px !important; text-align: center; white-space: nowrap; }
+.priorities-fixo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 6px;
+  color: #55554f;
+  opacity: 0.35;
+}
+.priorities-fixo-btn:hover { background: #eeeee9; opacity: 0.7; }
+.priorities-fixo-icon-svg { fill: none; stroke: currentColor; stroke-width: 1.6; }
+.priorities-fixo-btn.active {
+  color: #8b5cf6;
+  opacity: 1;
+}
+.priorities-fixo-btn.active .priorities-fixo-icon-svg { fill: currentColor; }
+/* linha separadora entre as 3 divisórias "⭐ Fixo" / "📌 Diários" / "Todos
+   os itens" (pedido do Georges — "separar os itens diários numa divisória
+   dentro da tabela", estendido agora pra Fixo também), só aparece quando
+   mais de 1 grupo coexiste no resultado atual (ver renderList no app.js).
+   Texto pequeno, maiúsculo, fundo levemente diferente da linha normal —
+   dá pra bater o olho sem competir com o conteúdo de verdade das linhas
+   de item. Agora é CLICÁVEL (botão de seta + o próprio nome) pra recolher/
+   expandir aquele grupo — cursor de ponteiro + hover leve avisam. */
 .priorities-group-header-row td {
-  padding: 6px 10px !important;
+  padding: 4px 10px !important;
   font-size: 11px;
   font-weight: 700;
   color: #8a8a84;
@@ -1796,7 +1833,14 @@ html, body {
   letter-spacing: 0.04em;
   background: #f4f1ea;
   border-bottom: 0.5px solid #e4e0d6 !important;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
+.priorities-group-collapse-btn { width: 18px; height: 18px; }
+.priorities-group-collapse-btn .ti { font-size: 13px; }
+.priorities-group-header-label { cursor: pointer; }
+.priorities-group-header-label:hover { color: #57534e; }
 /* linha da checklist — sem borda própria (fica "colada" na linha do item
    acima dela); só existe visualmente quando tem sub-itens ou o campo de
    adicionar está aberto (".notes-subitems" vazio não ocupa espaço). */
@@ -2961,6 +3005,35 @@ html, body {
   border-color: #0f9b8e;
   color: #fff;
 }
+/* pills de Prioridade da mini-lista "🚩 Lista de Prioridades" (Painel do
+   Dia, page.priorityMiniList — ver renderPriorityMiniBlock no app.js) —
+   mesmíssimo padrão visual de ".financeiro-account-tag" acima (mesma
+   ideia de filtro rápido multi-select em formato de pílula), só muda a
+   cor de destaque quando ativa (âmbar/Focus, pra combinar com a
+   estrela/ícone 🚩 do título em vez do verde do Financeiro). */
+.priority-mini-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.priority-mini-tag {
+  border: 0.5px solid #e2e0da;
+  background: #fff;
+  color: #55554f;
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.priority-mini-tag:hover { background: #f7f6f2; }
+.priority-mini-tag.active {
+  background: #f08c00;
+  border-color: #f08c00;
+  color: #fff;
+}
 /* aviso "todas as competências de: X, Y" quando 1+ tags de conta estão
    ativas — substitui a navegação de mês + totais (não fazem sentido nesse
    modo, já que os itens vêm de vários meses/anos ao mesmo tempo). */
@@ -3093,10 +3166,14 @@ html, body {
    "Conta" (sem largura fixa, cresce livre) — mesmo padrão consistente em
    toda linha da tabela. */
 .financeiro-th-vencimento,
+.financeiro-th-competencia,
+.financeiro-th-forma,
 .financeiro-th-status,
 .financeiro-th-acao { width: 1%; }
 .financeiro-th-valor { width: 1%; text-align: right; }
 .financeiro-th-cod { width: 260px; }
+.financeiro-competencia-cell,
+.financeiro-forma-cell { white-space: nowrap; }
 /* cabeçalho clicável (pedido do Georges — classificar por Conta/
    Vencimento/Valor a pagar/Status, padrão Vencimento) — mesmo padrão
    visual/comportamento de ".priorities-th-sortable" na tabela de
@@ -3163,6 +3240,21 @@ html, body {
 }
 .financeiro-tag-paid { background: #e6f4ea; color: #2f9e44; }
 .financeiro-tag-pending { background: #fdf1e2; color: #b9770e; }
+/* linha "conta mapeada, mas sem página no Notion nesse mês" (pedido do
+   Georges — nunca deixar uma conta sumir da tabela por causa da
+   automação falhar/atrasar). Levemente esmaecida (não é dado real, só um
+   "lembrete") + tag vermelha de alerta, bem diferente do laranja
+   "Pendente" de sempre — precisa chamar mais atenção que uma conta comum
+   ainda em aberto. */
+.financeiro-row.is-missing { background: #fdf4f2; }
+.financeiro-row.is-missing .financeiro-conta-cell { font-weight: 600; color: #55554f; }
+.financeiro-row.is-missing .financeiro-venc-cell,
+.financeiro-row.is-missing .financeiro-competencia-cell,
+.financeiro-row.is-missing .financeiro-valor-cell,
+.financeiro-row.is-missing .financeiro-forma-cell,
+.financeiro-row.is-missing .financeiro-cod-cell,
+.financeiro-row.is-missing .financeiro-action-cell { color: #b9b9b3; }
+.financeiro-tag-missing { background: #fbe3df; color: #c0392b; }
 .financeiro-action-cell { white-space: nowrap; }
 .financeiro-action-info {
   font-size: 11.5px;
