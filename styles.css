@@ -2935,11 +2935,55 @@ html, body {
 
 /* ---------------- Financeiro -> Contas Mensais ---------------- */
 .financeiro-wrap { display: flex; flex-direction: column; gap: 12px; }
+/* linha do topo (pedido do Georges: totais "ao lado do nome do mês e dos
+   botões para mudar de mês") — nav à esquerda, os 3 totais à direita;
+   quebra pra 2 linhas sozinha em telas estreitas (flex-wrap). */
+.financeiro-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .financeiro-month-nav {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+.financeiro-summary {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.financeiro-summary-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 0.5px solid #eeede9;
+  background: #fff;
+  min-width: 110px;
+}
+.financeiro-summary-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #928f86;
+}
+.financeiro-summary-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #3a3a35;
+}
+.financeiro-summary-paid { border-color: #cfe4c8; background: #f3faf1; }
+.financeiro-summary-paid .financeiro-summary-value { color: #2f9e44; }
+.financeiro-summary-pending { border-color: #f0dcb0; background: #fdf1e2; }
+.financeiro-summary-pending .financeiro-summary-value { color: #b9770e; }
 .financeiro-month-btn {
   width: 30px;
   height: 30px;
@@ -3005,6 +3049,20 @@ html, body {
   color: #55554f;
   white-space: nowrap;
 }
+/* Larguras explícitas por coluna — sem isso o navegador distribui o
+   espaço sobrando de forma desigual entre as colunas de conteúdo curto
+   (Vencimento/Valor/Status/Ação), deixando a tabela com "buracos" e
+   colunas fora de prumo entre uma linha e outra (reportado pelo
+   Georges). "width: 1%" nas colunas de conteúdo curto/fixo faz elas
+   encolherem pro tamanho do próprio conteúdo (mesmo truque já usado em
+   ".priorities-th-toggle" etc.), sobrando toda a largura extra pra
+   "Conta" (sem largura fixa, cresce livre) — mesmo padrão consistente em
+   toda linha da tabela. */
+.financeiro-th-vencimento,
+.financeiro-th-status,
+.financeiro-th-acao { width: 1%; }
+.financeiro-th-valor { width: 1%; text-align: right; }
+.financeiro-th-cod { width: 260px; }
 .financeiro-row td {
   padding: 9px 10px;
   border-bottom: 0.5px solid #f0efe9;
@@ -3015,15 +3073,19 @@ html, body {
 .financeiro-row:last-child td { border-bottom: none; }
 .financeiro-row.is-paid { background: #fafdf9; }
 .financeiro-conta-cell { font-weight: 600; }
+.financeiro-venc-cell,
+.financeiro-status-cell { white-space: nowrap; }
 .financeiro-valor-cell {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: right;
 }
 .financeiro-cod-cell {
   display: flex;
   align-items: center;
   gap: 6px;
-  max-width: 220px;
+  width: 260px;
+  max-width: 260px;
 }
 .financeiro-cod-text {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;

@@ -6449,12 +6449,52 @@
     });
   }
 
+  function financeiroTodaySP() {
+    var parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date());
+    var map = {};
+    parts.forEach(function (p) { map[p.type] = p.value; });
+    return map.year + "-" + map.month + "-" + map.day;
+  }
+
+  function financeiroAddDays(dateStr, delta) {
+    var parts = dateStr.split("-").map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // Junta, num só lugar, a mesma lógica de "quem manda" que decide se uma
+  // conta está paga — usada tanto na tabela de Contas Mensais quanto nos
+  // totais do topo e no bloco "Financeiro" de Início, pra nunca divergir
+  // entre os três. Notion (campo "Pagamento" preenchido, vindo da
+  // automação do Georges) sempre prevalece sobre o override manual da KV;
+  // o override só é considerado enquanto "Pagamento" ainda está vazio lá.
+  function financeiroPaidInfo(it, overrides) {
+    var override = overrides[it.id];
+    var notionPaid = !!(it.pagamento && it.pagamento.start);
+    var manuallyPaid = !notionPaid && !!(override && override.paid);
+    var isPaid = notionPaid || manuallyPaid;
+    var paidDateStr = notionPaid ? it.pagamento.start : (manuallyPaid && override.paidAt ? override.paidAt.slice(0, 10) : null);
+    return { notionPaid: notionPaid, manuallyPaid: manuallyPaid, isPaid: isPaid, paidDateStr: paidDateStr };
+  }
+
   function renderFinanceiroContasMensais(container, page, monthOverride) {
     var month = monthOverride || financeiroCurrentMonth();
     var isCurrentMonth = month === financeiroCurrentMonth();
 
     var wrap = document.createElement("div");
     wrap.className = "financeiro-wrap";
+
+    // "topRow" junta a navegação de mês (esquerda) com os 3 totais
+    // (direita, pedido do Georges: "faça no topo... três labels com o
+    // valor total das contas do mês, o total já pago e o total
+    // pendente") — os totais nascem em "…" e só ganham o valor real
+    // depois que a busca volta (não dá pra calcular antes de ter os
+    // itens), ver dentro do Promise.all abaixo.
+    var topRow = document.createElement("div");
+    topRow.className = "financeiro-top-row";
 
     var nav = document.createElement("div");
     nav.className = "financeiro-month-nav";
@@ -6498,7 +6538,30 @@
       nav.appendChild(todayBtn);
     }
 
-    wrap.appendChild(nav);
+    topRow.appendChild(nav);
+
+    var summary = document.createElement("div");
+    summary.className = "financeiro-summary";
+    function makeSummaryPill(kind, label) {
+      var pill = document.createElement("div");
+      pill.className = "financeiro-summary-pill financeiro-summary-" + kind;
+      var pillLabel = document.createElement("span");
+      pillLabel.className = "financeiro-summary-label";
+      pillLabel.textContent = label;
+      var pillValue = document.createElement("span");
+      pillValue.className = "financeiro-summary-value";
+      pillValue.textContent = "…";
+      pill.appendChild(pillLabel);
+      pill.appendChild(pillValue);
+      summary.appendChild(pill);
+      return pillValue;
+    }
+    var totalValueEl = makeSummaryPill("total", "Total do mês");
+    var paidValueEl = makeSummaryPill("paid", "Pago");
+    var pendingValueEl = makeSummaryPill("pending", "Pendente");
+    topRow.appendChild(summary);
+
+    wrap.appendChild(topRow);
 
     var body = document.createElement("div");
     body.className = "financeiro-body";
@@ -6509,12 +6572,29 @@
     wrap.appendChild(body);
     container.appendChild(wrap);
 
+    function updateSummary(contasData, overrides) {
+      var items = contasData.items || [];
+      var total = 0, paid = 0;
+      items.forEach(function (it) {
+        var v = typeof it.valorAPagar === "number" ? it.valorAPagar : 0;
+        total += v;
+        if (financeiroPaidInfo(it, overrides).isPaid) paid += v;
+      });
+      totalValueEl.textContent = financeiroFormatBRL(total);
+      paidValueEl.textContent = financeiroFormatBRL(paid);
+      pendingValueEl.textContent = financeiroFormatBRL(total - paid);
+    }
+
     Promise.all([
       authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }),
       authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }),
     ]).then(function (results) {
+      var contasData = results[0] || {};
+      var paidData = results[1] || {};
+      var overrides = (paidData && paidData.overrides) || {};
       body.innerHTML = "";
-      renderFinanceiroBody(body, page, month, results[0] || {}, results[1] || {});
+      updateSummary(contasData, overrides);
+      renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary);
     }).catch(function (e) {
       body.innerHTML = "";
       var err = document.createElement("p");
@@ -6524,7 +6604,7 @@
     });
   }
 
-  function renderFinanceiroBody(body, page, month, contasData, paidData) {
+  function renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary) {
     var items = contasData.items || [];
     var errors = contasData.errors || [];
     var overrides = (paidData && paidData.overrides) || {};
@@ -6547,12 +6627,20 @@
     var table = document.createElement("table");
     table.className = "financeiro-table";
 
+    var COLS = [
+      { label: "Conta", cls: "financeiro-th-conta" },
+      { label: "Vencimento", cls: "financeiro-th-vencimento" },
+      { label: "Valor a pagar", cls: "financeiro-th-valor" },
+      { label: "Código de barras", cls: "financeiro-th-cod" },
+      { label: "Status", cls: "financeiro-th-status" },
+      { label: "", cls: "financeiro-th-acao" },
+    ];
     var thead = document.createElement("thead");
     var headRow = document.createElement("tr");
-    ["Conta", "Vencimento", "Valor a pagar", "Código de barras", "Status", ""].forEach(function (label) {
+    COLS.forEach(function (col) {
       var th = document.createElement("th");
-      th.className = "financeiro-th";
-      th.textContent = label;
+      th.className = "financeiro-th " + col.cls;
+      th.textContent = col.label;
       headRow.appendChild(th);
     });
     thead.appendChild(headRow);
@@ -6561,11 +6649,8 @@
     var tbody = document.createElement("tbody");
 
     items.forEach(function (it) {
-      var override = overrides[it.id];
-      var notionPaid = !!(it.pagamento && it.pagamento.start);
-      var manuallyPaid = !notionPaid && !!(override && override.paid);
-      var isPaid = notionPaid || manuallyPaid;
-      var paidDateStr = notionPaid ? it.pagamento.start : (manuallyPaid && override.paidAt ? override.paidAt.slice(0, 10) : null);
+      var info = financeiroPaidInfo(it, overrides);
+      var notionPaid = info.notionPaid, manuallyPaid = info.manuallyPaid, isPaid = info.isPaid, paidDateStr = info.paidDateStr;
 
       var row = document.createElement("tr");
       row.className = "financeiro-row" + (isPaid ? " is-paid" : " is-pending");
@@ -6576,6 +6661,7 @@
       row.appendChild(contaCell);
 
       var vencCell = document.createElement("td");
+      vencCell.className = "financeiro-venc-cell";
       vencCell.textContent = financeiroFormatDate(it.vencimento && it.vencimento.start);
       row.appendChild(vencCell);
 
@@ -6611,6 +6697,7 @@
       row.appendChild(codCell);
 
       var statusCell = document.createElement("td");
+      statusCell.className = "financeiro-status-cell";
       var tag = document.createElement("span");
       tag.className = "financeiro-tag " + (isPaid ? "financeiro-tag-paid" : "financeiro-tag-pending");
       tag.textContent = isPaid ? ("Pago" + (paidDateStr ? " em " + financeiroFormatDate(paidDateStr) : "")) : "Pendente";
@@ -6639,7 +6726,9 @@
           }).then(function (r) { return r.json(); }).then(function () {
             body.innerHTML = "";
             authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }).then(function (freshPaid) {
-              renderFinanceiroBody(body, page, month, contasData, freshPaid || {});
+              var freshOverrides = (freshPaid && freshPaid.overrides) || {};
+              if (updateSummary) updateSummary(contasData, freshOverrides);
+              renderFinanceiroBody(body, page, month, contasData, freshPaid || {}, updateSummary);
             });
           }).catch(function (e) {
             actionBtn.disabled = false;
@@ -6655,6 +6744,155 @@
 
     table.appendChild(tbody);
     body.appendChild(table);
+  }
+
+  // ---------------- Financeiro: atalho "vence em breve" (Início) ----------------
+  // "page.financeiroDueSoon" (opcional, só em Início) — mini-divisória
+  // "Financeiro" com cards (mesmo visual dos cards que abrem uma página do
+  // Notion — ver buildItemEl) das contas com vencimento entre hoje e os
+  // próximos 7 dias, agrupadas em "Hoje" / "Amanhã" / "Próximos 7 dias".
+  // Cada card abre a própria página da conta no Notion (item.type
+  // "notion" + item.url), igual qualquer outro card de página do Notion
+  // no app. Só leitura (GET /financeiro-contas + GET /financeiro-paid,
+  // podendo ser 2 meses quando a janela de 7 dias vira o mês) — nunca
+  // escreve nada.
+  function renderFinanceiroDueSoonBlock(container, page) {
+    var section = document.createElement("div");
+    section.className = "query-block query-block-collapsible";
+    container.appendChild(section);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    var titleText = document.createElement("span");
+    titleText.textContent = "Financeiro";
+    title.appendChild(titleText);
+
+    var titleActions = document.createElement("span");
+    titleActions.className = "query-title-actions";
+
+    var titleLinksWrap = document.createElement("span");
+    titleLinksWrap.className = "query-title-links";
+    var linkA = document.createElement("a");
+    linkA.className = "query-title-link";
+    linkA.title = "Contas Mensais";
+    linkA.href = "#financeiro_contas_mensais";
+    linkA.addEventListener("click", function (e) {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      navigate("financeiro_contas_mensais");
+    });
+    var linkIcon = document.createElement("i");
+    linkIcon.className = "ti ti-apps";
+    linkA.appendChild(linkIcon);
+    titleLinksWrap.appendChild(linkA);
+    titleActions.appendChild(titleLinksWrap);
+
+    var collapseBtn = document.createElement("button");
+    collapseBtn.type = "button";
+    collapseBtn.className = "query-collapse-btn";
+    collapseBtn.setAttribute("aria-label", "Recolher/expandir");
+    var collapseIcon = document.createElement("i");
+    collapseIcon.className = "ti ti-chevron-down";
+    collapseBtn.appendChild(collapseIcon);
+    collapseBtn.addEventListener("click", function () {
+      var willCollapse = !section.classList.contains("collapsed");
+      section.classList.toggle("collapsed", willCollapse);
+      collapseIcon.className = willCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
+    });
+    titleActions.appendChild(collapseBtn);
+    title.appendChild(titleActions);
+    section.appendChild(title);
+
+    var body = document.createElement("div");
+    body.className = "query-block-body";
+    section.appendChild(body);
+
+    var status = document.createElement("p");
+    status.className = "empty";
+    status.textContent = "Buscando…";
+    body.appendChild(status);
+
+    var todayStr = financeiroTodaySP();
+    var endStr = financeiroAddDays(todayStr, 6);
+    var months = {};
+    months[todayStr.slice(0, 7)] = true;
+    months[endStr.slice(0, 7)] = true;
+    var monthKeys = Object.keys(months);
+
+    Promise.all(monthKeys.map(function (m) {
+      return authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(m)).then(function (r) { return r.json(); });
+    })).then(function (results) {
+      var allItems = [];
+      results.forEach(function (r) { allItems = allItems.concat((r && r.items) || []); });
+      var due = allItems.filter(function (it) {
+        var v = it.vencimento && it.vencimento.start;
+        return v && v >= todayStr && v <= endStr;
+      });
+      return Promise.all(monthKeys.map(function (m) {
+        return authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(m)).then(function (r) { return r.json(); });
+      })).then(function (paidResults) {
+        var overrides = {};
+        paidResults.forEach(function (pr) {
+          var o = (pr && pr.overrides) || {};
+          Object.keys(o).forEach(function (k) { overrides[k] = o[k]; });
+        });
+        return { due: due, overrides: overrides };
+      });
+    }).then(function (res) {
+      body.innerHTML = "";
+      renderFinanceiroDueSoonBody(body, res.due, res.overrides, todayStr, endStr);
+      var shouldCollapse = res.due.length === 0;
+      section.classList.toggle("collapsed", shouldCollapse);
+      collapseIcon.className = shouldCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
+    }).catch(function (e) {
+      body.innerHTML = "";
+      var err = document.createElement("p");
+      err.className = "empty";
+      err.textContent = "Erro ao buscar: " + e.message;
+      body.appendChild(err);
+    });
+  }
+
+  function renderFinanceiroDueSoonBody(body, items, overrides, todayStr, endStr) {
+    if (!items.length) {
+      var empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "Nenhuma conta vencendo nos próximos 7 dias.";
+      body.appendChild(empty);
+      return;
+    }
+    var tomorrowStr = financeiroAddDays(todayStr, 1);
+    var buckets = [
+      { label: "Hoje", test: function (v) { return v === todayStr; } },
+      { label: "Amanhã", test: function (v) { return v === tomorrowStr; } },
+      { label: "Próximos 7 dias", test: function (v) { return v > tomorrowStr && v <= endStr; } },
+    ];
+    items = items.slice().sort(function (a, b) {
+      return (a.vencimento.start || "").localeCompare(b.vencimento.start || "");
+    });
+    buckets.forEach(function (bucket) {
+      var bucketItems = items.filter(function (it) { return bucket.test(it.vencimento.start); });
+      if (!bucketItems.length) return;
+      var groupSection = document.createElement("div");
+      groupSection.className = "group-section compact";
+      var groupTitle = document.createElement("h4");
+      groupTitle.className = "group-title";
+      groupTitle.textContent = bucket.label;
+      groupSection.appendChild(groupTitle);
+      var itemsWrap = document.createElement("div");
+      itemsWrap.className = "group-items";
+      bucketItems.forEach(function (it, idx) {
+        var info = financeiroPaidInfo(it, overrides);
+        var sub = [
+          { text: financeiroFormatDate(it.vencimento.start) },
+          { text: financeiroFormatBRL(it.valorAPagar) },
+          { text: info.isPaid ? "Pago" : "Pendente", color: info.isPaid ? "#2f9e44" : "#b9770e" },
+        ];
+        itemsWrap.appendChild(buildItemEl({ label: it.accountLabel, type: "notion", url: it.url, sub: sub }, 100 + idx));
+      });
+      groupSection.appendChild(itemsWrap);
+      body.appendChild(groupSection);
+    });
   }
 
   function renderContent(pageId) {
@@ -6815,6 +7053,21 @@
         }
         renderDynamicQueryBlock(qDef, pageId, container);
       });
+      renderedSomething = true;
+    }
+
+    // "page.financeiroDueSoon" (opcional, só em Início) — divisória
+    // "Financeiro" com cards das contas vencendo Hoje/Amanhã/Próximos 7
+    // dias (ver renderFinanceiroDueSoonBlock). Mesma posição/tratamento
+    // de "dynamicQueries" acima (ex: "Itens Prioritários") — sem linha
+    // divisória quando vem logo depois da aba ativa.
+    if (page.financeiroDueSoon) {
+      if (renderedSomething && !hasTabs) {
+        var dividerFin = document.createElement("hr");
+        dividerFin.className = "content-divider";
+        container.appendChild(dividerFin);
+      }
+      renderFinanceiroDueSoonBlock(container, page);
       renderedSomething = true;
     }
 

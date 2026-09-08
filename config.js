@@ -913,7 +913,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-07 23:20",
+  appVersion: "2026-09-08 00:13",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -994,7 +994,8 @@ const APP_CONFIG = {
         { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
         { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
         { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
-        { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" }
+        { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
+        { label: "Financeiro", target: "financeiro_contas_mensais", icon: "wallet", color: "#0f9b8e" }
       ],
       items: [
         { label: "Painel do Dia", type: "page", target: "inicio", icon: "home" },
@@ -1036,6 +1037,13 @@ const APP_CONFIG = {
     inicio: {
       title: "Painel do Dia",
       itemsCompact: true,
+      // "Financeiro" (pedido do Georges) — divisória com cards das contas
+      // mensais vencendo Hoje/Amanhã/Próximos 7 dias, mesma posição de
+      // "Itens Prioritários" (logo depois da aba ativa). Ver
+      // renderFinanceiroDueSoonBlock no app.js — busca GET /financeiro-
+      // contas (14 bases do Notion) + GET /financeiro-paid (KV), nunca
+      // escreve nada.
+      financeiroDueSoon: true,
       // painel retrátil do lado direito — ver comentário de SIDEPANEL_LINKS
       // acima. Só existe nessa página por enquanto.
       sidePanel: SIDEPANEL_LINKS,
