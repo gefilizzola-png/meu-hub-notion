@@ -2935,6 +2935,40 @@ html, body {
 
 /* ---------------- Financeiro -> Contas Mensais ---------------- */
 .financeiro-wrap { display: flex; flex-direction: column; gap: 12px; }
+/* tags de filtro por conta (pedido do Georges — "botões pequenos, tipo
+   tags, com o nome de cada conta"), sempre no topo da tela. Seleção
+   múltipla: clicar liga/desliga, mesmo visual "pílula" já usado em
+   Filtros Rápidos de Prioridades, só que bem mais compacto. */
+.financeiro-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.financeiro-account-tag {
+  border: 0.5px solid #e2e0da;
+  background: #fff;
+  color: #55554f;
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.financeiro-account-tag:hover { background: #f7f6f2; }
+.financeiro-account-tag.active {
+  background: #0f9b8e;
+  border-color: #0f9b8e;
+  color: #fff;
+}
+/* aviso "todas as competências de: X, Y" quando 1+ tags de conta estão
+   ativas — substitui a navegação de mês + totais (não fazem sentido nesse
+   modo, já que os itens vêm de vários meses/anos ao mesmo tempo). */
+.financeiro-filter-info {
+  font-size: 12.5px;
+  color: #55554f;
+  font-weight: 600;
+}
 /* linha do topo (pedido do Georges: totais "ao lado do nome do mês e dos
    botões para mudar de mês") — nav à esquerda, os 3 totais à direita;
    quebra pra 2 linhas sozinha em telas estreitas (flex-wrap). */
@@ -3063,6 +3097,15 @@ html, body {
 .financeiro-th-acao { width: 1%; }
 .financeiro-th-valor { width: 1%; text-align: right; }
 .financeiro-th-cod { width: 260px; }
+/* cabeçalho clicável (pedido do Georges — classificar por Conta/
+   Vencimento/Valor a pagar/Status, padrão Vencimento) — mesmo padrão
+   visual/comportamento de ".priorities-th-sortable" na tabela de
+   Prioridades (cor ao ficar ativo + setinha indicando direção). */
+.financeiro-th-sortable { cursor: pointer; }
+.financeiro-th-sortable:hover { background: #eeece6; }
+.financeiro-th-sortable.active { color: #0f9b8e; }
+.financeiro-th-label { display: inline; }
+.financeiro-th-arrow { margin-left: 4px; font-size: 10px; }
 .financeiro-row td {
   padding: 9px 10px;
   border-bottom: 0.5px solid #f0efe9;

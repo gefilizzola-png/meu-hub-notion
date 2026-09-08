@@ -1856,6 +1856,15 @@
       (tab.dynamicQueries || []).forEach(function (qDef) {
         renderDynamicQueryBlock(qDef, pageId, body);
       });
+      // "tab.financeiroRange" (opcional — só nas 3 abas de Início) —
+      // divisória "Financeiro" (mesmo leiaute das outras 5 acima: emoji +
+      // fundo colorido), mas AQUI DENTRO de renderBody pra reagir à aba
+      // ativa (pedido do Georges: Hoje mostra só o que vence hoje, Amanhã
+      // só amanhã, Próximos 7 dias a janela toda) — antes ficava fora das
+      // abas (page.financeiroDueSoon), por isso nunca reagia ao clique.
+      if (tab.financeiroRange) {
+        renderFinanceiroDueSoonBlock(body, page, tab.financeiroRange);
+      }
     }
 
     page.tabs.forEach(function (tab, idx) {
@@ -6480,86 +6489,148 @@
     return { notionPaid: notionPaid, manuallyPaid: manuallyPaid, isPaid: isPaid, paidDateStr: paidDateStr };
   }
 
-  function renderFinanceiroContasMensais(container, page, monthOverride) {
+  function renderFinanceiroContasMensais(container, page, monthOverride, activeAccountsOverride) {
     var month = monthOverride || financeiroCurrentMonth();
     var isCurrentMonth = month === financeiroCurrentMonth();
+    // "activeAccounts" (pedido do Georges — tags de filtro por conta):
+    // lista de "key" (FINANCEIRO_ACCOUNT_KEYS) selecionadas. Vazia = modo
+    // normal (mês atual/navegado, todas as 14 contas). 1+ = modo "todas as
+    // competências" — ignora o mês, mostra TUDO já lançado nessa(s)
+    // conta(s) (ver financeiroAccounts no config.js / ?accountKeys= no
+    // worker.js).
+    var activeAccounts = activeAccountsOverride || [];
+    var filterActive = activeAccounts.length > 0;
 
     var wrap = document.createElement("div");
     wrap.className = "financeiro-wrap";
 
-    // "topRow" junta a navegação de mês (esquerda) com os 3 totais
+    // tags de conta, em ordem alfabética — sempre no topo, clicáveis a
+    // qualquer momento (mesmo já filtrado, pra somar/tirar contas do
+    // filtro). Seleção múltipla (mesmo padrão de "toggle" de um filtro
+    // rápido já usado em Prioridades).
+    if (page.financeiroAccounts && page.financeiroAccounts.length) {
+      var tagsRow = document.createElement("div");
+      tagsRow.className = "financeiro-tags-row";
+      var sortedAccounts = page.financeiroAccounts.slice().sort(function (a, b) {
+        return a.label.localeCompare(b.label, "pt-BR");
+      });
+      sortedAccounts.forEach(function (acc) {
+        var tagBtn = document.createElement("button");
+        tagBtn.type = "button";
+        var isActive = activeAccounts.indexOf(acc.key) !== -1;
+        tagBtn.className = "financeiro-account-tag" + (isActive ? " active" : "");
+        tagBtn.textContent = acc.label;
+        tagBtn.title = isActive
+          ? "Tirar " + acc.label + " do filtro"
+          : "Ver todas as competências de " + acc.label;
+        tagBtn.addEventListener("click", function () {
+          var next = activeAccounts.slice();
+          var pos = next.indexOf(acc.key);
+          if (pos !== -1) next.splice(pos, 1); else next.push(acc.key);
+          container.innerHTML = "";
+          renderFinanceiroContasMensais(container, page, month, next);
+        });
+        tagsRow.appendChild(tagBtn);
+      });
+      wrap.appendChild(tagsRow);
+    }
+
+    // "topRow" — modo normal: navegação de mês (esquerda) + 3 totais
     // (direita, pedido do Georges: "faça no topo... três labels com o
     // valor total das contas do mês, o total já pago e o total
-    // pendente") — os totais nascem em "…" e só ganham o valor real
-    // depois que a busca volta (não dá pra calcular antes de ter os
-    // itens), ver dentro do Promise.all abaixo.
+    // pendente"). Modo filtrado (1+ tags de conta ativas): mês não faz
+    // mais sentido (mostra TODAS as competências) — vira só um aviso de
+    // quais contas estão filtradas + botão de limpar.
     var topRow = document.createElement("div");
     topRow.className = "financeiro-top-row";
 
-    var nav = document.createElement("div");
-    nav.className = "financeiro-month-nav";
+    var totalValueEl, paidValueEl, pendingValueEl;
 
-    var prevBtn = document.createElement("button");
-    prevBtn.type = "button";
-    prevBtn.className = "financeiro-month-btn";
-    prevBtn.title = "Mês anterior";
-    prevBtn.innerHTML = '<i class="ti ti-chevron-left"></i>';
-    prevBtn.addEventListener("click", function () {
-      container.innerHTML = "";
-      renderFinanceiroContasMensais(container, page, financeiroShiftMonth(month, -1));
-    });
-    nav.appendChild(prevBtn);
+    if (!filterActive) {
+      var nav = document.createElement("div");
+      nav.className = "financeiro-month-nav";
 
-    var label = document.createElement("span");
-    label.className = "financeiro-month-label";
-    label.textContent = financeiroMonthLabel(month);
-    nav.appendChild(label);
-
-    var nextBtn = document.createElement("button");
-    nextBtn.type = "button";
-    nextBtn.className = "financeiro-month-btn";
-    nextBtn.title = "Próximo mês";
-    nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
-    nextBtn.addEventListener("click", function () {
-      container.innerHTML = "";
-      renderFinanceiroContasMensais(container, page, financeiroShiftMonth(month, 1));
-    });
-    nav.appendChild(nextBtn);
-
-    if (!isCurrentMonth) {
-      var todayBtn = document.createElement("button");
-      todayBtn.type = "button";
-      todayBtn.className = "financeiro-month-today-btn";
-      todayBtn.textContent = "Mês atual";
-      todayBtn.addEventListener("click", function () {
+      var prevBtn = document.createElement("button");
+      prevBtn.type = "button";
+      prevBtn.className = "financeiro-month-btn";
+      prevBtn.title = "Mês anterior";
+      prevBtn.innerHTML = '<i class="ti ti-chevron-left"></i>';
+      prevBtn.addEventListener("click", function () {
         container.innerHTML = "";
-        renderFinanceiroContasMensais(container, page, financeiroCurrentMonth());
+        renderFinanceiroContasMensais(container, page, financeiroShiftMonth(month, -1));
       });
-      nav.appendChild(todayBtn);
-    }
+      nav.appendChild(prevBtn);
 
-    topRow.appendChild(nav);
+      var label = document.createElement("span");
+      label.className = "financeiro-month-label";
+      label.textContent = financeiroMonthLabel(month);
+      nav.appendChild(label);
 
-    var summary = document.createElement("div");
-    summary.className = "financeiro-summary";
-    function makeSummaryPill(kind, label) {
-      var pill = document.createElement("div");
-      pill.className = "financeiro-summary-pill financeiro-summary-" + kind;
-      var pillLabel = document.createElement("span");
-      pillLabel.className = "financeiro-summary-label";
-      pillLabel.textContent = label;
-      var pillValue = document.createElement("span");
-      pillValue.className = "financeiro-summary-value";
-      pillValue.textContent = "…";
-      pill.appendChild(pillLabel);
-      pill.appendChild(pillValue);
-      summary.appendChild(pill);
-      return pillValue;
+      var nextBtn = document.createElement("button");
+      nextBtn.type = "button";
+      nextBtn.className = "financeiro-month-btn";
+      nextBtn.title = "Próximo mês";
+      nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
+      nextBtn.addEventListener("click", function () {
+        container.innerHTML = "";
+        renderFinanceiroContasMensais(container, page, financeiroShiftMonth(month, 1));
+      });
+      nav.appendChild(nextBtn);
+
+      if (!isCurrentMonth) {
+        var todayBtn = document.createElement("button");
+        todayBtn.type = "button";
+        todayBtn.className = "financeiro-month-today-btn";
+        todayBtn.textContent = "Mês atual";
+        todayBtn.addEventListener("click", function () {
+          container.innerHTML = "";
+          renderFinanceiroContasMensais(container, page, financeiroCurrentMonth());
+        });
+        nav.appendChild(todayBtn);
+      }
+
+      topRow.appendChild(nav);
+
+      var summary = document.createElement("div");
+      summary.className = "financeiro-summary";
+      function makeSummaryPill(kind, label) {
+        var pill = document.createElement("div");
+        pill.className = "financeiro-summary-pill financeiro-summary-" + kind;
+        var pillLabel = document.createElement("span");
+        pillLabel.className = "financeiro-summary-label";
+        pillLabel.textContent = label;
+        var pillValue = document.createElement("span");
+        pillValue.className = "financeiro-summary-value";
+        pillValue.textContent = "…";
+        pill.appendChild(pillLabel);
+        pill.appendChild(pillValue);
+        summary.appendChild(pill);
+        return pillValue;
+      }
+      totalValueEl = makeSummaryPill("total", "Total do mês");
+      paidValueEl = makeSummaryPill("paid", "Pago");
+      pendingValueEl = makeSummaryPill("pending", "Pendente");
+      topRow.appendChild(summary);
+    } else {
+      var filterInfo = document.createElement("div");
+      filterInfo.className = "financeiro-filter-info";
+      var labelsText = activeAccounts.map(function (k) {
+        var found = (page.financeiroAccounts || []).filter(function (a) { return a.key === k; })[0];
+        return found ? found.label : k;
+      }).join(", ");
+      filterInfo.textContent = "Todas as competências de: " + labelsText;
+      topRow.appendChild(filterInfo);
+
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "financeiro-month-today-btn";
+      clearBtn.textContent = "Limpar filtro";
+      clearBtn.addEventListener("click", function () {
+        container.innerHTML = "";
+        renderFinanceiroContasMensais(container, page, month, []);
+      });
+      topRow.appendChild(clearBtn);
     }
-    var totalValueEl = makeSummaryPill("total", "Total do mês");
-    var paidValueEl = makeSummaryPill("paid", "Pago");
-    var pendingValueEl = makeSummaryPill("pending", "Pendente");
-    topRow.appendChild(summary);
 
     wrap.appendChild(topRow);
 
@@ -6567,12 +6638,18 @@
     body.className = "financeiro-body";
     var status = document.createElement("p");
     status.className = "financeiro-status";
-    status.textContent = "Carregando contas de " + financeiroMonthLabel(month) + "...";
+    status.textContent = filterActive
+      ? "Carregando competências…"
+      : "Carregando contas de " + financeiroMonthLabel(month) + "...";
     body.appendChild(status);
     wrap.appendChild(body);
     container.appendChild(wrap);
 
+    // sem totais no modo filtrado (totalValueEl etc. ficam undefined) —
+    // updateSummary vira no-op nesse caso, sem precisar de um "if" em
+    // cada lugar que a chama.
     function updateSummary(contasData, overrides) {
+      if (!totalValueEl) return;
       var items = contasData.items || [];
       var total = 0, paid = 0;
       items.forEach(function (it) {
@@ -6585,16 +6662,55 @@
       pendingValueEl.textContent = financeiroFormatBRL(total - paid);
     }
 
-    Promise.all([
-      authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }),
-      authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }),
-    ]).then(function (results) {
-      var contasData = results[0] || {};
-      var paidData = results[1] || {};
-      var overrides = (paidData && paidData.overrides) || {};
-      body.innerHTML = "";
-      updateSummary(contasData, overrides);
-      renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary);
+    // estado de ordenação da tabela — pedido do Georges: cabeçalho
+    // clicável (Conta/Vencimento/Valor a pagar/Status), padrão inicial por
+    // Vencimento. Vive AQUI (fora de renderFinanceiroBody) pra sobreviver
+    // a re-renders da mesma "sessão" desta tela (ex: depois de marcar um
+    // item como pago) — SÓ reseta pro padrão quando a tela inteira é
+    // remontada de novo (troca de mês/tags de conta), mesma ideia de
+    // sortState em renderPrioritiesTable.
+    var sortState = { key: "vencimento", dir: 1 };
+
+    var contasPromise = filterActive
+      ? authFetch(cfg.templateWorkerUrl + "/financeiro-contas?accountKeys=" + encodeURIComponent(activeAccounts.join(","))).then(function (r) { return r.json(); })
+      : authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); });
+
+    contasPromise.then(function (contasData) {
+      // overrides "pago manualmente" (KV) — no modo normal é sempre o
+      // mesmo mês da tela; no modo filtrado os itens podem vir de VÁRIOS
+      // meses diferentes ao mesmo tempo, então busca (e mescla) o override
+      // de cada mês distinto presente nos itens devolvidos.
+      var items = contasData.items || [];
+      var monthKeysMap = {};
+      if (filterActive) {
+        items.forEach(function (it) {
+          var v = it.vencimento && it.vencimento.start;
+          if (v) monthKeysMap[v.slice(0, 7)] = true;
+        });
+      } else {
+        monthKeysMap[month] = true;
+      }
+      var monthKeyList = Object.keys(monthKeysMap);
+
+      var overridesPromise = monthKeyList.length
+        ? Promise.all(monthKeyList.map(function (m) {
+            return authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(m)).then(function (r) { return r.json(); });
+          })).then(function (paidResults) {
+            var merged = {};
+            paidResults.forEach(function (pr) {
+              var o = (pr && pr.overrides) || {};
+              Object.keys(o).forEach(function (k) { merged[k] = o[k]; });
+            });
+            return merged;
+          })
+        : Promise.resolve({});
+
+      return overridesPromise.then(function (overrides) {
+        var paidData = { overrides: overrides };
+        body.innerHTML = "";
+        updateSummary(contasData, overrides);
+        renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState);
+      });
     }).catch(function (e) {
       body.innerHTML = "";
       var err = document.createElement("p");
@@ -6604,10 +6720,37 @@
     });
   }
 
-  function renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary) {
+  // valor de ordenação de UM item pra UMA chave (usado tanto pela tabela
+  // do mês quanto pela "todas as competências" por conta — mesma função,
+  // já que ambas usam a mesma forma de linha). "status" ordena Pendente
+  // antes de Pago por padrão (dir 1) — decisão simples, sem sentido
+  // "certo" único aqui, mas consistente sempre que reordenar.
+  function financeiroSortValue(it, key, overrides) {
+    if (key === "conta") return (it.accountLabel || "").toLowerCase();
+    if (key === "vencimento") return (it.vencimento && it.vencimento.start) || "";
+    if (key === "valor") return typeof it.valorAPagar === "number" ? it.valorAPagar : -Infinity;
+    if (key === "status") return financeiroPaidInfo(it, overrides).isPaid ? 1 : 0;
+    return "";
+  }
+
+  function financeiroSortItems(items, sortState, overrides) {
+    if (!sortState || !sortState.key) return items;
+    var key = sortState.key, dir = sortState.dir || 1;
+    return items.slice().sort(function (a, b) {
+      var av = financeiroSortValue(a, key, overrides);
+      var bv = financeiroSortValue(b, key, overrides);
+      var cmp;
+      if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
+      else cmp = String(av).localeCompare(String(bv), "pt-BR");
+      return cmp * dir;
+    });
+  }
+
+  function renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState) {
     var items = contasData.items || [];
     var errors = contasData.errors || [];
     var overrides = (paidData && paidData.overrides) || {};
+    sortState = sortState || { key: "vencimento", dir: 1 };
 
     if (errors.length) {
       var errBox = document.createElement("div");
@@ -6619,28 +6762,56 @@
     if (!items.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
-      empty.textContent = "Nenhuma conta com vencimento neste mês.";
+      empty.textContent = contasData.month ? "Nenhuma conta com vencimento neste mês." : "Nenhuma competência encontrada.";
       body.appendChild(empty);
       return;
     }
 
+    items = financeiroSortItems(items, sortState, overrides);
+
     var table = document.createElement("table");
     table.className = "financeiro-table";
 
+    // "sortKey" (opcional) — só as 4 colunas que o Georges pediu pra
+    // classificar (Conta/Vencimento/Valor a pagar/Status); Código de
+    // barras e Ação ficam de fora (não fazem sentido ordenadas).
     var COLS = [
-      { label: "Conta", cls: "financeiro-th-conta" },
-      { label: "Vencimento", cls: "financeiro-th-vencimento" },
-      { label: "Valor a pagar", cls: "financeiro-th-valor" },
+      { label: "Conta", cls: "financeiro-th-conta", sortKey: "conta" },
+      { label: "Vencimento", cls: "financeiro-th-vencimento", sortKey: "vencimento" },
+      { label: "Valor a pagar", cls: "financeiro-th-valor", sortKey: "valor" },
       { label: "Código de barras", cls: "financeiro-th-cod" },
-      { label: "Status", cls: "financeiro-th-status" },
+      { label: "Status", cls: "financeiro-th-status", sortKey: "status" },
       { label: "", cls: "financeiro-th-acao" },
     ];
     var thead = document.createElement("thead");
     var headRow = document.createElement("tr");
     COLS.forEach(function (col) {
       var th = document.createElement("th");
-      th.className = "financeiro-th " + col.cls;
-      th.textContent = col.label;
+      th.className = "financeiro-th " + col.cls + (col.sortKey ? " financeiro-th-sortable" : "");
+      var thLabel = document.createElement("span");
+      thLabel.className = "financeiro-th-label";
+      thLabel.textContent = col.label;
+      th.appendChild(thLabel);
+      if (col.sortKey) {
+        th.title = "Clique para classificar por " + col.label;
+        var arrow = document.createElement("span");
+        arrow.className = "financeiro-th-arrow";
+        if (sortState.key === col.sortKey) {
+          th.classList.add("active");
+          arrow.textContent = sortState.dir === 1 ? "▲" : "▼";
+        }
+        th.appendChild(arrow);
+        th.addEventListener("click", function () {
+          if (sortState.key === col.sortKey) {
+            sortState.dir = sortState.dir * -1;
+          } else {
+            sortState.key = col.sortKey;
+            sortState.dir = 1;
+          }
+          body.innerHTML = "";
+          renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState);
+        });
+      }
       headRow.appendChild(th);
     });
     thead.appendChild(headRow);
@@ -6719,17 +6890,31 @@
         actionBtn.textContent = manuallyPaid ? "Desmarcar pago" : "Marcar como pago";
         actionBtn.addEventListener("click", function () {
           actionBtn.disabled = true;
+          // "mês" pra guardar o override na KV vem do PRÓPRIO vencimento do
+          // item, não da variável "month" da tela — no modo normal (por
+          // mês) dá sempre no mesmo mês mostrado, mas no modo "todas as
+          // competências por conta" (tags de filtro) os itens podem ser de
+          // vários meses diferentes ao mesmo tempo (ver renderFinanceiroContasMensais).
+          var itemMonth = (it.vencimento && it.vencimento.start) ? it.vencimento.start.slice(0, 7) : month;
+          var newPaid = !manuallyPaid;
           authFetch(cfg.templateWorkerUrl + "/financeiro-paid", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ month: month, pageId: it.id, paid: !manuallyPaid }),
+            body: JSON.stringify({ month: itemMonth, pageId: it.id, paid: newPaid }),
           }).then(function (r) { return r.json(); }).then(function () {
+            // atualiza o mapa de overrides LOCALMENTE (já sabemos o
+            // resultado — evita ter que buscar de novo, o que no modo
+            // "todas as competências" apagaria os overrides dos OUTROS
+            // meses presentes na mesma tabela).
+            if (newPaid) {
+              overrides[it.id] = { paid: true, paidAt: new Date().toISOString() };
+            } else {
+              delete overrides[it.id];
+            }
+            if (paidData) paidData.overrides = overrides;
+            if (updateSummary) updateSummary(contasData, overrides);
             body.innerHTML = "";
-            authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }).then(function (freshPaid) {
-              var freshOverrides = (freshPaid && freshPaid.overrides) || {};
-              if (updateSummary) updateSummary(contasData, freshOverrides);
-              renderFinanceiroBody(body, page, month, contasData, freshPaid || {}, updateSummary);
-            });
+            renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState);
           }).catch(function (e) {
             actionBtn.disabled = false;
             alert("Não deu pra salvar: " + e.message);
@@ -6747,24 +6932,27 @@
   }
 
   // ---------------- Financeiro: atalho "vence em breve" (Início) ----------------
-  // "page.financeiroDueSoon" (opcional, só em Início) — mini-divisória
-  // "Financeiro" com cards (mesmo visual dos cards que abrem uma página do
-  // Notion — ver buildItemEl) das contas com vencimento entre hoje e os
-  // próximos 7 dias, agrupadas em "Hoje" / "Amanhã" / "Próximos 7 dias".
-  // Cada card abre a própria página da conta no Notion (item.type
-  // "notion" + item.url), igual qualquer outro card de página do Notion
-  // no app. Só leitura (GET /financeiro-contas + GET /financeiro-paid,
-  // podendo ser 2 meses quando a janela de 7 dias vira o mês) — nunca
-  // escreve nada.
-  function renderFinanceiroDueSoonBlock(container, page) {
+  // "tab.financeiroRange" (opcional — só nas 3 abas de Início: "today"/
+  // "tomorrow"/"next7") — divisória "Financeiro" com cards (mesmo visual
+  // dos cards que abrem uma página do Notion — ver buildItemEl) das contas
+  // vencendo dentro da FAIXA da aba ativa, MESMO leiaute (emoji no título +
+  // fundo colorido) das outras 5 divisórias de cada aba (Reuniões/Sessões/
+  // Tarefas/Aniversários/Outros eventos) — pedido do Georges. Vive DENTRO
+  // de renderTabs/renderBody (ver ali), por isso reage à troca de aba
+  // igual as outras. Cada card abre a própria página da conta no Notion
+  // (item.type "notion" + item.url). Só leitura (GET /financeiro-contas +
+  // GET /financeiro-paid, podendo ser 2 meses quando a faixa "next7" vira
+  // o mês) — nunca escreve nada.
+  function renderFinanceiroDueSoonBlock(container, page, rangeMode) {
     var section = document.createElement("div");
     section.className = "query-block query-block-collapsible";
+    section.style.background = "#e6f5f2";
     container.appendChild(section);
 
     var title = document.createElement("h3");
     title.className = "group-title";
     var titleText = document.createElement("span");
-    titleText.textContent = "Financeiro";
+    titleText.textContent = "💰 Financeiro";
     title.appendChild(titleText);
 
     var titleActions = document.createElement("span");
@@ -6812,11 +7000,28 @@
     status.textContent = "Buscando…";
     body.appendChild(status);
 
+    // faixa de datas + mensagem de "vazio" de acordo com a aba ativa —
+    // MESMA convenção de valor usada nos baseFilters das outras 5
+    // divisórias (ver "today"/"tomorrow"/"on_or_after today + before
+    // next_7_days" em config.js): "next7" propositalmente NÃO exclui hoje/
+    // amanhã (mesma sobreposição natural que já existe nas outras 5).
     var todayStr = financeiroTodaySP();
-    var endStr = financeiroAddDays(todayStr, 6);
+    var tomorrowStr = financeiroAddDays(todayStr, 1);
+    var rangeStart, rangeEnd, emptyMsg;
+    if (rangeMode === "tomorrow") {
+      rangeStart = tomorrowStr; rangeEnd = tomorrowStr;
+      emptyMsg = "Nenhuma conta vencendo amanhã.";
+    } else if (rangeMode === "next7") {
+      rangeStart = todayStr; rangeEnd = financeiroAddDays(todayStr, 6);
+      emptyMsg = "Nenhuma conta vencendo nos próximos 7 dias.";
+    } else {
+      rangeStart = todayStr; rangeEnd = todayStr;
+      emptyMsg = "Nenhuma conta vencendo hoje.";
+    }
+
     var months = {};
-    months[todayStr.slice(0, 7)] = true;
-    months[endStr.slice(0, 7)] = true;
+    months[rangeStart.slice(0, 7)] = true;
+    months[rangeEnd.slice(0, 7)] = true;
     var monthKeys = Object.keys(months);
 
     Promise.all(monthKeys.map(function (m) {
@@ -6826,7 +7031,7 @@
       results.forEach(function (r) { allItems = allItems.concat((r && r.items) || []); });
       var due = allItems.filter(function (it) {
         var v = it.vencimento && it.vencimento.start;
-        return v && v >= todayStr && v <= endStr;
+        return v && v >= rangeStart && v <= rangeEnd;
       });
       return Promise.all(monthKeys.map(function (m) {
         return authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(m)).then(function (r) { return r.json(); });
@@ -6840,7 +7045,7 @@
       });
     }).then(function (res) {
       body.innerHTML = "";
-      renderFinanceiroDueSoonBody(body, res.due, res.overrides, todayStr, endStr);
+      renderFinanceiroDueSoonBody(body, res.due, res.overrides, emptyMsg);
       var shouldCollapse = res.due.length === 0;
       section.classList.toggle("collapsed", shouldCollapse);
       collapseIcon.className = shouldCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
@@ -6853,46 +7058,40 @@
     });
   }
 
-  function renderFinanceiroDueSoonBody(body, items, overrides, todayStr, endStr) {
+  // lista simples (sem sub-agrupamento Hoje/Amanhã/Próximos 7 dias — cada
+  // instância desse bloco já é uma faixa só, ver renderFinanceiroDueSoonBlock
+  // acima), ordenada por Vencimento.
+  function renderFinanceiroDueSoonBody(body, items, overrides, emptyMsg) {
     if (!items.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
-      empty.textContent = "Nenhuma conta vencendo nos próximos 7 dias.";
+      empty.textContent = emptyMsg;
       body.appendChild(empty);
       return;
     }
-    var tomorrowStr = financeiroAddDays(todayStr, 1);
-    var buckets = [
-      { label: "Hoje", test: function (v) { return v === todayStr; } },
-      { label: "Amanhã", test: function (v) { return v === tomorrowStr; } },
-      { label: "Próximos 7 dias", test: function (v) { return v > tomorrowStr && v <= endStr; } },
-    ];
     items = items.slice().sort(function (a, b) {
       return (a.vencimento.start || "").localeCompare(b.vencimento.start || "");
     });
-    buckets.forEach(function (bucket) {
-      var bucketItems = items.filter(function (it) { return bucket.test(it.vencimento.start); });
-      if (!bucketItems.length) return;
-      var groupSection = document.createElement("div");
-      groupSection.className = "group-section compact";
-      var groupTitle = document.createElement("h4");
-      groupTitle.className = "group-title";
-      groupTitle.textContent = bucket.label;
-      groupSection.appendChild(groupTitle);
-      var itemsWrap = document.createElement("div");
-      itemsWrap.className = "group-items";
-      bucketItems.forEach(function (it, idx) {
-        var info = financeiroPaidInfo(it, overrides);
-        var sub = [
-          { text: financeiroFormatDate(it.vencimento.start) },
-          { text: financeiroFormatBRL(it.valorAPagar) },
-          { text: info.isPaid ? "Pago" : "Pendente", color: info.isPaid ? "#2f9e44" : "#b9770e" },
-        ];
-        itemsWrap.appendChild(buildItemEl({ label: it.accountLabel, type: "notion", url: it.url, sub: sub }, 100 + idx));
-      });
-      groupSection.appendChild(itemsWrap);
-      body.appendChild(groupSection);
+    // wrapper ".group-section.compact" (sem título — cada instância deste
+    // bloco já é uma faixa só, não precisa de sub-agrupamento) só pra
+    // herdar o mesmo visual em grade 2 colunas dos cards de página do
+    // Notion usado em todo o resto do app (ver CSS ".group-section.compact
+    // .group-items").
+    var groupSection = document.createElement("div");
+    groupSection.className = "group-section compact";
+    var itemsWrap = document.createElement("div");
+    itemsWrap.className = "group-items";
+    items.forEach(function (it, idx) {
+      var info = financeiroPaidInfo(it, overrides);
+      var sub = [
+        { text: financeiroFormatDate(it.vencimento.start) },
+        { text: financeiroFormatBRL(it.valorAPagar) },
+        { text: info.isPaid ? "Pago" : "Pendente", color: info.isPaid ? "#2f9e44" : "#b9770e" },
+      ];
+      itemsWrap.appendChild(buildItemEl({ label: it.accountLabel, type: "notion", url: it.url, sub: sub }, 100 + idx));
     });
+    groupSection.appendChild(itemsWrap);
+    body.appendChild(groupSection);
   }
 
   function renderContent(pageId) {
@@ -7053,21 +7252,6 @@
         }
         renderDynamicQueryBlock(qDef, pageId, container);
       });
-      renderedSomething = true;
-    }
-
-    // "page.financeiroDueSoon" (opcional, só em Início) — divisória
-    // "Financeiro" com cards das contas vencendo Hoje/Amanhã/Próximos 7
-    // dias (ver renderFinanceiroDueSoonBlock). Mesma posição/tratamento
-    // de "dynamicQueries" acima (ex: "Itens Prioritários") — sem linha
-    // divisória quando vem logo depois da aba ativa.
-    if (page.financeiroDueSoon) {
-      if (renderedSomething && !hasTabs) {
-        var dividerFin = document.createElement("hr");
-        dividerFin.className = "content-divider";
-        container.appendChild(dividerFin);
-      }
-      renderFinanceiroDueSoonBlock(container, page);
       renderedSomething = true;
     }
 

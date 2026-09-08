@@ -592,6 +592,31 @@ var TITLELINKS_ANIVERSARIOS = [
   { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link", title: "Abrir Aniversários no Notion" }
 ];
 
+// "key"/"label" das 14 contas de "Financeiro → Contas Mensais" — ESPELHA
+// FINANCEIRO_CONTAS_MENSAIS no worker.js (mesmas 14 chaves/rótulos, sem o
+// databaseId — a busca por conta vai pelo worker via ?accountKeys=, que já
+// sabe o databaseId de cada uma; aqui só serve pra montar as tags de
+// filtro no app.js sem precisar de uma chamada extra ao Worker só pra
+// listar as contas). Se um dia entrar/sair conta lá, precisa atualizar
+// as DUAS listas (não tem como compartilhar uma constante entre os dois
+// arquivos/runtimes — mesmo motivo do comentário de PRIORITIES_* acima).
+var FINANCEIRO_ACCOUNT_KEYS = [
+  { key: "aluguel", label: "Aluguel" },
+  { key: "bb_ourocard", label: "BB - Ourocard" },
+  { key: "bb_smiles", label: "BB - Smiles" },
+  { key: "claro_multi", label: "Claro Multi" },
+  { key: "claro_tablet", label: "Claro Tablet" },
+  { key: "condominio", label: "Condomínio" },
+  { key: "energia", label: "Energia" },
+  { key: "gas", label: "Gás" },
+  { key: "mercado_pago", label: "Mercado Pago" },
+  { key: "nissan_bradesco", label: "Nissan Bradesco" },
+  { key: "nubank", label: "Nubank" },
+  { key: "sem_parar", label: "Sem Parar" },
+  { key: "unimed", label: "Unimed" },
+  { key: "vitor_3ef_nsf", label: "Vitor - 3EF - NSF" }
+];
+
 // "page.sidePanel" (opcional) — painel retrátil do lado direito, só na
 // página Início por enquanto. Cada divisória é { title, items: [...] },
 // cada item é { type:"notion", url } (abre em aba nova, ícone do cubo
@@ -913,7 +938,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-08 00:13",
+  appVersion: "2026-09-08 00:48",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1037,13 +1062,6 @@ const APP_CONFIG = {
     inicio: {
       title: "Painel do Dia",
       itemsCompact: true,
-      // "Financeiro" (pedido do Georges) — divisória com cards das contas
-      // mensais vencendo Hoje/Amanhã/Próximos 7 dias, mesma posição de
-      // "Itens Prioritários" (logo depois da aba ativa). Ver
-      // renderFinanceiroDueSoonBlock no app.js — busca GET /financeiro-
-      // contas (14 bases do Notion) + GET /financeiro-paid (KV), nunca
-      // escreve nada.
-      financeiroDueSoon: true,
       // painel retrátil do lado direito — ver comentário de SIDEPANEL_LINKS
       // acima. Só existe nessa página por enquanto.
       sidePanel: SIDEPANEL_LINKS,
@@ -1064,12 +1082,20 @@ const APP_CONFIG = {
       // trocando de aba (ver renderTabs no app.js). "dateRange: [0]" = só
       // hoje; "[0,6]" = intervalo de 7 dias (hoje + 6) formatado como
       // "18-24/08" (mesmo mês) ou "27/08-02/09" (virando o mês) por
-      // tabDateLabel() no app.js.
+      // tabDateLabel() no app.js. Cada aba também carrega "financeiroRange"
+      // ("today"/"tomorrow"/"next7") — pedido do Georges pra "Financeiro"
+      // (divisória com contas mensais vencendo) seguir a MESMA regra das
+      // outras 5 divisórias: reagir à aba ativa em vez de mostrar sempre os
+      // mesmos 7 dias. Renderizado de DENTRO de renderTabs/renderBody no
+      // app.js (não é mais "dynamicQueries" solto fora das abas), com o
+      // mesmo leiaute (emoji no título + fundo colorido) das demais — ver
+      // renderFinanceiroDueSoonBlock no app.js.
       tabs: [
         {
           label: "Hoje",
           dateRange: [0],
           weatherDay: 0,
+          financeiroRange: "today",
           dynamicQueries: [
             {
               title: "📅 Reuniões",
@@ -1196,6 +1222,7 @@ const APP_CONFIG = {
           label: "Amanhã",
           dateRange: [1],
           weatherDay: 1,
+          financeiroRange: "tomorrow",
           dynamicQueries: [
             {
               title: "📅 Reuniões",
@@ -1317,6 +1344,7 @@ const APP_CONFIG = {
           label: "Próximos 7 dias",
           dateRange: [0, 6],
           weatherDay: 0,
+          financeiroRange: "next7",
           dynamicQueries: [
             {
               title: "📅 Reuniões",
@@ -1936,6 +1964,12 @@ const APP_CONFIG = {
     financeiro_contas_mensais: {
       title: "Contas Mensais",
       financeiroContasMensais: true,
+      // tags de filtro por conta (pedido do Georges) — ver comentário de
+      // FINANCEIRO_ACCOUNT_KEYS acima. Clicar numa (ou mais) troca a
+      // tabela do mês atual pra TODAS as competências dessa(s) conta(s)
+      // (GET /financeiro-contas?accountKeys=...), ainda ordenável pelas
+      // colunas (ver renderFinanceiroContasMensais no app.js).
+      financeiroAccounts: FINANCEIRO_ACCOUNT_KEYS,
       items: []
     },
 
