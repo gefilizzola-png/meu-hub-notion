@@ -6371,6 +6371,292 @@
     loadItems();
   }
 
+  // ---------------- Financeiro → Contas Mensais ----------------
+  // Georges: "montar para mim uma tabela simples para cada mês, com o
+  // nome da conta, a data do vencimento..., o valor a pagar, a
+  // representação numérica do código de barras..., um indicativo/tag se
+  // está paga ou pendente e um botão para eu sinalizar que fiz o
+  // pagamento". Os dados de cada conta vêm de 14 bases do Notion (uma por
+  // conta — ver FINANCEIRO_CONTAS_MENSAIS no worker.js), atualizadas
+  // sozinhas por um projeto agendado à parte do Georges — aqui só LEMOS
+  // (GET /financeiro-contas?month=YYYY-MM), nunca escrevemos. O botão
+  // "marcar como pago" é diferente: fica só no app/KV (GET/POST
+  // /financeiro-paid) — decisão explícita do Georges pra manter a regra
+  // de nunca escrever no Notion fora dos botões "Criar no Notion". Se o
+  // Notion já tiver "Pagamento" preenchido (a automação já processou o
+  // comprovante), isso sempre prevalece sobre o override manual — o botão
+  // de marcar/desmarcar nem aparece nesse caso, vira só um aviso "via
+  // Notion".
+  //
+  // Sem estado externo: a navegação de mês re-renderiza a própria página
+  // chamando renderFinanceiroContasMensais de novo com um "month"
+  // explícito (mesmo padrão de outras páginas que se auto-recarregam após
+  // uma mudança, ex: renderPrioritiesTable) — não precisa de nenhuma
+  // variável guardada fora da função.
+  function financeiroCurrentMonth() {
+    var parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit",
+    }).formatToParts(new Date());
+    var map = {};
+    parts.forEach(function (p) { map[p.type] = p.value; });
+    return map.year + "-" + map.month;
+  }
+
+  function financeiroShiftMonth(month, delta) {
+    var parts = month.split("-").map(Number);
+    var year = parts[0];
+    var mo = parts[1] - 1 + delta; // 0-based
+    year += Math.floor(mo / 12);
+    mo = ((mo % 12) + 12) % 12;
+    return year + "-" + String(mo + 1).padStart(2, "0");
+  }
+
+  var FINANCEIRO_MONTH_NAMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+  function financeiroMonthLabel(month) {
+    var parts = month.split("-").map(Number);
+    return FINANCEIRO_MONTH_NAMES[parts[1] - 1] + " de " + parts[0];
+  }
+
+  function financeiroFormatDate(dateStr) {
+    if (!dateStr) return "—";
+    var fmt = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" });
+    return fmt.format(new Date(dateStr));
+  }
+
+  function financeiroFormatBRL(n) {
+    if (typeof n !== "number") return "—";
+    return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function financeiroCopyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    // fallback (navegadores/contextos sem Clipboard API) — campo temporário
+    // fora da tela + document.execCommand, jeito clássico de copiar texto.
+    return new Promise(function (resolve) {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) { /* ignora */ }
+      document.body.removeChild(ta);
+      resolve();
+    });
+  }
+
+  function renderFinanceiroContasMensais(container, page, monthOverride) {
+    var month = monthOverride || financeiroCurrentMonth();
+    var isCurrentMonth = month === financeiroCurrentMonth();
+
+    var wrap = document.createElement("div");
+    wrap.className = "financeiro-wrap";
+
+    var nav = document.createElement("div");
+    nav.className = "financeiro-month-nav";
+
+    var prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "financeiro-month-btn";
+    prevBtn.title = "Mês anterior";
+    prevBtn.innerHTML = '<i class="ti ti-chevron-left"></i>';
+    prevBtn.addEventListener("click", function () {
+      container.innerHTML = "";
+      renderFinanceiroContasMensais(container, page, financeiroShiftMonth(month, -1));
+    });
+    nav.appendChild(prevBtn);
+
+    var label = document.createElement("span");
+    label.className = "financeiro-month-label";
+    label.textContent = financeiroMonthLabel(month);
+    nav.appendChild(label);
+
+    var nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "financeiro-month-btn";
+    nextBtn.title = "Próximo mês";
+    nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
+    nextBtn.addEventListener("click", function () {
+      container.innerHTML = "";
+      renderFinanceiroContasMensais(container, page, financeiroShiftMonth(month, 1));
+    });
+    nav.appendChild(nextBtn);
+
+    if (!isCurrentMonth) {
+      var todayBtn = document.createElement("button");
+      todayBtn.type = "button";
+      todayBtn.className = "financeiro-month-today-btn";
+      todayBtn.textContent = "Mês atual";
+      todayBtn.addEventListener("click", function () {
+        container.innerHTML = "";
+        renderFinanceiroContasMensais(container, page, financeiroCurrentMonth());
+      });
+      nav.appendChild(todayBtn);
+    }
+
+    wrap.appendChild(nav);
+
+    var body = document.createElement("div");
+    body.className = "financeiro-body";
+    var status = document.createElement("p");
+    status.className = "financeiro-status";
+    status.textContent = "Carregando contas de " + financeiroMonthLabel(month) + "...";
+    body.appendChild(status);
+    wrap.appendChild(body);
+    container.appendChild(wrap);
+
+    Promise.all([
+      authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }),
+      authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }),
+    ]).then(function (results) {
+      body.innerHTML = "";
+      renderFinanceiroBody(body, page, month, results[0] || {}, results[1] || {});
+    }).catch(function (e) {
+      body.innerHTML = "";
+      var err = document.createElement("p");
+      err.className = "financeiro-status financeiro-status-error";
+      err.textContent = "Erro ao carregar: " + e.message;
+      body.appendChild(err);
+    });
+  }
+
+  function renderFinanceiroBody(body, page, month, contasData, paidData) {
+    var items = contasData.items || [];
+    var errors = contasData.errors || [];
+    var overrides = (paidData && paidData.overrides) || {};
+
+    if (errors.length) {
+      var errBox = document.createElement("div");
+      errBox.className = "financeiro-errors";
+      errBox.textContent = "Não deu pra carregar: " + errors.map(function (e) { return e.accountLabel; }).join(", ") + ".";
+      body.appendChild(errBox);
+    }
+
+    if (!items.length) {
+      var empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "Nenhuma conta com vencimento neste mês.";
+      body.appendChild(empty);
+      return;
+    }
+
+    var table = document.createElement("table");
+    table.className = "financeiro-table";
+
+    var thead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    ["Conta", "Vencimento", "Valor a pagar", "Código de barras", "Status", ""].forEach(function (label) {
+      var th = document.createElement("th");
+      th.className = "financeiro-th";
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement("tbody");
+
+    items.forEach(function (it) {
+      var override = overrides[it.id];
+      var notionPaid = !!(it.pagamento && it.pagamento.start);
+      var manuallyPaid = !notionPaid && !!(override && override.paid);
+      var isPaid = notionPaid || manuallyPaid;
+      var paidDateStr = notionPaid ? it.pagamento.start : (manuallyPaid && override.paidAt ? override.paidAt.slice(0, 10) : null);
+
+      var row = document.createElement("tr");
+      row.className = "financeiro-row" + (isPaid ? " is-paid" : " is-pending");
+
+      var contaCell = document.createElement("td");
+      contaCell.className = "financeiro-conta-cell";
+      contaCell.textContent = it.accountLabel;
+      row.appendChild(contaCell);
+
+      var vencCell = document.createElement("td");
+      vencCell.textContent = financeiroFormatDate(it.vencimento && it.vencimento.start);
+      row.appendChild(vencCell);
+
+      var valorCell = document.createElement("td");
+      valorCell.className = "financeiro-valor-cell";
+      valorCell.textContent = financeiroFormatBRL(it.valorAPagar);
+      row.appendChild(valorCell);
+
+      var codCell = document.createElement("td");
+      codCell.className = "financeiro-cod-cell";
+      var codText = document.createElement("span");
+      codText.className = "financeiro-cod-text";
+      codText.textContent = it.represNumerica || "—";
+      codCell.appendChild(codText);
+      if (it.represNumerica) {
+        var copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "financeiro-copy-btn";
+        copyBtn.title = "Copiar código de barras";
+        copyBtn.innerHTML = '<i class="ti ti-copy"></i>';
+        copyBtn.addEventListener("click", function () {
+          financeiroCopyToClipboard(it.represNumerica).then(function () {
+            copyBtn.classList.add("copied");
+            copyBtn.innerHTML = '<i class="ti ti-check"></i>';
+            setTimeout(function () {
+              copyBtn.classList.remove("copied");
+              copyBtn.innerHTML = '<i class="ti ti-copy"></i>';
+            }, 1200);
+          });
+        });
+        codCell.appendChild(copyBtn);
+      }
+      row.appendChild(codCell);
+
+      var statusCell = document.createElement("td");
+      var tag = document.createElement("span");
+      tag.className = "financeiro-tag " + (isPaid ? "financeiro-tag-paid" : "financeiro-tag-pending");
+      tag.textContent = isPaid ? ("Pago" + (paidDateStr ? " em " + financeiroFormatDate(paidDateStr) : "")) : "Pendente";
+      statusCell.appendChild(tag);
+      row.appendChild(statusCell);
+
+      var actionCell = document.createElement("td");
+      actionCell.className = "financeiro-action-cell";
+      if (notionPaid) {
+        var infoSpan = document.createElement("span");
+        infoSpan.className = "financeiro-action-info";
+        infoSpan.title = "O pagamento já foi confirmado automaticamente pelo Notion";
+        infoSpan.textContent = "via Notion";
+        actionCell.appendChild(infoSpan);
+      } else {
+        var actionBtn = document.createElement("button");
+        actionBtn.type = "button";
+        actionBtn.className = "financeiro-pay-btn" + (manuallyPaid ? " active" : "");
+        actionBtn.textContent = manuallyPaid ? "Desmarcar pago" : "Marcar como pago";
+        actionBtn.addEventListener("click", function () {
+          actionBtn.disabled = true;
+          authFetch(cfg.templateWorkerUrl + "/financeiro-paid", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ month: month, pageId: it.id, paid: !manuallyPaid }),
+          }).then(function (r) { return r.json(); }).then(function () {
+            body.innerHTML = "";
+            authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); }).then(function (freshPaid) {
+              renderFinanceiroBody(body, page, month, contasData, freshPaid || {});
+            });
+          }).catch(function (e) {
+            actionBtn.disabled = false;
+            alert("Não deu pra salvar: " + e.message);
+          });
+        });
+        actionCell.appendChild(actionBtn);
+      }
+      row.appendChild(actionCell);
+
+      tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+    body.appendChild(table);
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
@@ -6393,7 +6679,7 @@
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
     var hasTabs = !!(page.tabs && page.tabs.length);
 
-    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorities) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorities && !page.financeiroContasMensais) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -6613,6 +6899,23 @@
         container.appendChild(dividerPriorities);
       }
       renderPrioritiesTable(container, page);
+    }
+
+    // "page.financeiroContasMensais" (opcional) — tabela "Financeiro →
+    // Contas Mensais", mesmo esquema de "page.priorities" acima (tudo que
+    // a página precisa vem pendurado no objeto "page", o app.js só lê
+    // genérico). Diferente de "page.priorities"/"page.notes" (que são
+    // 100% KV, sem nenhuma relação com o Notion), esta lê 14 bases do
+    // Notion (GET /financeiro-contas) e só usa a KV pro "marcar como pago"
+    // manual (GET/POST /financeiro-paid) — ver comentário completo em
+    // renderFinanceiroContasMensais.
+    if (page.financeiroContasMensais) {
+      if (renderedSomething) {
+        var dividerFinanceiro = document.createElement("hr");
+        dividerFinanceiro.className = "content-divider";
+        container.appendChild(dividerFinanceiro);
+      }
+      renderFinanceiroContasMensais(container, page);
     }
   }
 

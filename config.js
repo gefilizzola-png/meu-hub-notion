@@ -913,7 +913,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-01 22:20",
+  appVersion: "2026-09-07 23:20",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1895,7 +1895,41 @@ const APP_CONFIG = {
       ]
     },
 
-    cat_pessoal: { title: "Pessoal", items: [] },
+    cat_pessoal: {
+      title: "Pessoal",
+      items: [
+        { label: "Financeiro", type: "page", target: "financeiro", icon: "wallet" }
+      ]
+    },
+
+    // "Financeiro → Contas Mensais" (pedido do Georges): tabela simples,
+    // por mês, das contas fixas mensais — nome da conta, vencimento, valor
+    // a pagar, código de barras (RepresNumérica) pra copiar, tag paga/
+    // pendente e um botão pra marcar como pago manualmente. Os dados vêm
+    // de 14 bases do Notion (uma por conta, todas em Pessoal / Financeiro
+    // / Contas Mensais lá — ver FINANCEIRO_CONTAS_MENSAIS no worker.js),
+    // atualizadas automaticamente por um projeto agendado à parte do
+    // Georges (lê fatura/comprovante no e-mail/pasta e grava no Notion) —
+    // o app aqui só LÊ essas 14 bases (GET /financeiro-contas), nunca
+    // escreve. O botão "marcar como pago" é diferente: fica só no app/KV
+    // (GET/POST /financeiro-paid) — decisão explícita do Georges pra não
+    // abrir uma exceção na regra de nunca escrever no Notion fora dos
+    // botões "Criar no Notion". Ver renderFinanceiroContasMensais no
+    // app.js (mesmo padrão de "page.priorities" — tudo que a página
+    // precisa vem pendurado aqui, o app.js só lê "page.*" de forma
+    // genérica).
+    financeiro: {
+      title: "Financeiro",
+      items: [
+        { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" }
+      ]
+    },
+
+    financeiro_contas_mensais: {
+      title: "Contas Mensais",
+      financeiroContasMensais: true,
+      items: []
+    },
 
     cat_profissional: {
       title: "Profissional",
