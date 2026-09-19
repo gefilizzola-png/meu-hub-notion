@@ -3284,3 +3284,159 @@ html, body {
   .financeiro-table { min-width: 640px; }
   .financeiro-body { overflow-x: auto; }
 }
+
+/* ---------- "page.legislacoes" — Legislações dinâmica (ver
+   renderLegislacoesPage no app.js). Mesma cor de acento azul de
+   ".search-block-accent" (lê o Notion, não é KV pura) — só "Fixar" é
+   KV, mas a página como um todo se comporta como uma busca/visualização. */
+.legislacoes-block {
+  background: rgba(74, 144, 217, 0.05);
+  border: 0.5px solid rgba(74, 144, 217, 0.25);
+  border-left: 3px solid #4a90d9;
+  border-radius: 10px;
+  padding: 12px 14px 14px;
+  margin-top: 4px;
+}
+.legislacoes-section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #57534e;
+  margin: 10px 0 6px;
+}
+.legislacoes-section-title:first-child { margin-top: 0; }
+.legislacoes-groupby-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b6b66;
+  margin-bottom: 8px;
+}
+.legislacoes-groupby-label select {
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #262624;
+}
+
+/* barra de controles de "Todas as legislações" — busca + 3 selects +
+   "Agrupar por" + "Limpar filtros", tudo numa linha só que quebra no
+   celular (mesma ideia de ".notes-form-row"). */
+.legislacoes-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.legislacoes-search-input {
+  flex: 1 1 180px;
+  min-width: 140px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #262624;
+}
+.legislacoes-filter-select {
+  font-size: 12px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #262624;
+  max-width: 160px;
+}
+.legislacoes-clear-btn {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 0.5px solid #dcdcd8;
+  background: #f7f7f5;
+  color: #55554f;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.legislacoes-clear-btn:hover { background: #eaeae6; }
+
+/* cabeçalho de grupo recolhível (mesma família visual de
+   ".priorities-group-header-row", só que em <div> em vez de <td> —
+   Legislações não é uma tabela). */
+.legislacoes-group-header-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  margin: 10px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8a84;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f4f1ea;
+  border-radius: 6px;
+}
+.legislacoes-group-header-row:first-child { margin-top: 0; }
+.legislacoes-group-collapse-btn { width: 18px; height: 18px; }
+.legislacoes-group-collapse-btn .ti { font-size: 13px; }
+.legislacoes-group-header-label { cursor: pointer; }
+.legislacoes-group-header-label:hover { color: #57534e; }
+
+/* grade de cards — 1 coluna no celular, mais em telas largas (mesma
+   ideia de ".group-section.dense .group-items"). */
+.legislacoes-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+@media (min-width: 720px) {
+  .legislacoes-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
+  .legislacoes-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.legislacoes-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 0.5px solid #ececea;
+  border-radius: 8px;
+  background: #fff;
+  min-width: 0;
+}
+.legislacoes-card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #262624;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+.legislacoes-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+/* dentro do card, os badges (Tipo/Situação/Assuntos) ficam cada um na
+   sua linha em vez de cortar com "..." (mesmo tratamento de
+   ".item-sub-badge-stacked") — o card já tem largura própria, sem a
+   pressão de caber ao lado do label como no "item" comum. */
+.legislacoes-card-badges .item-sub-badge {
+  display: block;
+  width: 100%;
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.legislacoes-card-badges .item-sub-badge::after { content: none; }
+.legislacoes-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}

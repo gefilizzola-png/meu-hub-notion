@@ -35,6 +35,31 @@
   // botões de link direto pro Notion usam icon: "notion").
   var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png", florianopolis: "icon-florianopolis.png", planalto: "icon-planalto.png", tce: "icon-tce.png", pmf: "icon-pmf.png" };
 
+  // detecta o domínio de um link de "texto da lei" (campo "Link" nativo de
+  // Legislações) e devolve a chave de IMG_ICONS correspondente — mesma
+  // lista de ícones já usada nos links digitados à mão em buildLawRow,
+  // agora aplicada automaticamente em cima do link que já está salvo no
+  // Notion (ver renderLegislacoesPage). "leismunicipais.com.br" E "leis.org"
+  // apontam pro mesmo ícone (o domínio mudou ao longo do tempo nas leis já
+  // cadastradas — ver amostra real via notion-query-data-sources). Domínio
+  // não mapeado (ex: "1drv.ms", link do OneDrive) devolve null — quem chama
+  // cai no ícone genérico ti-external-link.
+  var LAW_LINK_DOMAIN_ICONS = [
+    { match: "leismunicipais.com.br", icon: "leis-municipais" },
+    { match: "leis.org", icon: "leis-municipais" },
+    { match: "edicao.dom.sc.gov.br", icon: "diario-oficial" },
+    { match: "legislacao.presidencia.gov.br", icon: "planalto" },
+    { match: "cmf.sc.gov.br", icon: "florianopolis" },
+    { match: "file.notion.com", icon: "file-type-pdf" },
+  ];
+  function iconForLawLink(url) {
+    if (!url) return null;
+    var host;
+    try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return null; }
+    var found = LAW_LINK_DOMAIN_ICONS.filter(function (d) { return host.indexOf(d.match) !== -1; })[0];
+    return found ? found.icon : null;
+  }
+
   // ---------------- chamadas ao Worker, sempre com o login anexado ----------------
   // Todo fetch pro Worker passa por aqui — acrescenta "Authorization: Bearer
   // <token do Google>" (ver auth.js) em cima dos headers que já existirem.
@@ -7429,6 +7454,449 @@
     body.appendChild(groupSection);
   }
 
+  // ---------------- "page.legislacoes" — Legislações dinâmica ----------------
+  // (pedido do Georges — trocar "Legislação por assunto" hardcoded, que
+  // exigia editar o config.js toda vez que uma lei nova era publicada, por
+  // algo dinâmico: busca TODAS as legislações da base UMA VEZ SÓ (com Tipo/
+  // Situação/Link/Assuntos/Data-Prazo já vindo junto via "extra"); busca por
+  // nome, filtros (Tipo/Situação/Assunto) e "Agrupar por" (Assunto/Tipo/Ano/
+  // Situação) rodam 100% NO NAVEGADOR em cima do array já em mãos — nenhuma
+  // chamada nova ao Worker/Notion a cada filtro trocado, só na abertura da
+  // página. "Ano" vem do rollup "📅 Data/Prazo" (confirmado com o Georges —
+  // ele sempre guarda ali a data de PUBLICAÇÃO da lei, não uma data de
+  // acompanhamento de tarefa), sem precisar de nenhum campo novo no Notion.
+  // "Fixar" é 100% KV (rotas /legislacoes-fixadas, ver worker.js) — igual
+  // "Fixo"/"Diário" em Prioridades, NUNCA escreve em nada do Notion.
+  // ⚠️ RESTRIÇÃO EXPLÍCITA DO GEORGES, vale pra esta função inteira: os
+  // campos MULTI_SELECT da base Central (ex: 🏷️ Assuntos (PMF)) são só
+  // LEITURA aqui — nenhum botão desta página escreve no Notion, com exceção
+  // do "Criar no Notion" já existente em itemGroups (que não passa por
+  // aqui).
+  function renderLegislacoesPage(container, page) {
+    var lcfg = page.legislacoes || {};
+    var databaseId = lcfg.database_id;
+
+    var wrap = document.createElement("div");
+    wrap.className = "legislacoes-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "Legislações";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando legislações…";
+    wrap.appendChild(statusEl);
+
+    if (!databaseId) {
+      statusEl.textContent = "Configuração incompleta: falta database_id em page.legislacoes.";
+      return;
+    }
+
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+
+    var allLaws = [];
+    var pinnedIds = [];
+    var pinnedSet = {};
+    var state = {
+      search: "", tipo: "", situacao: "", assunto: "",
+      groupByAll: "assunto", groupByFixed: "assunto",
+      collapsedAll: {}, collapsedFixed: {}
+    };
+
+    // corpo montado depois de "Carregando…"; os CONTROLES (busca/selects)
+    // nascem 1 vez só (ver mais abaixo) — só as SEÇÕES de cards são
+    // redesenhadas a cada mudança de estado (applyState), pra não perder o
+    // foco/cursor da caixa de busca a cada letra digitada.
+    var body = document.createElement("div");
+
+    function syncPinnedSet() {
+      pinnedSet = {};
+      pinnedIds.forEach(function (id) { pinnedSet[id] = true; });
+    }
+
+    function lawYear(law) {
+      return (law.dataPrazo && law.dataPrazo.start) ? law.dataPrazo.start.slice(0, 4) : null;
+    }
+
+    // agrupa uma lista de leis pelo campo escolhido em "Agrupar por". Uma
+    // lei com vários Assuntos entra em CADA grupo correspondente (mesmo
+    // espírito das antigas divisórias "Legislação por assunto" — uma lei
+    // sobre 2 assuntos aparecia nas 2). "" (Nenhum) devolve um grupo só,
+    // sem cabeçalho.
+    function buildGroups(laws, groupBy) {
+      if (!groupBy) return [{ key: "__all__", label: null, laws: laws }];
+      var map = {};
+      laws.forEach(function (law) {
+        var keys;
+        if (groupBy === "assunto") {
+          keys = (law.assuntos && law.assuntos.length) ? law.assuntos.map(function (a) { return a.name; }) : ["(Sem assunto)"];
+        } else if (groupBy === "tipo") {
+          keys = [law.tipo || "(Sem tipo)"];
+        } else if (groupBy === "situacao") {
+          keys = [law.situacao || "(Sem situação)"];
+        } else if (groupBy === "ano") {
+          keys = [lawYear(law) || "(Sem data)"];
+        } else {
+          keys = ["__all__"];
+        }
+        keys.forEach(function (k) {
+          if (!map[k]) map[k] = { key: k, label: k, laws: [] };
+          map[k].laws.push(law);
+        });
+      });
+      var groups = Object.keys(map).map(function (k) { return map[k]; });
+      // "Ano" ordena decrescente (mais recente primeiro) — mais útil que
+      // alfabética pra datas. Os outros ficam em ordem alfabética normal.
+      if (groupBy === "ano") groups.sort(function (a, b) { return (b.key || "").localeCompare(a.key || ""); });
+      else groups.sort(function (a, b) { return a.key.localeCompare(b.key, "pt-BR"); });
+      return groups;
+    }
+
+    function matchesFilters(law) {
+      if (state.search) {
+        var s = state.search.toLowerCase();
+        if ((law.title || "").toLowerCase().indexOf(s) === -1) return false;
+      }
+      if (state.tipo && law.tipo !== state.tipo) return false;
+      if (state.situacao && law.situacao !== state.situacao) return false;
+      if (state.assunto) {
+        var has = (law.assuntos || []).some(function (a) { return a.name === state.assunto; });
+        if (!has) return false;
+      }
+      return true;
+    }
+
+    // ---- "Fixar" — só KV, nunca Notion (ver comentário grande no topo da
+    // função). Otimista: já redesenha na hora (applyState), sem esperar o
+    // Worker responder; se a chamada falhar, o estado local (pinnedIds) só
+    // volta a sincronizar no próximo GET (ex: reabrindo a página).
+    function togglePin(id) {
+      var idx = pinnedIds.indexOf(id);
+      if (idx === -1) pinnedIds.push(id); else pinnedIds.splice(idx, 1);
+      syncPinnedSet();
+      applyState();
+      authFetch(cfg.templateWorkerUrl + "/legislacoes-fixadas", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: pinnedIds })
+      }).then(handle401).then(function (r) { return r.json(); }).then(function (data) {
+        pinnedIds = (data && data.pinned) || pinnedIds;
+        syncPinnedSet();
+        applyState();
+      }).catch(function () { /* mantém o estado otimista já aplicado */ });
+    }
+
+    // ---- card de uma lei: nome, badges (Tipo/Situação/Assuntos) e os 3
+    // botões pedidos pelo Georges — "texto da lei" (campo Link, ícone pelo
+    // domínio via iconForLawLink), "Notion" (p.url, sempre presente) e
+    // "Fixar" (estrela, reaproveita makeStarSvg — mesmo ícone de Fixo em
+    // Prioridades).
+    function buildLawCard(law) {
+      var card = document.createElement("div");
+      card.className = "legislacoes-card";
+
+      var nameEl = document.createElement("div");
+      nameEl.className = "legislacoes-card-name";
+      nameEl.textContent = law.title;
+      card.appendChild(nameEl);
+
+      var badges = document.createElement("div");
+      badges.className = "legislacoes-card-badges";
+      if (law.tipo) {
+        var b1 = document.createElement("span");
+        b1.className = "item-sub-badge";
+        if (law.tipoColor) b1.style.color = law.tipoColor;
+        b1.textContent = law.tipo;
+        badges.appendChild(b1);
+      }
+      if (law.situacao) {
+        var b2 = document.createElement("span");
+        b2.className = "item-sub-badge";
+        if (law.situacaoColor) b2.style.color = law.situacaoColor;
+        b2.textContent = law.situacao;
+        badges.appendChild(b2);
+      }
+      (law.assuntos || []).forEach(function (a) {
+        var b3 = document.createElement("span");
+        b3.className = "item-sub-badge";
+        if (a.color) b3.style.color = NOTION_COLOR[a.color] || "";
+        b3.textContent = a.name;
+        badges.appendChild(b3);
+      });
+      if (badges.children.length) card.appendChild(badges);
+
+      var actions = document.createElement("div");
+      actions.className = "legislacoes-card-actions";
+
+      if (law.link) {
+        var linkIconKey = iconForLawLink(law.link);
+        var isImgLink = linkIconKey && IMG_ICONS[linkIconKey];
+        var linkBtn = document.createElement("a");
+        linkBtn.className = "law-link-btn legislacoes-action-btn" + (isImgLink ? " icon-img" : "");
+        linkBtn.href = law.link;
+        linkBtn.target = "_blank";
+        linkBtn.rel = "noopener";
+        linkBtn.title = "Abrir texto da lei";
+        if (isImgLink) {
+          var imgL = document.createElement("img");
+          imgL.src = IMG_ICONS[linkIconKey];
+          imgL.alt = "";
+          imgL.width = 18;
+          imgL.height = 18;
+          linkBtn.appendChild(imgL);
+        } else {
+          var iconL = document.createElement("i");
+          iconL.className = "ti ti-external-link";
+          linkBtn.appendChild(iconL);
+        }
+        actions.appendChild(linkBtn);
+      }
+
+      var notionBtn = document.createElement("a");
+      notionBtn.className = "law-link-btn legislacoes-action-btn icon-img";
+      notionBtn.href = law.url;
+      notionBtn.target = "_blank";
+      notionBtn.rel = "noopener";
+      notionBtn.title = "Abrir no Notion";
+      var imgN = document.createElement("img");
+      imgN.src = IMG_ICONS.notion;
+      imgN.alt = "";
+      imgN.width = 18;
+      imgN.height = 18;
+      notionBtn.appendChild(imgN);
+      actions.appendChild(notionBtn);
+
+      var isPinned = !!pinnedSet[law.id];
+      var fixarBtn = document.createElement("button");
+      fixarBtn.type = "button";
+      fixarBtn.className = "priorities-fixo-btn legislacoes-action-btn" + (isPinned ? " active" : "");
+      fixarBtn.title = isPinned ? "Remover de Legislações Fixadas" : "Fixar";
+      var starSvg = makeStarSvg();
+      starSvg.classList.add("priorities-fixo-icon-svg");
+      fixarBtn.appendChild(starSvg);
+      fixarBtn.addEventListener("click", function () { togglePin(law.id); });
+      actions.appendChild(fixarBtn);
+
+      card.appendChild(actions);
+      return card;
+    }
+
+    // desenha uma seção inteira (cabeçalhos de grupo recolhíveis + cards) —
+    // usado tanto pra "Legislações Fixadas" quanto "Todas as legislações",
+    // cada uma com seu próprio "collapsedState" (independentes entre si).
+    function renderLawSection(sectionEl, laws, groupBy, collapsedState, emptyText) {
+      sectionEl.innerHTML = "";
+      if (!laws.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = emptyText;
+        sectionEl.appendChild(empty);
+        return;
+      }
+      var groups = buildGroups(laws, groupBy);
+      var showHeaders = !(groups.length === 1 && groups[0].key === "__all__");
+      groups.forEach(function (g) {
+        if (showHeaders) {
+          var header = document.createElement("div");
+          header.className = "legislacoes-group-header-row";
+          var isCollapsed = !!collapsedState[g.key];
+          var toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "query-collapse-btn legislacoes-group-collapse-btn";
+          var ic = document.createElement("i");
+          ic.className = isCollapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
+          toggle.appendChild(ic);
+          var doToggle = function () { collapsedState[g.key] = !collapsedState[g.key]; applyState(); };
+          toggle.addEventListener("click", doToggle);
+          header.appendChild(toggle);
+          var label = document.createElement("span");
+          label.className = "legislacoes-group-header-label";
+          label.textContent = g.label + " (" + g.laws.length + ")";
+          label.addEventListener("click", doToggle);
+          header.appendChild(label);
+          sectionEl.appendChild(header);
+          if (isCollapsed) return;
+        }
+        var cardsWrap = document.createElement("div");
+        cardsWrap.className = "legislacoes-cards";
+        g.laws.forEach(function (law) { cardsWrap.appendChild(buildLawCard(law)); });
+        sectionEl.appendChild(cardsWrap);
+      });
+    }
+
+    function groupBySelect(currentValue, onChange) {
+      var label = document.createElement("label");
+      label.className = "legislacoes-groupby-label";
+      label.textContent = "Agrupar por: ";
+      var sel = document.createElement("select");
+      [["assunto", "Assunto"], ["tipo", "Tipo"], ["ano", "Ano"], ["situacao", "Situação"], ["", "Nenhum"]].forEach(function (opt) {
+        var o = document.createElement("option");
+        o.value = opt[0];
+        o.textContent = opt[1];
+        sel.appendChild(o);
+      });
+      sel.value = currentValue;
+      sel.addEventListener("change", function () { onChange(sel.value); });
+      label.appendChild(sel);
+      return label;
+    }
+
+    // ---- monta os controles/estrutura 1 VEZ SÓ (ver comentário lá em
+    // cima) — "applyState" só mexe no conteúdo de "fixedSection"/
+    // "allSection" e no texto do título de Fixadas, nunca recria os
+    // <input>/<select> abaixo.
+    var fixedTitleRow = document.createElement("div");
+    fixedTitleRow.className = "legislacoes-section-title";
+    body.appendChild(fixedTitleRow);
+    body.appendChild(groupBySelect(state.groupByFixed, function (v) { state.groupByFixed = v; applyState(); }));
+    var fixedSection = document.createElement("div");
+    body.appendChild(fixedSection);
+
+    var hr = document.createElement("hr");
+    hr.className = "content-divider";
+    body.appendChild(hr);
+
+    var allTitleRow = document.createElement("div");
+    allTitleRow.className = "legislacoes-section-title";
+    allTitleRow.textContent = "Todas as legislações";
+    body.appendChild(allTitleRow);
+
+    var controlsRow = document.createElement("div");
+    controlsRow.className = "legislacoes-controls";
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Buscar por nome...";
+    searchInput.className = "legislacoes-search-input";
+    searchInput.addEventListener("input", function () { state.search = searchInput.value; applyState(); });
+    controlsRow.appendChild(searchInput);
+
+    var tipoSelect = document.createElement("select");
+    tipoSelect.className = "legislacoes-filter-select";
+    tipoSelect.addEventListener("change", function () { state.tipo = tipoSelect.value; applyState(); });
+    controlsRow.appendChild(tipoSelect);
+
+    var situacaoSelect = document.createElement("select");
+    situacaoSelect.className = "legislacoes-filter-select";
+    situacaoSelect.addEventListener("change", function () { state.situacao = situacaoSelect.value; applyState(); });
+    controlsRow.appendChild(situacaoSelect);
+
+    var assuntoSelect = document.createElement("select");
+    assuntoSelect.className = "legislacoes-filter-select";
+    assuntoSelect.addEventListener("change", function () { state.assunto = assuntoSelect.value; applyState(); });
+    controlsRow.appendChild(assuntoSelect);
+
+    controlsRow.appendChild(groupBySelect(state.groupByAll, function (v) { state.groupByAll = v; applyState(); }));
+
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "legislacoes-clear-btn";
+    clearBtn.textContent = "Limpar filtros";
+    clearBtn.addEventListener("click", function () {
+      state.search = ""; state.tipo = ""; state.situacao = ""; state.assunto = "";
+      searchInput.value = ""; tipoSelect.value = ""; situacaoSelect.value = ""; assuntoSelect.value = "";
+      applyState();
+    });
+    controlsRow.appendChild(clearBtn);
+
+    body.appendChild(controlsRow);
+
+    var allSection = document.createElement("div");
+    body.appendChild(allSection);
+
+    // opções dos selects derivadas dos dados DE VERDADE (só o que existe
+    // entre as legislações buscadas) — evita filtro vazio/opção que não
+    // bate com nada, e não depende de manter uma lista fixa em dia.
+    function fillSelect(sel, valuesMap, allLabel) {
+      sel.innerHTML = "";
+      var optAll = document.createElement("option");
+      optAll.value = "";
+      optAll.textContent = allLabel;
+      sel.appendChild(optAll);
+      Object.keys(valuesMap).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (k) {
+        var o = document.createElement("option");
+        o.value = k;
+        o.textContent = k;
+        sel.appendChild(o);
+      });
+    }
+    function populateFilterOptions() {
+      var tipos = {}, situacoes = {}, assuntos = {};
+      allLaws.forEach(function (l) {
+        if (l.tipo) tipos[l.tipo] = true;
+        if (l.situacao) situacoes[l.situacao] = true;
+        (l.assuntos || []).forEach(function (a) { assuntos[a.name] = true; });
+      });
+      fillSelect(tipoSelect, tipos, "Todos os tipos");
+      fillSelect(situacaoSelect, situacoes, "Todas as situações");
+      fillSelect(assuntoSelect, assuntos, "Todos os assuntos");
+    }
+
+    function applyState() {
+      fixedTitleRow.textContent = "⭐ Legislações Fixadas (" + pinnedIds.length + ")";
+      var fixedLaws = allLaws.filter(function (l) { return pinnedSet[l.id]; });
+      renderLawSection(fixedSection, fixedLaws, state.groupByFixed, state.collapsedFixed, "Nenhuma legislação fixada ainda — clique na estrela de um card aqui embaixo pra fixar.");
+      var filteredLaws = allLaws.filter(matchesFilters);
+      renderLawSection(allSection, filteredLaws, state.groupByAll, state.collapsedAll, "Nenhuma legislação bate com os filtros.");
+    }
+
+    // ---- busca os dados: TODAS as legislações (1 chamada) + a lista de
+    // fixadas (1 chamada) — em paralelo. SÓ LEITURA no Notion (mesma rota
+    // /query já usada por qualquer outra página dinâmica do app).
+    var extraFields = ["Tipo", "Situação", "Link", "🏷️ Assuntos (PMF)", "📅 Data/Prazo"];
+    var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
+      "&filters=" + encodeURIComponent(JSON.stringify([{ property: "Nome", type: "title", condition: "is_not_empty", value: true }])) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Nome", direction: "ascending" }])) +
+      "&extra=" + encodeURIComponent(JSON.stringify(extraFields));
+
+    Promise.all([
+      authFetch(queryUrl).then(handle401).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); }),
+      authFetch(cfg.templateWorkerUrl + "/legislacoes-fixadas").then(handle401).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    ]).then(function (results) {
+      var queryResult = results[0];
+      var fixadasResult = results[1];
+      if (!queryResult.ok) throw new Error((queryResult.data && queryResult.data.error) || "Falha ao buscar legislações");
+      var pages = (queryResult.data && queryResult.data.pages) || [];
+      allLaws = pages.map(function (p) {
+        var extra = p.extra || {};
+        var tipoRaw = extra["Tipo"];
+        var situacaoRaw = extra["Situação"];
+        var assuntosRaw = extra["🏷️ Assuntos (PMF)"];
+        var assuntosFlat = [];
+        (Array.isArray(assuntosRaw) ? assuntosRaw : []).forEach(function (v) {
+          if (Array.isArray(v)) assuntosFlat = assuntosFlat.concat(v);
+          else if (v) assuntosFlat.push(v);
+        });
+        return {
+          id: p.id,
+          title: p.title,
+          url: p.url,
+          tipo: tipoRaw ? tipoRaw.name : null,
+          tipoColor: tipoRaw ? (NOTION_COLOR[tipoRaw.color] || "") : "",
+          situacao: situacaoRaw ? situacaoRaw.name : null,
+          situacaoColor: situacaoRaw ? (NOTION_COLOR[situacaoRaw.color] || "") : "",
+          assuntos: assuntosFlat.filter(function (a) { return a && a.name; }),
+          link: extra["Link"] || null,
+          dataPrazo: extra["📅 Data/Prazo"] || null
+        };
+      });
+      pinnedIds = (fixadasResult.ok && fixadasResult.data && fixadasResult.data.pinned) || [];
+      syncPinnedSet();
+      populateFilterOptions();
+      statusEl.style.display = "none";
+      wrap.appendChild(body);
+      applyState();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao buscar legislações: " + err.message;
+    });
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
@@ -7451,7 +7919,7 @@
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
     var hasTabs = !!(page.tabs && page.tabs.length);
 
-    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais && !page.legislacoes) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -7704,6 +8172,21 @@
         container.appendChild(dividerFinanceiro);
       }
       renderFinanceiroContasMensais(container, page);
+      renderedSomething = true;
+    }
+
+    // "page.legislacoes" (opcional, pedido do Georges) — página dinâmica de
+    // Legislações (busca/filtros/agrupamento + Fixar), mesmo esquema de
+    // "page.priorities"/"page.financeiroContasMensais" acima (tudo que a
+    // página precisa vem pendurado no objeto "page"). Ver
+    // renderLegislacoesPage.
+    if (page.legislacoes) {
+      if (renderedSomething) {
+        var dividerLegislacoes = document.createElement("hr");
+        dividerLegislacoes.className = "content-divider";
+        container.appendChild(dividerLegislacoes);
+      }
+      renderLegislacoesPage(container, page);
     }
   }
 
