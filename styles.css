@@ -3445,6 +3445,21 @@ html, body {
   text-overflow: clip;
 }
 .legislacoes-card-badges .item-sub-badge::after { content: none; }
+/* botão "+N"/"Mostrar menos" (pedido do Georges: card ficava gigante com
+   muitos assuntos) — reseta a aparência de <button> pra ficar igual a um
+   badge normal, só que clicável (cor de destaque + cursor pointer). */
+.legislacoes-badge-toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: #b35900;
+  font-weight: 600;
+}
+.legislacoes-badge-toggle:hover { text-decoration: underline; }
 .legislacoes-card-actions {
   display: flex;
   align-items: center;

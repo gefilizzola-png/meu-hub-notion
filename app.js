@@ -7462,9 +7462,9 @@
   // nome, filtros (Tipo/Situação/Assunto) e "Agrupar por" (Assunto/Tipo/Ano/
   // Situação) rodam 100% NO NAVEGADOR em cima do array já em mãos — nenhuma
   // chamada nova ao Worker/Notion a cada filtro trocado, só na abertura da
-  // página. "Ano" vem do rollup "📅 Data/Prazo" (confirmado com o Georges —
-  // ele sempre guarda ali a data de PUBLICAÇÃO da lei, não uma data de
-  // acompanhamento de tarefa), sem precisar de nenhum campo novo no Notion.
+  // página. "Ano" vem do rollup "📅 Data de Conclusão" (pedido do Georges —
+  // trocado de "📅 Data/Prazo" pra esse), sem precisar de nenhum campo novo
+  // no Notion.
   // "Fixar" é 100% KV (rotas /legislacoes-fixadas, ver worker.js) — igual
   // "Fixo"/"Diário" em Prioridades, NUNCA escreve em nada do Notion.
   // ⚠️ RESTRIÇÃO EXPLÍCITA DO GEORGES, vale pra esta função inteira: os
@@ -7510,7 +7510,7 @@
     // andOrToggle, igual nas outras páginas). Default de "Agrupar por" é
     // "tipo" (não mais "assunto" — ver comentário em buildGroups).
     var state = {
-      search: "", tipoSelected: [], situacaoSelected: [], assuntoSelected: [], assuntoMode: "or",
+      search: "", searchFixed: "", tipoSelected: [], situacaoSelected: [], assuntoSelected: [], assuntoMode: "or",
       groupByAll: "tipo", groupByFixed: "tipo",
       collapsedAll: {}, collapsedFixed: {}
     };
@@ -7526,20 +7526,22 @@
       pinnedIds.forEach(function (id) { pinnedSet[id] = true; });
     }
 
-    // "📅 Data/Prazo" vem do Worker como rollup via Central — dependendo de
-    // como a Central relaciona (1 ou várias páginas), o rollup pode vir
-    // como OBJETO único {start,end} OU como ARRAY de objetos [{start,end}]
-    // (mesmo padrão do rollup de Assuntos, que já é array). "law.dataPrazo"
-    // é normalizado aqui pra sempre virar {start,end}|null, não importa a
-    // forma que chegou — bug reportado pelo Georges (TODAS as 99 leis
-    // caindo em "(SEM DATA)" ao agrupar por Ano) era exatamente isso:
-    // dataPrazo chegava como array, e ".start" de um array é undefined.
-    function normalizeDatePrazo(dp) {
+    // "📅 Data de Conclusão" vem do Worker como rollup via Central —
+    // dependendo de como a Central relaciona (1 ou várias páginas), o
+    // rollup pode vir como OBJETO único {start,end} OU como ARRAY de
+    // objetos [{start,end}] (mesmo padrão do rollup de Assuntos, que já é
+    // array). "law.dataConclusao" é normalizado aqui pra sempre virar
+    // {start,end}|null, não importa a forma que chegou — bug reportado
+    // pelo Georges (TODAS as 99 leis caindo em "(SEM DATA)" ao agrupar por
+    // Ano, quando essa lógica ainda usava "📅 Data/Prazo") era exatamente
+    // isso: o rollup chegava como array, e ".start" de um array é
+    // undefined. Georges pediu pra usar "📅 Data de Conclusão" pro Ano.
+    function normalizeDateRollup(dp) {
       while (Array.isArray(dp)) dp = dp.length ? dp[0] : null;
       return (dp && dp.start) ? dp : null;
     }
     function lawYear(law) {
-      var dp = normalizeDatePrazo(law.dataPrazo);
+      var dp = normalizeDateRollup(law.dataConclusao);
       return dp ? String(dp.start).slice(0, 4) : null;
     }
 
@@ -7598,6 +7600,21 @@
       if (groupBy === "ano") groups.sort(function (a, b) { return (b.key || "").localeCompare(a.key || ""); });
       else groups.sort(function (a, b) { return a.key.localeCompare(b.key, "pt-BR"); });
       return groups;
+    }
+
+    // leis fixadas que batem com a busca da própria seção "Legislações
+    // Fixadas" (state.searchFixed, independente da busca de "Todas as
+    // legislações") — usada tanto em applyState() quanto no
+    // "Recolher/Expandir tudo" daquela seção, pra ficarem consistentes.
+    function getFixedLaws() {
+      return allLaws.filter(function (l) {
+        if (!pinnedSet[l.id]) return false;
+        if (state.searchFixed) {
+          var sf = state.searchFixed.toLowerCase();
+          if ((l.title || "").toLowerCase().indexOf(sf) === -1) return false;
+        }
+        return true;
+      });
     }
 
     // filtros de Tipo/Situação/Assunto — mesmo comportamento de QUALQUER
@@ -7672,13 +7689,46 @@
         b2.textContent = law.situacao;
         badges.appendChild(b2);
       }
-      (law.assuntos || []).forEach(function (a) {
-        var b3 = document.createElement("span");
-        b3.className = "item-sub-badge";
-        if (a.color) b3.style.color = NOTION_COLOR[a.color] || "";
-        b3.textContent = a.name;
-        badges.appendChild(b3);
+      // pedido do Georges: card ficava gigante quando a lei tinha muitos
+      // assuntos (multi_select sem limite) — mostra só os 4 primeiros e um
+      // badge clicável "+N" que expande (e recolhe de novo) o resto, sem
+      // precisar re-renderizar a seção inteira (applyState).
+      function buildAssuntoBadge(a) {
+        var b = document.createElement("span");
+        b.className = "item-sub-badge";
+        if (a.color) b.style.color = NOTION_COLOR[a.color] || "";
+        b.textContent = a.name;
+        return b;
+      }
+      var assuntosList = law.assuntos || [];
+      var maxAssuntosVisiveis = 4;
+      assuntosList.slice(0, maxAssuntosVisiveis).forEach(function (a) {
+        badges.appendChild(buildAssuntoBadge(a));
       });
+      if (assuntosList.length > maxAssuntosVisiveis) {
+        var extraAssuntos = assuntosList.slice(maxAssuntosVisiveis);
+        var assuntosExpanded = false;
+        var toggleAssuntosBtn = document.createElement("button");
+        toggleAssuntosBtn.type = "button";
+        toggleAssuntosBtn.className = "item-sub-badge legislacoes-badge-toggle";
+        toggleAssuntosBtn.textContent = "+" + extraAssuntos.length;
+        toggleAssuntosBtn.addEventListener("click", function () {
+          assuntosExpanded = !assuntosExpanded;
+          if (assuntosExpanded) {
+            extraAssuntos.forEach(function (a) {
+              var b = buildAssuntoBadge(a);
+              b.classList.add("legislacoes-badge-extra");
+              badges.insertBefore(b, toggleAssuntosBtn);
+            });
+            toggleAssuntosBtn.textContent = "Mostrar menos";
+          } else {
+            var toRemove = badges.querySelectorAll(".legislacoes-badge-extra");
+            for (var i = 0; i < toRemove.length; i++) toRemove[i].remove();
+            toggleAssuntosBtn.textContent = "+" + extraAssuntos.length;
+          }
+        });
+        badges.appendChild(toggleAssuntosBtn);
+      }
       if (badges.children.length) card.appendChild(badges);
 
       var actions = document.createElement("div");
@@ -7843,10 +7893,21 @@
     var fixedTitleRow = document.createElement("div");
     fixedTitleRow.className = "legislacoes-section-title";
     body.appendChild(fixedTitleRow);
+    // busca só por nome, igual "Todas as legislações" (pedido do Georges:
+    // "Crie a opção de pesquisa, também, na divisória Legislações
+    // Favoritas") — filtro independente (state.searchFixed), só afeta a
+    // lista de fixadas.
+    var searchInputFixed = document.createElement("input");
+    searchInputFixed.type = "text";
+    searchInputFixed.placeholder = "Buscar por nome...";
+    searchInputFixed.className = "legislacoes-search-input";
+    searchInputFixed.addEventListener("input", function () { state.searchFixed = searchInputFixed.value; applyState(); });
+
     var fixedToolbarRow = document.createElement("div");
     fixedToolbarRow.className = "legislacoes-toolbar-row";
+    fixedToolbarRow.appendChild(searchInputFixed);
     fixedToolbarRow.appendChild(groupBySelect(state.groupByFixed, function (v) { state.groupByFixed = v; applyState(); }));
-    fixedToolbarRow.appendChild(collapseAllToolbar(function () { return allLaws.filter(function (l) { return pinnedSet[l.id]; }); }, "groupByFixed", state.collapsedFixed));
+    fixedToolbarRow.appendChild(collapseAllToolbar(function () { return getFixedLaws(); }, "groupByFixed", state.collapsedFixed));
     body.appendChild(fixedToolbarRow);
     var fixedSection = document.createElement("div");
     body.appendChild(fixedSection);
@@ -7964,7 +8025,7 @@
 
     function applyState() {
       fixedTitleRow.textContent = "⭐ Legislações Fixadas (" + pinnedIds.length + ")";
-      var fixedLaws = allLaws.filter(function (l) { return pinnedSet[l.id]; });
+      var fixedLaws = getFixedLaws();
       renderLawSection(fixedSection, fixedLaws, state.groupByFixed, state.collapsedFixed, "Nenhuma legislação fixada ainda — clique na estrela de um card aqui embaixo pra fixar.");
       var filteredLaws = allLaws.filter(matchesFilters);
       renderLawSection(allSection, filteredLaws, state.groupByAll, state.collapsedAll, "Nenhuma legislação bate com os filtros.");
@@ -7973,7 +8034,7 @@
     // ---- busca os dados: TODAS as legislações (1 chamada) + a lista de
     // fixadas (1 chamada) — em paralelo. SÓ LEITURA no Notion (mesma rota
     // /query já usada por qualquer outra página dinâmica do app).
-    var extraFields = ["Tipo", "Situação", "Link", "🏷️ Assuntos (PMF)", "📅 Data/Prazo"];
+    var extraFields = ["Tipo", "Situação", "Link", "🏷️ Assuntos (PMF)", "📅 Data de Conclusão"];
     var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
       "&filters=" + encodeURIComponent(JSON.stringify([{ property: "Nome", type: "title", condition: "is_not_empty", value: true }])) +
       "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Nome", direction: "ascending" }])) +
@@ -8018,7 +8079,7 @@
           situacaoColor: situacaoRaw ? (NOTION_COLOR[situacaoRaw.color] || "") : "",
           assuntos: assuntosFlat.filter(function (a) { return a && a.name; }),
           link: extra["Link"] || null,
-          dataPrazo: extra["📅 Data/Prazo"] || null
+          dataConclusao: extra["📅 Data de Conclusão"] || null
         };
       });
       pinnedIds = (fixadasResult.ok && fixadasResult.data && fixadasResult.data.pinned) || [];
