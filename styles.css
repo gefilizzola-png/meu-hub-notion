@@ -3310,7 +3310,6 @@ html, body {
   gap: 6px;
   font-size: 12px;
   color: #6b6b66;
-  margin-bottom: 8px;
 }
 .legislacoes-groupby-label select {
   font-size: 12px;
@@ -3321,9 +3320,25 @@ html, body {
   color: #262624;
 }
 
-/* barra de controles de "Todas as legislações" — busca + 3 selects +
-   "Agrupar por" + "Limpar filtros", tudo numa linha só que quebra no
-   celular (mesma ideia de ".notes-form-row"). */
+/* linha com "Agrupar por" + Recolher tudo/Expandir tudo (uma por seção:
+   Fixadas e Todas as legislações). */
+.legislacoes-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.legislacoes-collapseall-toolbar { display: flex; gap: 4px; flex-shrink: 0; }
+.legislacoes-collapseall-toolbar .toolbar-icon-btn { width: 26px; height: 26px; }
+.legislacoes-collapseall-toolbar .toolbar-icon-btn .ti { font-size: 13px; }
+
+/* barra de controles de "Todas as legislações" — busca + dropdowns de
+   Tipo/Situação/Assunto (buildIconDropdown, mesmo componente/visual de
+   qualquer outro filtro do app) + "Agrupar por" + recolher/expandir tudo +
+   "Limpar filtros", tudo numa linha só que quebra no celular (mesma ideia
+   de ".notes-form-row"). */
 .legislacoes-controls {
   display: flex;
   flex-wrap: wrap;
@@ -3341,14 +3356,10 @@ html, body {
   background: #fff;
   color: #262624;
 }
-.legislacoes-filter-select {
-  font-size: 12px;
-  padding: 5px 7px;
-  border-radius: 7px;
-  border: 0.5px solid #dcdcd8;
-  background: #fff;
-  color: #262624;
-  max-width: 160px;
+.legislacoes-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .legislacoes-clear-btn {
   font-size: 12px;

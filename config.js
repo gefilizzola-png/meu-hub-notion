@@ -938,7 +938,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-18 21:24",
+  appVersion: "2026-09-18 22:06",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -2211,15 +2211,21 @@ const APP_CONFIG = {
       ],
       // "legislacoes" (pedido do Georges — trocar "Legislação por assunto"
       // hardcoded por algo dinâmico): renderLegislacoesPage (app.js) busca
-      // TODAS as legislações desta base 1 vez só e monta busca/filtros/
-      // agrupamento (Assunto/Tipo/Ano/Situação) + a divisória "Legislações
-      // Fixadas" — nada disso mora mais aqui no config.js, só o
-      // database_id. LEGISLACOES_TIPO_FILTER/LEGISLACOES_ASSUNTOS_FILTER
-      // (acima) ficaram sem uso nesta página (as opções de Tipo/Situação/
-      // Assunto agora são derivadas ao vivo dos dados carregados), mas
-      // continuam declarados pro caso de precisar de novo.
+      // TODAS as legislações desta base 1 vez só e monta busca/filtros
+      // (Tipo/Situação/Assunto, seleção múltipla com busca e E/OU — MESMO
+      // dropdown/mesmas definições já usadas em Contratos/Betha/Reuniões/
+      // Tarefas/TAT, ver buildIconDropdown no app.js) + agrupamento (Tipo/
+      // Ano/Situação — "Assunto" saiu do agrupamento porque uma lei com
+      // vários assuntos duplicava nos grupos; continua valendo como
+      // filtro) + a divisória "Legislações Fixadas". "tipoFilter"/
+      // "assuntosFilter" reaproveitam as MESMAS definições já usadas antes
+      // nesta página (LEGISLACOES_TIPO_FILTER/LEGISLACOES_ASSUNTOS_FILTER,
+      // acima) — Situação não tem filtro compartilhado equivalente, então
+      // suas opções são derivadas ao vivo das leis carregadas.
       legislacoes: {
-        database_id: "39f8d5dfde534e378a108521c1978e21"
+        database_id: "39f8d5dfde534e378a108521c1978e21",
+        tipoFilter: LEGISLACOES_TIPO_FILTER,
+        assuntosFilter: LEGISLACOES_ASSUNTOS_FILTER
       }
     },
     pmf_cad_cargos: { title: "Cargos", items: [] },

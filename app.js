@@ -7503,9 +7503,15 @@
     var allLaws = [];
     var pinnedIds = [];
     var pinnedSet = {};
+    // "tipoSelected"/"situacaoSelected"/"assuntoSelected" — listas (0, 1 ou
+    // várias opções marcadas), igual qualquer outro filtro do app
+    // (buildIconDropdown, ver mais abaixo) — vazio = sem restrição.
+    // "assuntoMode" ("or"/"and") só vale pra Assunto (único com
+    // andOrToggle, igual nas outras páginas). Default de "Agrupar por" é
+    // "tipo" (não mais "assunto" — ver comentário em buildGroups).
     var state = {
-      search: "", tipo: "", situacao: "", assunto: "",
-      groupByAll: "assunto", groupByFixed: "assunto",
+      search: "", tipoSelected: [], situacaoSelected: [], assuntoSelected: [], assuntoMode: "or",
+      groupByAll: "tipo", groupByFixed: "tipo",
       collapsedAll: {}, collapsedFixed: {}
     };
 
@@ -7524,31 +7530,25 @@
       return (law.dataPrazo && law.dataPrazo.start) ? law.dataPrazo.start.slice(0, 4) : null;
     }
 
-    // agrupa uma lista de leis pelo campo escolhido em "Agrupar por". Uma
-    // lei com vários Assuntos entra em CADA grupo correspondente (mesmo
-    // espírito das antigas divisórias "Legislação por assunto" — uma lei
-    // sobre 2 assuntos aparecia nas 2). "" (Nenhum) devolve um grupo só,
-    // sem cabeçalho.
+    // agrupa uma lista de leis pelo campo escolhido em "Agrupar por". SEM
+    // "assunto" aqui de propósito (pedido do Georges: agrupar por assunto
+    // fazia a MESMA lei aparecer repetida em cada grupo, já que uma lei
+    // pode ter vários assuntos ao mesmo tempo — "Não gostei"). Cada lei
+    // entra em EXATAMENTE 1 grupo agora (Tipo/Situação/Ano são valores
+    // únicos por lei) — Assunto continua disponível, só que como FILTRO
+    // (ver buildFilterBar), não mais como agrupamento. "" (Nenhum) devolve
+    // um grupo só, sem cabeçalho.
     function buildGroups(laws, groupBy) {
       if (!groupBy) return [{ key: "__all__", label: null, laws: laws }];
       var map = {};
       laws.forEach(function (law) {
-        var keys;
-        if (groupBy === "assunto") {
-          keys = (law.assuntos && law.assuntos.length) ? law.assuntos.map(function (a) { return a.name; }) : ["(Sem assunto)"];
-        } else if (groupBy === "tipo") {
-          keys = [law.tipo || "(Sem tipo)"];
-        } else if (groupBy === "situacao") {
-          keys = [law.situacao || "(Sem situação)"];
-        } else if (groupBy === "ano") {
-          keys = [lawYear(law) || "(Sem data)"];
-        } else {
-          keys = ["__all__"];
-        }
-        keys.forEach(function (k) {
-          if (!map[k]) map[k] = { key: k, label: k, laws: [] };
-          map[k].laws.push(law);
-        });
+        var key;
+        if (groupBy === "tipo") key = law.tipo || "(Sem tipo)";
+        else if (groupBy === "situacao") key = law.situacao || "(Sem situação)";
+        else if (groupBy === "ano") key = lawYear(law) || "(Sem data)";
+        else key = "__all__";
+        if (!map[key]) map[key] = { key: key, label: key, laws: [] };
+        map[key].laws.push(law);
       });
       var groups = Object.keys(map).map(function (k) { return map[k]; });
       // "Ano" ordena decrescente (mais recente primeiro) — mais útil que
@@ -7558,16 +7558,24 @@
       return groups;
     }
 
+    // filtros de Tipo/Situação/Assunto — mesmo comportamento de QUALQUER
+    // outro filtro de seleção múltipla do app (buildIconDropdown): nenhuma
+    // opção marcada = sem restrição; 1+ marcadas = OU entre elas (Tipo/
+    // Situação sempre; Assunto também, a não ser que o botão E/OU do
+    // dropdown esteja em "E" — "assuntoMode").
     function matchesFilters(law) {
       if (state.search) {
         var s = state.search.toLowerCase();
         if ((law.title || "").toLowerCase().indexOf(s) === -1) return false;
       }
-      if (state.tipo && law.tipo !== state.tipo) return false;
-      if (state.situacao && law.situacao !== state.situacao) return false;
-      if (state.assunto) {
-        var has = (law.assuntos || []).some(function (a) { return a.name === state.assunto; });
-        if (!has) return false;
+      if (state.tipoSelected.length && state.tipoSelected.indexOf(law.tipo) === -1) return false;
+      if (state.situacaoSelected.length && state.situacaoSelected.indexOf(law.situacao) === -1) return false;
+      if (state.assuntoSelected.length) {
+        var lawNames = (law.assuntos || []).map(function (a) { return a.name; });
+        var matchesAssunto = state.assuntoMode === "and"
+          ? state.assuntoSelected.every(function (n) { return lawNames.indexOf(n) !== -1; })
+          : state.assuntoSelected.some(function (n) { return lawNames.indexOf(n) !== -1; });
+        if (!matchesAssunto) return false;
       }
       return true;
     }
@@ -7735,7 +7743,7 @@
       label.className = "legislacoes-groupby-label";
       label.textContent = "Agrupar por: ";
       var sel = document.createElement("select");
-      [["assunto", "Assunto"], ["tipo", "Tipo"], ["ano", "Ano"], ["situacao", "Situação"], ["", "Nenhum"]].forEach(function (opt) {
+      [["tipo", "Tipo"], ["ano", "Ano"], ["situacao", "Situação"], ["", "Nenhum"]].forEach(function (opt) {
         var o = document.createElement("option");
         o.value = opt[0];
         o.textContent = opt[1];
@@ -7747,6 +7755,40 @@
       return label;
     }
 
+    // botões "Recolher tudo"/"Expandir tudo" (pedido do Georges) — ao lado
+    // do "Agrupar por" de cada seção. "getLaws" devolve a lista ATUAL
+    // daquela seção (Fixadas ou filtradas) na hora do clique — não pode ser
+    // uma lista fixa, porque muda conforme os filtros/pinos mudam.
+    // "groupByKey" é o nome do campo em "state" (groupByFixed/groupByAll),
+    // lido na hora do clique também (o usuário pode ter trocado "Agrupar
+    // por" depois da última renderização).
+    function collapseAllToolbar(getLaws, groupByKey, collapsedState) {
+      var wrap = document.createElement("span");
+      wrap.className = "legislacoes-collapseall-toolbar";
+      function setAll(value) {
+        var groups = buildGroups(getLaws(), state[groupByKey]);
+        groups.forEach(function (g) { if (g.key !== "__all__") collapsedState[g.key] = value; });
+        applyState();
+      }
+      var collapseBtn = document.createElement("button");
+      collapseBtn.type = "button";
+      collapseBtn.className = "toolbar-icon-btn";
+      collapseBtn.title = "Recolher tudo";
+      collapseBtn.setAttribute("aria-label", "Recolher tudo");
+      collapseBtn.innerHTML = '<i class="ti ti-arrows-minimize"></i>';
+      collapseBtn.addEventListener("click", function () { setAll(true); });
+      var expandBtn = document.createElement("button");
+      expandBtn.type = "button";
+      expandBtn.className = "toolbar-icon-btn";
+      expandBtn.title = "Expandir tudo";
+      expandBtn.setAttribute("aria-label", "Expandir tudo");
+      expandBtn.innerHTML = '<i class="ti ti-arrows-maximize"></i>';
+      expandBtn.addEventListener("click", function () { setAll(false); });
+      wrap.appendChild(collapseBtn);
+      wrap.appendChild(expandBtn);
+      return wrap;
+    }
+
     // ---- monta os controles/estrutura 1 VEZ SÓ (ver comentário lá em
     // cima) — "applyState" só mexe no conteúdo de "fixedSection"/
     // "allSection" e no texto do título de Fixadas, nunca recria os
@@ -7754,7 +7796,11 @@
     var fixedTitleRow = document.createElement("div");
     fixedTitleRow.className = "legislacoes-section-title";
     body.appendChild(fixedTitleRow);
-    body.appendChild(groupBySelect(state.groupByFixed, function (v) { state.groupByFixed = v; applyState(); }));
+    var fixedToolbarRow = document.createElement("div");
+    fixedToolbarRow.className = "legislacoes-toolbar-row";
+    fixedToolbarRow.appendChild(groupBySelect(state.groupByFixed, function (v) { state.groupByFixed = v; applyState(); }));
+    fixedToolbarRow.appendChild(collapseAllToolbar(function () { return allLaws.filter(function (l) { return pinnedSet[l.id]; }); }, "groupByFixed", state.collapsedFixed));
+    body.appendChild(fixedToolbarRow);
     var fixedSection = document.createElement("div");
     body.appendChild(fixedSection);
 
@@ -7777,30 +7823,53 @@
     searchInput.addEventListener("input", function () { state.search = searchInput.value; applyState(); });
     controlsRow.appendChild(searchInput);
 
-    var tipoSelect = document.createElement("select");
-    tipoSelect.className = "legislacoes-filter-select";
-    tipoSelect.addEventListener("change", function () { state.tipo = tipoSelect.value; applyState(); });
-    controlsRow.appendChild(tipoSelect);
+    // Tipo/Situação/Assunto — mesmo dropdown de seleção múltipla (com
+    // busca e E/OU) já usado em TODAS as outras páginas do app
+    // (buildIconDropdown, ver lá em cima) — não mais um <select> simples.
+    // As opções só ficam prontas depois que os dados chegam (ver
+    // Promise.all mais abaixo), por isso o dropdown em si só é MONTADO
+    // dentro de buildFilterBar(), chamado pela 1ª vez de lá.
+    var filterBarWrap = document.createElement("span");
+    filterBarWrap.className = "legislacoes-filterbar";
+    controlsRow.appendChild(filterBarWrap);
 
-    var situacaoSelect = document.createElement("select");
-    situacaoSelect.className = "legislacoes-filter-select";
-    situacaoSelect.addEventListener("change", function () { state.situacao = situacaoSelect.value; applyState(); });
-    controlsRow.appendChild(situacaoSelect);
+    var tipoOptions = [];
+    var situacaoOptions = [];
+    var assuntoOptions = [];
 
-    var assuntoSelect = document.createElement("select");
-    assuntoSelect.className = "legislacoes-filter-select";
-    assuntoSelect.addEventListener("change", function () { state.assunto = assuntoSelect.value; applyState(); });
-    controlsRow.appendChild(assuntoSelect);
+    // reconstrói os 3 dropdowns do zero — mesmo motivo do "Limpar filtros"
+    // de renderSearchBlock (buildIconDropdown guarda o próprio estado
+    // marcado dentro do closure; recriar o elemento é a forma mais simples
+    // de garantir que volta pro estado inicial de verdade). Chamado tanto
+    // na 1ª montagem (options recém-carregadas) quanto no "Limpar filtros".
+    function buildFilterBar() {
+      filterBarWrap.innerHTML = "";
+      filterBarWrap.appendChild(buildIconDropdown({ label: "Tipo", options: tipoOptions }, function (opts) {
+        state.tipoSelected = opts.map(function (o) { return o.pageId; });
+        applyState();
+      }));
+      filterBarWrap.appendChild(buildIconDropdown({ label: "Situação", options: situacaoOptions }, function (opts) {
+        state.situacaoSelected = opts.map(function (o) { return o.pageId; });
+        applyState();
+      }));
+      filterBarWrap.appendChild(buildIconDropdown({ label: "Assuntos", options: assuntoOptions, searchable: true, andOrToggle: true }, function (opts) {
+        state.assuntoSelected = opts.map(function (o) { return o.pageId; });
+        state.assuntoMode = opts.mode || "or";
+        applyState();
+      }));
+    }
 
     controlsRow.appendChild(groupBySelect(state.groupByAll, function (v) { state.groupByAll = v; applyState(); }));
+    controlsRow.appendChild(collapseAllToolbar(function () { return allLaws.filter(matchesFilters); }, "groupByAll", state.collapsedAll));
 
     var clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "legislacoes-clear-btn";
     clearBtn.textContent = "Limpar filtros";
     clearBtn.addEventListener("click", function () {
-      state.search = ""; state.tipo = ""; state.situacao = ""; state.assunto = "";
-      searchInput.value = ""; tipoSelect.value = ""; situacaoSelect.value = ""; assuntoSelect.value = "";
+      state.search = ""; searchInput.value = "";
+      state.tipoSelected = []; state.situacaoSelected = []; state.assuntoSelected = []; state.assuntoMode = "or";
+      buildFilterBar();
       applyState();
     });
     controlsRow.appendChild(clearBtn);
@@ -7810,32 +7879,40 @@
     var allSection = document.createElement("div");
     body.appendChild(allSection);
 
-    // opções dos selects derivadas dos dados DE VERDADE (só o que existe
-    // entre as legislações buscadas) — evita filtro vazio/opção que não
-    // bate com nada, e não depende de manter uma lista fixa em dia.
-    function fillSelect(sel, valuesMap, allLabel) {
-      sel.innerHTML = "";
-      var optAll = document.createElement("option");
-      optAll.value = "";
-      optAll.textContent = allLabel;
-      sel.appendChild(optAll);
-      Object.keys(valuesMap).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (k) {
-        var o = document.createElement("option");
-        o.value = k;
-        o.textContent = k;
-        sel.appendChild(o);
-      });
-    }
-    function populateFilterOptions() {
-      var tipos = {}, situacoes = {}, assuntos = {};
+    // opções dos 3 dropdowns: Tipo reaproveita LEGISLACOES_TIPO_FILTER
+    // (fixo, com cores já definidas — "já temos essas definições de
+    // filtros bem definidas em outras páginas"); Situação (sem filtro
+    // compartilhado equivalente) deriva das leis carregadas; Assunto busca
+    // ao vivo da Central (mesmo mecanismo/optionsFrom de
+    // LEGISLACOES_ASSUNTOS_FILTER, resolvido em paralelo lá no
+    // Promise.all abaixo) — todas 100% leitura.
+    function uniqueOptionsFromLaws(pickName, pickColor) {
+      var map = {};
       allLaws.forEach(function (l) {
-        if (l.tipo) tipos[l.tipo] = true;
-        if (l.situacao) situacoes[l.situacao] = true;
-        (l.assuntos || []).forEach(function (a) { assuntos[a.name] = true; });
+        var name = pickName(l);
+        if (!name || map[name]) return;
+        map[name] = { label: name, pageId: name, icon: "ti-tag", color: pickColor(l) || "" };
       });
-      fillSelect(tipoSelect, tipos, "Todos os tipos");
-      fillSelect(situacaoSelect, situacoes, "Todas as situações");
-      fillSelect(assuntoSelect, assuntos, "Todos os assuntos");
+      return Object.keys(map).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).map(function (k) { return map[k]; });
+    }
+    function populateFilterOptions(assuntoSchemaOptions) {
+      tipoOptions = (lcfg.tipoFilter && lcfg.tipoFilter.options) || uniqueOptionsFromLaws(function (l) { return l.tipo; }, function (l) { return l.tipoColor; });
+      situacaoOptions = uniqueOptionsFromLaws(function (l) { return l.situacao; }, function (l) { return l.situacaoColor; });
+      if (assuntoSchemaOptions && assuntoSchemaOptions.length) {
+        assuntoOptions = assuntoSchemaOptions;
+      } else {
+        // fallback: deriva dos assuntos que já vieram junto com as leis
+        // (menos completo que a lista viva da Central, mas evita o filtro
+        // ficar vazio se o /schema falhar por algum motivo).
+        var map = {};
+        allLaws.forEach(function (l) {
+          (l.assuntos || []).forEach(function (a) {
+            if (a && a.name && !map[a.name]) map[a.name] = { label: a.name, pageId: a.name, icon: "ti-tag", color: NOTION_COLOR[a.color] || "" };
+          });
+        });
+        assuntoOptions = Object.keys(map).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).map(function (k) { return map[k]; });
+      }
+      buildFilterBar();
     }
 
     function applyState() {
@@ -7855,12 +7932,23 @@
       "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Nome", direction: "ascending" }])) +
       "&extra=" + encodeURIComponent(JSON.stringify(extraFields));
 
+    // "Assuntos" busca a lista VIVA de opções da Central (mesmo mecanismo
+    // "optionsFrom" de LEGISLACOES_ASSUNTOS_FILTER, já usado assim em toda
+    // pesquisa por Assunto do app) — em paralelo com o resto, cai pro
+    // fallback (opções derivadas das leis já carregadas) se falhar por
+    // qualquer motivo, sem travar o carregamento da página inteira.
+    var assuntoOptionsPromise = (lcfg.assuntosFilter && lcfg.assuntosFilter.optionsFrom)
+      ? fetchSchemaOptions(lcfg.assuntosFilter.optionsFrom.database_id, lcfg.assuntosFilter.optionsFrom.property).catch(function () { return []; })
+      : Promise.resolve([]);
+
     Promise.all([
       authFetch(queryUrl).then(handle401).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); }),
-      authFetch(cfg.templateWorkerUrl + "/legislacoes-fixadas").then(handle401).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      authFetch(cfg.templateWorkerUrl + "/legislacoes-fixadas").then(handle401).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); }),
+      assuntoOptionsPromise
     ]).then(function (results) {
       var queryResult = results[0];
       var fixadasResult = results[1];
+      var assuntoSchemaOptions = results[2];
       if (!queryResult.ok) throw new Error((queryResult.data && queryResult.data.error) || "Falha ao buscar legislações");
       var pages = (queryResult.data && queryResult.data.pages) || [];
       allLaws = pages.map(function (p) {
@@ -7888,7 +7976,7 @@
       });
       pinnedIds = (fixadasResult.ok && fixadasResult.data && fixadasResult.data.pinned) || [];
       syncPinnedSet();
-      populateFilterOptions();
+      populateFilterOptions(assuntoSchemaOptions);
       statusEl.style.display = "none";
       wrap.appendChild(body);
       applyState();
