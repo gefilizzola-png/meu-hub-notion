@@ -7526,18 +7526,59 @@
       pinnedIds.forEach(function (id) { pinnedSet[id] = true; });
     }
 
+    // "📅 Data/Prazo" vem do Worker como rollup via Central — dependendo de
+    // como a Central relaciona (1 ou várias páginas), o rollup pode vir
+    // como OBJETO único {start,end} OU como ARRAY de objetos [{start,end}]
+    // (mesmo padrão do rollup de Assuntos, que já é array). "law.dataPrazo"
+    // é normalizado aqui pra sempre virar {start,end}|null, não importa a
+    // forma que chegou — bug reportado pelo Georges (TODAS as 99 leis
+    // caindo em "(SEM DATA)" ao agrupar por Ano) era exatamente isso:
+    // dataPrazo chegava como array, e ".start" de um array é undefined.
+    function normalizeDatePrazo(dp) {
+      while (Array.isArray(dp)) dp = dp.length ? dp[0] : null;
+      return (dp && dp.start) ? dp : null;
+    }
     function lawYear(law) {
-      return (law.dataPrazo && law.dataPrazo.start) ? law.dataPrazo.start.slice(0, 4) : null;
+      var dp = normalizeDatePrazo(law.dataPrazo);
+      return dp ? String(dp.start).slice(0, 4) : null;
+    }
+
+    // "Tributo" NÃO é um campo do Notion — não existe propriedade
+    // estruturada pra isso na base Legislações (conferido direto no
+    // schema). O que existe é um padrão de nomenclatura no título (Nome):
+    // "Legislação - ÓRGÃO - NÚMERO - TRIBUTO - ASSUNTO...". Pedido do
+    // Georges, ciente de que o padrão não é 100% consistente (leis sem
+    // tributo no nome, leis com 2 tributos juntos, "CAD_IMOB" vs
+    // "CAD-IMOB", etc — opção "extrair da 4ª posição" escolhida por ele
+    // mesmo depois de eu mostrar esses casos): pega o pedaço logo depois
+    // de órgão+número (parts[3]); se esse pedaço parecer uma frase longa
+    // (3+ palavras ou >20 caracteres) em vez de um código curto, trata
+    // como "sem tributo" também, já que claramente não é um código de
+    // tributo (ex: "Código Tributário Municipal", "Programa de
+    // Racionalização..."). Maiúsculas + hífen normalizado pra underscore
+    // faz "CAD-IMOB"/"CAD_IMOB"/variações de caixa caírem no MESMO grupo.
+    function lawTributo(law) {
+      var nome = law.title || "";
+      var parts = nome.split(" - ").map(function (s) { return s.trim(); }).filter(function (s) { return s.length; });
+      if (parts.length < 4) return null;
+      var candidate = parts[3];
+      if (!candidate) return null;
+      var words = candidate.split(/\s+/).filter(function (w) { return w.length; });
+      if (words.length > 2 || candidate.length > 20) return null;
+      return candidate.toUpperCase().replace(/-/g, "_");
     }
 
     // agrupa uma lista de leis pelo campo escolhido em "Agrupar por". SEM
     // "assunto" aqui de propósito (pedido do Georges: agrupar por assunto
     // fazia a MESMA lei aparecer repetida em cada grupo, já que uma lei
-    // pode ter vários assuntos ao mesmo tempo — "Não gostei"). Cada lei
-    // entra em EXATAMENTE 1 grupo agora (Tipo/Situação/Ano são valores
-    // únicos por lei) — Assunto continua disponível, só que como FILTRO
-    // (ver buildFilterBar), não mais como agrupamento. "" (Nenhum) devolve
-    // um grupo só, sem cabeçalho.
+    // pode ter vários assuntos ao mesmo tempo — "Não gostei"). "Tributo"
+    // pelo mesmo motivo poderia repetir lei em leis com 2 tributos no
+    // nome (ex: "IPTU/ISSQN") — lawTributo() acima já devolve só 1 valor
+    // por lei (o 1º/principal), evitando duplicação. Cada lei entra em
+    // EXATAMENTE 1 grupo (Tipo/Situação/Ano/Tributo são valores únicos
+    // por lei nessa função) — Assunto continua disponível, só que como
+    // FILTRO (ver buildFilterBar), não mais como agrupamento. "" (Nenhum)
+    // devolve um grupo só, sem cabeçalho.
     function buildGroups(laws, groupBy) {
       if (!groupBy) return [{ key: "__all__", label: null, laws: laws }];
       var map = {};
@@ -7546,6 +7587,7 @@
         if (groupBy === "tipo") key = law.tipo || "(Sem tipo)";
         else if (groupBy === "situacao") key = law.situacao || "(Sem situação)";
         else if (groupBy === "ano") key = lawYear(law) || "(Sem data)";
+        else if (groupBy === "tributo") key = lawTributo(law) || "(Sem tributo)";
         else key = "__all__";
         if (!map[key]) map[key] = { key: key, label: key, laws: [] };
         map[key].laws.push(law);
@@ -7713,14 +7755,19 @@
         if (showHeaders) {
           var header = document.createElement("div");
           header.className = "legislacoes-group-header-row";
-          var isCollapsed = !!collapsedState[g.key];
+          // default é RECOLHIDO (pedido do Georges: "como padrão, os
+          // agrupamentos sempre estão recolhidos quando abro a página") —
+          // só fica expandido depois que o usuário clica pra abrir aquele
+          // grupo especificamente (hasOwnProperty distingue "nunca mexeu
+          // nesse grupo" de "usuário já recolheu de propósito").
+          var isCollapsed = collapsedState.hasOwnProperty(g.key) ? !!collapsedState[g.key] : true;
           var toggle = document.createElement("button");
           toggle.type = "button";
           toggle.className = "query-collapse-btn legislacoes-group-collapse-btn";
           var ic = document.createElement("i");
           ic.className = isCollapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
           toggle.appendChild(ic);
-          var doToggle = function () { collapsedState[g.key] = !collapsedState[g.key]; applyState(); };
+          var doToggle = function () { collapsedState[g.key] = !isCollapsed; applyState(); };
           toggle.addEventListener("click", doToggle);
           header.appendChild(toggle);
           var label = document.createElement("span");
@@ -7743,7 +7790,7 @@
       label.className = "legislacoes-groupby-label";
       label.textContent = "Agrupar por: ";
       var sel = document.createElement("select");
-      [["tipo", "Tipo"], ["ano", "Ano"], ["situacao", "Situação"], ["", "Nenhum"]].forEach(function (opt) {
+      [["tipo", "Tipo"], ["tributo", "Tributo"], ["ano", "Ano"], ["situacao", "Situação"], ["", "Nenhum"]].forEach(function (opt) {
         var o = document.createElement("option");
         o.value = opt[0];
         o.textContent = opt[1];
