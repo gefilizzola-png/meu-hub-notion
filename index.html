@@ -54,6 +54,16 @@
            preenchido/destacado quando a página aberta já é a home (ver
            updateSetHomeBtn em app.js, chamado a cada render(pageId)). -->
       <button class="set-home-btn" id="setHomeBtn" type="button" title="Definir como página inicial"><i class="ti ti-home"></i></button>
+      <!-- Central de Notificações (pedido do Georges): sino GLOBAL, visível em
+           QUALQUER página (diferente do sidePanel abaixo, que só aparece em
+           páginas com page.sidePanel configurado) — abre o painel notifPanel,
+           que desliza da DIREITA (espelho do menu esquerdo). Bolinha vermelha
+           (id="notifBellBadge") só aparece quando tem aviso não lido — ver
+           refreshNotifications()/toggleNotifPanel() em app.js. -->
+      <button class="notif-bell-btn" id="notifBellBtn" type="button" title="Central de notificações" aria-label="Central de notificações" aria-expanded="false">
+        <i class="ti ti-bell"></i>
+        <span class="notif-bell-badge" id="notifBellBadge" style="display:none"></span>
+      </button>
       <div class="header-search">
         <div class="search-field-wrap">
           <i class="ti ti-search"></i>
@@ -82,6 +92,26 @@
   <i class="ti ti-chevron-left" aria-hidden="true"></i>
 </button>
 <aside class="side-panel" id="sidePanel" aria-hidden="true" style="display:none"></aside>
+
+<!-- Central de Notificações (pedido do Georges) — gaveta PRÓPRIA, dedicada
+     (não reaproveita o side-panel acima, que é uma feature diferente —
+     atalhos por página, hoje só em Início): mesma dinâmica de "abre sem
+     usar a tela toda, fecha clicando fora" do menu esquerdo (sidebar +
+     sidebarBackdrop, no topo deste arquivo), só que espelhada — desliza da
+     DIREITA e é acionada pelo sino global (notifBellBtn), não por página.
+     Ver renderNotifPanel()/toggleNotifPanel() em app.js. -->
+<div class="notif-backdrop" id="notifBackdrop"></div>
+<aside class="notif-panel" id="notifPanel" aria-hidden="true">
+  <div class="notif-panel-header">
+    <span class="notif-panel-title">Notificações</span>
+    <div class="notif-panel-tabs" id="notifPanelTabs">
+      <button type="button" class="notif-panel-tab-btn active" data-mode="unread">Não lidas</button>
+      <button type="button" class="notif-panel-tab-btn" data-mode="all">Todas</button>
+    </div>
+    <button type="button" class="notif-panel-close-btn" id="notifPanelCloseBtn" aria-label="Fechar notificações"><i class="ti ti-x"></i></button>
+  </div>
+  <div class="notif-panel-list" id="notifPanelList"></div>
+</aside>
 
 <div class="search-results" id="searchResults"></div>
 
