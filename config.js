@@ -791,6 +791,72 @@ var NOTIFICATION_SOURCES = [
     defaultLeadTimes: [
       { id: "2d", amount: 2, unit: "days", label: "2 dias antes" }
     ]
+  },
+  // "Itens Prioritários" (pedido do Georges: "páginas da base Central que
+  // possuem Focus preenchido e data vincenda") — ao contrário das fontes
+  // acima, NÃO restringe por "📚 Página de Origem": varre a Central
+  // INTEIRA, pegando qualquer página (Tarefa, Reunião, Betha, TAT, JART,
+  // COMAT, Convênio, Auditoria etc) que a própria fórmula "⭐ Focus" do
+  // Notion já classificou como urgente. Mesmos 3 rótulos usados em
+  // FOCUS_FILTER acima (orPairs = "ou" entre eles — qualquer um dos 3
+  // conta como "Focus preenchido"). "🧲 Andamento" != Concluído/Cancelado
+  // é o mesmo par fixo usado em todas as outras fontes — ERA um baseFilter
+  // fixo também na exibição "Itens Prioritários" de Início antes de virar
+  // um filtro interativo lá (ver INICIO_ANDAMENTO_FILTER); aqui, sem UI
+  // pra "reexibir" nada, mantém fixo de propósito, por segurança (evita
+  // depender só da fórmula Focus já excluir concluídos/cancelados sozinha).
+  {
+    id: "prioritarios",
+    label: "Itens Prioritários",
+    database_id: "2310481486dd80079202fe1eaf5e14c4",
+    baseFilters: [
+      { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+      { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" },
+      {
+        property: "⭐ Focus", type: "formula", formulaType: "string", condition: "contains",
+        orPairs: [
+          { condition: "contains", value: "⭐ 1 - Focus" },
+          { condition: "contains", value: "⚠️ 2 - Atenção" },
+          { condition: "contains", value: "📅 3 - Verificar prazo" }
+        ]
+      }
+    ],
+    dateProperty: "📅 Data/Prazo",
+    // leva pro Painel do Dia (page "inicio"), onde já mora a divisória
+    // "⭐ Itens Prioritários" — mesma exibição, sem duplicar nada novo.
+    target: { type: "page", target: "inicio" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
+    ]
+  },
+  // Financeiro / Contas Mensais (pedido do Georges: "importantíssimo pra
+  // mim ter a possibilidade de Notificação") — kind DIFERENTE de propósito
+  // ("financeiro", não "notion"/padrão): as 14 contas NÃO vivem na Central,
+  // são 14 bases próprias do Notion, buscadas pela rota já existente GET
+  // /financeiro-contas (por mês), a MESMA usada pela página "Contas
+  // Mensais" — não pelo /query genérico que as fontes "notion" acima usam.
+  // Por isso não tem "database_id"/"baseFilters" aqui: fetchFinanceiroNotificationItems
+  // (app.js) cuida da busca inteira sozinha, mês a mês, cruzando com
+  // /financeiro-paid (o mesmo "marcar como pago" manual da KV que a
+  // própria página Contas Mensais já usa) pra nunca notificar uma conta
+  // que já foi paga — nem pelo Notion, nem manualmente pelo app. Só
+  // escreve/lê o de sempre (100% leitura no Notion, /financeiro-paid é
+  // 100% KV) — nada muda na regra de nunca escrever no Notion fora dos
+  // botões "Criar". "dateProperty: 'vencimento'" aqui NÃO é um nome de
+  // propriedade do Notion (é só a chave usada dentro de "extra" pra
+  // reaproveitar buildNotificationsFromSource sem precisar mudar nada
+  // nele — ver comentário grande em fetchFinanceiroNotificationItems).
+  {
+    id: "financeiro",
+    label: "Financeiro (Contas Mensais)",
+    kind: "financeiro",
+    dateProperty: "vencimento",
+    target: { type: "page", target: "financeiro_contas_mensais" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "3d", amount: 3, unit: "days", label: "3 dias antes" }
+    ]
   }
 ];
 
@@ -1008,7 +1074,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-20 20:28",
+  appVersion: "2026-09-20 20:48",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é

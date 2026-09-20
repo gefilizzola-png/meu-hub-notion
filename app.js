@@ -8561,16 +8561,29 @@
     return (dp && dp.start) ? dp : null;
   }
 
-  // janela de busca de UMA fonte: de "2 dias atrás" (NOTIF_GRACE_MS abaixo
-  // — continua avisando um pouco depois do prazo, em vez de sumir na hora
-  // que o evento passa) até "daqui a N dias" (N = maior leadTime da fonte,
-  // +1 dia de folga pra cobrir hora exata/fuso sem cortar nenhum evento
-  // por engano). SÓ LEITURA — mesma rota /query usada por qualquer outra
-  // página dinâmica do app.
-  function fetchNotificationSourceItems(source) {
+  // tem que bater com "past_2_days" usado no filtro de fetchNotionNotificationSourceItems
+  // abaixo — item some da Central assim que sair dessa janela, sem
+  // precisar de nenhuma limpeza manual/agendada. Também usada pela janela
+  // de Financeiro (fetchFinanceiroNotificationItems), com o mesmo sentido.
+  var NOTIF_GRACE_MS = 2 * 86400000;
+
+  // maior leadTime de uma fonte, em DIAS, +1 dia de folga (cobre hora
+  // exata/fuso sem cortar nenhum evento por engano) — usado tanto pela
+  // janela de busca "notion" quanto pela "financeiro" abaixo, por isso
+  // virou uma função à parte (era só inline antes de existir a 2ª fonte de
+  // dados).
+  function notifSourceMaxDays(source) {
     var maxMs = 0;
     source.leadTimes.forEach(function (lt) { maxMs = Math.max(maxMs, leadTimeMs(lt)); });
-    var maxDays = Math.max(1, Math.ceil(maxMs / 86400000) + 1);
+    return Math.max(1, Math.ceil(maxMs / 86400000) + 1);
+  }
+
+  // fontes normais (kind "notion", que é o default — ver
+  // NOTIFICATION_SOURCES no config.js): SÓ LEITURA, mesma rota /query
+  // usada por qualquer outra página dinâmica do app. Janela de busca de
+  // "2 dias atrás" (NOTIF_GRACE_MS) até "daqui a N dias" (notifSourceMaxDays).
+  function fetchNotionNotificationSourceItems(source) {
+    var maxDays = notifSourceMaxDays(source);
     var filters = source.baseFilters.concat([
       { property: source.dateProperty, type: "date", condition: "on_or_after", value: "past_2_days" },
       { property: source.dateProperty, type: "date", condition: "before", value: "next_" + maxDays + "_days" }
@@ -8587,10 +8600,100 @@
     }).catch(function () { return []; });
   }
 
-  // tem que bater com "past_2_days" usado no filtro acima — item some da
-  // Central assim que sair dessa janela, sem precisar de nenhuma limpeza
-  // manual/agendada.
-  var NOTIF_GRACE_MS = 2 * 86400000;
+  // "YYYY-MM" de cada mês tocado pela janela [startDate, endDate]
+  // (inclusive) — a janela de uma fonte de notificação normalmente cabe
+  // num mês só, mas perto da virada (ex: hoje 28/set, antecedência de 5
+  // dias) toca setembro E outubro; GET /financeiro-contas só aceita UM mês
+  // por chamada, por isso busca cada um separado e junta depois. Função
+  // pura (datas já prontas, sem calcular "agora" aqui dentro) só pra dar
+  // pra testar isolado.
+  function financeiroMonthsInRange(startDate, endDate) {
+    var months = [];
+    var d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    var end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+    while (d <= end) {
+      months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+      d.setMonth(d.getMonth() + 1);
+    }
+    return months;
+  }
+
+  // filtra as contas já pagas (Notion OU KV) e as linhas sintéticas
+  // "missing" (conta sem nenhum lançamento naquele mês — nada pra
+  // notificar) e converte o que sobra pro mesmo formato {id,title,url,
+  // extra} que buildNotificationsFromSource já espera de QUALQUER fonte —
+  // assim ele não precisa saber que "Financeiro" existe. Função pura
+  // (items/overrides já prontos) só pra dar pra testar isolado, separada
+  // de fetchFinanceiroNotificationItems (que cuida só do fetch/promises).
+  function filterAndMapFinanceiroItems(items, overrides, dateProperty) {
+    return items.filter(function (it) {
+      if (it.missing) return false; // sem lançamento nesse mês, nada a notificar
+      if (it.pagamento) return false; // Notion já confirmou o pagamento
+      var ov = it.id && overrides[it.id];
+      if (ov && ov.paid) return false; // marcado como pago manualmente (KV)
+      return true;
+    }).map(function (it) {
+      var extraObj = {};
+      extraObj[dateProperty] = it.vencimento;
+      return {
+        id: it.id,
+        // "Aluguel — Setembro/2026" (accountLabel sempre presente; nome é
+        // o texto do próprio lançamento no Notion, pode faltar).
+        title: it.accountLabel + (it.nome ? " — " + it.nome : ""),
+        url: it.url,
+        extra: extraObj
+      };
+    });
+  }
+
+  // Financeiro / Contas Mensais (kind "financeiro" — pedido do Georges:
+  // "importantíssimo pra mim ter a possibilidade de Notificação"). As 14
+  // contas NÃO vivem na Central: busca pela rota já existente GET
+  // /financeiro-contas (por mês, a MESMA usada pela página "Contas
+  // Mensais"), cruzando com GET /financeiro-paid (o mesmo "marcar como
+  // pago" manual da KV que essa página já usa) pra nunca notificar uma
+  // conta já paga — nem pelo Notion, nem manualmente pelo app. 100%
+  // leitura no Notion + 100% KV em financeiro-paid, nada novo escrito em
+  // lugar nenhum.
+  function fetchFinanceiroNotificationItems(source) {
+    var maxDays = notifSourceMaxDays(source);
+    var now = new Date();
+    var startWindow = new Date(now.getTime() - NOTIF_GRACE_MS);
+    var endWindow = new Date(now.getTime() + maxDays * 86400000);
+    var months = financeiroMonthsInRange(startWindow, endWindow);
+
+    return Promise.all(months.map(function (month) {
+      return Promise.all([
+        authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(month))
+          .then(function (res) {
+            if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+            return res.ok ? res.json() : { items: [] };
+          })
+          .then(function (data) { return (data && data.items) || []; })
+          .catch(function () { return []; }),
+        authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(month))
+          .then(function (res) { return res.ok ? res.json() : { overrides: {} }; })
+          .then(function (data) { return (data && data.overrides) || {}; })
+          .catch(function () { return {}; })
+      ]).then(function (results) {
+        return filterAndMapFinanceiroItems(results[0], results[1], source.dateProperty);
+      });
+    })).then(function (perMonth) {
+      var all = [];
+      perMonth.forEach(function (arr) { all = all.concat(arr); });
+      return all;
+    }).catch(function () { return []; });
+  }
+
+  // ponto único chamado por computeNotifications — decide QUAL busca usar
+  // conforme "source.kind" (default "notion", ver resolvedNotifSources
+  // acima). Mantém buildNotificationsFromSource 100% agnóstico: ele só
+  // enxerga a lista {id,title,url,extra} pronta, nunca sabe se veio do
+  // /query genérico ou de /financeiro-contas.
+  function fetchNotificationSourceItems(source) {
+    if (source.kind === "financeiro") return fetchFinanceiroNotificationItems(source);
+    return fetchNotionNotificationSourceItems(source);
+  }
 
   // pra cada item x leadTime que JÁ entrou na janela de aviso, monta 1
   // notificação INDEPENDENTE (notifId = fonte::leadTime::pageId — decisão
@@ -8638,6 +8741,7 @@
       return {
         id: source.id,
         label: source.label,
+        kind: source.kind || "notion",
         database_id: source.database_id,
         baseFilters: source.baseFilters,
         dateProperty: source.dateProperty,
