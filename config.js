@@ -740,6 +740,18 @@ var SIDEPANEL_LINKS = [
 // precisar de nenhuma lógica de "voltar a ficar não lido"). Fase 1 (pedido
 // explícito do Georges: "pode ir por fases") — só 2 fontes pra validar o
 // conceito antes de estender pra mais páginas.
+//
+// "defaultEnabled"/"defaultLeadTimes" (pedido do Georges: "Eu queria poder
+// ter a gestão do que vai ter notificação e quando") são só a SEMENTE —
+// usada pelo app.js apenas enquanto o Georges nunca mexeu na gestão pela
+// própria Central de Notificações (GET /notifications-settings devolve
+// null nesse caso). Assim que ele liga/desliga uma fonte ou
+// adiciona/remove uma antecedência pelo ícone de engrenagem no painel, o
+// que fica salvo na KV passa a valer, e estes campos aqui viram só
+// histórico/fallback — não precisam ser editados de novo pra isso (só se o
+// Georges quiser mudar o PADRÃO de fábrica de uma fonte nova). id/label/
+// database_id/baseFilters/dateProperty/target continuam fixos aqui, só eu
+// mexo neles (exigem conhecimento do schema do Notion).
 var NOTIFICATION_SOURCES = [
   {
     id: "reunioes",
@@ -754,7 +766,8 @@ var NOTIFICATION_SOURCES = [
     // "url" que a busca já devolve por padrão — sem precisar configurar
     // nada aqui pra isso).
     target: { type: "page", target: "pmf_ctrl_reunioes" },
-    leadTimes: [
+    defaultEnabled: true,
+    defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" },
       { id: "3h", amount: 3, unit: "hours", label: "3 horas antes" }
     ]
@@ -774,7 +787,8 @@ var NOTIFICATION_SOURCES = [
     ],
     dateProperty: "📅 Data/Prazo",
     target: { type: "page", target: "pmf_col_tat" },
-    leadTimes: [
+    defaultEnabled: true,
+    defaultLeadTimes: [
       { id: "2d", amount: 2, unit: "days", label: "2 dias antes" }
     ]
   }
@@ -994,7 +1008,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-20 19:08",
+  appVersion: "2026-09-20 20:28",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é

@@ -108,6 +108,11 @@
       <button type="button" class="notif-panel-tab-btn active" data-mode="unread">Não lidas</button>
       <button type="button" class="notif-panel-tab-btn" data-mode="all">Todas</button>
     </div>
+    <!-- gestão (pedido do Georges: "gestão do que vai ter notificação e
+         quando") — alterna a lista pro editor por fonte (liga/desliga +
+         antecedências), dentro do MESMO painel/id="notifPanelList" (ver
+         toggleNotifSettingsView/renderNotifSettings em app.js). -->
+    <button type="button" class="notif-panel-settings-btn" id="notifPanelSettingsBtn" title="Gerenciar notificações" aria-label="Gerenciar notificações"><i class="ti ti-settings"></i></button>
     <button type="button" class="notif-panel-close-btn" id="notifPanelCloseBtn" aria-label="Fechar notificações"><i class="ti ti-x"></i></button>
   </div>
   <div class="notif-panel-list" id="notifPanelList"></div>

@@ -8546,7 +8546,7 @@
   // completo). SÓ LEITURA no Notion (mesmo /query de sempre); "lida/não
   // lida" é 100% KV (/notifications-read no worker.js), igual "Fixar" de
   // Legislações — nunca escreve em nada do Notion.
-  var notifState = { items: [], readIds: [], mode: "unread", loaded: false, loading: false };
+  var notifState = { items: [], readIds: [], settings: null, sources: [], mode: "unread", view: "list", loaded: false, loading: false };
 
   function leadTimeMs(lt) {
     return lt.amount * (lt.unit === "hours" ? 3600000 : 86400000);
@@ -8624,8 +8624,42 @@
     return list;
   }
 
-  function computeNotifications() {
-    return Promise.all((window.NOTIFICATION_SOURCES || []).map(function (source) {
+  // monta a lista de fontes "resolvida": enabled/leadTimes vêm do que foi
+  // salvo em /notifications-settings (pedido do Georges: gestão pelo
+  // próprio app) quando existe, senão caem pro defaultEnabled/
+  // defaultLeadTimes do config.js (ver comentário grande em
+  // NOTIFICATION_SOURCES). Uma fonte que não aparece no objeto salvo (ex:
+  // eu adiciono uma fonte nova depois) também cai no default dela — não
+  // precisa "migrar" nada na KV quando isso acontece.
+  function resolvedNotifSources(savedSettings) {
+    return (window.NOTIFICATION_SOURCES || []).map(function (source) {
+      var s = savedSettings && savedSettings[source.id];
+      var leadTimes = (s && Array.isArray(s.leadTimes) && s.leadTimes.length) ? s.leadTimes : source.defaultLeadTimes;
+      return {
+        id: source.id,
+        label: source.label,
+        database_id: source.database_id,
+        baseFilters: source.baseFilters,
+        dateProperty: source.dateProperty,
+        target: source.target,
+        defaultLeadTimes: source.defaultLeadTimes,
+        enabled: s ? !!s.enabled : (source.defaultEnabled !== false),
+        leadTimes: leadTimes
+      };
+    });
+  }
+
+  function fetchNotifSettings() {
+    return authFetch(cfg.templateWorkerUrl + "/notifications-settings")
+      .then(function (res) { return res.ok ? res.json() : { settings: null }; })
+      .then(function (data) { return (data && data.settings) || null; })
+      .catch(function () { return null; });
+  }
+
+  // só consulta o Notion das fontes LIGADAS — desligar uma fonte pela
+  // gestão evita a busca dela inteira, não só esconde o resultado depois.
+  function computeNotifications(sources) {
+    return Promise.all(sources.filter(function (s) { return s.enabled; }).map(function (source) {
       return fetchNotificationSourceItems(source).then(function (pages) {
         return buildNotificationsFromSource(source, pages);
       });
@@ -8687,16 +8721,195 @@
   function refreshNotifications() {
     if (notifState.loading) return Promise.resolve();
     notifState.loading = true;
-    return Promise.all([computeNotifications(), fetchNotifReadIds()]).then(function (results) {
+    return fetchNotifSettings().then(function (savedSettings) {
+      notifState.settings = savedSettings;
+      notifState.sources = resolvedNotifSources(savedSettings);
+      return Promise.all([computeNotifications(notifState.sources), fetchNotifReadIds()]);
+    }).then(function (results) {
       notifState.items = results[0];
       notifState.readIds = results[1];
       notifState.loaded = true;
       notifState.loading = false;
       updateNotifBellBadge();
-      renderNotifList();
+      if (notifState.view === "settings") renderNotifSettings(); else renderNotifList();
     }).catch(function () {
       notifState.loading = false;
     });
+  }
+
+  // ---------------- gestão de notificações (pedido do Georges: "Eu queria
+  // poder ter a gestão do que vai ter notificação e quando (qual
+  // antecedência)") ----------------
+  // Editor dentro do próprio painel (ícone de engrenagem no cabeçalho, ver
+  // index.html/toggleNotifSettingsView abaixo), mesmo padrão de "salva a
+  // cada mudança" dos Filtros Rápidos/Visualizações de Prioridades: PUT
+  // sempre manda o objeto INTEIRO (todas as fontes, não só a que mudou) —
+  // nunca faz merge no servidor (ver handleNotificationsSettingsUpdate no
+  // worker.js).
+  function buildNotifSettingsPayload() {
+    var out = {};
+    notifState.sources.forEach(function (s) {
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes };
+    });
+    return out;
+  }
+
+  function saveNotifSettings() {
+    return authFetch(cfg.templateWorkerUrl + "/notifications-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settings: buildNotifSettingsPayload() })
+    }).then(function (res) { return res.ok ? res.json() : null; }).then(function (data) {
+      if (data && data.settings) notifState.settings = data.settings;
+    }).catch(function () {});
+  }
+
+  // otimista (igual toggleNotifRead acima): mexe no estado local, re-
+  // renderiza o editor na hora, salva em segundo plano E recalcula a lista
+  // de avisos (sem precisar de um refreshNotifications completo —
+  // settings/leadTimes já são conhecidos localmente, só falta buscar de
+  // novo as fontes afetadas no Notion).
+  function applyNotifSettingsChange() {
+    if (notifState.view === "settings") renderNotifSettings();
+    saveNotifSettings();
+    notifState.loading = true;
+    computeNotifications(notifState.sources).then(function (items) {
+      notifState.items = items;
+      notifState.loading = false;
+      updateNotifBellBadge();
+      if (notifState.view === "list") renderNotifList();
+    }).catch(function () { notifState.loading = false; });
+  }
+
+  function findNotifSource(sourceId) {
+    return notifState.sources.filter(function (s) { return s.id === sourceId; })[0];
+  }
+
+  function setNotifSourceEnabled(sourceId, enabled) {
+    var s = findNotifSource(sourceId);
+    if (!s) return;
+    s.enabled = enabled;
+    applyNotifSettingsChange();
+  }
+
+  function addNotifLeadTime(sourceId, amount, unit) {
+    var s = findNotifSource(sourceId);
+    if (!s || !amount || amount <= 0) return;
+    var id = amount + (unit === "hours" ? "h" : "d");
+    if (s.leadTimes.some(function (lt) { return lt.id === id; })) return; // já existe, ignora silenciosamente
+    var label = amount + " " + (unit === "hours" ? (amount === 1 ? "hora antes" : "horas antes") : (amount === 1 ? "dia antes" : "dias antes"));
+    s.leadTimes = s.leadTimes.concat([{ id: id, amount: amount, unit: unit, label: label }]);
+    s.leadTimes.sort(function (a, b) { return leadTimeMs(b) - leadTimeMs(a); }); // maior antecedência primeiro
+    applyNotifSettingsChange();
+  }
+
+  function removeNotifLeadTime(sourceId, leadTimeId) {
+    var s = findNotifSource(sourceId);
+    if (!s) return;
+    s.leadTimes = s.leadTimes.filter(function (lt) { return lt.id !== leadTimeId; });
+    applyNotifSettingsChange();
+  }
+
+  function renderNotifSettings() {
+    var listEl = document.getElementById("notifPanelList");
+    if (!listEl) return;
+    listEl.innerHTML = "";
+    if (!notifState.sources.length) {
+      var empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = notifState.loaded ? "Nenhuma fonte configurada." : "Carregando…";
+      listEl.appendChild(empty);
+      return;
+    }
+    notifState.sources.forEach(function (s) {
+      var block = document.createElement("div");
+      block.className = "notif-settings-source";
+
+      var head = document.createElement("div");
+      head.className = "notif-settings-source-head";
+      var label = document.createElement("span");
+      label.className = "notif-settings-source-label";
+      label.textContent = s.label;
+      head.appendChild(label);
+
+      var toggle = document.createElement("label");
+      toggle.className = "notif-settings-toggle";
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !!s.enabled;
+      cb.addEventListener("change", function () { setNotifSourceEnabled(s.id, cb.checked); });
+      toggle.appendChild(cb);
+      var track = document.createElement("span");
+      track.className = "notif-settings-toggle-track";
+      toggle.appendChild(track);
+      head.appendChild(toggle);
+      block.appendChild(head);
+
+      if (s.leadTimes.length) {
+        var chips = document.createElement("div");
+        chips.className = "notif-settings-leadtimes";
+        s.leadTimes.forEach(function (lt) {
+          var chip = document.createElement("span");
+          chip.className = "notif-settings-leadtime-chip";
+          var chipLabel = document.createElement("span");
+          chipLabel.textContent = lt.label;
+          chip.appendChild(chipLabel);
+          var rm = document.createElement("button");
+          rm.type = "button";
+          rm.title = "Remover";
+          rm.innerHTML = '<i class="ti ti-x"></i>';
+          rm.addEventListener("click", function () { removeNotifLeadTime(s.id, lt.id); });
+          chip.appendChild(rm);
+          chips.appendChild(chip);
+        });
+        block.appendChild(chips);
+      } else {
+        var noneEl = document.createElement("p");
+        noneEl.className = "notif-settings-empty";
+        noneEl.textContent = "Sem antecedências — não vai avisar.";
+        block.appendChild(noneEl);
+      }
+
+      var addRow = document.createElement("div");
+      addRow.className = "notif-settings-add-row";
+      var amountInput = document.createElement("input");
+      amountInput.type = "number";
+      amountInput.min = "1";
+      amountInput.className = "notif-settings-add-amount";
+      amountInput.placeholder = "Qtd";
+      addRow.appendChild(amountInput);
+      var unitSelect = document.createElement("select");
+      unitSelect.className = "notif-settings-add-unit";
+      [["days", "dias"], ["hours", "horas"]].forEach(function (opt) {
+        var o = document.createElement("option");
+        o.value = opt[0];
+        o.textContent = opt[1];
+        unitSelect.appendChild(o);
+      });
+      addRow.appendChild(unitSelect);
+      var addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "notif-settings-add-btn";
+      addBtn.title = "Adicionar antecedência";
+      addBtn.innerHTML = '<i class="ti ti-plus"></i>';
+      addBtn.addEventListener("click", function () {
+        var amount = parseInt(amountInput.value, 10);
+        if (!amount || amount <= 0) return;
+        addNotifLeadTime(s.id, amount, unitSelect.value);
+        amountInput.value = "";
+      });
+      addRow.appendChild(addBtn);
+      block.appendChild(addRow);
+
+      listEl.appendChild(block);
+    });
+  }
+
+  function toggleNotifSettingsView() {
+    notifState.view = notifState.view === "settings" ? "list" : "settings";
+    if (notifState.view === "settings") renderNotifSettings(); else renderNotifList();
+    var gearBtn = document.getElementById("notifPanelSettingsBtn");
+    if (gearBtn) gearBtn.classList.toggle("active", notifState.view === "settings");
   }
 
   function renderNotifList() {
@@ -8801,6 +9014,13 @@
     if (backdrop) backdrop.classList.remove("open");
     panel.setAttribute("aria-hidden", "true");
     btn.setAttribute("aria-expanded", "false");
+    // volta pra lista (fecha o editor de gestão, se tava aberto) — pra não
+    // reabrir direto na tela de configurações da próxima vez.
+    if (notifState.view === "settings") {
+      notifState.view = "list";
+      var gearBtn = document.getElementById("notifPanelSettingsBtn");
+      if (gearBtn) gearBtn.classList.remove("active");
+    }
   }
 
   function toggleNotifPanel() {
@@ -8815,6 +9035,8 @@
   if (notifBackdropEl) notifBackdropEl.addEventListener("click", closeNotifPanel);
   var notifPanelCloseBtnEl = document.getElementById("notifPanelCloseBtn");
   if (notifPanelCloseBtnEl) notifPanelCloseBtnEl.addEventListener("click", closeNotifPanel);
+  var notifPanelSettingsBtnEl = document.getElementById("notifPanelSettingsBtn");
+  if (notifPanelSettingsBtnEl) notifPanelSettingsBtnEl.addEventListener("click", toggleNotifSettingsView);
   var notifPanelTabsEl = document.getElementById("notifPanelTabs");
   if (notifPanelTabsEl) {
     var notifTabBtns = notifPanelTabsEl.querySelectorAll(".notif-panel-tab-btn");
@@ -8822,6 +9044,10 @@
       (function (btn) {
         btn.addEventListener("click", function () {
           notifState.mode = btn.getAttribute("data-mode");
+          // clicar numa aba (Não lidas/Todas) sempre volta pra lista, saindo
+          // do editor de gestão se estava aberto.
+          notifState.view = "list";
+          if (notifPanelSettingsBtnEl) notifPanelSettingsBtnEl.classList.remove("active");
           for (var j = 0; j < notifTabBtns.length; j++) notifTabBtns[j].classList.toggle("active", notifTabBtns[j] === btn);
           renderNotifList();
         });

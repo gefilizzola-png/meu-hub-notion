@@ -1660,6 +1660,21 @@ html, body {
   white-space: nowrap;
 }
 .notif-panel-tab-btn.active { background: #fff; color: #262624; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.notif-panel-settings-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.notif-panel-settings-btn:hover { background: #f4f4f2; color: #666; }
+.notif-panel-settings-btn.active { background: #eaf2fb; color: #4a90d9; }
 .notif-panel-close-btn {
   width: 26px;
   height: 26px;
@@ -1734,6 +1749,142 @@ html, body {
 }
 .notif-card-app-btn:hover, .notif-card-read-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
 .notif-card-app-btn .ti, .notif-card-read-btn .ti { font-size: 13px; }
+
+/* ---------------- gestão de notificações (pedido do Georges) ----------------
+   Editor por fonte, dentro do MESMO #notifPanelList (troca de conteúdo via
+   renderNotifSettings() em app.js, ver toggleNotifSettingsView) — reaproveita
+   o padding/scroll de .notif-panel-list, só o CONTEÚDO interno é diferente
+   dos cards de notificação. */
+.notif-settings-source {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px;
+  border: 0.5px solid #ececea;
+  border-radius: 8px;
+  background: #fff;
+}
+.notif-settings-source-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notif-settings-source-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #262624;
+  margin-right: auto;
+}
+/* toggle liga/desliga — mesma ideia de "trilho + bolinha" de qualquer
+   switch nativo, só que sem depender de nenhuma lib nova. */
+.notif-settings-toggle {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.notif-settings-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.notif-settings-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: #dcdcd8;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+.notif-settings-toggle-track::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+.notif-settings-toggle input:checked + .notif-settings-toggle-track { background: #4a90d9; }
+.notif-settings-toggle input:checked + .notif-settings-toggle-track::before { transform: translateX(14px); }
+.notif-settings-leadtimes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.notif-settings-leadtime-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 8px;
+  background: #f4f4f2;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #4a4a45;
+}
+.notif-settings-leadtime-chip button {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.notif-settings-leadtime-chip button:hover { background: #e2e2de; color: #666; }
+.notif-settings-leadtime-chip button .ti { font-size: 10px; }
+.notif-settings-empty {
+  font-size: 11px;
+  color: #b3b3ac;
+  font-style: italic;
+  margin: 0;
+}
+.notif-settings-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.notif-settings-add-amount {
+  width: 52px;
+  padding: 4px 6px;
+  border: 0.5px solid #dcdcd8;
+  border-radius: 6px;
+  font-size: 11.5px;
+}
+.notif-settings-add-unit {
+  padding: 4px 6px;
+  border: 0.5px solid #dcdcd8;
+  border-radius: 6px;
+  font-size: 11.5px;
+  background: #fff;
+}
+.notif-settings-add-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #4a90d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.notif-settings-add-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
+.notif-settings-add-btn .ti { font-size: 13px; }
 
 @media (max-width: 1023px) {
   .header-search { display: none; }
