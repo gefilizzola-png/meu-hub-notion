@@ -1565,6 +1565,176 @@ html, body {
 .side-panel-btn img { width: 15px; height: 15px; }
 .side-panel-btn .ti { font-size: 16px; color: #4a90d9; }
 
+/* ---------------- Central de Notificações (pedido do Georges) ----------------
+   Sino no header (mesmo "peso" visual de ".set-home-btn"/".menu-toggle-btn"
+   acima) + gaveta PRÓPRIA que desliza da DIREITA — igual dinâmica do menu
+   esquerdo, mas SEMPRE como camada por cima do conteúdo (backdrop visível
+   em QUALQUER tamanho de tela, diferente de ".side-panel-backdrop" que só
+   aparece em tela estreita): é um painel de uso rápido/ocasional, não uma
+   companhia permanente da página como o painel de atalhos. */
+.notif-bell-btn {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 17px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.notif-bell-btn:hover { background: #f4f4f2; color: #666; }
+.notif-bell-btn:active { background: #f0f0ee; }
+.notif-bell-btn[aria-expanded="true"] { color: #4a90d9; background: #eaf2fb; }
+.notif-bell-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e03131;
+  border: 1.5px solid #fff;
+}
+
+.notif-backdrop {
+  display: none;
+}
+.notif-backdrop.open {
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 60;
+}
+.notif-panel {
+  position: fixed;
+  right: 0;
+  top: 64px;
+  bottom: 0;
+  width: min(92vw, 380px);
+  background: #fff;
+  border-left: 0.5px solid #ececea;
+  box-shadow: -2px 0 20px rgba(0, 0, 0, 0.14);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  z-index: 61;
+}
+.notif-panel.open { transform: translateX(0); }
+.notif-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 0.5px solid #ececea;
+  flex-shrink: 0;
+}
+.notif-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #262624;
+  margin-right: auto;
+}
+.notif-panel-tabs {
+  display: flex;
+  gap: 4px;
+  background: #f4f4f2;
+  border-radius: 8px;
+  padding: 2px;
+}
+.notif-panel-tab-btn {
+  border: none;
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #78766f;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notif-panel-tab-btn.active { background: #fff; color: #262624; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.notif-panel-close-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.notif-panel-close-btn:hover { background: #f4f4f2; color: #666; }
+.notif-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.notif-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 10px;
+  border: 0.5px solid #ececea;
+  border-radius: 8px;
+  background: #fff;
+}
+/* já vencido (dentro da folga de 2 dias) — mesma cor de alerta usada em
+   Atrasados, uma barrinha à esquerda pra chamar atenção sem gritar. */
+.notif-card-overdue { border-left: 2.5px solid #e8590c; }
+.notif-card-read { opacity: 0.55; }
+.notif-card-main {
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  display: block;
+}
+.notif-card-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #262624;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+.notif-card-meta {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
+.notif-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.notif-card-app-btn, .notif-card-read-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #4a90d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+}
+.notif-card-app-btn:hover, .notif-card-read-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
+.notif-card-app-btn .ti, .notif-card-read-btn .ti { font-size: 13px; }
+
 @media (max-width: 1023px) {
   .header-search { display: none; }
   /* cabeçalho mobile já é apertado (botão voltar + breadcrumb) — o

@@ -8535,6 +8535,300 @@
     sidePanelBackdrop.addEventListener("click", closeSidePanel);
   }
 
+  // ---------------- Central de Notificações (pedido do Georges) ----------------
+  // Sino GLOBAL no header (qualquer página — diferente do side-panel acima,
+  // que só existe em páginas com page.sidePanel) + gaveta que desliza da
+  // DIREITA, fecha clicando fora — mesma dinâmica do menu esquerdo
+  // (sidebar/sidebarBackdrop), só espelhada, numa gaveta PRÓPRIA
+  // (notifPanel/notifBackdrop, ver index.html), não reaproveitando o
+  // side-panel de atalhos. Fontes + antecedências vêm de
+  // NOTIFICATION_SOURCES (config.js — ver comentário grande lá pro desenho
+  // completo). SÓ LEITURA no Notion (mesmo /query de sempre); "lida/não
+  // lida" é 100% KV (/notifications-read no worker.js), igual "Fixar" de
+  // Legislações — nunca escreve em nada do Notion.
+  var notifState = { items: [], readIds: [], mode: "unread", loaded: false, loading: false };
+
+  function leadTimeMs(lt) {
+    return lt.amount * (lt.unit === "hours" ? 3600000 : 86400000);
+  }
+
+  // mesmo padrão defensivo de normalizeDateRollup (Legislações) — "extra"
+  // de uma propriedade "date" normalmente vem como {start,end}, mas se
+  // algum dia uma fonte precisar de um rollup de data (em vez de campo
+  // direto) pode vir como array — desembrulha os dois jeitos.
+  function normalizeNotifDate(dp) {
+    while (Array.isArray(dp)) dp = dp.length ? dp[0] : null;
+    return (dp && dp.start) ? dp : null;
+  }
+
+  // janela de busca de UMA fonte: de "2 dias atrás" (NOTIF_GRACE_MS abaixo
+  // — continua avisando um pouco depois do prazo, em vez de sumir na hora
+  // que o evento passa) até "daqui a N dias" (N = maior leadTime da fonte,
+  // +1 dia de folga pra cobrir hora exata/fuso sem cortar nenhum evento
+  // por engano). SÓ LEITURA — mesma rota /query usada por qualquer outra
+  // página dinâmica do app.
+  function fetchNotificationSourceItems(source) {
+    var maxMs = 0;
+    source.leadTimes.forEach(function (lt) { maxMs = Math.max(maxMs, leadTimeMs(lt)); });
+    var maxDays = Math.max(1, Math.ceil(maxMs / 86400000) + 1);
+    var filters = source.baseFilters.concat([
+      { property: source.dateProperty, type: "date", condition: "on_or_after", value: "past_2_days" },
+      { property: source.dateProperty, type: "date", condition: "before", value: "next_" + maxDays + "_days" }
+    ]);
+    var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(source.database_id) +
+      "&filters=" + encodeURIComponent(JSON.stringify(filters)) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: source.dateProperty, direction: "ascending" }])) +
+      "&extra=" + encodeURIComponent(JSON.stringify([source.dateProperty]));
+    return authFetch(url).then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { pages: [] }; }
+      return res.ok ? res.json() : { pages: [] };
+    }).then(function (data) {
+      return (data && data.pages) || [];
+    }).catch(function () { return []; });
+  }
+
+  // tem que bater com "past_2_days" usado no filtro acima — item some da
+  // Central assim que sair dessa janela, sem precisar de nenhuma limpeza
+  // manual/agendada.
+  var NOTIF_GRACE_MS = 2 * 86400000;
+
+  // pra cada item x leadTime que JÁ entrou na janela de aviso, monta 1
+  // notificação INDEPENDENTE (notifId = fonte::leadTime::pageId — decisão
+  // do Georges: cada antecedência é um aviso à parte, com seu próprio
+  // lida/não lida desde o início, sem precisar "voltar a ficar não lido").
+  function buildNotificationsFromSource(source, pages) {
+    var now = Date.now();
+    var list = [];
+    pages.forEach(function (p) {
+      var dp = normalizeNotifDate(p.extra && p.extra[source.dateProperty]);
+      if (!dp) return;
+      var eventTime = new Date(dp.start).getTime();
+      if (isNaN(eventTime)) return;
+      if (eventTime < now - NOTIF_GRACE_MS) return;
+      source.leadTimes.forEach(function (lt) {
+        var triggerTime = eventTime - leadTimeMs(lt);
+        if (now < triggerTime) return; // ainda não chegou a hora de avisar
+        list.push({
+          id: source.id + "::" + lt.id + "::" + p.id,
+          sourceId: source.id,
+          sourceLabel: source.label,
+          title: p.title,
+          url: p.url,
+          target: source.target,
+          eventTime: eventTime,
+          leadLabel: lt.label,
+          overdue: eventTime < now
+        });
+      });
+    });
+    return list;
+  }
+
+  function computeNotifications() {
+    return Promise.all((window.NOTIFICATION_SOURCES || []).map(function (source) {
+      return fetchNotificationSourceItems(source).then(function (pages) {
+        return buildNotificationsFromSource(source, pages);
+      });
+    })).then(function (perSource) {
+      var all = [];
+      perSource.forEach(function (arr) { all = all.concat(arr); });
+      all.sort(function (a, b) { return a.eventTime - b.eventTime; });
+      return all;
+    });
+  }
+
+  function fetchNotifReadIds() {
+    return authFetch(cfg.templateWorkerUrl + "/notifications-read")
+      .then(function (res) { return res.ok ? res.json() : { read: [] }; })
+      .then(function (data) { return (data && data.read) || []; })
+      .catch(function () { return []; });
+  }
+
+  function saveNotifReadIds(ids) {
+    return authFetch(cfg.templateWorkerUrl + "/notifications-read", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ read: ids })
+    }).catch(function () {});
+  }
+
+  function updateNotifBellBadge() {
+    var badge = document.getElementById("notifBellBadge");
+    if (!badge) return;
+    var readSet = {};
+    notifState.readIds.forEach(function (id) { readSet[id] = true; });
+    var unread = notifState.items.filter(function (n) { return !readSet[n.id]; }).length;
+    badge.style.display = unread ? "" : "none";
+  }
+
+  // só exibição (data/hora local do navegador) — sem cálculo de fuso, igual
+  // qualquer outra data mostrada no app.
+  function notifDateLabel(eventTime) {
+    var d = new Date(eventTime);
+    if (isNaN(d.getTime())) return "";
+    var dia = String(d.getDate()).padStart(2, "0");
+    var mes = String(d.getMonth() + 1).padStart(2, "0");
+    var hh = String(d.getHours()).padStart(2, "0");
+    var mm = String(d.getMinutes()).padStart(2, "0");
+    return dia + "/" + mes + " às " + hh + ":" + mm;
+  }
+
+  // otimista (igual togglePin de Legislações): já atualiza badge/lista na
+  // hora, manda o array inteiro pro Worker depois — se a chamada falhar, o
+  // estado local só volta a sincronizar no próximo refreshNotifications().
+  function toggleNotifRead(notifId) {
+    var idx = notifState.readIds.indexOf(notifId);
+    if (idx === -1) notifState.readIds.push(notifId); else notifState.readIds.splice(idx, 1);
+    updateNotifBellBadge();
+    renderNotifList();
+    saveNotifReadIds(notifState.readIds.slice());
+  }
+
+  function refreshNotifications() {
+    if (notifState.loading) return Promise.resolve();
+    notifState.loading = true;
+    return Promise.all([computeNotifications(), fetchNotifReadIds()]).then(function (results) {
+      notifState.items = results[0];
+      notifState.readIds = results[1];
+      notifState.loaded = true;
+      notifState.loading = false;
+      updateNotifBellBadge();
+      renderNotifList();
+    }).catch(function () {
+      notifState.loading = false;
+    });
+  }
+
+  function renderNotifList() {
+    var listEl = document.getElementById("notifPanelList");
+    if (!listEl) return;
+    listEl.innerHTML = "";
+    if (!notifState.loaded) {
+      var loading = document.createElement("p");
+      loading.className = "empty";
+      loading.textContent = "Carregando notificações…";
+      listEl.appendChild(loading);
+      return;
+    }
+    var readSet = {};
+    notifState.readIds.forEach(function (id) { readSet[id] = true; });
+    var items = notifState.items.filter(function (n) {
+      return notifState.mode === "all" ? true : !readSet[n.id];
+    });
+    if (!items.length) {
+      var empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = notifState.mode === "all" ? "Nenhuma notificação." : "Nenhuma notificação não lida.";
+      listEl.appendChild(empty);
+      return;
+    }
+    items.forEach(function (n) {
+      var isRead = !!readSet[n.id];
+      var card = document.createElement("div");
+      card.className = "notif-card" + (isRead ? " notif-card-read" : "") + (n.overdue ? " notif-card-overdue" : "");
+
+      // título abre a página do PRÓPRIO evento no Notion (link exato já
+      // devolvido pelo /query, sempre correto — sem precisar configurar
+      // nada por fonte pra isso).
+      var main = document.createElement("a");
+      main.className = "notif-card-main";
+      main.href = n.url;
+      main.target = "_blank";
+      main.rel = "noopener";
+      var title = document.createElement("div");
+      title.className = "notif-card-title";
+      title.textContent = n.title;
+      main.appendChild(title);
+      var meta = document.createElement("div");
+      meta.className = "notif-card-meta";
+      meta.textContent = n.sourceLabel + " · " + n.leadLabel + " · " + notifDateLabel(n.eventTime);
+      main.appendChild(meta);
+      card.appendChild(main);
+
+      var actions = document.createElement("div");
+      actions.className = "notif-card-actions";
+      if (n.target && n.target.type === "page") {
+        var appBtn = document.createElement("a");
+        appBtn.className = "notif-card-app-btn";
+        appBtn.href = "#" + n.target.target;
+        appBtn.title = "Ver em " + n.sourceLabel + " no app";
+        appBtn.addEventListener("click", function (e) {
+          if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          navigate(n.target.target);
+          closeNotifPanel();
+        });
+        var ic = document.createElement("i");
+        ic.className = "ti ti-apps";
+        appBtn.appendChild(ic);
+        actions.appendChild(appBtn);
+      }
+      var readBtn = document.createElement("button");
+      readBtn.type = "button";
+      readBtn.className = "notif-card-read-btn";
+      readBtn.title = isRead ? "Marcar como não lida" : "Marcar como lida";
+      // ícone reflete o estado ATUAL (igual estrela de Fixar/Diário):
+      // envelope fechado = ainda não lida; aberto = já lida.
+      var ric = document.createElement("i");
+      ric.className = isRead ? "ti ti-mail-opened" : "ti ti-mail";
+      readBtn.appendChild(ric);
+      readBtn.addEventListener("click", function () { toggleNotifRead(n.id); });
+      actions.appendChild(readBtn);
+
+      card.appendChild(actions);
+      listEl.appendChild(card);
+    });
+  }
+
+  function openNotifPanel() {
+    var btn = document.getElementById("notifBellBtn");
+    var panel = document.getElementById("notifPanel");
+    var backdrop = document.getElementById("notifBackdrop");
+    if (!btn || !panel) return;
+    panel.classList.add("open");
+    if (backdrop) backdrop.classList.add("open");
+    panel.setAttribute("aria-hidden", "false");
+    btn.setAttribute("aria-expanded", "true");
+    if (!notifState.loaded) refreshNotifications(); else renderNotifList();
+  }
+
+  function closeNotifPanel() {
+    var btn = document.getElementById("notifBellBtn");
+    var panel = document.getElementById("notifPanel");
+    var backdrop = document.getElementById("notifBackdrop");
+    if (!btn || !panel) return;
+    panel.classList.remove("open");
+    if (backdrop) backdrop.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+    btn.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleNotifPanel() {
+    var panel = document.getElementById("notifPanel");
+    if (!panel) return;
+    if (panel.classList.contains("open")) closeNotifPanel(); else openNotifPanel();
+  }
+
+  var notifBellBtnEl = document.getElementById("notifBellBtn");
+  if (notifBellBtnEl) notifBellBtnEl.addEventListener("click", toggleNotifPanel);
+  var notifBackdropEl = document.getElementById("notifBackdrop");
+  if (notifBackdropEl) notifBackdropEl.addEventListener("click", closeNotifPanel);
+  var notifPanelCloseBtnEl = document.getElementById("notifPanelCloseBtn");
+  if (notifPanelCloseBtnEl) notifPanelCloseBtnEl.addEventListener("click", closeNotifPanel);
+  var notifPanelTabsEl = document.getElementById("notifPanelTabs");
+  if (notifPanelTabsEl) {
+    var notifTabBtns = notifPanelTabsEl.querySelectorAll(".notif-panel-tab-btn");
+    for (var nti = 0; nti < notifTabBtns.length; nti++) {
+      (function (btn) {
+        btn.addEventListener("click", function () {
+          notifState.mode = btn.getAttribute("data-mode");
+          for (var j = 0; j < notifTabBtns.length; j++) notifTabBtns[j].classList.toggle("active", notifTabBtns[j] === btn);
+          renderNotifList();
+        });
+      })(notifTabBtns[nti]);
+    }
+  }
+
   // ---------------- page render / navigation ----------------
   function render(pageId, push) {
     var page = cfg.pages[pageId];
@@ -8798,6 +9092,13 @@
 
     buildIndex();
     collectSearchInputs();
+
+    // Central de Notificações — 1ª busca assim que loga (não trava o boot,
+    // roda em paralelo com o resto), + atualiza sozinha a cada 5min (fica
+    // ligado numa aba aberta o dia todo sem precisar recarregar a página
+    // pra descobrir um aviso novo que entrou na janela de antecedência).
+    refreshNotifications();
+    setInterval(refreshNotifications, 5 * 60 * 1000);
 
     // busca o override de "página inicial" salvo na KV (ver /home-page no
     // worker.js — botão #setHomeBtn) ANTES de decidir qual página abrir.

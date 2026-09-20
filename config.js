@@ -724,6 +724,62 @@ var SIDEPANEL_LINKS = [
   }
 ];
 
+// ---------------- Central de Notificações (pedido do Georges — sino no
+// header, painel que abre da direita com os eventos com prazo próximo) ----------------
+// Cada "fonte" busca em UMA base do Notion (mesmo baseFilters já usado em
+// dynamicQueries de outras páginas — reaproveitado literalmente de
+// pmf_ctrl_reunioes/pmf_col_tat abaixo) e tem 1+ "leadTimes" (quando
+// avisar ANTES do prazo — dias ou horas). O app.js busca cada fonte 1 vez
+// (mesmo /query de sempre, só leitura), calcula pra cada item x leadTime
+// se já entrou na janela de aviso (ex: "1 dia antes" fica ativo assim que
+// faltar <= 1 dia pro prazo), e monta um notifId único
+// "<source.id>::<leadTime.id>::<pageId do Notion>" — cada combinação
+// item+antecedência é um aviso INDEPENDENTE (ex: "Reunião X — 1 dia antes"
+// e "Reunião X — 3 horas antes" são 2 avisos distintos, cada um com seu
+// próprio lida/não lida desde o início — decisão do Georges, pra não
+// precisar de nenhuma lógica de "voltar a ficar não lido"). Fase 1 (pedido
+// explícito do Georges: "pode ir por fases") — só 2 fontes pra validar o
+// conceito antes de estender pra mais páginas.
+var NOTIFICATION_SOURCES = [
+  {
+    id: "reunioes",
+    label: "Reuniões",
+    database_id: "2310481486dd80079202fe1eaf5e14c4",
+    baseFilters: [
+      { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" }
+    ],
+    dateProperty: "📅 Data/Prazo",
+    // pra onde vai o botão "abrir no app" de cada aviso dessa fonte (o
+    // título do próprio aviso já abre a página do EVENTO no Notion, via
+    // "url" que a busca já devolve por padrão — sem precisar configurar
+    // nada aqui pra isso).
+    target: { type: "page", target: "pmf_ctrl_reunioes" },
+    leadTimes: [
+      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" },
+      { id: "3h", amount: 3, unit: "hours", label: "3 horas antes" }
+    ]
+  },
+  {
+    id: "tat_sessoes",
+    label: "Sessões do TAT",
+    database_id: "2310481486dd80079202fe1eaf5e14c4",
+    // mesmo baseFilters de "Sessões pendentes" em pmf_col_tat (ver mais
+    // abaixo) — só as ainda não concluídas entram na Central de
+    // Notificações, não faz sentido avisar de uma sessão que já aconteceu
+    // e já foi marcada como concluída no Andamento.
+    baseFilters: [
+      { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - TAT - Sessões" },
+      { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+      { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+    ],
+    dateProperty: "📅 Data/Prazo",
+    target: { type: "page", target: "pmf_col_tat" },
+    leadTimes: [
+      { id: "2d", amount: 2, unit: "days", label: "2 dias antes" }
+    ]
+  }
+];
+
 var BUSCA_DATA_PRAZO_FILTER = { property: "📅 Data/Prazo", type: "date", label: "Data/Prazo" };
 var BUSCA_DATA_CONCLUSAO_FILTER = { property: "📅 Data de Conclusão", type: "date", label: "Data de Conclusão" };
 var BUSCA_DATA_CRIACAO_FILTER = { property: "✨ Criado em", type: "created_time", label: "Data de Criação" };
@@ -938,7 +994,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-19 15:27",
+  appVersion: "2026-09-20 19:08",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
