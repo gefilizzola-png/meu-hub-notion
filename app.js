@@ -307,6 +307,39 @@
     return li;
   }
 
+  // ---------------- "rail colapsado" — só ícones, tela larga (pedido do
+  // Georges: "Um modo 'só ícones' pra tela larga, clicando num botão de
+  // recolher — libera espaço horizontal sem perder os atalhos, só
+  // escondendo os rótulos [...] mas apenas para telas largas. No celular
+  // fechado, não.") ---------------- A classe "rail-collapsed" em #shell é
+  // o único estado — todo o efeito visual mora no CSS, dentro de
+  // "@media (min-width: 1024px)" (ver styles.css), então no celular a
+  // classe pode estar presente sem NENHUM efeito (o botão que a liga nem
+  // aparece lá, via CSS). Persistido em localStorage (mesmo padrão do
+  // token de auth.js) — é preferência de tela, não precisa ir pro KV.
+  var RAIL_COLLAPSE_STORAGE_KEY = "hub_rail_collapsed";
+  function initRailCollapse() {
+    var btn = document.getElementById("sidebarCollapseBtn");
+    var shell = document.getElementById("shell");
+    if (!btn || !shell) return;
+    var collapsed = false;
+    try { collapsed = localStorage.getItem(RAIL_COLLAPSE_STORAGE_KEY) === "1"; } catch (e) { /* modo privado etc — segue sem persistir */ }
+    applyRailCollapse(collapsed);
+    btn.addEventListener("click", function () {
+      applyRailCollapse(!shell.classList.contains("rail-collapsed"));
+    });
+  }
+  function applyRailCollapse(collapsed) {
+    var shell = document.getElementById("shell");
+    var btn = document.getElementById("sidebarCollapseBtn");
+    if (!shell || !btn) return;
+    shell.classList.toggle("rail-collapsed", collapsed);
+    var icon = btn.querySelector(".ti");
+    if (icon) icon.className = "ti " + (collapsed ? "ti-chevrons-right" : "ti-chevrons-left");
+    btn.title = collapsed ? "Expandir menu" : "Recolher menu";
+    try { localStorage.setItem(RAIL_COLLAPSE_STORAGE_KEY, collapsed ? "1" : "0"); } catch (e) { /* modo privado etc */ }
+  }
+
   // ---------------- atalhos fixos no topo do menu (pedido do Georges: "dar
   // visual mais moderno... colocar como fixo no topo os itens que
   // aparecem em Início, com os seus respectivos ícones") ----------------
@@ -432,7 +465,46 @@
     }).catch(function () {});
   }
 
-  // linhas compactas (mais densas que .sidebar-pinned-item — 20 itens
+  // ---------------- limite configurável da seção Recentes do menu (pedido
+  // do Georges: "no Menu exiba somente as 8 últimas [...] crie um botão de
+  // configuração para eu escolher quantas quero exibir") — mesmo padrão KV
+  // de /home-page (1 valor só), salvo no Worker em /recent-settings.
+  // "recentSettingsEditorOpen" controla se o formulariozinho (número +
+  // Salvar) está aberto no cabeçalho da seção.
+  var recentSettingsState = { limit: cfg.recentLimitDefault || 8, loaded: false };
+  var recentSettingsEditorOpen = false;
+
+  function fetchRecentSettings() {
+    return authFetch(cfg.templateWorkerUrl + "/recent-settings")
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (data && data.limit) recentSettingsState.limit = data.limit;
+        recentSettingsState.loaded = true;
+      })
+      .catch(function () { recentSettingsState.loaded = true; });
+  }
+
+  function saveRecentSettings(limit) {
+    recentSettingsState.limit = limit;
+    renderSidebarRecent();
+    authFetch(cfg.templateWorkerUrl + "/recent-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ limit: limit })
+    }).then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        // o Worker satura (1..50) — se o valor voltar diferente do que
+        // pedimos (ex: mandamos 9999), atualiza pra refletir o que
+        // realmente ficou salvo.
+        if (data && data.limit && data.limit !== recentSettingsState.limit) {
+          recentSettingsState.limit = data.limit;
+          renderSidebarRecent();
+        }
+      })
+      .catch(function () {});
+  }
+
+  // linhas compactas (mais densas que .sidebar-pinned-item — vários itens
   // precisam caber sem virar a metade do menu; ver .sidebar-recent no
   // styles.css) — mesmo padrão de <a href="#pageId"> real (Ctrl/Cmd+clique
   // etc) do resto do app. Ignora pageId que não existe mais em cfg.pages
@@ -441,14 +513,40 @@
     var wrap = document.getElementById("sidebarRecent");
     if (!wrap) return;
     wrap.innerHTML = "";
-    var recent = recentUniqueVisits(pageVisitsState.visits, 20).filter(function (v) { return !!cfg.pages[v.pageId]; });
-    if (!recent.length) return; // nada visitado ainda (ou ainda carregando) — seção some, sem "vazio" poluindo o menu
+    var limit = recentSettingsState.limit || cfg.recentLimitDefault || 8;
+    var recent = recentUniqueVisits(pageVisitsState.visits, limit).filter(function (v) { return !!cfg.pages[v.pageId]; });
+    if (!recent.length && !recentSettingsEditorOpen) return; // nada visitado ainda (ou ainda carregando) — seção some, sem "vazio" poluindo o menu
 
     var head = document.createElement("div");
     head.className = "sidebar-section-head";
-    var headLabel = document.createElement("span");
+    // título da seção vira link pra página "Recentes" cheia (pedido do
+    // Georges: "crie como uma página, tal qual Mais Visitados").
+    var headLabel = document.createElement("a");
+    headLabel.className = "sidebar-section-head-title";
+    headLabel.href = "#recentes";
     headLabel.textContent = "Recentes";
+    headLabel.addEventListener("click", function (e) {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      navigate("recentes");
+    });
     head.appendChild(headLabel);
+
+    var headActions = document.createElement("span");
+    headActions.className = "sidebar-section-head-actions";
+
+    // engrenagem — abre/fecha o formulariozinho "quantas exibir".
+    var gearBtn = document.createElement("button");
+    gearBtn.type = "button";
+    gearBtn.className = "sidebar-section-head-link";
+    gearBtn.title = "Escolher quantas páginas recentes mostrar aqui";
+    gearBtn.innerHTML = '<i class="ti ti-settings"></i>';
+    gearBtn.addEventListener("click", function () {
+      recentSettingsEditorOpen = !recentSettingsEditorOpen;
+      renderSidebarRecent();
+    });
+    headActions.appendChild(gearBtn);
+
     // "Ver mais visitadas" (pedido do Georges: ranking por quantidade de
     // acesso) — link discreto no cabeçalho da seção, não duplicado em
     // Pastas (que também alcança "mais_visitadas" pra busca/breadcrumb).
@@ -462,8 +560,38 @@
       e.preventDefault();
       navigate("mais_visitadas");
     });
-    head.appendChild(moreLink);
+    headActions.appendChild(moreLink);
+    head.appendChild(headActions);
     wrap.appendChild(head);
+
+    if (recentSettingsEditorOpen) {
+      var editor = document.createElement("div");
+      editor.className = "sidebar-recent-settings";
+      var editorLabel = document.createElement("label");
+      editorLabel.textContent = "Mostrar quantas:";
+      editor.appendChild(editorLabel);
+      var input = document.createElement("input");
+      input.type = "number";
+      input.min = "1";
+      input.max = "50";
+      input.value = String(limit);
+      input.className = "sidebar-recent-settings-input";
+      editor.appendChild(input);
+      var saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "sidebar-recent-settings-save";
+      saveBtn.textContent = "Salvar";
+      saveBtn.addEventListener("click", function () {
+        var n = Math.round(Number(input.value));
+        if (!n || isNaN(n)) n = cfg.recentLimitDefault || 8;
+        if (n < 1) n = 1;
+        if (n > 50) n = 50;
+        recentSettingsEditorOpen = false;
+        saveRecentSettings(n);
+      });
+      editor.appendChild(saveBtn);
+      wrap.appendChild(editor);
+    }
 
     var list = document.createElement("div");
     list.className = "sidebar-recent-list";
@@ -487,13 +615,83 @@
     wrap.appendChild(list);
   }
 
+  // ---------------- helpers de data (fuso America/Sao_Paulo, mesmo
+  // cuidado de notifDateLabel/formatDateRangeExtra: NUNCA usar getDate()/
+  // getHours() do navegador direto, porque o fuso do dispositivo pode ser
+  // outro) — usados pelo filtro de período de Mais Visitadas e pelos
+  // rótulos "hoje/ontem" de Recentes. Locale "en-CA" formata datas como
+  // YYYY-MM-DD por padrão — truque pra comparar strings direto (ordem
+  // lexicográfica = ordem cronológica).
+  var saoPauloDateKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" });
+  function saoPauloDateKey(ts) { return saoPauloDateKeyFmt.format(new Date(ts)); }
+
+  // filtro de período da página Mais Visitadas (pedido do Georges: "Crie um
+  // filtro para eu poder visualizar por data. Tipo: as mais visitadas
+  // desde o início da contagem, só naquela data, ontem, etc."). Função
+  // pura — recebe "nowTs" de fora (nunca chama Date.now() sozinha) pra dar
+  // pra testar isolado sem depender do relógio real.
+  function filterVisitsByDateMode(visits, mode, customKey, nowTs) {
+    var list = visits || [];
+    if (!mode || mode === "all") return list;
+    var todayKey = saoPauloDateKey(nowTs);
+    if (mode === "today") {
+      return list.filter(function (v) { return saoPauloDateKey(v.ts) === todayKey; });
+    }
+    if (mode === "yesterday") {
+      var yKey = saoPauloDateKey(nowTs - 24 * 60 * 60 * 1000);
+      return list.filter(function (v) { return saoPauloDateKey(v.ts) === yKey; });
+    }
+    if (mode === "last7") {
+      var startKey = saoPauloDateKey(nowTs - 6 * 24 * 60 * 60 * 1000);
+      return list.filter(function (v) { var k = saoPauloDateKey(v.ts); return k >= startKey && k <= todayKey; });
+    }
+    if (mode === "month") {
+      var monthPrefix = todayKey.slice(0, 7);
+      return list.filter(function (v) { return saoPauloDateKey(v.ts).slice(0, 7) === monthPrefix; });
+    }
+    if (mode === "custom") {
+      if (!customKey) return [];
+      return list.filter(function (v) { return saoPauloDateKey(v.ts) === customKey; });
+    }
+    return list;
+  }
+
+  // páginas de "allIds" que NÃO aparecem em nenhuma visita do log —
+  // usado pela seção "Nunca Visitadas" (pedido do Georges: "para eu saber
+  // e identificar o motivo"). Função pura, mesmo padrão de
+  // recentUniqueVisits/countVisitsByPage acima.
+  function neverVisitedPageIds(allIds, visits) {
+    var visited = {};
+    (visits || []).forEach(function (v) { if (v && v.pageId) visited[v.pageId] = true; });
+    return (allIds || []).filter(function (id) { return !visited[id]; });
+  }
+
+  // rótulo "hoje às HH:MM" / "ontem às HH:MM" / "dd/mm/aaaa" pra cada linha
+  // da página Recentes — mesmo raciocínio de saoPauloDateKey acima,
+  // "nowTs" opcional (default Date.now()) só pra dar pra testar isolado.
+  var relativeVisitTimeFmt = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+  var relativeVisitDateFmt = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" });
+  function relativeVisitLabel(ts, nowTs) {
+    nowTs = nowTs || Date.now();
+    var key = saoPauloDateKey(ts);
+    if (key === saoPauloDateKey(nowTs)) return "hoje às " + relativeVisitTimeFmt.format(new Date(ts));
+    if (key === saoPauloDateKey(nowTs - 24 * 60 * 60 * 1000)) return "ontem às " + relativeVisitTimeFmt.format(new Date(ts));
+    return relativeVisitDateFmt.format(new Date(ts));
+  }
+
+  // estado do filtro de período de Mais Visitadas — fica fora da função de
+  // render pra sobreviver a um re-render da mesma página (ex: trocar o
+  // filtro não deveria voltar pro padrão se o usuário navegar pra outro
+  // lugar e voltar).
+  var mostVisitedFilterState = { mode: "all", customDate: "" };
+
   // "Mais Visitadas" (pedido do Georges: ranking por quantidade de
   // visitas, maior pra menor, com o número do lado — "pra eu ver quais
-  // páginas são mais acessadas e quais não estou utilizando"). Chamada por
-  // renderContent quando a página tem "page.mostVisited: true" (ver
-  // pages.mais_visitadas em config.js) — mesmo padrão de despacho de
-  // renderFinanceiroContasMensais/renderPrioritiesTable (a página só marca
-  // uma flag, renderContent chama a função certa).
+  // páginas são mais acessadas e quais não estou utilizando") + filtro de
+  // período + seção "Nunca Visitadas" (sempre todo o período, independente
+  // do filtro acima — "nunca visitada" não faz sentido recortado por
+  // data). Chamada por renderContent quando a página tem
+  // "page.mostVisited: true" (ver pages.mais_visitadas em config.js).
   function renderMostVisitedPage(container) {
     if (!pageVisitsState.loaded) {
       var loading = document.createElement("p");
@@ -502,8 +700,141 @@
       container.appendChild(loading);
       return;
     }
-    var ranked = countVisitsByPage(pageVisitsState.visits).filter(function (v) { return !!cfg.pages[v.pageId]; });
-    if (!ranked.length) {
+
+    var filterWrap = document.createElement("div");
+    filterWrap.className = "most-visited-filter";
+    var filterLabel = document.createElement("span");
+    filterLabel.className = "most-visited-filter-label";
+    filterLabel.textContent = "Período:";
+    filterWrap.appendChild(filterLabel);
+
+    var select = document.createElement("select");
+    select.className = "most-visited-filter-select";
+    [
+      ["all", "Todo o período"],
+      ["today", "Hoje"],
+      ["yesterday", "Ontem"],
+      ["last7", "Últimos 7 dias"],
+      ["month", "Este mês"],
+      ["custom", "Escolher uma data…"]
+    ].forEach(function (opt) {
+      var o = document.createElement("option");
+      o.value = opt[0];
+      o.textContent = opt[1];
+      if (opt[0] === mostVisitedFilterState.mode) o.selected = true;
+      select.appendChild(o);
+    });
+    filterWrap.appendChild(select);
+
+    var dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.className = "most-visited-filter-date";
+    dateInput.value = mostVisitedFilterState.customDate || "";
+    dateInput.style.display = mostVisitedFilterState.mode === "custom" ? "" : "none";
+    filterWrap.appendChild(dateInput);
+
+    container.appendChild(filterWrap);
+
+    var resultsWrap = document.createElement("div");
+    container.appendChild(resultsWrap);
+
+    function buildRow(pageId, extraLabel, extraClass) {
+      var row = document.createElement("a");
+      row.className = "most-visited-row" + (extraClass ? " " + extraClass : "");
+      row.href = "#" + pageId;
+      row.addEventListener("click", function (e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate(pageId);
+      });
+      var ic = document.createElement("i");
+      ic.className = "ti " + iconForPageId(pageId);
+      row.appendChild(ic);
+      var lbl = document.createElement("span");
+      lbl.className = "most-visited-label";
+      lbl.textContent = labelForPageId(pageId);
+      row.appendChild(lbl);
+      if (extraLabel) {
+        var extra = document.createElement("span");
+        extra.className = "most-visited-count";
+        extra.textContent = extraLabel;
+        row.appendChild(extra);
+      }
+      return row;
+    }
+
+    function repaint() {
+      resultsWrap.innerHTML = "";
+      var nowTs = Date.now();
+      var filtered = filterVisitsByDateMode(pageVisitsState.visits, mostVisitedFilterState.mode, mostVisitedFilterState.customDate, nowTs);
+      var ranked = countVisitsByPage(filtered).filter(function (v) { return !!cfg.pages[v.pageId]; });
+
+      if (!ranked.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhuma visita nesse período.";
+        resultsWrap.appendChild(empty);
+      } else {
+        var list = document.createElement("div");
+        list.className = "most-visited-list";
+        ranked.forEach(function (v, i) {
+          var row = buildRow(v.pageId, v.count + (v.count === 1 ? " visita" : " visitas"));
+          var rank = document.createElement("span");
+          rank.className = "most-visited-rank";
+          rank.textContent = (i + 1) + "º";
+          row.insertBefore(rank, row.firstChild);
+          list.appendChild(row);
+        });
+        resultsWrap.appendChild(list);
+      }
+
+      // "Nunca Visitadas" — SEMPRE todo o período (ver comentário da
+      // função acima). Páginas com noTrackVisit (o próprio ranking/
+      // Recentes) não entram na lista — não são "conteúdo" de verdade.
+      var allIds = Object.keys(cfg.pages).filter(function (id) { return !cfg.pages[id].noTrackVisit; });
+      var neverIds = neverVisitedPageIds(allIds, pageVisitsState.visits).sort(function (a, b) {
+        return labelForPageId(a).localeCompare(labelForPageId(b), "pt-BR");
+      });
+      if (neverIds.length) {
+        var neverHead = document.createElement("div");
+        neverHead.className = "most-visited-section-head";
+        neverHead.textContent = "Nunca visitadas (" + neverIds.length + ")";
+        resultsWrap.appendChild(neverHead);
+        var neverList = document.createElement("div");
+        neverList.className = "most-visited-list most-visited-list-never";
+        neverIds.forEach(function (id) { neverList.appendChild(buildRow(id, null, "most-visited-row-never")); });
+        resultsWrap.appendChild(neverList);
+      }
+    }
+
+    select.addEventListener("change", function () {
+      mostVisitedFilterState.mode = select.value;
+      dateInput.style.display = mostVisitedFilterState.mode === "custom" ? "" : "none";
+      repaint();
+    });
+    dateInput.addEventListener("change", function () {
+      mostVisitedFilterState.customDate = dateInput.value || "";
+      if (mostVisitedFilterState.mode === "custom") repaint();
+    });
+
+    repaint();
+  }
+
+  // "Recentes" em página própria (pedido do Georges: "crie como uma
+  // página, tal qual Mais Visitados") — TODAS as visitas únicas por
+  // recedência, sem o teto de 20 que a prévia do menu usa (ver
+  // renderSidebarRecent). Reaproveita o visual de .most-visited-list (linha
+  // branca+sombra), só troca a contagem por "quando" (relativeVisitLabel).
+  function renderRecentPage(container) {
+    if (!pageVisitsState.loaded) {
+      var loading = document.createElement("p");
+      loading.className = "empty";
+      loading.textContent = "Carregando…";
+      container.appendChild(loading);
+      return;
+    }
+    var all = recentUniqueVisits(pageVisitsState.visits, 100000).filter(function (v) { return !!cfg.pages[v.pageId]; });
+    if (!all.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Ainda sem histórico de visitas.";
@@ -512,7 +843,7 @@
     }
     var list = document.createElement("div");
     list.className = "most-visited-list";
-    ranked.forEach(function (v, i) {
+    all.forEach(function (v) {
       var row = document.createElement("a");
       row.className = "most-visited-row";
       row.href = "#" + v.pageId;
@@ -521,10 +852,6 @@
         e.preventDefault();
         navigate(v.pageId);
       });
-      var rank = document.createElement("span");
-      rank.className = "most-visited-rank";
-      rank.textContent = (i + 1) + "º";
-      row.appendChild(rank);
       var ic = document.createElement("i");
       ic.className = "ti " + iconForPageId(v.pageId);
       row.appendChild(ic);
@@ -532,10 +859,10 @@
       lbl.className = "most-visited-label";
       lbl.textContent = labelForPageId(v.pageId);
       row.appendChild(lbl);
-      var count = document.createElement("span");
-      count.className = "most-visited-count";
-      count.textContent = v.count + (v.count === 1 ? " visita" : " visitas");
-      row.appendChild(count);
+      var when = document.createElement("span");
+      when.className = "most-visited-count";
+      when.textContent = relativeVisitLabel(v.ts);
+      row.appendChild(when);
       list.appendChild(row);
     });
     container.appendChild(list);
@@ -8365,6 +8692,13 @@
       return;
     }
 
+    // "Recentes" em página própria (pedido do Georges: "crie como uma
+    // página, tal qual Mais Visitados") — mesmo padrão exclusivo acima.
+    if (page.recentPage) {
+      renderRecentPage(container);
+      return;
+    }
+
     // "pinnedOnly" (ver pages.entrada em config.js) — mesmo motivo do
     // filtro em buildTreeNode: item virou atalho fixo no topo do menu, não
     // repete aqui dentro do corpo da página (ex: "Pastas").
@@ -9585,8 +9919,14 @@
     renderSidebarPinned();
     // só registra uma visita nova quando a página MUDA de verdade — evita
     // contar de novo se render() rodar 2x pra mesma página (voltar do
-    // histórico do navegador pra onde já estava).
-    if (pageId !== lastTrackedPageId) {
+    // histórico do navegador pra onde já estava). "noTrackVisit" (pedido
+    // do Georges: as próprias páginas de ranking — Mais Visitadas/
+    // Recentes — não devem poluir os rankings delas mesmas) pula o
+    // registro por completo, mas ainda repinta a seção Recentes (útil se
+    // ela ainda não tinha carregado).
+    if (page.noTrackVisit) {
+      renderSidebarRecent();
+    } else if (pageId !== lastTrackedPageId) {
       lastTrackedPageId = pageId;
       trackPageVisit(pageId);
     } else {
@@ -9826,8 +10166,9 @@
   // função quando já tem um token do Google válido — ver auth.js). Sem
   // isso, o app nem monta a árvore/conteúdo até a pessoa logar.
   function boot() {
-    var titleEl = document.getElementById("sidebarTitle");
+    var titleEl = document.getElementById("sidebarTitleText");
     if (titleEl) titleEl.textContent = cfg.appTitle;
+    initRailCollapse();
     // Carimbo da versão — agora no rodapé do menu (pedido do Georges: usuário
     // logado + versão "hoje meio perdidos no header"), antes ficava dentro de
     // #sidebarTitle. Só pra dar pra conferir, com uma olhada rápida, se o
@@ -9848,7 +10189,7 @@
 
     // páginas visitadas (Recentes/Mais Visitadas) — busca o log salvo 1x no
     // boot; não trava o boot (mesma lógica de refreshNotifications acima).
-    fetchPageVisits().then(function () { renderSidebarRecent(); });
+    Promise.all([fetchPageVisits(), fetchRecentSettings()]).then(function () { renderSidebarRecent(); });
 
     // busca o override de "página inicial" salvo na KV (ver /home-page no
     // worker.js — botão #setHomeBtn) ANTES de decidir qual página abrir.

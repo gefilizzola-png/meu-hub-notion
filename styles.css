@@ -142,6 +142,56 @@ html, body {
   padding: 20px 20px 14px;
   font-size: 15px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sidebar-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* botão do "rail colapsado" (pedido do Georges: "só ícones... pra tela
+   larga [...] mas apenas para telas largas. No celular fechado, não.") —
+   escondido por padrão (mobile-first), só aparece dentro do media query
+   de tela larga lá embaixo. */
+.sidebar-collapse-btn {
+  display: none;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  color: #8c8c86;
+  cursor: pointer;
+  font-size: 15px;
+}
+.sidebar-collapse-btn:hover { background: #efefec; color: #2c2c2a; }
+
+/* rail colapsado — SÓ dentro deste media query (pedido do Georges: "apenas
+   para telas largas. No celular fechado, não") — abaixo de 1024px a
+   classe "rail-collapsed" em #shell fica sem nenhum efeito (o botão que a
+   liga também está escondido acima, mobile-first). Some o que precisa de
+   texto pra fazer sentido (busca, Recentes, árvore de pastas, rodapé) e
+   deixa só os atalhos fixos, virados ícone puro — "libera espaço
+   horizontal sem perder os atalhos, só escondendo os rótulos". */
+@media (min-width: 1024px) {
+  .sidebar-collapse-btn { display: flex; }
+  #shell.rail-collapsed .sidebar { width: 64px; }
+  #shell.rail-collapsed .sidebar-title-text,
+  #shell.rail-collapsed .sidebar-search,
+  #shell.rail-collapsed .sidebar-recent,
+  #shell.rail-collapsed .tree,
+  #shell.rail-collapsed .sidebar-footer { display: none; }
+  #shell.rail-collapsed .sidebar-header { padding: 20px 0 14px; justify-content: center; }
+  #shell.rail-collapsed .sidebar-pinned { padding: 2px 8px 10px; }
+  #shell.rail-collapsed .sidebar-pinned-item {
+    justify-content: center;
+    padding: 0;
+    width: 36px;
+    margin: 0 auto;
+  }
+  #shell.rail-collapsed .sidebar-pinned-label { display: none; }
 }
 .sidebar-search {
   padding: 0 16px 14px;
@@ -245,18 +295,68 @@ html, body {
   letter-spacing: 0.03em;
   color: #9c9c96;
 }
+/* título da seção virou link pra página cheia (pedido do Georges: "Recentes
+   ... crie como uma página") — mesmo tamanho/cor do texto de antes, só que
+   clicável (sublinha no hover, feito parece link mesmo). */
+.sidebar-section-head-title {
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-section-head-title:hover { text-decoration: underline; color: #2c2c2a; }
+.sidebar-section-head-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .sidebar-section-head-link {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 20px;
   height: 20px;
+  border: none;
+  background: transparent;
   border-radius: 6px;
   color: #9c9c96;
   text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
 }
 .sidebar-section-head-link:hover { background: #efefec; color: #2c2c2a; }
 .sidebar-section-head-link .ti { font-size: 13px; }
+/* formulariozinho "quantas exibir" (pedido do Georges: "crie um botão de
+   configuração para eu escolher quantas quero exibir"), abre embaixo do
+   cabeçalho da seção Recentes ao clicar na engrenagem. */
+.sidebar-recent-settings {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 10px;
+  font-size: 12px;
+  color: #6b6b63;
+}
+.sidebar-recent-settings-input {
+  width: 48px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  padding: 0 6px;
+  font-size: 12px;
+  text-align: center;
+}
+.sidebar-recent-settings-save {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: none;
+  background: #2c2c2a;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sidebar-recent-settings-save:hover { background: #1f1f1d; }
 .sidebar-recent-list { display: flex; flex-direction: column; gap: 1px; }
 .sidebar-recent-item {
   display: flex;
@@ -537,6 +637,49 @@ html, body {
   color: #999;
   white-space: nowrap;
 }
+
+/* filtro de período (pedido do Georges: "Crie um filtro para eu poder
+   visualizar por data. Tipo: as mais visitadas desde o início da
+   contagem, só naquela data, ontem, etc.") + seção "Nunca Visitadas"
+   (pedido do Georges: "para eu saber e identificar o motivo"). */
+.most-visited-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  max-width: 520px;
+}
+.most-visited-filter-label { font-size: 12.5px; color: #6b6b63; flex-shrink: 0; }
+.most-visited-filter-select {
+  height: 32px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: #2c2c2a;
+}
+.most-visited-filter-date {
+  height: 32px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: #2c2c2a;
+}
+.most-visited-section-head {
+  margin: 22px 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #9c9c96;
+  max-width: 520px;
+}
+.most-visited-list-never { opacity: 0.75; }
+.most-visited-row-never { box-shadow: 0 0 0 0.5px #ececea; background: #fafaf9; }
+.most-visited-row-never:hover { background: #f2f2ef; }
 
 /* item — base = mobile list-with-dividers */
 /* botão "reservado" (ex: "Central" em Contratos, enquanto o link não é

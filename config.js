@@ -1178,7 +1178,12 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-21 17:26",
+  appVersion: "2026-09-21 17:48",
+  // valor inicial da seção "Recentes" do menu ANTES do fetch de
+  // /recent-settings responder (evita a seção "pular" de tamanho
+  // quando o Worker devolver o valor salvo) — espelha
+  // RECENT_LIMIT_DEFAULT no worker.js.
+  recentLimitDefault: 8,
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1211,11 +1216,15 @@ const APP_CONFIG = {
   // o mesmo formato de pages.entrada.quickButtons (nome puro do Tabler
   // Icons, sem prefixo "ti-" — quem monta o className final é
   // renderSidebarPinned).
+  // ordem pedida pelo Georges (rodada rail colapsado/Recentes página):
+  // Painel do Dia, Favoritas, Anotações Rápidas, Lista de Prioridades,
+  // Financeiro — antes era Painel do Dia/Prioridades/Anotações/Favoritas/
+  // Financeiro.
   sidebarPinned: [
     { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
-    { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
-    { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
     { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
+    { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
+    { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
     { label: "Financeiro", target: "financeiro_contas_mensais", icon: "wallet", color: "#0f9b8e" }
   ],
 
@@ -1297,7 +1306,8 @@ const APP_CONFIG = {
         { label: "Central", type: "page", target: "central", icon: "layout-grid" },
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
         { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" },
-        { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" }
+        { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" },
+        { label: "Recentes", type: "page", target: "recentes", icon: "history" }
       ]
     },
 
@@ -1308,11 +1318,27 @@ const APP_CONFIG = {
     // worker.js), nunca toca o Notion. "mostVisited:true" despacha pra
     // renderMostVisitedPage(container) em renderContent (app.js) — mesmo
     // padrão exclusivo de page.dynamicQuery, sem empilhar com outros blocos.
-    // Também alcançável pelo ícone "█" no cabeçalho da seção "Recentes" do
-    // menu (renderSidebarRecent em app.js).
+    // Também alcançável pelo ícone no cabeçalho da seção "Recentes" do
+    // menu (renderSidebarRecent em app.js). "noTrackVisit:true" (pedido
+    // implícito do Georges: a lista tem que refletir páginas de CONTEÚDO,
+    // não ela mesma) — render() em app.js pula trackPageVisit() pra
+    // páginas com essa flag, então abrir o próprio ranking nunca conta
+    // como "1 visita" nele mesmo nem no "Nunca Visitadas".
     mais_visitadas: {
       title: "Mais Visitadas",
-      mostVisited: true
+      mostVisited: true,
+      noTrackVisit: true
+    },
+
+    // "Recentes" em página própria (pedido do Georges: "crie como uma
+    // página, tal qual Mais Visitados") — TODAS as visitas únicas por
+    // recedência, sem teto de 20 (esse teto é só do preview no menu, ver
+    // cfg.recentLimitDefault + renderSidebarRecent em app.js). Mesma flag
+    // noTrackVisit acima, mesmo motivo.
+    recentes: {
+      title: "Recentes",
+      recentPage: true,
+      noTrackVisit: true
     },
 
     // "Resumo dos resumos" — cada seção junta HOJE + AMANHÃ num só lugar

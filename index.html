@@ -30,7 +30,17 @@
        telas largas (o menu já convive lado a lado com o conteúdo). -->
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header" id="sidebarTitle">Meu hub</div>
+    <div class="sidebar-header" id="sidebarTitle">
+      <span class="sidebar-title-text" id="sidebarTitleText">Meu hub</span>
+      <!-- rail colapsado (pedido do Georges: "só ícones... pra tela larga")
+           - só aparece em telas largas (ver CSS), clique alterna a classe
+           rail-collapsed em #shell - ver app.js. No celular o botão nem
+           aparece porque o menu já tem seu próprio jeito de abrir/fechar
+           (menuToggleBtn), diferente do rail. -->
+      <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" type="button" title="Recolher menu" aria-label="Recolher menu">
+        <i class="ti ti-chevrons-left"></i>
+      </button>
+    </div>
     <div class="sidebar-search">
       <div class="search-field-wrap">
         <i class="ti ti-search"></i>
