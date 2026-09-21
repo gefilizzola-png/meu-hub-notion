@@ -922,6 +922,36 @@ var NOTIFICATION_SOURCES = [
     defaultLeadTimes: [
       { id: "3d", amount: 3, unit: "days", label: "3 dias antes" }
     ]
+  },
+  // Aniversários (pedido do Georges). "📚 Página de Origem" = "Pessoal -
+  // Aniversários" — mesmo valor usado no bloco "🎂 Aniversários" de Início.
+  // SEM exclusão de Andamento de propósito (diferente de todas as outras
+  // fontes): os itens de Aniversários ficam sempre em "6 - Concluído" (não
+  // fazem sentido com outro status — confirmado no comentário do próprio
+  // bloco de Aniversários em Início), então excluir Concluído escondia
+  // TUDO. dateProperty "📅 Data/Prazo" aqui já guarda a ocorrência DESTE
+  // ANO do aniversário (não a data de nascimento crua) — confirmado porque
+  // o bloco de Aniversários de Início já compara esse campo com "hoje" e
+  // funciona; então o mesmo mecanismo de antecedência (dias/horas antes)
+  // funciona igual a qualquer outra fonte, sem precisar de nenhum cálculo
+  // especial de "próxima ocorrência anual".
+  {
+    id: "aniversarios",
+    label: "Aniversários",
+    // mesmo emoji da divisória "🎂 Aniversários" no Painel do Dia.
+    icon: "🎂",
+    database_id: "2310481486dd80079202fe1eaf5e14c4",
+    baseFilters: [
+      { property: "📚 Página de Origem", type: "select", condition: "equals", value: "Pessoal - Aniversários" }
+    ],
+    dateProperty: "📅 Data/Prazo",
+    // leva pro Painel do Dia (page "inicio"), onde já mora o bloco "🎂
+    // Aniversários" (dentro das abas Hoje/Amanhã/Próximos 7 dias).
+    target: { type: "page", target: "inicio" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
+    ]
   }
 ];
 
@@ -1139,7 +1169,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-20 21:12",
+  appVersion: "2026-09-20 21:20",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
