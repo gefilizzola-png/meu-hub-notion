@@ -756,6 +756,9 @@ var NOTIFICATION_SOURCES = [
   {
     id: "reunioes",
     label: "Reuniões",
+    // mesmo emoji da divisória "📅 Reuniões" no Painel do Dia (pedido do
+    // Georges — facilitar a leitura visual de qual fonte é cada aviso).
+    icon: "📅",
     database_id: "2310481486dd80079202fe1eaf5e14c4",
     baseFilters: [
       { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" }
@@ -775,6 +778,10 @@ var NOTIFICATION_SOURCES = [
   {
     id: "tat_sessoes",
     label: "Sessões do TAT",
+    // mesmo emoji da divisória "⚖️ Sessões (TAT / JART / COMAT)" no Painel
+    // do Dia — reaproveitado aqui mesmo só existindo TAT por enquanto, pra
+    // já bater com Sessões JART/Reuniões COMAT se/quando entrarem.
+    icon: "⚖️",
     database_id: "2310481486dd80079202fe1eaf5e14c4",
     // mesmo baseFilters de "Sessões pendentes" em pmf_col_tat (ver mais
     // abaixo) — só as ainda não concluídas entram na Central de
@@ -808,6 +815,8 @@ var NOTIFICATION_SOURCES = [
   {
     id: "prioritarios",
     label: "Itens Prioritários",
+    // mesmo emoji da divisória "⭐ Itens Prioritários" no Painel do Dia.
+    icon: "⭐",
     database_id: "2310481486dd80079202fe1eaf5e14c4",
     baseFilters: [
       { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
@@ -850,6 +859,8 @@ var NOTIFICATION_SOURCES = [
   {
     id: "financeiro",
     label: "Financeiro (Contas Mensais)",
+    // mesmo emoji do bloco "💰 Financeiro" no Painel do Dia.
+    icon: "💰",
     kind: "financeiro",
     dateProperty: "vencimento",
     target: { type: "page", target: "financeiro_contas_mensais" },
@@ -1074,7 +1085,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-20 20:48",
+  appVersion: "2026-09-20 20:58",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é

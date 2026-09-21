@@ -8715,6 +8715,7 @@
           id: source.id + "::" + lt.id + "::" + p.id,
           sourceId: source.id,
           sourceLabel: source.label,
+          sourceIcon: source.icon || "",
           title: p.title,
           url: p.url,
           target: source.target,
@@ -8741,6 +8742,7 @@
       return {
         id: source.id,
         label: source.label,
+        icon: source.icon || "",
         kind: source.kind || "notion",
         database_id: source.database_id,
         baseFilters: source.baseFilters,
@@ -8933,7 +8935,7 @@
       head.className = "notif-settings-source-head";
       var label = document.createElement("span");
       label.className = "notif-settings-source-label";
-      label.textContent = s.label;
+      label.textContent = (s.icon ? s.icon + " " : "") + s.label;
       head.appendChild(label);
 
       var toggle = document.createElement("label");
@@ -9058,7 +9060,7 @@
       main.appendChild(title);
       var meta = document.createElement("div");
       meta.className = "notif-card-meta";
-      meta.textContent = n.sourceLabel + " · " + n.leadLabel + " · " + notifDateLabel(n.eventTime);
+      meta.textContent = (n.sourceIcon ? n.sourceIcon + " " : "") + n.sourceLabel + " · " + n.leadLabel + " · " + notifDateLabel(n.eventTime);
       main.appendChild(meta);
       card.appendChild(main);
 
