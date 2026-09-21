@@ -9041,14 +9041,13 @@
     // reseta ao recarregar a página. Diferente do liga/desliga da tela de
     // gestão (engrenagem): aquele controla o que é BUSCADO no Notion e o
     // BADGE; isto só filtra o que já foi buscado, na hora, sem mexer em
-    // nada salvo. Só mostra chip pra categoria que tem pelo menos 1 item
-    // na aba atual (Não lidas/Todas) — nada pra filtrar, nada de chip.
-    var chipSources = [];
-    var seenSourceIds = {};
-    modeItems.forEach(function (n) {
-      if (seenSourceIds[n.sourceId]) return;
-      seenSourceIds[n.sourceId] = true;
-      chipSources.push({ id: n.sourceId, icon: n.sourceIcon, label: n.sourceLabel });
+    // nada salvo. Lista vem de notifState.sources (fontes LIGADAS), não
+    // dos itens atuais da aba — de propósito: se dependesse de "tem item
+    // agora", a fileira de chips apareceria/sumiria sozinha conforme a aba
+    // (Não lidas/Todas) ou o momento, o que confundia mais do que ajudava
+    // (pedido do Georges: comportamento previsível).
+    var chipSources = notifState.sources.filter(function (s) { return s.enabled; }).map(function (s) {
+      return { id: s.id, icon: s.icon, label: s.label };
     });
     if (chipSources.length > 1) {
       var chipsRow = document.createElement("div");
@@ -9205,6 +9204,60 @@
         });
       })(notifTabBtns[nti]);
     }
+  }
+
+  // Fechar arrastando com o dedo pra direita (pedido do Georges — no
+  // celular a gaveta ocupa quase a tela toda, então fechar só pelo X ou
+  // tocando fora dela é incômodo quando o dedo já está em cima do painel).
+  // Só reage a um gesto CLARAMENTE horizontal (dx positivo maior que |dy|
+  // a cada instante do arrasto) — senão atrapalharia o scroll vertical
+  // normal da lista de notificações, que usa o mesmo toque. Um arrasto
+  // curto ou majoritariamente vertical não fecha nada, só o dedo solto
+  // depois de passar de NOTIF_SWIPE_CLOSE_PX é que conta. Continua
+  // funcionando junto com o X e o clique no fundo escuro (nenhum dos dois
+  // foi removido) — é só mais um jeito de fechar.
+  var NOTIF_SWIPE_CLOSE_PX = 70;
+  var notifSwipe = { active: false, startX: 0, startY: 0, lastDx: 0 };
+
+  function notifSwipeReset() {
+    var panelEl = document.getElementById("notifPanel");
+    if (panelEl) {
+      panelEl.classList.remove("notif-panel-dragging");
+      panelEl.style.transform = "";
+    }
+    notifSwipe.active = false;
+    notifSwipe.lastDx = 0;
+  }
+
+  var notifPanelEl = document.getElementById("notifPanel");
+  if (notifPanelEl) {
+    notifPanelEl.addEventListener("touchstart", function (e) {
+      if (!isNarrowScreen.matches || !e.touches || e.touches.length !== 1) return;
+      notifSwipe.active = true;
+      notifSwipe.startX = e.touches[0].clientX;
+      notifSwipe.startY = e.touches[0].clientY;
+      notifSwipe.lastDx = 0;
+    }, { passive: true });
+
+    notifPanelEl.addEventListener("touchmove", function (e) {
+      if (!notifSwipe.active || !e.touches || e.touches.length !== 1) return;
+      var dx = e.touches[0].clientX - notifSwipe.startX;
+      var dy = e.touches[0].clientY - notifSwipe.startY;
+      if (dx > 0 && dx > Math.abs(dy)) {
+        notifSwipe.lastDx = dx;
+        notifPanelEl.classList.add("notif-panel-dragging");
+        notifPanelEl.style.transform = "translateX(" + dx + "px)";
+      }
+    }, { passive: true });
+
+    function notifSwipeEnd() {
+      if (!notifSwipe.active) return;
+      var dx = notifSwipe.lastDx;
+      notifSwipeReset();
+      if (dx > NOTIF_SWIPE_CLOSE_PX) closeNotifPanel();
+    }
+    notifPanelEl.addEventListener("touchend", notifSwipeEnd);
+    notifPanelEl.addEventListener("touchcancel", notifSwipeReset);
   }
 
   // ---------------- page render / navigation ----------------

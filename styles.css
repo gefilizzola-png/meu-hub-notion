@@ -1627,6 +1627,11 @@ html, body {
   z-index: 61;
 }
 .notif-panel.open { transform: translateX(0); }
+/* enquanto o dedo arrasta (ver touchmove em app.js) — desliga a transição
+   CSS pra o painel acompanhar o dedo em tempo real (sem atraso); volta a
+   animar suave sozinho assim que a classe some (soltar o dedo remove ela
+   antes de decidir fechar ou voltar pro lugar). */
+.notif-panel.notif-panel-dragging { transition: none; }
 .notif-panel-header {
   display: flex;
   align-items: center;
