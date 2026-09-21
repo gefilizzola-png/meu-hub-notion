@@ -178,8 +178,141 @@ html, body {
   padding: 1px 5px;
   pointer-events: none;
 }
+/* ---------- atalhos fixos no topo do menu (pedido do Georges: "dar visual
+   mais moderno... colocar como fixo no topo os itens que aparecem em
+   Início") — mesmo padrão visual dos quickButtons acima (chip colorido
+   sólido + ícone branco, via --pin-color), só que em linha (não card),
+   pra caber empilhado no menu lateral estreito. NÃO mexe em .tree-row (26px
+   fixo — regra combinada com o Georges) — é uma seção própria, acima da
+   árvore de pastas. */
+.sidebar-pinned {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 10px 10px;
+}
+.sidebar-pinned-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 9px;
+  color: #2c2c2a;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-pinned-item:hover { background: #efefec; }
+.sidebar-pinned-item.active {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07), 0 0 0 0.5px #e4e4e0;
+  color: #1f1f1d;
+  font-weight: 600;
+}
+.sidebar-pinned-icon {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pin-color, #4a90d9);
+  color: #fff;
+}
+.sidebar-pinned-icon .ti { font-size: 14px; }
+.sidebar-pinned-label { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- "Recentes" (pedido do Georges: "parecido com o que
+   Notion/Linear fazem" - 20 últimas páginas visitadas, mais recente
+   primeiro). Linhas mais compactas que .sidebar-pinned-item de propósito
+   (28px vs 36px) - 20 itens precisam caber sem virar metade do menu. Some
+   sozinha (fica vazia, sem cabeçalho) enquanto não há nenhuma visita
+   registrada - ver renderSidebarRecent() em app.js. */
+.sidebar-recent { padding: 2px 10px 6px; }
+.sidebar-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #9c9c96;
+}
+.sidebar-section-head-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: #9c9c96;
+  text-decoration: none;
+}
+.sidebar-section-head-link:hover { background: #efefec; color: #2c2c2a; }
+.sidebar-section-head-link .ti { font-size: 13px; }
+.sidebar-recent-list { display: flex; flex-direction: column; gap: 1px; }
+.sidebar-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: #57574f;
+  font-size: 12.5px;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-recent-item .ti { font-size: 14px; flex-shrink: 0; color: #a3a39a; }
+.sidebar-recent-item:hover { background: #efefec; color: #2c2c2a; }
+.sidebar-recent-item.active { background: #efefec; color: #1f1f1d; font-weight: 600; }
+.sidebar-recent-item span { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- rodapé fixo do menu (pedido do Georges: usuário logado +
+   versão do app, "hoje meio perdidos no header"). #authUser/#authUserLabel/
+   #authSignOutBtn são os MESMOS ids de antes (só mudaram de lugar no HTML
+   - auth.js não depende de posição), então o visual deles já vem de
+   .auth-user em outro lugar deste arquivo; aqui só o wrapper do rodapé. */
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 0.5px solid #ececea;
+  flex-shrink: 0;
+}
+.sidebar-footer .auth-user {
+  /* dentro do rodapé (não mais colado numa barra de busca do header) —
+     zera o margin-left:8px que .auth-user traz por padrão lá em cima, e
+     deixa encolher/truncar (.auth-user #authUserLabel já tem
+     text-overflow:ellipsis) em vez de empurrar a versão pra fora. */
+  margin-left: 0;
+  min-width: 0;
+}
+.sidebar-footer .app-version {
+  display: block;
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: #b3b3ab;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .tree {
-  padding: 4px 10px 20px;
+  padding: 8px 10px 20px;
+  margin-top: 4px;
+  border-top: 0.5px solid #ececea;
   flex: 1;
 }
 .tree ul, .tree li { list-style: none; margin: 0; padding: 0; }
@@ -362,6 +495,47 @@ html, body {
   font-size: 13px;
   padding: 28px 4px;
   text-align: center;
+}
+
+/* ---------- "Mais Visitadas" (pedido do Georges: ranking por quantidade de
+   visitas, maior pra menor, com o número do lado de cada uma) - ver
+   renderMostVisitedPage() em app.js. */
+.most-visited-list { display: flex; flex-direction: column; gap: 2px; max-width: 520px; }
+.most-visited-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #2c2c2a;
+  text-decoration: none;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px #e4e4e0;
+}
+.most-visited-row:hover { background: #f7f7f5; }
+.most-visited-rank {
+  flex-shrink: 0;
+  width: 28px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #9c9c96;
+  text-align: right;
+}
+.most-visited-row .ti { flex-shrink: 0; font-size: 16px; color: #6b6b63; }
+.most-visited-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.most-visited-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #999;
+  white-space: nowrap;
 }
 
 /* item — base = mobile list-with-dividers */
@@ -1932,9 +2106,12 @@ html, body {
 
 @media (max-width: 1023px) {
   .header-search { display: none; }
-  /* cabeçalho mobile já é apertado (botão voltar + breadcrumb) — o
-     "logado como X · Sair" fica só no desktop. */
-  .auth-user { display: none !important; }
+  /* o indicador "logado como X · Sair" morava no cabeçalho (apertado no
+     celular: botão voltar + breadcrumb) e por isso ficava escondido aqui.
+     Agora mora no rodapé do menu lateral (.sidebar-footer, pedido do
+     Georges), que tem espaço de sobra mesmo no celular quando o menu está
+     aberto — então não precisa mais esconder.
+     .sidebar-footer .auth-user (abaixo) cuida do layout ali. */
 
   /* celular: a data de criação (badge bem pequeno) comprimia o texto da
      anotação quando ficava na mesma linha que as tags/botões — aqui ela

@@ -38,7 +38,25 @@
         <span class="kbd-hint">Ctrl K</span>
       </div>
     </div>
+    <!-- atalhos fixos (renderSidebarPinned em app.js, lista em
+         cfg.sidebarPinned) — sempre visíveis, acima da árvore de pastas. -->
+    <nav class="sidebar-pinned" id="sidebarPinned"></nav>
+    <!-- "Recentes" (pedido do Georges) - ate 20 paginas visitadas mais
+         recentemente, populado por renderSidebarRecent() em app.js; some
+         sozinha (fica vazia) enquanto nao ha nenhuma visita registrada. -->
+    <nav class="sidebar-recent" id="sidebarRecent"></nav>
     <nav class="tree" id="tree"></nav>
+    <!-- rodape fixo do menu (pedido do Georges: "hoje meio perdidos no
+         header") - usuario logado (movido de dentro do header - auth.js so
+         faz getElementById, nao depende de posicao no DOM) + versao do app
+         (movida de dentro de #sidebarTitle - ver boot() em app.js). -->
+    <div class="sidebar-footer" id="sidebarFooter">
+      <div class="auth-user" id="authUser">
+        <span id="authUserLabel"></span>
+        <button type="button" id="authSignOutBtn">Sair</button>
+      </div>
+      <span class="app-version" id="sidebarFooterVersion"></span>
+    </div>
   </aside>
 
   <div class="main">
@@ -69,10 +87,6 @@
           <i class="ti ti-search"></i>
           <input class="header-search-input js-search-input" placeholder="Buscar" autocomplete="off">
         </div>
-      </div>
-      <div class="auth-user" id="authUser">
-        <span id="authUserLabel"></span>
-        <button type="button" id="authSignOutBtn">Sair</button>
       </div>
     </header>
     <main class="content" id="content"></main>

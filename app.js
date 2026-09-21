@@ -21,6 +21,17 @@
   var selectedResult = -1;
   var expandedPages = {};   // pageId -> true if its children are shown in the sidebar tree
 
+  // ---------------- páginas visitadas (Recentes/Mais Visitadas — pedido
+  // do Georges) ---------------- log bruto { visits: [{pageId, ts}, ...] },
+  // 100% KV via /page-visits (worker.js) — SÓ navegação dentro do próprio
+  // app, nada do Notion. Guardado em memória (não precisa esperar o GET
+  // toda vez que renderiza — só 1x no boot, depois atualiza otimista a
+  // cada navegação nova). "lastTrackedPageId" evita registrar visita
+  // repetida quando render() roda de novo pra MESMA página (ex: voltar do
+  // histórico do navegador pra onde já estava).
+  var pageVisitsState = { visits: [], loaded: false };
+  var lastTrackedPageId = null;
+
   function iconFor(item) {
     if (item.icon) return "ti-" + item.icon;
     if (item.type === "notion") return "ti-file-text";
@@ -244,8 +255,12 @@
 
     var childItems = pageItems(page);
     var hasContent = childItems.length > 0;
+    // "pinnedOnly" (ver comentário grande de pages.entrada em config.js) —
+    // item que virou atalho fixo no topo do menu (renderSidebarPinned)
+    // continua no array (pra buildIndex/busca/breadcrumb não quebrarem),
+    // mas não aparece de novo aqui como subpasta — ficaria duplicado.
     var subfolders = childItems.filter(function (item) {
-      return item.type === "page" && cfg.pages[item.target];
+      return item.type === "page" && cfg.pages[item.target] && !item.pinnedOnly;
     });
     var hasSubfolders = subfolders.length > 0;
     var isOpen = !!expandedPages[pageId];
@@ -290,6 +305,240 @@
       li.appendChild(ul);
     }
     return li;
+  }
+
+  // ---------------- atalhos fixos no topo do menu (pedido do Georges: "dar
+  // visual mais moderno... colocar como fixo no topo os itens que
+  // aparecem em Início, com os seus respectivos ícones") ----------------
+  // Lê cfg.sidebarPinned (config.js) — sempre a MESMA lista, em qualquer
+  // página/estado da árvore (diferente do nav#tree, que muda conforme
+  // expande/recolhe pastas). Cada linha é um <a href="#target"> de
+  // verdade, mesmo padrão do resto do app (Ctrl/Cmd+clique, clique do
+  // meio e "abrir em nova aba" funcionam nativos; clique normal navega
+  // client-side). "active" quando currentId bate com o target.
+  function renderSidebarPinned() {
+    var wrap = document.getElementById("sidebarPinned");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    (cfg.sidebarPinned || []).forEach(function (item) {
+      var link = document.createElement("a");
+      link.className = "sidebar-pinned-item" + (item.target === currentId ? " active" : "");
+      link.href = "#" + item.target;
+      link.addEventListener("click", function (e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate(item.target);
+      });
+      var iconWrap = document.createElement("span");
+      iconWrap.className = "sidebar-pinned-icon";
+      iconWrap.style.setProperty("--pin-color", item.color || "#4a90d9");
+      var ic = document.createElement("i");
+      ic.className = "ti ti-" + (item.icon || "circle");
+      iconWrap.appendChild(ic);
+      link.appendChild(iconWrap);
+      var lbl = document.createElement("span");
+      lbl.className = "sidebar-pinned-label";
+      lbl.textContent = item.label;
+      link.appendChild(lbl);
+      wrap.appendChild(link);
+    });
+  }
+
+  // ---------------- Recentes (pedido do Georges: "parecido com o que
+  // Notion/Linear fazem", 20 últimas páginas visitadas, mais recente
+  // primeiro) ---------------- páginas puras (sem DOM), testáveis isoladas.
+
+  // acha um ícone representativo pra "pageId" — reaproveita o MESMO dado já
+  // calculado em outro lugar (sidebarPinned + flatIndex, que já guarda
+  // "icon" por item de menu), em vez de inventar uma fonte nova: primeiro
+  // tenta um atalho fixo (cfg.sidebarPinned), senão o primeiro item do
+  // índice de busca que aponte pra essa página (flatIndex.target), senão
+  // cai no genérico (calendário pra dynamicQuery, pasta pro resto — mesma
+  // regra do ícone da árvore em buildTreeNode).
+  function iconForPageId(pageId) {
+    var pinned = (cfg.sidebarPinned || []).filter(function (p) { return p.target === pageId; })[0];
+    if (pinned) return "ti-" + (pinned.icon || "circle");
+    var found = flatIndex.filter(function (e) { return e.target === pageId; })[0];
+    if (found && found.icon) return found.icon;
+    var page = cfg.pages[pageId];
+    if (page && (page.dynamicQuery || page.dynamicQueries)) return "ti-calendar-event";
+    return "ti-folder";
+  }
+
+  function labelForPageId(pageId) {
+    var page = cfg.pages[pageId];
+    return page ? page.title : pageId;
+  }
+
+  // { visits: [{pageId, ts}, ...] } (log bruto, pode ter páginas repetidas
+  // E páginas que não existem mais em cfg.pages, se alguma foi removida do
+  // config.js depois) -> lista das últimas "limit" páginas ÚNICAS, mais
+  // recente primeiro (maior ts primeiro). Função pura — recebe o log
+  // pronto, não sabe de onde veio (fetch/estado local), só ordena/dedupe.
+  function recentUniqueVisits(visits, limit) {
+    var latestByPage = {};
+    (visits || []).forEach(function (v) {
+      if (!v || !v.pageId) return;
+      if (!(v.pageId in latestByPage) || v.ts > latestByPage[v.pageId]) latestByPage[v.pageId] = v.ts;
+    });
+    return Object.keys(latestByPage)
+      .map(function (pageId) { return { pageId: pageId, ts: latestByPage[pageId] }; })
+      .sort(function (a, b) { return b.ts - a.ts; })
+      .slice(0, limit);
+  }
+
+  // mesmo log bruto -> contagem de visitas por página, MAIOR pra MENOR —
+  // usada pela página "Mais Visitadas" (pedido do Georges: "quais páginas
+  // são mais acessadas e quais não estou utilizando"). Função pura, mesmo
+  // padrão de recentUniqueVisits acima.
+  function countVisitsByPage(visits) {
+    var counts = {};
+    (visits || []).forEach(function (v) {
+      if (!v || !v.pageId) return;
+      counts[v.pageId] = (counts[v.pageId] || 0) + 1;
+    });
+    return Object.keys(counts)
+      .map(function (pageId) { return { pageId: pageId, count: counts[pageId] }; })
+      .sort(function (a, b) { return b.count - a.count; });
+  }
+
+  // GET /page-visits — 1x no boot, popula pageVisitsState em memória (ver
+  // comentário grande lá em cima). Falha de rede/401 nunca trava o boot —
+  // "Recentes" só fica vazio até a próxima navegação conseguir salvar.
+  function fetchPageVisits() {
+    return authFetch(cfg.templateWorkerUrl + "/page-visits")
+      .then(function (res) { return res.ok ? res.json() : { visits: [] }; })
+      .then(function (data) {
+        pageVisitsState.visits = (data && data.visits) || [];
+        pageVisitsState.loaded = true;
+      })
+      .catch(function () { pageVisitsState.loaded = true; });
+  }
+
+  // chamada de dentro de render() (ver mais abaixo) toda vez que a página
+  // MUDA de verdade (não em re-render da mesma página, ex: voltar do
+  // histórico pra onde já estava) — otimista: já soma na lista local e
+  // re-renderiza "Recentes" na hora, POST pro Worker roda em segundo
+  // plano (fire-and-forget, mesmo padrão de toggleNotifRead/togglePin —
+  // se falhar, corrige sozinho no próximo fetchPageVisits/boot).
+  function trackPageVisit(pageId) {
+    var ts = Date.now();
+    pageVisitsState.visits.push({ pageId: pageId, ts: ts });
+    renderSidebarRecent();
+    authFetch(cfg.templateWorkerUrl + "/page-visits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId: pageId, ts: ts })
+    }).catch(function () {});
+  }
+
+  // linhas compactas (mais densas que .sidebar-pinned-item — 20 itens
+  // precisam caber sem virar a metade do menu; ver .sidebar-recent no
+  // styles.css) — mesmo padrão de <a href="#pageId"> real (Ctrl/Cmd+clique
+  // etc) do resto do app. Ignora pageId que não existe mais em cfg.pages
+  // (página removida do config.js depois de visitada).
+  function renderSidebarRecent() {
+    var wrap = document.getElementById("sidebarRecent");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    var recent = recentUniqueVisits(pageVisitsState.visits, 20).filter(function (v) { return !!cfg.pages[v.pageId]; });
+    if (!recent.length) return; // nada visitado ainda (ou ainda carregando) — seção some, sem "vazio" poluindo o menu
+
+    var head = document.createElement("div");
+    head.className = "sidebar-section-head";
+    var headLabel = document.createElement("span");
+    headLabel.textContent = "Recentes";
+    head.appendChild(headLabel);
+    // "Ver mais visitadas" (pedido do Georges: ranking por quantidade de
+    // acesso) — link discreto no cabeçalho da seção, não duplicado em
+    // Pastas (que também alcança "mais_visitadas" pra busca/breadcrumb).
+    var moreLink = document.createElement("a");
+    moreLink.className = "sidebar-section-head-link";
+    moreLink.href = "#mais_visitadas";
+    moreLink.title = "Ver páginas mais visitadas";
+    moreLink.innerHTML = '<i class="ti ti-chart-bar"></i>';
+    moreLink.addEventListener("click", function (e) {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      navigate("mais_visitadas");
+    });
+    head.appendChild(moreLink);
+    wrap.appendChild(head);
+
+    var list = document.createElement("div");
+    list.className = "sidebar-recent-list";
+    recent.forEach(function (v) {
+      var link = document.createElement("a");
+      link.className = "sidebar-recent-item" + (v.pageId === currentId ? " active" : "");
+      link.href = "#" + v.pageId;
+      link.addEventListener("click", function (e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate(v.pageId);
+      });
+      var ic = document.createElement("i");
+      ic.className = "ti " + iconForPageId(v.pageId);
+      link.appendChild(ic);
+      var lbl = document.createElement("span");
+      lbl.textContent = labelForPageId(v.pageId);
+      link.appendChild(lbl);
+      list.appendChild(link);
+    });
+    wrap.appendChild(list);
+  }
+
+  // "Mais Visitadas" (pedido do Georges: ranking por quantidade de
+  // visitas, maior pra menor, com o número do lado — "pra eu ver quais
+  // páginas são mais acessadas e quais não estou utilizando"). Chamada por
+  // renderContent quando a página tem "page.mostVisited: true" (ver
+  // pages.mais_visitadas em config.js) — mesmo padrão de despacho de
+  // renderFinanceiroContasMensais/renderPrioritiesTable (a página só marca
+  // uma flag, renderContent chama a função certa).
+  function renderMostVisitedPage(container) {
+    if (!pageVisitsState.loaded) {
+      var loading = document.createElement("p");
+      loading.className = "empty";
+      loading.textContent = "Carregando…";
+      container.appendChild(loading);
+      return;
+    }
+    var ranked = countVisitsByPage(pageVisitsState.visits).filter(function (v) { return !!cfg.pages[v.pageId]; });
+    if (!ranked.length) {
+      var empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "Ainda sem histórico de visitas.";
+      container.appendChild(empty);
+      return;
+    }
+    var list = document.createElement("div");
+    list.className = "most-visited-list";
+    ranked.forEach(function (v, i) {
+      var row = document.createElement("a");
+      row.className = "most-visited-row";
+      row.href = "#" + v.pageId;
+      row.addEventListener("click", function (e) {
+        if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate(v.pageId);
+      });
+      var rank = document.createElement("span");
+      rank.className = "most-visited-rank";
+      rank.textContent = (i + 1) + "º";
+      row.appendChild(rank);
+      var ic = document.createElement("i");
+      ic.className = "ti " + iconForPageId(v.pageId);
+      row.appendChild(ic);
+      var lbl = document.createElement("span");
+      lbl.className = "most-visited-label";
+      lbl.textContent = labelForPageId(v.pageId);
+      row.appendChild(lbl);
+      var count = document.createElement("span");
+      count.className = "most-visited-count";
+      count.textContent = v.count + (v.count === 1 ? " visita" : " visitas");
+      row.appendChild(count);
+      list.appendChild(row);
+    });
+    container.appendChild(list);
   }
 
   function escapeHtml(s) {
@@ -8109,7 +8358,17 @@
       return;
     }
 
-    var flatItems = page.items || [];
+    // "Mais Visitadas" (pedido do Georges) — página exclusiva, mesmo padrão
+    // do dynamicQuery acima: só essa lista, sem empilhar com outros blocos.
+    if (page.mostVisited) {
+      renderMostVisitedPage(container);
+      return;
+    }
+
+    // "pinnedOnly" (ver pages.entrada em config.js) — mesmo motivo do
+    // filtro em buildTreeNode: item virou atalho fixo no topo do menu, não
+    // repete aqui dentro do corpo da página (ex: "Pastas").
+    var flatItems = (page.items || []).filter(function (item) { return !item.pinnedOnly; });
     var itemGroups = (page.itemGroups || []).filter(function (g) { return (g.items || []).length > 0; });
     var groups = (page.groups || []).filter(function (g) { return (g.items || []).length > 0; });
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
@@ -9323,6 +9582,16 @@
     renderBreadcrumb();
     renderContent(pageId);
     renderTree();
+    renderSidebarPinned();
+    // só registra uma visita nova quando a página MUDA de verdade — evita
+    // contar de novo se render() rodar 2x pra mesma página (voltar do
+    // histórico do navegador pra onde já estava).
+    if (pageId !== lastTrackedPageId) {
+      lastTrackedPageId = pageId;
+      trackPageVisit(pageId);
+    } else {
+      renderSidebarRecent();
+    }
     renderSidePanel(pageId);
     updateSetHomeBtn();
 
@@ -9558,18 +9827,14 @@
   // isso, o app nem monta a árvore/conteúdo até a pessoa logar.
   function boot() {
     var titleEl = document.getElementById("sidebarTitle");
-    if (titleEl) {
-      titleEl.textContent = cfg.appTitle;
-      // Carimbo pequeno do lado do título — só pra dar pra conferir, com uma
-      // olhada rápida, se o navegador já está servindo o último push feito
-      // no GitHub (o valor vem de config.js, atualizado a cada entrega).
-      if (cfg.appVersion) {
-        var v = document.createElement("span");
-        v.className = "app-version";
-        v.textContent = cfg.appVersion;
-        titleEl.appendChild(v);
-      }
-    }
+    if (titleEl) titleEl.textContent = cfg.appTitle;
+    // Carimbo da versão — agora no rodapé do menu (pedido do Georges: usuário
+    // logado + versão "hoje meio perdidos no header"), antes ficava dentro de
+    // #sidebarTitle. Só pra dar pra conferir, com uma olhada rápida, se o
+    // navegador já está servindo o último push feito no GitHub (o valor vem
+    // de config.js, atualizado a cada entrega).
+    var versionEl = document.getElementById("sidebarFooterVersion");
+    if (versionEl && cfg.appVersion) versionEl.textContent = cfg.appVersion;
 
     buildIndex();
     collectSearchInputs();
@@ -9580,6 +9845,10 @@
     // pra descobrir um aviso novo que entrou na janela de antecedência).
     refreshNotifications();
     setInterval(refreshNotifications, 5 * 60 * 1000);
+
+    // páginas visitadas (Recentes/Mais Visitadas) — busca o log salvo 1x no
+    // boot; não trava o boot (mesma lógica de refreshNotifications acima).
+    fetchPageVisits().then(function () { renderSidebarRecent(); });
 
     // busca o override de "página inicial" salvo na KV (ver /home-page no
     // worker.js — botão #setHomeBtn) ANTES de decidir qual página abrir.

@@ -1178,7 +1178,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-21 11:52",
+  appVersion: "2026-09-21 17:26",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
@@ -1195,6 +1195,29 @@ const APP_CONFIG = {
   startPage: "entrada",
   homePage: "inicio",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
+
+  // Atalhos FIXOS no topo do menu lateral (pedido do Georges: "visual mais
+  // moderno... colocar como fixo no topo os itens que aparecem em
+  // Início, com os seus respectivos ícones") — mesmos 5 links que já
+  // existiam como quickButtons da página "entrada" (ver pages.entrada
+  // abaixo, que perdeu esse grid de cards: virou redundante depois de
+  // fixo aqui). Renderizado por renderSidebarPinned() (app.js), SEMPRE
+  // visível (não depende de qual página está aberta nem se a árvore de
+  // pastas está expandida/recolhida) — diferente da árvore de pastas
+  // normal (nav#tree), que continua alcançando TUDO a partir de
+  // "startPage" (ver comentário grande em pages.entrada sobre por que os
+  // 4 itens abaixo continuam em "items" lá, só com "pinnedOnly:true", em
+  // vez de removidos: preserva a busca Ctrl+K e o breadcrumb). "icon" usa
+  // o mesmo formato de pages.entrada.quickButtons (nome puro do Tabler
+  // Icons, sem prefixo "ti-" — quem monta o className final é
+  // renderSidebarPinned).
+  sidebarPinned: [
+    { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
+    { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
+    { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
+    { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
+    { label: "Financeiro", target: "financeiro_contas_mensais", icon: "wallet", color: "#0f9b8e" }
+  ],
 
   // Lista mestre dos status de "🧲 Andamento" (id da página no Notion +
   // rótulo + cor) — usada pra colorir o selo de status que aparece no
@@ -1239,40 +1262,57 @@ const APP_CONFIG = {
   ],
 
   pages: {
-    // era "Entrada" — pedido do Georges: essa é a página que agora se
-    // chama "Início" (o antigo "Início", com o resumo do dia, virou
-    // "Painel do Dia", ver mais abaixo). A KEY interna continua "entrada"
-    // de propósito (só o "title" mudou) — trocar a key exigiria atualizar
-    // TODO "target: 'entrada'" espalhado pelo config.js/app.js (startPage,
-    // etc.) à toa, risco sem benefício nenhum já que ninguém vê a key, só o
-    // title. "items" continua com a lista COMPLETA de sempre (inclusive
-    // Criar páginas/Eventos/Central/Categorias/Biblioteca) — é dela que a
-    // árvore do menu lateral e a busca alcançam essas páginas (ver
-    // buildIndex/buildTreeNode, que percorrem a partir de "startPage"); só
-    // o CONTEÚDO da página ganhou "quickButtons" (grade de botões grandes,
-    // ver renderContent em app.js) com um recorte de 4 links "principais",
-    // pedido explicitamente do Georges — os outros continuam acessíveis
-    // pelo menu/busca, só não aparecem nos botões grandes.
+    // era "Entrada", depois "Início" — pedido do Georges (rodada do menu
+    // lateral moderno): os 5 links de acesso rápido (Painel do Dia, Lista
+    // de Prioridades, Anotações Rápidas, Favoritas, Financeiro) viraram
+    // atalhos FIXOS no topo do menu (ver "sidebarPinned" lá em cima e
+    // renderSidebarPinned no app.js) — sempre visíveis, sem precisar abrir
+    // pasta nenhuma. Essa página virou só a lista das pastas "de verdade"
+    // que sobraram (Criar páginas/Eventos/Central/Categorias/Biblioteca),
+    // por isso o título mudou pra "Pastas". A KEY interna continua
+    // "entrada" de propósito (trocar exigiria atualizar todo "target:
+    // 'entrada'"/startPage à toa — ninguém vê a key, só o title).
+    // "quickButtons" (grade de cards grandes) foi removido daqui — ficou
+    // redundante com os atalhos fixos do menu.
+    // Os 4 itens que viraram atalho fixo (Painel do Dia/Anotações
+    // Rápidas/Lista de Prioridades/Favoritas) CONTINUAM em "items" abaixo,
+    // só com "pinnedOnly:true" — de propósito, NÃO foram removidos de
+    // verdade: buildIndex()/buildTreeNode() (app.js) percorrem a árvore a
+    // partir daqui pra alimentar a busca Ctrl+K (flatIndex) e o breadcrumb
+    // (parentOf) — se removesse o item de "items", essas 4 páginas (e, no
+    // caso de Favoritas, TODOS os favoritos dela) sumiriam da busca. Em
+    // vez disso, "pinnedOnly:true" só faz buildTreeNode PULAR o item na
+    // árvore do menu E renderContent PULAR o item no corpo da página
+    // "Pastas" — a página continua sendo percorrida normalmente por baixo
+    // dos panos.
     entrada: {
-      title: "Início",
-      quickButtons: [
-        { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
-        { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
-        { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
-        { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
-        { label: "Financeiro", target: "financeiro_contas_mensais", icon: "wallet", color: "#0f9b8e" }
-      ],
+      title: "Pastas",
       items: [
-        { label: "Painel do Dia", type: "page", target: "inicio", icon: "home" },
-        { label: "Anotações Rápidas", type: "page", target: "anotacoes", icon: "notes" },
-        { label: "Lista de Prioridades", type: "page", target: "prioridades", icon: "list-check" },
+        { label: "Painel do Dia", type: "page", target: "inicio", icon: "home", pinnedOnly: true },
+        { label: "Anotações Rápidas", type: "page", target: "anotacoes", icon: "notes", pinnedOnly: true },
+        { label: "Lista de Prioridades", type: "page", target: "prioridades", icon: "list-check", pinnedOnly: true },
         { label: "Criar páginas", type: "page", target: "criar_paginas", icon: "file-plus" },
         { label: "Eventos", type: "page", target: "eventos", icon: "calendar" },
-        { label: "Favoritas", type: "page", target: "favoritas", icon: "star" },
+        { label: "Favoritas", type: "page", target: "favoritas", icon: "star", pinnedOnly: true },
         { label: "Central", type: "page", target: "central", icon: "layout-grid" },
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
-        { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" }
+        { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" },
+        { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" }
       ]
+    },
+
+    // "Mais Visitadas" (pedido do Georges: "pra eu ver quais páginas são mais
+    // acessadas e quais não estou utilizando, pensando em como melhorá-las
+    // pra usar mais") — ranking por quantidade de visitas, maior pra menor,
+    // com o número do lado de cada uma. 100% KV (log em /page-visits, ver
+    // worker.js), nunca toca o Notion. "mostVisited:true" despacha pra
+    // renderMostVisitedPage(container) em renderContent (app.js) — mesmo
+    // padrão exclusivo de page.dynamicQuery, sem empilhar com outros blocos.
+    // Também alcançável pelo ícone "█" no cabeçalho da seção "Recentes" do
+    // menu (renderSidebarRecent em app.js).
+    mais_visitadas: {
+      title: "Mais Visitadas",
+      mostVisited: true
     },
 
     // "Resumo dos resumos" — cada seção junta HOJE + AMANHÃ num só lugar
