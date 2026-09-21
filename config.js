@@ -777,22 +777,76 @@ var NOTIFICATION_SOURCES = [
   },
   {
     id: "tat_sessoes",
-    label: "Sessões do TAT",
+    // pedido do Georges (confirmando o que já estava certo): esta fonte
+    // reaproveita o MESMO orPairs de "📚 Página de Origem" da divisória
+    // "⚖️ Sessões (TAT / JART / COMAT)" de Início — cobre as 3, não só TAT
+    // (o nome antigo "Sessões do TAT" tava desatualizado/enganoso).
+    label: "Sessões TAT, JART ou COMAT",
     // mesmo emoji da divisória "⚖️ Sessões (TAT / JART / COMAT)" no Painel
-    // do Dia — reaproveitado aqui mesmo só existindo TAT por enquanto, pra
-    // já bater com Sessões JART/Reuniões COMAT se/quando entrarem.
+    // do Dia.
     icon: "⚖️",
     database_id: "2310481486dd80079202fe1eaf5e14c4",
-    // mesmo baseFilters de "Sessões pendentes" em pmf_col_tat (ver mais
-    // abaixo) — só as ainda não concluídas entram na Central de
-    // Notificações, não faz sentido avisar de uma sessão que já aconteceu
-    // e já foi marcada como concluída no Andamento.
+    // mesmo baseFilters de "Sessões pendentes" em pmf_col_tat + o orPairs
+    // de Página de Origem copiado literal da divisória "⚖️ Sessões (TAT /
+    // JART / COMAT)" de Início (ver mais abaixo) — só as ainda não
+    // concluídas entram na Central de Notificações, não faz sentido
+    // avisar de uma sessão que já aconteceu e já foi marcada como
+    // concluída no Andamento.
     baseFilters: [
-      { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - TAT - Sessões" },
+      {
+        property: "📚 Página de Origem", type: "select",
+        orPairs: [
+          { condition: "equals", value: "PMF - TAT - Sessões" },
+          { condition: "equals", value: "PMF - JART - Sessões" },
+          { condition: "equals", value: "PMF - COMAT - Reuniões" }
+        ]
+      },
       { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
       { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
     ],
     dateProperty: "📅 Data/Prazo",
+    // ainda leva só pra página do TAT (JART/COMAT não têm página própria
+    // completa no app ainda) — o link do TÍTULO de cada aviso (que abre a
+    // página exata do EVENTO no Notion) já cobre os 3 corretamente, é só o
+    // botão "abrir no app" que fica restrito ao TAT por enquanto.
+    target: { type: "page", target: "pmf_col_tat" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "2d", amount: 2, unit: "days", label: "2 dias antes" }
+    ]
+  },
+  // "Processos TAT ou JART" (pedido do Georges — separado de Sessões,
+  // grupo próprio). Mesmo padrão de baseFilters (Andamento aberto) +
+  // orPairs na Página de Origem, agora com os valores de PROCESSOS (não
+  // sessões): "PMF - TAT - Processos" (confirmado — mesma exibição
+  // "Processos pendentes" já usada em pmf_col_tat) e "PMF - JART -
+  // Processos" (confirmado que existe como origem real — usado no atalho
+  // "Criar Processo (JART)" — mas sem uma exibição própria já construída
+  // no app pra cross-checar o campo de data; assumindo "📅 Data/Prazo",
+  // mesmo campo usado em TODA a Central, até confirmação em contrário). Só
+  // TAT+JART por pedido explícito — "PMF - COMAT - Processos" também
+  // existe na Central (mesma família), mas o Georges não pediu, fica de
+  // fora por enquanto.
+  {
+    id: "processos_tat_jart",
+    label: "Processos TAT ou JART",
+    icon: "📁",
+    database_id: "2310481486dd80079202fe1eaf5e14c4",
+    baseFilters: [
+      {
+        property: "📚 Página de Origem", type: "select",
+        orPairs: [
+          { condition: "equals", value: "PMF - TAT - Processos" },
+          { condition: "equals", value: "PMF - JART - Processos" }
+        ]
+      },
+      { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+      { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
+    ],
+    dateProperty: "📅 Data/Prazo",
+    // única página com Processos já construída no app é a do TAT — o
+    // título de cada aviso continua abrindo a página exata no Notion,
+    // certa pros dois casos.
     target: { type: "page", target: "pmf_col_tat" },
     defaultEnabled: true,
     defaultLeadTimes: [
@@ -1085,7 +1139,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-20 20:58",
+  appVersion: "2026-09-20 21:12",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é

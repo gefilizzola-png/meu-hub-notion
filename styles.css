@@ -1697,6 +1697,35 @@ html, body {
   flex-direction: column;
   gap: 8px;
 }
+/* filtro rápido por categoria (pedido do Georges) — fica dentro do próprio
+   #notifPanelList, primeiro filho, renderizado de novo a cada
+   renderNotifList() junto com os cards; some sozinho quando a tela de
+   gestão substitui o conteúdo da lista (troca de innerHTML). */
+.notif-category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 2px;
+}
+.notif-category-chip {
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #4a4a45;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notif-category-chip:hover { border-color: #b9b9b3; background: #f7f7f5; }
+/* categoria oculta (clicada) — mesma ideia visual de "apagado" usada em
+   outros togglezinhos do app (ex: botão Notion sem link ainda). */
+.notif-category-chip-off {
+  color: #b3b3ac;
+  background: #f4f4f2;
+  text-decoration: line-through;
+}
 .notif-card {
   display: flex;
   align-items: flex-start;

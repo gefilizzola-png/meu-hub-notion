@@ -8546,7 +8546,7 @@
   // completo). SÓ LEITURA no Notion (mesmo /query de sempre); "lida/não
   // lida" é 100% KV (/notifications-read no worker.js), igual "Fixar" de
   // Legislações — nunca escreve em nada do Notion.
-  var notifState = { items: [], readIds: [], settings: null, sources: [], mode: "unread", view: "list", loaded: false, loading: false };
+  var notifState = { items: [], readIds: [], settings: null, sources: [], hiddenSourceIds: [], mode: "unread", view: "list", loaded: false, loading: false };
 
   function leadTimeMs(lt) {
     return lt.amount * (lt.unit === "hours" ? 3600000 : 86400000);
@@ -9031,13 +9031,59 @@
     }
     var readSet = {};
     notifState.readIds.forEach(function (id) { readSet[id] = true; });
-    var items = notifState.items.filter(function (n) {
+    var modeItems = notifState.items.filter(function (n) {
       return notifState.mode === "all" ? true : !readSet[n.id];
+    });
+
+    // filtro rápido por categoria (pedido do Georges: "escolher as
+    // categorias que quero exibir... ex: ocultar Itens Prioritários,
+    // exibindo só as demais") — SÓ em memória (notifState.hiddenSourceIds),
+    // reseta ao recarregar a página. Diferente do liga/desliga da tela de
+    // gestão (engrenagem): aquele controla o que é BUSCADO no Notion e o
+    // BADGE; isto só filtra o que já foi buscado, na hora, sem mexer em
+    // nada salvo. Só mostra chip pra categoria que tem pelo menos 1 item
+    // na aba atual (Não lidas/Todas) — nada pra filtrar, nada de chip.
+    var chipSources = [];
+    var seenSourceIds = {};
+    modeItems.forEach(function (n) {
+      if (seenSourceIds[n.sourceId]) return;
+      seenSourceIds[n.sourceId] = true;
+      chipSources.push({ id: n.sourceId, icon: n.sourceIcon, label: n.sourceLabel });
+    });
+    if (chipSources.length > 1) {
+      var chipsRow = document.createElement("div");
+      chipsRow.className = "notif-category-chips";
+      chipSources.forEach(function (cs) {
+        var hidden = notifState.hiddenSourceIds.indexOf(cs.id) !== -1;
+        var chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "notif-category-chip" + (hidden ? " notif-category-chip-off" : "");
+        chip.textContent = (cs.icon ? cs.icon + " " : "") + cs.label;
+        chip.title = hidden ? "Clique pra voltar a exibir" : "Clique pra ocultar";
+        chip.addEventListener("click", function () {
+          var idx = notifState.hiddenSourceIds.indexOf(cs.id);
+          if (idx === -1) notifState.hiddenSourceIds.push(cs.id); else notifState.hiddenSourceIds.splice(idx, 1);
+          renderNotifList();
+        });
+        chipsRow.appendChild(chip);
+      });
+      listEl.appendChild(chipsRow);
+    }
+
+    var items = modeItems.filter(function (n) {
+      return notifState.hiddenSourceIds.indexOf(n.sourceId) === -1;
     });
     if (!items.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
-      empty.textContent = notifState.mode === "all" ? "Nenhuma notificação." : "Nenhuma notificação não lida.";
+      // distingue "não tem nada mesmo" de "tem, mas tá tudo oculto pelo
+      // filtro de categoria" (senão os chips ficam sem sentido — pareceria
+      // que sumiu tudo de vez, sem dar pra saber que é só clicar de novo).
+      if (modeItems.length && !items.length) {
+        empty.textContent = "Tudo oculto pelo filtro de categoria acima — clique num chip pra reexibir.";
+      } else {
+        empty.textContent = notifState.mode === "all" ? "Nenhuma notificação." : "Nenhuma notificação não lida.";
+      }
       listEl.appendChild(empty);
       return;
     }
