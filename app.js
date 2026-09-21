@@ -8707,6 +8707,16 @@
       if (!dp) return;
       var eventTime = new Date(dp.start).getTime();
       if (isNaN(eventTime)) return;
+      // campo só com DATA (sem "T" na string, ex: Aniversários/Vencimento
+      // do Financeiro) não tem hora de verdade — igual ao comentário de
+      // formatDateRangeExtra acima: o Notion manda só "2026-09-22", o JS
+      // entende isso como meia-noite UTC, e exibir isso no fuso de SP
+      // "volta um dia" (22/09 00:00 UTC vira 21/09 21:00 em SP). Guarda se
+      // tinha hora de verdade pra notifDateLabel formatar certo (UTC sem
+      // "voltar o dia" quando não tem hora, SP quando tem) — bug real
+      // reportado pelo Georges: Aniversários de dias DIFERENTES (22/09 e
+      // 23/09) apareciam os dois como "21/09 às 21:00".
+      var hasTime = typeof dp.start === "string" && dp.start.indexOf("T") !== -1;
       if (eventTime < now - NOTIF_GRACE_MS) return;
       source.leadTimes.forEach(function (lt) {
         var triggerTime = eventTime - leadTimeMs(lt);
@@ -8720,6 +8730,7 @@
           url: p.url,
           target: source.target,
           eventTime: eventTime,
+          hasTime: hasTime,
           leadLabel: lt.label,
           overdue: eventTime < now
         });
@@ -8801,16 +8812,24 @@
     badge.style.display = unread ? "" : "none";
   }
 
-  // só exibição (data/hora local do navegador) — sem cálculo de fuso, igual
-  // qualquer outra data mostrada no app.
-  function notifDateLabel(eventTime) {
+  // MESMO padrão já usado em formatDateRangeExtra (busca acima): campo do
+  // Notion só com DATA (sem hora de verdade — ex: Aniversários, Vencimento
+  // do Financeiro) vira "2026-09-22" puro, que o JS entende como meia-
+  // noite UTC; formatar isso no fuso de SP "volta um dia" (22/09 00:00 UTC
+  // vira 21/09 21:00 em SP) — BUG real reportado pelo Georges: dois
+  // aniversários de dias diferentes (22/09 e 23/09) apareciam os dois como
+  // "21/09 às 21:00". Fix: quando "hasTime" é false, formata em UTC (lê de
+  // volta o mesmo dia/mês que veio do Notion, sem conversão nenhuma) E
+  // omite a hora (não existe hora de verdade pra mostrar). Quando tem hora
+  // de verdade (Reuniões, Sessões...), formata no fuso de SP normalmente.
+  var notifDateFmtDateSP = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+  var notifDateFmtTimeSP = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+  var notifDateFmtDateUTC = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit" });
+  function notifDateLabel(eventTime, hasTime) {
     var d = new Date(eventTime);
     if (isNaN(d.getTime())) return "";
-    var dia = String(d.getDate()).padStart(2, "0");
-    var mes = String(d.getMonth() + 1).padStart(2, "0");
-    var hh = String(d.getHours()).padStart(2, "0");
-    var mm = String(d.getMinutes()).padStart(2, "0");
-    return dia + "/" + mes + " às " + hh + ":" + mm;
+    if (!hasTime) return notifDateFmtDateUTC.format(d);
+    return notifDateFmtDateSP.format(d) + " às " + notifDateFmtTimeSP.format(d);
   }
 
   // otimista (igual togglePin de Legislações): já atualiza badge/lista na
@@ -9136,7 +9155,7 @@
       main.appendChild(title);
       var meta = document.createElement("div");
       meta.className = "notif-card-meta";
-      meta.textContent = (n.sourceIcon ? n.sourceIcon + " " : "") + n.sourceLabel + " · " + n.leadLabel + " · " + notifDateLabel(n.eventTime);
+      meta.textContent = (n.sourceIcon ? n.sourceIcon + " " : "") + n.sourceLabel + " · " + n.leadLabel + " · " + notifDateLabel(n.eventTime, n.hasTime);
       main.appendChild(meta);
       card.appendChild(main);
 

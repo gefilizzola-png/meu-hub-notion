@@ -944,6 +944,15 @@ var NOTIFICATION_SOURCES = [
     baseFilters: [
       { property: "📚 Página de Origem", type: "select", condition: "equals", value: "Pessoal - Aniversários" }
     ],
+    // "📅 Data/Prazo" É o campo certo pra Aniversários (confirmado pelo
+    // Georges): sempre a data do aniversário deste ano, com o lembrete
+    // ajustável (1/2 dias antes ou no dia). "📅 Data de Conclusão", nessas
+    // páginas, guarda a data de NASCIMENTO — não usar aqui. O bug real (as
+    // notificações mostrando "21/09" pra aniversários de dias diferentes)
+    // não era o campo errado, e sim a EXIBIÇÃO da data/hora — ver o fix em
+    // notifDateLabel/buildNotificationsFromSource (app.js): campo só com
+    // data (sem hora) formatado no fuso de SP "voltava um dia" (meia-noite
+    // UTC virava 21h do dia anterior em SP). Já corrigido lá.
     dateProperty: "📅 Data/Prazo",
     // leva pro Painel do Dia (page "inicio"), onde já mora o bloco "🎂
     // Aniversários" (dentro das abas Hoje/Amanhã/Próximos 7 dias).
@@ -1169,7 +1178,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-21 11:26",
+  appVersion: "2026-09-21 11:52",
   // "startPage" continua sendo a RAIZ da árvore do menu lateral — a página
   // com KEY "entrada" (título "Início" desde a rodada da página inicial
   // configurável — era "Entrada" antes) tem que seguir sendo a raiz: é
