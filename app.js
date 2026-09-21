@@ -8546,7 +8546,7 @@
   // completo). SÓ LEITURA no Notion (mesmo /query de sempre); "lida/não
   // lida" é 100% KV (/notifications-read no worker.js), igual "Fixar" de
   // Legislações — nunca escreve em nada do Notion.
-  var notifState = { items: [], readIds: [], settings: null, sources: [], hiddenSourceIds: [], mode: "unread", view: "list", loaded: false, loading: false };
+  var notifState = { items: [], readIds: [], settings: null, sources: [], hiddenSourceIds: [], soloSourceId: null, mode: "unread", view: "list", loaded: false, loading: false };
 
   function leadTimeMs(lt) {
     return lt.amount * (lt.unit === "hours" ? 3600000 : 86400000);
@@ -9018,6 +9018,31 @@
     if (gearBtn) gearBtn.classList.toggle("active", notifState.view === "settings");
   }
 
+  // ciclo de 3 estados por chip de categoria (pedido do Georges): normal
+  // (tudo aparece, nada marcado) -> clique 1: "só esta" (soloSourceId,
+  // EXCLUSIVO — só uma categoria por vez, clicar numa categoria diferente
+  // troca quem tá em modo solo, sem precisar "desmarcar" a anterior à
+  // parte) -> clique 2: oculta (mesmo comportamento tachado/ocultado de
+  // antes — entra em hiddenSourceIds) -> clique 3: volta ao normal. Cada
+  // chip decide o PRÓXIMO estado olhando só o PRÓPRIO estado atual (nunca
+  // olha os outros chips) — soloSourceId sendo uma variável única (não uma
+  // lista) já garante a exclusividade sozinho: assim que outro chip vira
+  // solo, este aqui deixa de ser (a checagem "notifState.soloSourceId ===
+  // cs.id" no render já reflete isso, sem precisar limpar nada à parte).
+  function cycleNotifCategoryChip(sourceId) {
+    if (notifState.soloSourceId === sourceId) {
+      notifState.soloSourceId = null;
+      if (notifState.hiddenSourceIds.indexOf(sourceId) === -1) notifState.hiddenSourceIds.push(sourceId);
+      return;
+    }
+    var hiddenIdx = notifState.hiddenSourceIds.indexOf(sourceId);
+    if (hiddenIdx !== -1) {
+      notifState.hiddenSourceIds.splice(hiddenIdx, 1);
+      return;
+    }
+    notifState.soloSourceId = sourceId;
+  }
+
   function renderNotifList() {
     var listEl = document.getElementById("notifPanelList");
     if (!listEl) return;
@@ -9053,15 +9078,19 @@
       var chipsRow = document.createElement("div");
       chipsRow.className = "notif-category-chips";
       chipSources.forEach(function (cs) {
-        var hidden = notifState.hiddenSourceIds.indexOf(cs.id) !== -1;
+        var isSolo = notifState.soloSourceId === cs.id;
+        var isHidden = !isSolo && notifState.hiddenSourceIds.indexOf(cs.id) !== -1;
         var chip = document.createElement("button");
         chip.type = "button";
-        chip.className = "notif-category-chip" + (hidden ? " notif-category-chip-off" : "");
+        chip.className = "notif-category-chip" +
+          (isSolo ? " notif-category-chip-solo" : "") +
+          (isHidden ? " notif-category-chip-off" : "");
         chip.textContent = (cs.icon ? cs.icon + " " : "") + cs.label;
-        chip.title = hidden ? "Clique pra voltar a exibir" : "Clique pra ocultar";
+        chip.title = isSolo ? "Exibindo só esta — clique pra ocultar" :
+          isHidden ? "Oculta — clique pra voltar ao normal" :
+          "Clique pra exibir só esta categoria";
         chip.addEventListener("click", function () {
-          var idx = notifState.hiddenSourceIds.indexOf(cs.id);
-          if (idx === -1) notifState.hiddenSourceIds.push(cs.id); else notifState.hiddenSourceIds.splice(idx, 1);
+          cycleNotifCategoryChip(cs.id);
           renderNotifList();
         });
         chipsRow.appendChild(chip);
@@ -9070,16 +9099,18 @@
     }
 
     var items = modeItems.filter(function (n) {
+      if (notifState.soloSourceId) return n.sourceId === notifState.soloSourceId;
       return notifState.hiddenSourceIds.indexOf(n.sourceId) === -1;
     });
     if (!items.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
-      // distingue "não tem nada mesmo" de "tem, mas tá tudo oculto pelo
-      // filtro de categoria" (senão os chips ficam sem sentido — pareceria
-      // que sumiu tudo de vez, sem dar pra saber que é só clicar de novo).
+      // distingue "não tem nada mesmo" de "tem, mas o filtro de categoria
+      // acima tá escondendo tudo" (senão os chips ficam sem sentido —
+      // pareceria que sumiu tudo de vez, sem dar pra saber que é só clicar
+      // de novo).
       if (modeItems.length && !items.length) {
-        empty.textContent = "Tudo oculto pelo filtro de categoria acima — clique num chip pra reexibir.";
+        empty.textContent = "Nada bate com o filtro de categoria acima — clique num chip pra mudar.";
       } else {
         empty.textContent = notifState.mode === "all" ? "Nenhuma notificação." : "Nenhuma notificação não lida.";
       }

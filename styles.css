@@ -1724,13 +1724,23 @@ html, body {
   white-space: nowrap;
 }
 .notif-category-chip:hover { border-color: #b9b9b3; background: #f7f7f5; }
-/* categoria oculta (clicada) — mesma ideia visual de "apagado" usada em
+/* categoria oculta (2º clique) — mesma ideia visual de "apagado" usada em
    outros togglezinhos do app (ex: botão Notion sem link ainda). */
 .notif-category-chip-off {
   color: #b3b3ac;
   background: #f4f4f2;
   text-decoration: line-through;
 }
+/* "só esta categoria" (1º clique — pedido do Georges: 3 estados por chip:
+   normal -> só esta -> oculta -> normal) — preenchido/destacado, pra ficar
+   bem diferente tanto do normal quanto do apagado/tachado acima. */
+.notif-category-chip-solo {
+  border-color: #4a90d9;
+  background: #4a90d9;
+  color: #fff;
+  font-weight: 600;
+}
+.notif-category-chip-solo:hover { border-color: #3a7dc4; background: #3a7dc4; }
 .notif-card {
   display: flex;
   align-items: flex-start;
