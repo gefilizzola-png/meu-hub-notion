@@ -4222,35 +4222,123 @@ html, body {
 
 /* cabeçalho de grupo por categoria (aba "Comprar", agrupada — espelha a
    view "Comprar" do Notion, que era agrupada por Categoria). */
+/* cabeçalho de grupo por categoria (pedido do Georges — "agrupamentos" em
+   qualquer aba, com "cores diferentes... ícones/emojis"): pinta o texto e o
+   emoji com --cat-color (ver SUPERMERCADO_CATEGORIA_META em config.js,
+   aplicado via categoriaMeta no app.js). */
 .supermercado-group-head {
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  color: #7a7a76;
-  margin: 14px 0 6px;
+  color: var(--cat-color, #7a7a76);
+  margin: 16px 0 6px;
 }
 .supermercado-group-head:first-child { margin-top: 0; }
+.supermercado-group-head-emoji { font-size: 16px; }
 
 .supermercado-list { display: flex; flex-direction: column; gap: 6px; }
+/* linha do item — borda esquerda colorida pela categoria (--cat-color, ver
+   categoriaMeta no app.js) dá a identidade visual "pintada por categoria"
+   pedida pelo Georges, sem precisar de fundo colorido pesado (mantém a
+   lista legível com muitos itens). ".needbuy" (Providência = "Comprar") é
+   um sinal PRÓPRIO, por cima disso — fundo âmbar suave, independente da
+   cor da categoria, pra chamar atenção em QUALQUER aba onde o item
+   apareça. */
 .supermercado-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 8px 10px 8px 8px;
   border-radius: 10px;
+  border-left: 4px solid var(--cat-color, #dcdcd8);
   background: #fff;
   box-shadow: 0 0 0 0.5px #e4e4e0;
   flex-wrap: wrap;
 }
-.supermercado-row-name {
+.supermercado-row.needbuy {
+  background: #fffaf1;
+  box-shadow: 0 0 0 1px #ffe0a3;
+}
+/* badge circular com o emoji da categoria (pedido do Georges — "ícones/
+   emojis"). Fundo branco neutro + borda colorida (em vez de tingir o
+   fundo com a cor, que exigiria misturar cor+alfa por categoria) — mais
+   simples e funciona igual em qualquer navegador. */
+.supermercado-cat-badge {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  background: #fff;
+  border: 2px solid var(--cat-color, #dcdcd8);
+  flex-shrink: 0;
+}
+.supermercado-row-namecol {
   flex: 1;
-  min-width: 140px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.supermercado-row-name {
   font-size: 13.5px;
   color: #2c2c2a;
-  font-weight: 500;
+  font-weight: 600;
+}
+.supermercado-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.supermercado-row-cat {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+/* pílula "precisa comprar" (pedido do Georges — "algum sinalizador
+   naqueles que precisa Comprar") — cor âmbar fixa, sempre a mesma
+   independente da categoria do item (é um SINAL de status, não de
+   identidade). */
+.supermercado-need-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #b35900;
+  background: #fff4e6;
+  border: 1px solid #ffd8a8;
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
 }
 .supermercado-row-field { flex-shrink: 0; }
+/* linha de pílulas do filtro de Situação (pedido do Georges — "Crie
+   filtros pela Situação") — clique liga/desliga, seleção múltipla (mesmo
+   visual "pílula" das abas de visualização acima, com estado .active). */
+.supermercado-situacao-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.supermercado-situacao-pill {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #2c2c2a;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.supermercado-situacao-pill:hover { border-color: #4a90d9; }
+.supermercado-situacao-pill.active {
+  background: #4a90d9;
+  border-color: #4a90d9;
+  color: #fff;
+}
 /* <select> inline de Providência/Prioridade — mesma "caixinha" de
    .priorities-cell-select, só um pouco mais estreita (célula de linha, não
    de tabela larga). */

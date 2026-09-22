@@ -1032,6 +1032,29 @@ var SUPERMERCADO_PRIORIDADE_OPTIONS = ["1 - Urgente", "2 - Alta", "3 - Média", 
 // nos filtros da página.
 var SUPERMERCADO_PROVIDENCIA_OPTIONS = ["Comprar", "Comprado", "Já tem", "Desnecessário", "Definir"];
 
+// Emoji + cor por Categoria (pedido do Georges — "visual mais bonito,
+// moderno, pintando de cores diferentes os itens de cada categoria, com
+// ícones/emojis"), usado no badge circular de cada linha e no cabeçalho de
+// grupo quando "Agrupar por: Categoria" — ver categoriaMeta em
+// renderSupermercadoPage no app.js. Chave tem que bater EXATAMENTE com
+// SUPERMERCADO_CATEGORIA_OPTIONS acima; categoria sem entrada aqui cai no
+// fallback genérico (ícone 🏷️, cinza) dentro do próprio app.js.
+var SUPERMERCADO_CATEGORIA_META = {
+  "Bazar": { emoji: "🏠", color: "#868e96" },
+  "Bebidas": { emoji: "🥤", color: "#1c7ed6" },
+  "Conservas": { emoji: "🥫", color: "#a0522d" },
+  "Farmácia": { emoji: "💊", color: "#e64980" },
+  "Frigorífico": { emoji: "🥩", color: "#c92a2a" },
+  "Frios e Laticínios": { emoji: "🧀", color: "#f08c00" },
+  "Higiene": { emoji: "🧴", color: "#15aabf" },
+  "Hortifruti": { emoji: "🥦", color: "#2f9e44" },
+  "Limpeza": { emoji: "🧽", color: "#5c7cfa" },
+  "Matinais": { emoji: "🥣", color: "#fab005" },
+  "Mercearia": { emoji: "🛒", color: "#8a63d2" },
+  "Padaria": { emoji: "🥖", color: "#e8850c" },
+  "Pet Care": { emoji: "🐾", color: "#0f9b8e" }
+};
+
 // ---------------- "Programação" — slots fixos do dia (pedido do Georges) ----------------
 // Divisória nova (ver pages.prioridades.scheduleSlots mais abaixo e o bloco
 // "Programação" dentro de renderPrioritiesTable no app.js — função
@@ -1197,7 +1220,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-21 21:45",
+  appVersion: "2026-09-21 22:23",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2007,7 +2030,9 @@ const APP_CONFIG = {
       // priorityFields acima, pendurado no objeto da página pro app.js
       // ficar genérico.
       supermercadoFields: {
-        categoria: { label: "Categoria", options: SUPERMERCADO_CATEGORIA_OPTIONS },
+        // "meta" (pedido do Georges — visual moderno por categoria) só
+        // existe em "categoria" — ver SUPERMERCADO_CATEGORIA_META acima.
+        categoria: { label: "Categoria", options: SUPERMERCADO_CATEGORIA_OPTIONS, meta: SUPERMERCADO_CATEGORIA_META },
         prioridade: { label: "Prioridade", options: SUPERMERCADO_PRIORIDADE_OPTIONS },
         providencia: { label: "Providência", options: SUPERMERCADO_PROVIDENCIA_OPTIONS }
       },

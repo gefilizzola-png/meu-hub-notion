@@ -8684,6 +8684,10 @@
   function renderSupermercadoPage(container, page) {
     var fields = page.supermercadoFields || {};
     var viewsCfg = page.views || [];
+    // fallback genérico (pedido do Georges — visual por categoria) pra
+    // qualquer categoria sem entrada em SUPERMERCADO_CATEGORIA_META
+    // (config.js) — inclui "Sem categoria" (item sem Categoria definida).
+    var CAT_FALLBACK_META = { emoji: "🏷️", color: "#868e96" };
 
     function handle401(res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
@@ -8696,11 +8700,31 @@
       return p.length === 3 ? (p[2] + "/" + p[1] + "/" + p[0]) : ymd;
     }
 
+    // emoji+cor da categoria (pedido do Georges — "pintando de cores
+    // diferentes os itens de cada categoria, com ícones/emojis") — ver
+    // SUPERMERCADO_CATEGORIA_META no config.js, pendurado em
+    // fields.categoria.meta (mesmo padrão de fields.categoria.options).
+    function catMeta(cat) {
+      var meta = fields.categoria && fields.categoria.meta;
+      return (cat && meta && meta[cat]) || CAT_FALLBACK_META;
+    }
+
     var state = {
       items: [],
       loaded: false,
       view: (viewsCfg[0] && viewsCfg[0].id) || "produtos",
       filterCategoria: "",
+      // "Agrupar por" (pedido do Georges — "poder aplicar agrupamentos,
+      // seja na aba Produtos, Comprar ou Comprados, para classificar por
+      // ordem alfabética ou por categorias") — nasce em "categoria" (era o
+      // comportamento fixo de antes só na aba Comprar, agora vira o padrão
+      // nas 3 abas, mas o Georges pode trocar pra alfabética a qualquer
+      // momento).
+      groupBy: "categoria",
+      // filtro de Situação (pedido do Georges — "Crie filtros pela
+      // Situação") — Set de valores de Providência ativos; vazio = sem
+      // filtro (mostra todas as situações).
+      situacaoFilter: new Set(),
       search: ""
     };
 
@@ -8755,7 +8779,7 @@
     addWrap.appendChild(addBtn);
     wrap.appendChild(addWrap);
 
-    // ---- filtros: busca por nome + categoria ----
+    // ---- filtros: busca por nome + categoria + "Organizar por" ----
     var filterWrap = document.createElement("div");
     filterWrap.className = "supermercado-filters";
 
@@ -8774,11 +8798,49 @@
     (fields.categoria && fields.categoria.options || []).forEach(function (opt) {
       var o = document.createElement("option");
       o.value = opt;
-      o.textContent = opt;
+      o.textContent = (catMeta(opt).emoji + " " + opt);
       catSelect.appendChild(o);
     });
     filterWrap.appendChild(catSelect);
+
+    // "Organizar por" (pedido do Georges — agrupamento em qualquer aba).
+    var organizeSelect = document.createElement("select");
+    organizeSelect.className = "supermercado-filter-select";
+    [["categoria", "Agrupar por categoria"], ["alfabetica", "Ordem alfabética"]].forEach(function (pair) {
+      var o = document.createElement("option");
+      o.value = pair[0];
+      o.textContent = pair[1];
+      if (pair[0] === state.groupBy) o.selected = true;
+      organizeSelect.appendChild(o);
+    });
+    filterWrap.appendChild(organizeSelect);
     wrap.appendChild(filterWrap);
+
+    // ---- filtro de Situação (pedido do Georges — "Crie filtros pela
+    // Situação") — pílulas multi-select, mesmo padrão visual das abas. ----
+    var situacaoWrap = document.createElement("div");
+    situacaoWrap.className = "supermercado-situacao-pills";
+    var situacaoBtns = {};
+    (fields.providencia && fields.providencia.options || []).forEach(function (opt) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "supermercado-situacao-pill";
+      btn.textContent = opt;
+      btn.addEventListener("click", function () {
+        if (state.situacaoFilter.has(opt)) state.situacaoFilter.delete(opt);
+        else state.situacaoFilter.add(opt);
+        updateSituacaoActive();
+        repaint();
+      });
+      situacaoBtns[opt] = btn;
+      situacaoWrap.appendChild(btn);
+    });
+    function updateSituacaoActive() {
+      Object.keys(situacaoBtns).forEach(function (k) {
+        situacaoBtns[k].classList.toggle("active", state.situacaoFilter.has(k));
+      });
+    }
+    wrap.appendChild(situacaoWrap);
 
     var resultsWrap = document.createElement("div");
     wrap.appendChild(resultsWrap);
@@ -8812,13 +8874,44 @@
     }
 
     function buildRow(it) {
+      var meta = catMeta(it.categoria);
       var row = document.createElement("div");
-      row.className = "supermercado-row";
+      row.className = "supermercado-row" + (it.providencia === "Comprar" ? " needbuy" : "");
+      row.style.setProperty("--cat-color", meta.color);
 
-      var nameWrap = document.createElement("div");
-      nameWrap.className = "supermercado-row-name";
-      nameWrap.textContent = it.produto;
-      row.appendChild(nameWrap);
+      // badge circular com o emoji da categoria (pedido do Georges).
+      var badge = document.createElement("span");
+      badge.className = "supermercado-cat-badge";
+      badge.style.setProperty("--cat-color", meta.color);
+      badge.textContent = meta.emoji;
+      badge.title = it.categoria || "Sem categoria";
+      row.appendChild(badge);
+
+      var nameCol = document.createElement("div");
+      nameCol.className = "supermercado-row-namecol";
+      var nameLine = document.createElement("div");
+      nameLine.className = "supermercado-row-name";
+      nameLine.textContent = it.produto;
+      nameCol.appendChild(nameLine);
+
+      var subLine = document.createElement("div");
+      subLine.className = "supermercado-row-sub";
+      var catLabel = document.createElement("span");
+      catLabel.className = "supermercado-row-cat";
+      catLabel.style.color = meta.color;
+      catLabel.textContent = it.categoria || "Sem categoria";
+      subLine.appendChild(catLabel);
+      // sinalizador "precisa comprar" (pedido do Georges) — aparece em
+      // QUALQUER aba onde o item entre (Produtos mostra tudo, Comprar já é
+      // só isso — o selo ainda ajuda a bater o olho rápido).
+      if (it.providencia === "Comprar") {
+        var needBadge = document.createElement("span");
+        needBadge.className = "supermercado-need-badge";
+        needBadge.textContent = "🛒 Precisa comprar";
+        subLine.appendChild(needBadge);
+      }
+      nameCol.appendChild(subLine);
+      row.appendChild(nameCol);
 
       var provWrap = document.createElement("div");
       provWrap.className = "supermercado-row-field";
@@ -8868,6 +8961,10 @@
 
     function matchesFilters(it) {
       if (state.filterCategoria && it.categoria !== state.filterCategoria) return false;
+      // filtro de Situação (pedido do Georges) — Set vazio = sem filtro
+      // (mostra todas as situações); com algo marcado, só bate o que está
+      // ligado.
+      if (state.situacaoFilter.size && !state.situacaoFilter.has(it.providencia)) return false;
       if (state.search) {
         var q = state.search.toLowerCase();
         if ((it.produto || "").toLowerCase().indexOf(q) === -1) return false;
@@ -8885,10 +8982,12 @@
       } else if (state.view === "comprados") {
         viewItems = filtered.filter(function (it) { return it.providencia === "Comprado"; });
       } else {
-        // "Produtos" — espelha a view padrão da base no Notion: tudo MENOS
-        // o que está marcado "Comprar" (a lista de compras propriamente
-        // dita mora só na aba "Comprar").
-        viewItems = filtered.filter(function (it) { return it.providencia !== "Comprar"; });
+        // "Produtos" (pedido do Georges — sinalizador de "precisa comprar"
+        // só faz sentido se o item também aparecer aqui) — TODOS os itens,
+        // sem excluir "Comprar" (diferente da view original do Notion, que
+        // escondia esses itens; a aba "Comprar" continua sendo a lista de
+        // compras dedicada, agrupada).
+        viewItems = filtered;
       }
 
       if (!viewItems.length) {
@@ -8899,18 +8998,26 @@
         return;
       }
 
-      if (state.view === "comprar") {
-        // agrupado por categoria — espelha a view "Comprar" da base no
-        // Notion, que era agrupada por Categoria.
+      // "Agrupar por" (pedido do Georges) — aplicado nas 3 abas por igual,
+      // não mais fixo só na aba Comprar.
+      if (state.groupBy === "categoria") {
         var byCat = {};
         viewItems.forEach(function (it) {
           var cat = it.categoria || "Sem categoria";
           (byCat[cat] = byCat[cat] || []).push(it);
         });
         Object.keys(byCat).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (cat) {
+          var meta = catMeta(cat === "Sem categoria" ? "" : cat);
           var head = document.createElement("div");
           head.className = "supermercado-group-head";
-          head.textContent = cat + " (" + byCat[cat].length + ")";
+          head.style.setProperty("--cat-color", meta.color);
+          var headEmoji = document.createElement("span");
+          headEmoji.className = "supermercado-group-head-emoji";
+          headEmoji.textContent = meta.emoji;
+          head.appendChild(headEmoji);
+          var headText = document.createElement("span");
+          headText.textContent = cat + " (" + byCat[cat].length + ")";
+          head.appendChild(headText);
           resultsWrap.appendChild(head);
           var list = document.createElement("div");
           list.className = "supermercado-list";
@@ -8986,6 +9093,7 @@
 
     searchInput.addEventListener("input", function () { state.search = searchInput.value.trim(); repaint(); });
     catSelect.addEventListener("change", function () { state.filterCategoria = catSelect.value; repaint(); });
+    organizeSelect.addEventListener("change", function () { state.groupBy = organizeSelect.value; repaint(); });
 
     updateTabActive();
     loadItems();
