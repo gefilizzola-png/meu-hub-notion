@@ -9099,6 +9099,104 @@
       return sel;
     }
 
+    // categoria vira um dropdown CUSTOM em vez de <select> nativo (pedido
+    // do Georges, 2ª rodada — ele mandou print mostrando que, ao ABRIR o
+    // <select>, quem desenha a listinha de opções é o NAVEGADOR/sistema
+    // operacional, não o CSS do app — por isso saía uma caixa branca lisa,
+    // gigante, cobrindo as linhas de baixo, sem nada da "pílula colorida"
+    // que só aparecia FECHADO. Não tem como estilizar por dentro de um
+    // <select> nativo aberto em nenhum navegador. Mesmo padrão de menu
+    // usado no resto do app (".filter-menu", "fixed", fecha sozinho ao
+    // clicar fora/rolar — ver os 2 listeners globais no topo do arquivo,
+    // funcionam pra qualquer ".filter-menu" novo sem precisar mexer neles)
+    // — só que aqui é escolha ÚNICA: clicar numa opção já fecha e troca,
+    // igual um <select> de sempre se comportava.
+    function buildCategoriaPicker(currentValue, onChange) {
+      var opts = (fields.categoria && fields.categoria.options) || [];
+      var wrap = document.createElement("div");
+      wrap.className = "filter-dropdown supermercado-cat-picker";
+
+      var trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = "supermercado-row-cat-select";
+
+      var menu = document.createElement("div");
+      menu.className = "filter-menu";
+
+      function updateTrigger() {
+        var meta = catMeta(currentValue);
+        trigger.style.setProperty("--cat-color", meta.color);
+        trigger.textContent = currentValue || "Sem categoria";
+      }
+
+      function buildOptionRow(label, value) {
+        var row = document.createElement("div");
+        row.className = "filter-option";
+        var meta = catMeta(value);
+        var dot = document.createElement("span");
+        dot.className = "priorities-option-dot";
+        dot.style.background = meta.color;
+        row.appendChild(dot);
+        var lbl = document.createElement("span");
+        lbl.textContent = label;
+        row.appendChild(lbl);
+        var check = document.createElement("i");
+        check.className = "ti ti-check filter-option-check";
+        row.appendChild(check);
+        if (value === currentValue) row.classList.add("selected");
+        row.addEventListener("click", function (e) {
+          e.stopPropagation();
+          menu.classList.remove("open");
+          currentValue = value;
+          updateTrigger();
+          onChange(value);
+        });
+        menu.appendChild(row);
+      }
+
+      buildOptionRow("Sem categoria", "");
+      opts.forEach(function (opt) { buildOptionRow(opt, opt); });
+
+      // mesma lógica de posicionamento "fixed" (escapa de qualquer
+      // container com scroll no caminho) + abre pra cima quando não cabe
+      // embaixo, copiada de buildMultiCheckDropdown mais acima — ver os
+      // comentários lá pro raciocínio completo.
+      function positionMenu() {
+        var rect = trigger.getBoundingClientRect();
+        menu.style.position = "fixed";
+        menu.style.left = rect.left + "px";
+        menu.style.minWidth = Math.max(rect.width, 180) + "px";
+        var margin = 8;
+        var spaceBelow = window.innerHeight - rect.bottom - margin;
+        var spaceAbove = rect.top - margin;
+        var maxHeightCap = 320;
+        if (spaceBelow >= 160 || spaceBelow >= spaceAbove) {
+          menu.style.top = (rect.bottom + 4) + "px";
+          menu.style.bottom = "auto";
+          menu.style.maxHeight = Math.max(120, Math.min(maxHeightCap, spaceBelow)) + "px";
+        } else {
+          menu.style.top = "auto";
+          menu.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+          menu.style.maxHeight = Math.max(120, Math.min(maxHeightCap, spaceAbove)) + "px";
+        }
+      }
+
+      trigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (menu.classList.contains("open")) {
+          menu.classList.remove("open");
+        } else {
+          positionMenu();
+          menu.classList.add("open");
+        }
+      });
+
+      updateTrigger();
+      wrap.appendChild(trigger);
+      wrap.appendChild(menu);
+      return wrap;
+    }
+
     function buildRow(it) {
       var meta = catMeta(it.categoria);
       var row = document.createElement("div");
@@ -9123,16 +9221,14 @@
       nameTopLine.appendChild(nameLine);
 
       // categoria agora é editável direto na linha (pedido do Georges,
-      // rodada 4 — "como edito a categoria de um item existente?") — mesmo
-      // <select> nativo por baixo (ver buildSelect acima), mas com CSS
-      // "moderno" (pílula colorida via --cat-color, sem caixa quadrada) e
-      // na MESMA linha do nome do item, não mais abaixo (pedido do
-      // Georges, rodada 5 — "ficou muito quadrada... no mesmo nível de
-      // altura do nome do item, e não abaixo").
-      var catSelectRow = buildSelect("categoria", it.categoria, function (v) {
+      // rodada 4 — "como edito a categoria de um item existente?"), com
+      // dropdown CUSTOM em vez de <select> nativo (rodada 6 — ver
+      // buildCategoriaPicker acima pro raciocínio completo), pílula
+      // colorida via --cat-color, na MESMA linha do nome do item, não mais
+      // abaixo (pedido do Georges, rodada 5).
+      var catSelectRow = buildCategoriaPicker(it.categoria, function (v) {
         updateItem(it.id, { categoria: v });
       });
-      catSelectRow.className += " supermercado-row-cat-select";
       nameTopLine.appendChild(catSelectRow);
       nameCol.appendChild(nameTopLine);
 

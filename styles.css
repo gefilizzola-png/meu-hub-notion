@@ -4340,16 +4340,20 @@ html, body {
 }
 .supermercado-row-sub:empty { display: none; }
 /* categoria editável inline (pedido do Georges, rodada 4 — "como edito a
-   categoria de um item existente?"), redesenhada em pílula moderna
-   (pedido do Georges, rodada 5 — "ficou muito quadrada, aspecto de coisa
-   antiga... algo mais moderno"): <select> nativo por baixo, chrome
-   removido via appearance:none, fundo levemente tingido pela cor da
-   categoria (color-mix sobre --cat-color, já setada na row) e seta
-   customizada em SVG no lugar da seta nativa do navegador. */
+   categoria de um item existente?"), pílula moderna (rodada 5). Rodada 6:
+   o botão que abre esse dropdown, não mais um <select> nativo (ver
+   buildCategoriaPicker no app.js — o navegador desenha a LISTA aberta de
+   um <select> por conta própria, ignorando CSS, então a pílula colorida
+   só existia fechada; virando <button> + menu próprio, o visual continua
+   igual FECHADO e agora também vale ABERTO). Fundo levemente tingido pela
+   cor da categoria (color-mix sobre --cat-color, setada no próprio botão)
+   e seta customizada em SVG. */
 .supermercado-row-cat-select {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
+  box-sizing: border-box;
+  font-family: inherit;
   height: 22px;
   min-width: 0;
   flex-shrink: 0;
@@ -4373,6 +4377,10 @@ html, body {
   border-color: color-mix(in srgb, var(--cat-color, #dcdcd8) 45%, #fff);
   outline: none;
 }
+/* wrapper do novo dropdown custom — só precisa existir pro menu (posição
+   "fixed", ver positionMenu no app.js) achar o botão de referência; não
+   tem estilo próprio, ".supermercado-row-cat-select" cuida de tudo. */
+.supermercado-cat-picker { display: inline-flex; flex-shrink: 0; }
 /* contador "já foi sinalizado Comprar Nx" (pedido do Georges — base da
    aba Favoritos) — discreto, tom neutro (é histórico, não um alerta). */
 .supermercado-count-badge {
