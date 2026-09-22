@@ -7433,7 +7433,7 @@
     var topRow = document.createElement("div");
     topRow.className = "financeiro-top-row";
 
-    var totalValueEl, paidValueEl, pendingValueEl;
+    var totalValueEl, paidValueEl, pendingValueEl, fixaValueEl, faturasValueEl;
 
     if (!filterActive) {
       var nav = document.createElement("div");
@@ -7499,6 +7499,13 @@
       totalValueEl = makeSummaryPill("total", "Total do mês");
       paidValueEl = makeSummaryPill("paid", "Pago");
       pendingValueEl = makeSummaryPill("pending", "Pendente");
+      // "Conta Fixa" / "Faturas" (pedido do Georges — "para eu saber quanto
+      // tenho de conta fixa prevista para o mês"): 2 caixas a mais, SEM
+      // separar Pago/Pendente (valor bruto do mês inteiro, ver
+      // updateSummary abaixo) — "Faturas" é só as 5 contas de cartão que o
+      // Georges listou, "Conta Fixa" é o resto.
+      fixaValueEl = makeSummaryPill("fixa", "Conta Fixa");
+      faturasValueEl = makeSummaryPill("faturas", "Faturas");
       topRow.appendChild(summary);
     } else {
       var filterInfo = document.createElement("div");
@@ -7534,23 +7541,36 @@
     wrap.appendChild(body);
     container.appendChild(wrap);
 
+    // "Faturas" (pedido do Georges) — as 5 contas de cartão/crédito citadas
+    // por ele; "Conta Fixa" é tudo que NÃO está nessa lista. Mesmas "key"
+    // de FINANCEIRO_CONTAS_MENSAIS (worker.js) / FINANCEIRO_ACCOUNT_KEYS
+    // (config.js).
+    var FINANCEIRO_FATURA_KEYS = ["bb_smiles", "bb_ourocard", "nubank", "mercado_pago", "sem_parar"];
+
     // sem totais no modo filtrado (totalValueEl etc. ficam undefined) —
     // updateSummary vira no-op nesse caso, sem precisar de um "if" em
     // cada lugar que a chama.
     function updateSummary(contasData, overrides) {
       if (!totalValueEl) return;
       var items = contasData.items || [];
-      var total = 0, paid = 0;
+      var total = 0, paid = 0, fixa = 0, faturas = 0;
       items.forEach(function (it) {
         var info = financeiroPaidInfo(it, overrides);
         var raw = financeiroDisplayValue(it, info);
         var v = typeof raw === "number" ? raw : 0;
         total += v;
         if (info.isPaid) paid += v;
+        // "Conta Fixa"/"Faturas" (pedido do Georges — "não precisa separar
+        // o que está PAGO ou PENDENTE, apenas os valores mesmo") — soma
+        // bruta do mês inteiro, sem olhar info.isPaid.
+        if (FINANCEIRO_FATURA_KEYS.indexOf(it.accountKey) !== -1) faturas += v;
+        else fixa += v;
       });
       totalValueEl.textContent = financeiroFormatBRL(total);
       paidValueEl.textContent = financeiroFormatBRL(paid);
       pendingValueEl.textContent = financeiroFormatBRL(total - paid);
+      if (fixaValueEl) fixaValueEl.textContent = financeiroFormatBRL(fixa);
+      if (faturasValueEl) faturasValueEl.textContent = financeiroFormatBRL(faturas);
     }
 
     // estado de ordenação da tabela — pedido do Georges: cabeçalho
@@ -7811,20 +7831,27 @@
         row.appendChild(formaCell);
       }
 
+      // "PIX" (pedido do Georges — conta Marshall não tem boleto, só chave
+      // PIX): decide pelo que EXISTE na linha, não por accountKey fixo — se
+      // não tem RepresNumérica mas tem PIX, mostra/copia a chave PIX no
+      // lugar; nas outras 15 contas (com boleto) segue exatamente como
+      // antes.
+      var codValue = it.represNumerica || it.pix;
+      var codIsPix = !it.represNumerica && !!it.pix;
       var codCell = document.createElement("td");
       codCell.className = "financeiro-cod-cell";
       var codText = document.createElement("span");
       codText.className = "financeiro-cod-text";
-      codText.textContent = it.represNumerica || "—";
+      codText.textContent = codValue || "—";
       codCell.appendChild(codText);
-      if (it.represNumerica) {
+      if (codValue) {
         var copyBtn = document.createElement("button");
         copyBtn.type = "button";
         copyBtn.className = "financeiro-copy-btn";
-        copyBtn.title = "Copiar código de barras";
+        copyBtn.title = codIsPix ? "Copiar chave PIX" : "Copiar código de barras";
         copyBtn.innerHTML = '<i class="ti ti-copy"></i>';
         copyBtn.addEventListener("click", function () {
-          financeiroCopyToClipboard(it.represNumerica).then(function () {
+          financeiroCopyToClipboard(codValue).then(function () {
             copyBtn.classList.add("copied");
             copyBtn.innerHTML = '<i class="ti ti-check"></i>';
             setTimeout(function () {
@@ -9059,23 +9086,29 @@
 
       var nameCol = document.createElement("div");
       nameCol.className = "supermercado-row-namecol";
+      var nameTopLine = document.createElement("div");
+      nameTopLine.className = "supermercado-row-topline";
       var nameLine = document.createElement("div");
       nameLine.className = "supermercado-row-name";
       nameLine.textContent = it.produto;
-      nameCol.appendChild(nameLine);
+      nameTopLine.appendChild(nameLine);
 
-      var subLine = document.createElement("div");
-      subLine.className = "supermercado-row-sub";
       // categoria agora é editável direto na linha (pedido do Georges,
       // rodada 4 — "como edito a categoria de um item existente?") — mesmo
-      // <select> compacto já usado pra Prioridade/Providência antes de
-      // virarem botão de ciclo, ver buildSelect acima.
+      // <select> nativo por baixo (ver buildSelect acima), mas com CSS
+      // "moderno" (pílula colorida via --cat-color, sem caixa quadrada) e
+      // na MESMA linha do nome do item, não mais abaixo (pedido do
+      // Georges, rodada 5 — "ficou muito quadrada... no mesmo nível de
+      // altura do nome do item, e não abaixo").
       var catSelectRow = buildSelect("categoria", it.categoria, function (v) {
         updateItem(it.id, { categoria: v });
       });
       catSelectRow.className += " supermercado-row-cat-select";
-      catSelectRow.style.color = meta.color;
-      subLine.appendChild(catSelectRow);
+      nameTopLine.appendChild(catSelectRow);
+      nameCol.appendChild(nameTopLine);
+
+      var subLine = document.createElement("div");
+      subLine.className = "supermercado-row-sub";
       // contador de quantas vezes já foi sinalizado "Comprar" (pedido do
       // Georges — base da aba "Favoritos") — só aparece quando já
       // aconteceu pelo menos 1 vez, discreto, não é o sinalizador

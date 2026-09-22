@@ -611,10 +611,12 @@ var FINANCEIRO_ACCOUNT_KEYS = [
   { key: "gas", label: "Gás" },
   { key: "mercado_pago", label: "Mercado Pago" },
   { key: "nissan_bradesco", label: "Nissan Bradesco" },
+  { key: "nissan_ipva_licenciamento", label: "Nissan - IPVA e Licenciamento" },
   { key: "nubank", label: "Nubank" },
   { key: "sem_parar", label: "Sem Parar" },
   { key: "unimed", label: "Unimed" },
-  { key: "vitor_3ef_nsf", label: "Vitor - 3EF - NSF" }
+  { key: "vitor_3ef_nsf", label: "Vitor - 3EF - NSF" },
+  { key: "marshall", label: "Vitor - Desenho - Marshall" }
 ];
 
 // "page.sidePanel" (opcional) — painel retrátil do lado direito, só na
@@ -1248,7 +1250,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-22 00:24",
+  appVersion: "2026-09-22 00:53",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
