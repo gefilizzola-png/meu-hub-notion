@@ -16,6 +16,29 @@
   // (raiz da árvore) continuam usando startPage puro.
   var homePageId = cfg.homePage || cfg.startPage;
   var currentId = homePageId;
+  // "deep link" leve pra abrir uma página já numa aba/visão específica
+  // (pedido do Georges — clicar na notificação de Supermercado abre
+  // direto na aba Comprar, não em Produtos). O hash aceita
+  // "#pageId?chave=valor" (mesmo "?" de query string comum); render()
+  // separa a query da pageId de verdade (pra cfg.pages continuar
+  // indexado só por pageId puro) e guarda os parâmetros aqui — quem
+  // monta a página (ex: renderSupermercadoPage) lê e consome 1x. Genérico
+  // de propósito: qualquer página pode usar no futuro, não só Supermercado.
+  var pendingRouteParams = null;
+  function parsePageRoute(raw) {
+    raw = raw || "";
+    var qIdx = raw.indexOf("?");
+    if (qIdx === -1) return { pageId: raw, params: {} };
+    var params = {};
+    raw.slice(qIdx + 1).split("&").forEach(function (pair) {
+      if (!pair) return;
+      var eq = pair.indexOf("=");
+      var k = eq === -1 ? pair : pair.slice(0, eq);
+      var v = eq === -1 ? "" : decodeURIComponent(pair.slice(eq + 1));
+      if (k) params[decodeURIComponent(k)] = v;
+    });
+    return { pageId: raw.slice(0, qIdx), params: params };
+  }
   var parentOf = {};        // pageId -> parentPageId
   var flatIndex = [];       // { label, type, url|target, pathTitles: [..], pathIds: [..], ownerPageId }
   var selectedResult = -1;
@@ -8808,10 +8831,16 @@
       return "Clique pra marcar como Urgente";
     }
 
+    // deep link vindo da Central de Notificações (pedido do Georges: "ao
+    // clicar, abre a página de mercado na aba Comprar") — ver
+    // pendingRouteParams/parsePageRoute acima; só usa se apontar pra uma
+    // aba que EXISTE de verdade (senão cai no padrão de sempre).
+    var routeView = pendingRouteParams && pendingRouteParams.view;
+    var routeViewValid = routeView && viewsCfg.some(function (v) { return v.id === routeView; });
     var state = {
       items: [],
       loaded: false,
-      view: (viewsCfg[0] && viewsCfg[0].id) || "produtos",
+      view: routeViewValid ? routeView : ((viewsCfg[0] && viewsCfg[0].id) || "produtos"),
       // filtro de Categoria (pedido do Georges, rodada 4 — "use aquele
       // mesmo padrão que usamos em outros filtros para permitir multi_select
       // e pesquisa dentro do filtro") — Set de nomes de categoria; vazio =
@@ -9113,7 +9142,11 @@
       // Georges — base da aba "Favoritos") — só aparece quando já
       // aconteceu pelo menos 1 vez, discreto, não é o sinalizador
       // principal (esse agora é o próprio botão de status, ver abaixo).
-      if (it.comprarCount > 0) {
+      // SÓ na aba Favoritos (pedido do Georges, rodada 5: "pode excluir o
+      // ícone de contagem quando selecionada a opção Produtos, Comprar ou
+      // Comprados... exibe somente quando eu selecionar Favoritos") — nas
+      // outras 3 abas o histórico não é relevante, só polui a linha.
+      if (it.comprarCount > 0 && state.view === "favoritos") {
         var countBadge = document.createElement("span");
         countBadge.className = "supermercado-count-badge";
         countBadge.textContent = "🔁 " + it.comprarCount + "x";
@@ -9382,6 +9415,218 @@
     loadItems();
   }
 
+  // ---------------- "page.remedios" — Remédios (100% KV, nunca Notion) ----------------
+  // Pedido do Georges: lista do estoque de remédios que ele mantém na
+  // mochila, copiada 1x da base do Notion "Pessoal / Listas / Remédios"
+  // (ver REMEDIOS_SEED no worker.js) — daqui em diante 100% KV, mesmo
+  // motivo de renderSupermercadoPage acima (botão do Notion que a API
+  // pública não aciona + regra de nunca escrever em nada do Notion). Bem
+  // mais simples que Supermercado: sem abas/categorias/filtros, só a lista
+  // + botões "Usei"/"Repus" (quantidade) + quantidade-padrão editável.
+  function renderRemediosPage(container, page) {
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+
+    var state = { items: [], loaded: false };
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando…";
+    container.appendChild(statusEl);
+
+    var wrap = document.createElement("div");
+    wrap.className = "remedios-wrap";
+    wrap.style.display = "none";
+    container.appendChild(wrap);
+
+    // ---- "adicionar remédio" (nome só — composição/finalidade/padrão
+    // ficam editáveis depois, mesmo espírito do form de Supermercado) ----
+    var addWrap = document.createElement("div");
+    addWrap.className = "remedios-add";
+    var addInput = document.createElement("input");
+    addInput.type = "text";
+    addInput.placeholder = "Nome do remédio…";
+    addInput.className = "remedios-add-input";
+    addWrap.appendChild(addInput);
+    var addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "notes-add-btn";
+    addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
+    addWrap.appendChild(addBtn);
+    wrap.appendChild(addWrap);
+
+    var listEl = document.createElement("div");
+    listEl.className = "remedios-list";
+    wrap.appendChild(listEl);
+
+    function addItem() {
+      var nome = addInput.value.trim();
+      if (!nome) return;
+      addBtn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/remedios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome: nome })
+      }).then(handle401).then(function () {
+        addInput.value = "";
+        loadItems();
+      }).catch(function () {
+        statusEl.textContent = "Erro ao adicionar remédio.";
+        statusEl.style.display = "";
+      }).finally(function () { addBtn.disabled = false; });
+    }
+    addBtn.addEventListener("click", addItem);
+    addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
+
+    function updateItem(id, patch) {
+      return authFetch(cfg.templateWorkerUrl + "/remedios?id=" + encodeURIComponent(id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch)
+      }).then(handle401);
+    }
+
+    function deleteItem(id) {
+      if (!confirm("Excluir este remédio da lista?")) return;
+      authFetch(cfg.templateWorkerUrl + "/remedios?id=" + encodeURIComponent(id), { method: "DELETE" })
+        .then(handle401).then(loadItems).catch(function () {});
+    }
+
+    // "Usei"/"Repus" (pedido do Georges: "um botão que clico para sinalizar
+    // quando usei um remédio, diminuindo a quantidade, e outro pra
+    // sinalizar que fiz a reposição... aumentando a quantidade") —
+    // otimista (mesmo padrão de togglePin/toggleNotifRead): já atualiza o
+    // número na tela, regrava de verdade no Worker em paralelo; se a
+    // resposta trouxer um valor diferente (ex: já tinha chegado em 0),
+    // corrige com o valor real devolvido.
+    function bump(it, delta, btn) {
+      var route = delta < 0 ? "/remedios-usar" : "/remedios-repor";
+      it.quantidade = Math.max(0, (it.quantidade || 0) + delta);
+      renderList();
+      if (btn) btn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + route + "?id=" + encodeURIComponent(it.id), { method: "POST" })
+        .then(handle401).then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data && data.item) {
+            var idx = state.items.findIndex(function (x) { return x.id === it.id; });
+            if (idx !== -1) state.items[idx] = data.item;
+          }
+          renderList();
+        }).catch(function () { loadItems(); });
+    }
+
+    function buildRow(it) {
+      var padrao = it.quantidadePadrao || 0;
+      var low = padrao > 0 && (it.quantidade || 0) <= padrao / 2;
+
+      var row = document.createElement("div");
+      row.className = "remedios-row" + (low ? " low" : "");
+
+      var mainCol = document.createElement("div");
+      mainCol.className = "remedios-row-main";
+      var nomeLine = document.createElement("div");
+      nomeLine.className = "remedios-row-nome";
+      nomeLine.textContent = it.nome;
+      mainCol.appendChild(nomeLine);
+      if (it.composicao || it.finalidade) {
+        var subLine = document.createElement("div");
+        subLine.className = "remedios-row-sub";
+        subLine.textContent = it.composicao || it.finalidade;
+        subLine.title = [it.composicao, it.finalidade].filter(Boolean).join(" — ");
+        mainCol.appendChild(subLine);
+      }
+      row.appendChild(mainCol);
+
+      var qtyWrap = document.createElement("div");
+      qtyWrap.className = "remedios-row-qty";
+      var usarBtn = document.createElement("button");
+      usarBtn.type = "button";
+      usarBtn.className = "remedios-qty-btn remedios-qty-minus";
+      usarBtn.title = "Usei (diminui 1)";
+      usarBtn.innerHTML = '<i class="ti ti-minus"></i>';
+      usarBtn.addEventListener("click", function () { bump(it, -1, usarBtn); });
+      qtyWrap.appendChild(usarBtn);
+      var qtyValue = document.createElement("span");
+      qtyValue.className = "remedios-qty-value";
+      qtyValue.textContent = it.quantidade || 0;
+      qtyWrap.appendChild(qtyValue);
+      var reporBtn = document.createElement("button");
+      reporBtn.type = "button";
+      reporBtn.className = "remedios-qty-btn remedios-qty-plus";
+      reporBtn.title = "Repus (aumenta 1)";
+      reporBtn.innerHTML = '<i class="ti ti-plus"></i>';
+      reporBtn.addEventListener("click", function () { bump(it, 1, reporBtn); });
+      qtyWrap.appendChild(reporBtn);
+      row.appendChild(qtyWrap);
+
+      // quantidade-padrão (pedido do Georges: "Cada remédio deve ter a sua
+      // respectiva quantidade-padrão") — editável inline, é o que
+      // define o gatilho de "estoque baixo" (metade ou menos) usado pela
+      // notificação (fetchRemediosNotificationItems acima).
+      var padraoWrap = document.createElement("div");
+      padraoWrap.className = "remedios-row-padrao";
+      var padraoLabel = document.createElement("span");
+      padraoLabel.className = "remedios-row-padrao-label";
+      padraoLabel.textContent = "Padrão";
+      padraoWrap.appendChild(padraoLabel);
+      var padraoInput = document.createElement("input");
+      padraoInput.type = "number";
+      padraoInput.min = "0";
+      padraoInput.className = "remedios-row-padrao-input";
+      padraoInput.value = padrao;
+      padraoInput.title = "Quantidade-padrão — usada pra saber quando avisar que está acabando";
+      padraoInput.addEventListener("change", function () {
+        var n = Math.max(0, Math.round(Number(padraoInput.value)) || 0);
+        padraoInput.value = n;
+        it.quantidadePadrao = n;
+        row.className = "remedios-row" + ((n > 0 && (it.quantidade || 0) <= n / 2) ? " low" : "");
+        updateItem(it.id, { quantidadePadrao: n }).catch(function () {});
+      });
+      padraoWrap.appendChild(padraoInput);
+      row.appendChild(padraoWrap);
+
+      var delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "remedios-row-delete";
+      delBtn.title = "Excluir";
+      delBtn.innerHTML = '<i class="ti ti-trash"></i>';
+      delBtn.addEventListener("click", function () { deleteItem(it.id); });
+      row.appendChild(delBtn);
+
+      return row;
+    }
+
+    function renderList() {
+      listEl.innerHTML = "";
+      if (!state.items.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhum remédio cadastrado ainda.";
+        listEl.appendChild(empty);
+        return;
+      }
+      state.items.forEach(function (it) { listEl.appendChild(buildRow(it)); });
+    }
+
+    function loadItems() {
+      authFetch(cfg.templateWorkerUrl + "/remedios").then(handle401).then(function (res) {
+        return res.json();
+      }).then(function (data) {
+        state.items = (data && data.items) || [];
+        state.loaded = true;
+        statusEl.style.display = "none";
+        wrap.style.display = "";
+        renderList();
+      }).catch(function () {
+        statusEl.textContent = "Erro ao carregar remédios.";
+      });
+    }
+
+    loadItems();
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
@@ -9417,6 +9662,12 @@
     // empilhar com outros blocos.
     if (page.supermercado) {
       renderSupermercadoPage(container, page);
+      return;
+    }
+
+    // "Remédios" (pedido do Georges) — mesmo padrão exclusivo acima.
+    if (page.remedios) {
+      renderRemediosPage(container, page);
       return;
     }
 
@@ -10010,20 +10261,72 @@
   // com leadTime "0", a notificação dispara assim que existir ao menos 1
   // item Comprar, some sozinha quando o último for tirado de Comprar (não
   // tem mais count>0, a lista sintética fica vazia).
+  //
+  // ID FIXO POR CONJUNTO (pedido do Georges, rodada 5 — bug real: "sinalizei
+  // um item como Comprar, mas até agora não apareceu"): a versão antiga
+  // usava sempre o MESMO "id" ("supermercado-pending"), então uma vez que
+  // essa notificação fosse marcada como lida (ex: durante um teste), o
+  // "id" final montado em buildNotificationsFromSource
+  // ("supermercado::agora::supermercado-pending") nunca mudava — ficava
+  // "lida" pra sempre, mesmo sinalizando itens NOVOS depois, porque o
+  // filtro padrão da Central (modo "Não lidas") casa por esse id. Fix:
+  // "id" agora inclui os IDs (ordenados) dos itens atualmente em Comprar —
+  // muda sempre que o CONJUNTO muda (item novo sinalizado, ou tirado), o
+  // que reabre a notificação como não lida automaticamente; volta a ficar
+  // "lida" (mesmo id) se o Georges reabrir o painel sem nada ter mudado.
   function fetchSupermercadoNotificationItems(source) {
     return authFetch(cfg.templateWorkerUrl + "/supermercado").then(function (res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
       return res.ok ? res.json() : { items: [] };
     }).then(function (data) {
       var items = (data && data.items) || [];
-      var count = items.filter(function (it) { return it.providencia === "Comprar"; }).length;
-      if (!count) return [];
+      var pendingIds = items.filter(function (it) { return it.providencia === "Comprar"; })
+        .map(function (it) { return it.id; }).sort();
+      if (!pendingIds.length) return [];
+      var extraObj = {};
+      extraObj[source.dateProperty] = new Date().toISOString();
+      // texto fixo (pedido do Georges: "não precisa exibir todos eles...
+      // exiba apenas assim: Supermercado: itens pendentes para comprar" —
+      // sem contagem dinâmica) + deep link direto pra aba Comprar (ver
+      // appRoute/parsePageRoute em renderNotifList, e "view" no target
+      // abaixo/config.js).
+      return [{
+        id: "supermercado-pending::" + pendingIds.join(","),
+        title: "Supermercado: itens pendentes para comprar",
+        url: location.origin + location.pathname + "#supermercado?view=comprar",
+        extra: extraObj
+      }];
+    }).catch(function () { return []; });
+  }
+
+  // Remédios (kind "remedios" — pedido do Georges: "quando estiver na
+  // metade, deve apontar uma notificação... Não precisa exibir uma linha
+  // para cada remédio"). Mesmo truque de "supermercado" acima: junta TODOS
+  // os remédios com quantidade <= metade da quantidadePadrao num item
+  // SINTÉTICO só, com "extra[dateProperty]" = agora — leadTime "0" dispara
+  // assim que existir pelo menos 1 remédio baixo. "id" inclui os IDs
+  // (ordenados) dos remédios baixos — mesmo fix do bug de "id fixo" corrigido
+  // acima em fetchSupermercadoNotificationItems (rodada 5): sem isso, uma
+  // vez lida a notificação nunca voltaria a aparecer pra um remédio NOVO
+  // que ficasse baixo depois. quantidadePadrao 0 (ainda não configurado)
+  // nunca conta como "baixo" — evita notificação falsa em item recém-criado.
+  function fetchRemediosNotificationItems(source) {
+    return authFetch(cfg.templateWorkerUrl + "/remedios").then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+      return res.ok ? res.json() : { items: [] };
+    }).then(function (data) {
+      var items = (data && data.items) || [];
+      var lowIds = items.filter(function (it) {
+        var padrao = it.quantidadePadrao || 0;
+        return padrao > 0 && (it.quantidade || 0) <= padrao / 2;
+      }).map(function (it) { return it.id; }).sort();
+      if (!lowIds.length) return [];
       var extraObj = {};
       extraObj[source.dateProperty] = new Date().toISOString();
       return [{
-        id: "supermercado-pending",
-        title: count + " item" + (count === 1 ? "" : "s") + " sinalizado" + (count === 1 ? "" : "s") + " para comprar",
-        url: location.origin + location.pathname + "#supermercado",
+        id: "remedios-low::" + lowIds.join(","),
+        title: "Atenção: necessidade de repor Remédios",
+        url: location.origin + location.pathname + "#remedios",
         extra: extraObj
       }];
     }).catch(function () { return []; });
@@ -10033,10 +10336,12 @@
   // conforme "source.kind" (default "notion", ver resolvedNotifSources
   // acima). Mantém buildNotificationsFromSource 100% agnóstico: ele só
   // enxerga a lista {id,title,url,extra} pronta, nunca sabe se veio do
-  // /query genérico, de /financeiro-contas ou de /supermercado.
+  // /query genérico, de /financeiro-contas, de /supermercado ou de
+  // /remedios.
   function fetchNotificationSourceItems(source) {
     if (source.kind === "financeiro") return fetchFinanceiroNotificationItems(source);
     if (source.kind === "supermercado") return fetchSupermercadoNotificationItems(source);
+    if (source.kind === "remedios") return fetchRemediosNotificationItems(source);
     return fetchNotionNotificationSourceItems(source);
   }
 
@@ -10521,14 +10826,21 @@
       var actions = document.createElement("div");
       actions.className = "notif-card-actions";
       if (n.target && n.target.type === "page") {
+        // "view" opcional (pedido do Georges — Supermercado: "quando eu
+        // clicar, abre a página de mercado na aba Comprar") — vira
+        // "#pageId?view=xxx", que render()/parsePageRoute sabem separar
+        // (ver comentário grande lá em cima); Ctrl/Cmd+clique continua
+        // funcionando igual (abre em nova aba com a MESMA query, pois é
+        // um <a href> de verdade).
+        var appRoute = n.target.target + (n.target.view ? "?view=" + encodeURIComponent(n.target.view) : "");
         var appBtn = document.createElement("a");
         appBtn.className = "notif-card-app-btn";
-        appBtn.href = "#" + n.target.target;
+        appBtn.href = "#" + appRoute;
         appBtn.title = "Ver em " + n.sourceLabel + " no app";
         appBtn.addEventListener("click", function (e) {
           if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
           e.preventDefault();
-          navigate(n.target.target);
+          navigate(appRoute);
           closeNotifPanel();
         });
         var ic = document.createElement("i");
@@ -10670,9 +10982,12 @@
   }
 
   // ---------------- page render / navigation ----------------
-  function render(pageId, push) {
+  function render(rawPageId, push) {
+    var route = parsePageRoute(rawPageId);
+    var pageId = route.pageId;
     var page = cfg.pages[pageId];
-    if (!page) { pageId = homePageId; page = cfg.pages[pageId]; }
+    if (!page) { pageId = homePageId; page = cfg.pages[pageId]; route.params = {}; }
+    pendingRouteParams = route.params;
     currentId = pageId;
 
     document.title = page.title + " · " + cfg.appTitle;
@@ -10701,7 +11016,7 @@
     renderSidePanel(pageId);
     updateSetHomeBtn();
 
-    if (push) history.pushState({ pageId: pageId }, "", "#" + pageId);
+    if (push) history.pushState({ pageId: rawPageId }, "", "#" + rawPageId);
   }
 
   // ---------------- "página inicial configurável" (pedido do Georges) ----------------

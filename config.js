@@ -929,12 +929,17 @@ var NOTIFICATION_SOURCES = [
   // exibir uma notificação de Supermercados... sempre que tiver um item
   // sinalizado para Comprar"). Fonte 100% KV, sem Notion (mesmo espírito de
   // "financeiro" acima, kind próprio) — não é uma notificação "por item com
-  // data": é 1 notificação só, "tem N item(ns) pra comprar agora", ver
+  // data": é 1 notificação só, texto fixo "Supermercado: itens pendentes
+  // para comprar" (pedido do Georges, rodada 5 — sem contagem dinâmica), ver
   // fetchSupermercadoNotificationItems no app.js. "dateProperty: 'gatilho'"
   // aqui, igual ao "vencimento" de financeiro acima, NÃO é campo do Notion —
   // é só a chave de "extra" que reaproveita buildNotificationsFromSource
   // sem mudar nada nele; o item sintético sempre carrega a hora ATUAL, e o
   // único leadTime é "0" (dispara assim que existir algum item Comprar).
+  // "view: 'comprar'" (pedido do Georges, rodada 5 — "quando eu clicar,
+  // abre a página de mercado na aba Comprar") — consumido pelo botão de
+  // app da Central (renderNotifList) e pela própria renderSupermercadoPage
+  // via pendingRouteParams/parsePageRoute (app.js).
   {
     id: "supermercado",
     label: "Lista de Supermercado",
@@ -942,10 +947,28 @@ var NOTIFICATION_SOURCES = [
     icon: "🛒",
     kind: "supermercado",
     dateProperty: "gatilho",
-    target: { type: "page", target: "supermercado" },
+    target: { type: "page", target: "supermercado", view: "comprar" },
     defaultEnabled: true,
     defaultLeadTimes: [
       { id: "agora", amount: 0, unit: "hours", label: "Assim que sinalizar" }
+    ]
+  },
+  // Remédios (pedido do Georges — "quando estiver na metade, deve apontar
+  // uma notificação... Não precisa exibir uma linha para cada remédio").
+  // MESMO truque de "supermercado" acima (fonte 100% KV, sem Notion, kind
+  // próprio, item sintético com "extra[gatilho]" = agora, leadTime "0"): 1
+  // notificação só, agregando TODOS os remédios com quantidade <= metade da
+  // quantidade-padrão — ver fetchRemediosNotificationItems no app.js.
+  {
+    id: "remedios",
+    label: "Remédios",
+    icon: "💊",
+    kind: "remedios",
+    dateProperty: "gatilho",
+    target: { type: "page", target: "remedios" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "agora", amount: 0, unit: "hours", label: "Assim que ficar baixo" }
     ]
   },
   // Aniversários (pedido do Georges). "📚 Página de Origem" = "Pessoal -
@@ -1250,7 +1273,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-22 00:53",
+  appVersion: "2026-09-22 01:21",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2081,6 +2104,21 @@ const APP_CONFIG = {
       ]
     },
 
+    // "Remédios" (pedido do Georges — copiar a base do Notion "Pessoal /
+    // Listas / Remédios", o estoque que ele mantém na mochila, pro Meu Hub,
+    // com botões de Usei/Repus pra controlar quantidade). MESMO motivo de
+    // "supermercado" acima (botão do Notion que a API não aciona + regra de
+    // nunca escrever no Notion) — 100% KV (worker.js, rotas /remedios),
+    // carga inicial importada 1x (ver REMEDIOS_SEED no worker.js).
+    // "remedios: true" é o flag que renderContent usa pra chamar
+    // renderRemediosPage no app.js (mesmo padrão de "supermercado: true"
+    // acima). Lista simples, sem abas (o Georges só pediu quantidade +
+    // botões, sem categorias/filtros como o Supermercado).
+    remedios: {
+      title: "Remédios",
+      remedios: true
+    },
+
     criar_paginas: {
       title: "Criar páginas",
       items: [
@@ -2382,7 +2420,11 @@ const APP_CONFIG = {
     cat_pessoal_listas: {
       title: "Listas",
       items: [
-        { label: "Lista de Supermercado", type: "page", target: "supermercado", icon: "shopping-cart" }
+        { label: "Lista de Supermercado", type: "page", target: "supermercado", icon: "shopping-cart" },
+        // "Remédios" (pedido do Georges) — mesmo lugar da Lista de
+        // Supermercado, mesmo espírito (lista pessoal trazida do Notion pro
+        // Meu Hub).
+        { label: "Remédios", type: "page", target: "remedios", icon: "pill" }
       ]
     },
 

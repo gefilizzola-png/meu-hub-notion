@@ -4478,3 +4478,110 @@ html, body {
   .supermercado-row { flex-direction: column; align-items: stretch; }
   .supermercado-row-name { flex: 1 1 auto; min-width: 0; }
 }
+
+/* ---------------- Remédios (pedido do Georges — estoque da mochila) ---------------- */
+.remedios-wrap { display: flex; flex-direction: column; gap: 14px; }
+/* mesmo padrão visual de .supermercado-add acima (input + botão sólido). */
+.remedios-add { display: flex; flex-wrap: wrap; gap: 8px; max-width: 480px; }
+.remedios-add-input {
+  flex: 1;
+  min-width: 160px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  font-size: 13.5px;
+  color: #2c2c2a;
+}
+.remedios-add-input:focus { outline: none; border-color: #4a90d9; }
+
+.remedios-list { display: flex; flex-direction: column; gap: 6px; }
+.remedios-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 0.5px solid #e6e6e2;
+  background: #fff;
+}
+/* estoque baixo (<= metade da quantidade-padrão, pedido do Georges) —
+   mesmo tom de alerta já usado em .financeiro-summary-pending. */
+.remedios-row.low { border-color: #f0dcb0; background: #fdf6ea; }
+.remedios-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.remedios-row-nome { font-size: 13.5px; font-weight: 600; color: #2c2c2a; }
+.remedios-row-sub {
+  font-size: 11.5px;
+  color: #8a8a86;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.remedios-row-qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.remedios-qty-btn {
+  height: 26px;
+  width: 26px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fbfbfa;
+  color: #4a4a46;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+.remedios-qty-btn:hover { background: #f0f0ec; }
+.remedios-qty-minus:hover { border-color: #d99a94; color: #b0413a; }
+.remedios-qty-plus:hover { border-color: #9ec9a3; color: #2f9e44; }
+.remedios-qty-value {
+  min-width: 22px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2c2c2a;
+}
+.remedios-row.low .remedios-qty-value { color: #b9770e; }
+.remedios-row-padrao {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.remedios-row-padrao-label { font-size: 10.5px; color: #8a8a86; }
+.remedios-row-padrao-input {
+  width: 46px;
+  height: 26px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fbfbfa;
+  text-align: center;
+  font-size: 12px;
+  color: #2c2c2a;
+}
+.remedios-row-padrao-input:focus { outline: none; border-color: #4a90d9; background: #fff; }
+.remedios-row-delete {
+  height: 28px;
+  width: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #b0413a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.remedios-row-delete:hover { background: #fbeceb; }
+
+@media (max-width: 640px) {
+  .remedios-row { flex-wrap: wrap; }
+  .remedios-row-main { flex-basis: 100%; }
+}
