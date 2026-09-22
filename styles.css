@@ -90,7 +90,17 @@ html, body {
     bottom: 0;
     z-index: 50;
     box-shadow: 2px 0 20px rgba(0, 0, 0, 0.18);
+    /* arrastar com o dedo pra fechar (pedido do Georges, rodada 5 — mesmo
+       gesto/padrão da Central de Notificações, espelhado: aqui o Menu sai
+       pela ESQUERDA — ver sidebarSwipe em app.js). transition aqui é só
+       pra "voltar pro lugar" quando o arrasto solta sem passar do limite
+       de fechar (a classe .sidebar-dragging desliga durante o arrasto,
+       pra acompanhar o dedo em tempo real sem atraso). Só faz sentido
+       nessa media query — em telas largas o menu é sticky lado a lado,
+       sem "arrastar pra fechar". */
+    transition: transform 0.2s ease;
   }
+  #shell.sidebar-visible .sidebar.sidebar-dragging { transition: none; }
   #shell.sidebar-visible .sidebar-backdrop {
     display: block;
     position: fixed;
@@ -426,7 +436,12 @@ html, body {
   padding: 0 6px;
   margin: 0;
   border-radius: 6px;
-  font-size: 12.5px;
+  /* pedido do Georges, rodada 5 — "aumente um pouco o tamanho da letra do
+     menu a partir de 'Pastas', 'Criar...'" (a árvore de pastas — NÃO
+     sidebarPinned/sidebarRecent, que ficam como estão). Aumento pequeno
+     (12.5px -> 13.5px); .tree-row continua com 26px fixo (regra combinada
+     com o Georges — ver comentário em .sidebar-pinned acima). */
+  font-size: 13.5px;
   line-height: 1;
   color: #444;
   cursor: pointer;
@@ -462,8 +477,11 @@ html, body {
 .tree-row.active .ti.icon-empty { color: #cc4b3c; }
 
 .tree-toggle {
-  width: 13px;
-  height: 13px;
+  /* pedido do Georges, rodada 5 — "aumente bem pouco... o tamanho da
+     flecha para abrir ou recolher cada pasta" (13px -> 14px, mesmo
+     espírito discreto do aumento de fonte acima). */
+  width: 14px;
+  height: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -474,7 +492,7 @@ html, body {
 .tree-toggle:not(.empty):hover { background: #e2e2de; }
 .tree-toggle.empty { cursor: default; }
 .tree-row .tree-toggle .ti {
-  font-size: 12px;
+  font-size: 13.5px;
   width: auto;
   color: inherit;
   transition: transform 0.12s ease;
@@ -740,6 +758,31 @@ html, body {
   text-overflow: ellipsis;
 }
 .item-chevron { font-size: 15px; color: #c4c4c0; flex-shrink: 0; }
+/* "item.extraAction" (pedido do Georges, rodada 5 — 2º botão pequeno num
+   card de Favoritas, ex: Remédios/Supermercado — Notion + App). Botão
+   quadrado discreto, mesmo tom apagado do resto do item, ganha destaque
+   suave no hover (não usa a cor de destaque azul pra não competir com o
+   chevron/kbd ao lado). */
+.item-extra-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0.5px solid transparent;
+  background: transparent;
+  color: #9c9a94;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.item-extra-action:hover {
+  background: #f0f0ee;
+  border-color: #dcdcd8;
+  color: #2c2c2a;
+}
+.item-extra-action img { display: block; }
 .kbd-num {
   display: none;
   font-size: 10px;
@@ -4396,6 +4439,10 @@ html, body {
    visuais, mesmo espírito de .supermercado-view-btn.active (pílula sólida
    quando "ligado"). */
 .supermercado-status-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   height: 30px;
   padding: 0 12px;
   border-radius: 999px;
@@ -4409,6 +4456,11 @@ html, body {
   flex-shrink: 0;
 }
 .supermercado-status-btn:hover { border-color: #4a90d9; }
+/* ícone (emoji ou Tabler) + texto SEPARADOS agora (pedido do Georges,
+   rodada 5 — ver buildCycleActionBtn no app.js) — no celular o texto some
+   e só o ícone fica, ver media query lá embaixo. */
+.supermercado-status-btn-icon { font-size: 13px; line-height: 1; flex-shrink: 0; }
+.supermercado-status-btn-label { line-height: 1; }
 .supermercado-status-btn.comprar {
   background: #fff4e6;
   border-color: #ffd8a8;
@@ -4453,6 +4505,17 @@ html, body {
   border-color: #4a90d9;
   color: #fff;
 }
+/* "Só Urgentes" (pedido do Georges, rodada 5 — pílula on/off só na aba
+   Comprar; visibilidade controlada via JS em updateTabActive()). Cor
+   própria (vermelho, mesma paleta de .supermercado-status-btn.urgente)
+   pra diferenciar visualmente do filtro de Situação acima. */
+.supermercado-urgente-only-wrap { margin-top: -2px; }
+.supermercado-urgente-only-pill:hover { border-color: #c92a2a; }
+.supermercado-urgente-only-pill.active {
+  background: #c92a2a;
+  border-color: #c92a2a;
+  color: #fff;
+}
 /* <select> inline de Providência/Prioridade — mesma "caixinha" de
    .priorities-cell-select, só um pouco mais estreita (célula de linha, não
    de tabela larga). */
@@ -4483,8 +4546,33 @@ html, body {
 .supermercado-row-delete:hover { background: #fbeceb; }
 
 @media (max-width: 640px) {
-  .supermercado-row { flex-direction: column; align-items: stretch; }
+  /* pedido do Georges, rodada 5 — "no celular com a tela fechada, ficou
+     ruim o leiaute de Supermercados... faça ele reconhecer a tela
+     pequena e diminuir os botões, para ficar numa linha". A versão
+     anterior empilhava CADA filho (badge/nome/status/prioridade/excluir)
+     em linhas separadas (flex-direction:column) — ficava alto e feio.
+     Agora: nome+categoria continuam sendo a 1ª linha (flex-basis:100% —
+     ver .supermercado-row-namecol abaixo), e status/prioridade/excluir
+     ficam juntos numa 2ª linha, todos pequenos e só com ícone. */
+  .supermercado-row { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .supermercado-row-namecol { flex-basis: 100%; min-width: 0; }
   .supermercado-row-name { flex: 1 1 auto; min-width: 0; }
+  /* ícone da categoria dentro do card (pedido do Georges — "pode retirar
+     o ícone da categoria... já está no agrupamento daquela categoria e
+     já tem o botão para mudar a categoria") — só no celular; no desktop
+     continua aparecendo normalmente. */
+  .supermercado-cat-badge { display: none; }
+  /* botões Sinalizar/Prioridade/Excluir — só ícone, bem menores, pra
+     caber tudo numa linha só (pedido do Georges). */
+  .supermercado-status-btn {
+    height: 26px;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+  .supermercado-status-btn-icon { font-size: 13px; }
+  .supermercado-status-btn-label { display: none; }
+  .supermercado-row-delete { height: 26px; width: 26px; }
+  .supermercado-row-cat-select { height: 20px; font-size: 9.5px; padding: 0 16px 0 7px; }
 }
 
 /* ---------------- Remédios (pedido do Georges — estoque da mochila) ---------------- */
@@ -4503,6 +4591,26 @@ html, body {
   color: #2c2c2a;
 }
 .remedios-add-input:focus { outline: none; border-color: #4a90d9; }
+/* input de composição no form de criar (pedido do Georges, rodada 2 —
+   "editar a composição ao criar"), mesma caixa do nome, um pouco mais
+   larga (texto costuma ser mais longo, ex: "Dipirona monoidratada - 1g"). */
+.remedios-add-composicao { flex: 1.6; min-width: 220px; }
+
+/* busca (pedido do Georges: "pesquisa pelo nome... composição... ou
+   Finalidade") — mesma caixa visual dos inputs de criar acima. */
+.remedios-search { max-width: 480px; }
+.remedios-search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  font-size: 13.5px;
+  color: #2c2c2a;
+  box-sizing: border-box;
+}
+.remedios-search-input:focus { outline: none; border-color: #4a90d9; }
 
 .remedios-list { display: flex; flex-direction: column; gap: 6px; }
 .remedios-row {
@@ -4517,14 +4625,57 @@ html, body {
 /* estoque baixo (<= metade da quantidade-padrão, pedido do Georges) —
    mesmo tom de alerta já usado em .financeiro-summary-pending. */
 .remedios-row.low { border-color: #f0dcb0; background: #fdf6ea; }
-.remedios-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+/* "número" — etiqueta física do comprimido (pedido do Georges, rodada 2:
+   "escrevo em cada comprimido o número daquele remédio"), copiado 1x de
+   "Identificação" no Notion (ver REMEDIOS_SEED no worker.js). Pílula
+   numérica fixa à esquerda do nome, mesmo espírito visual de
+   .remedios-qty-value mas neutra (não é estoque, é só identificação). */
+.remedios-row-numero { flex-shrink: 0; }
+.remedios-row-numero-input {
+  width: 34px;
+  height: 26px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #f4f4f2;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #5c5c58;
+}
+.remedios-row-numero-input:focus { outline: none; border-color: #4a90d9; background: #fff; }
+.remedios-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.remedios-row-nome-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .remedios-row-nome { font-size: 13.5px; font-weight: 600; color: #2c2c2a; }
-.remedios-row-sub {
+/* ícone "i" — hover mostra a Finalidade via tooltip nativo (pedido do
+   Georges: "um ícone de informação... aparece a Finalidade"). */
+.remedios-info-icon {
+  font-size: 14px;
+  color: #9c9a94;
+  cursor: help;
+  flex-shrink: 0;
+}
+.remedios-info-icon:hover { color: #4a90d9; }
+/* composição editável inline (pedido do Georges, rodada 2 — "editar a
+   composição... ao alterar um remédio já cadastro") — caixa discreta
+   (sem borda visível até focar), mesmo espírito de
+   .remedios-row-padrao-input mas ocupando a largura toda disponível. */
+.remedios-row-composicao-input {
+  width: 100%;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 0.5px solid transparent;
+  background: transparent;
   font-size: 11.5px;
   color: #8a8a86;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+.remedios-row-composicao-input:hover { background: #f7f7f5; }
+.remedios-row-composicao-input:focus {
+  outline: none;
+  border-color: #4a90d9;
+  background: #fff;
+  color: #2c2c2a;
 }
 .remedios-row-qty {
   display: flex;
@@ -4591,5 +4742,5 @@ html, body {
 
 @media (max-width: 640px) {
   .remedios-row { flex-wrap: wrap; }
-  .remedios-row-main { flex-basis: 100%; }
+  .remedios-row-main { flex-basis: 100%; order: -1; }
 }

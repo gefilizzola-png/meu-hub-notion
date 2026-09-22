@@ -1064,6 +1064,44 @@
       kbd.textContent = String(idx + 1);
       right.appendChild(kbd);
     }
+    // "item.extraAction" (pedido do Georges, rodada 5 — "no card Remédios,
+    // coloque dois botões: um com ícone no Notion que leva para a página do
+    // Notion [...] e outro que leva para nosso app. Faça o mesmo com
+    // Supermercado") — botão pequeno extra, SEPARADO do clique principal da
+    // linha (stopPropagation), pra abrir um 2º destino (Notion ou app) sem
+    // trocar o comportamento padrão do item. Shape: { type: "notion"|"page",
+    // url (se notion) / target (se page), icon (chave de IMG_ICONS, opcional),
+    // tiIcon (classe Tabler, fallback se não tiver ícone de imagem), title }.
+    if (item.extraAction) {
+      var extraBtn = document.createElement("button");
+      extraBtn.type = "button";
+      extraBtn.className = "item-extra-action";
+      extraBtn.title = item.extraAction.title || "";
+      extraBtn.setAttribute("aria-label", item.extraAction.title || "Ação extra");
+      if (item.extraAction.icon && IMG_ICONS[item.extraAction.icon]) {
+        var exImg = document.createElement("img");
+        exImg.src = IMG_ICONS[item.extraAction.icon];
+        exImg.alt = "";
+        exImg.width = 15;
+        exImg.height = 15;
+        extraBtn.appendChild(exImg);
+      } else {
+        var exIcon = document.createElement("i");
+        exIcon.className = "ti " + (item.extraAction.tiIcon || "ti-external-link");
+        extraBtn.appendChild(exIcon);
+      }
+      extraBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (item.extraAction.type === "notion" && item.extraAction.url) {
+          window.open(item.extraAction.url, "_blank", "noopener");
+        } else if (item.extraAction.type === "page" && item.extraAction.target) {
+          navigate(item.extraAction.target);
+        }
+      });
+      right.appendChild(extraBtn);
+    }
+
     var chevron = document.createElement("i");
     chevron.className = "item-chevron ti " + (
       item.type === "notion" ? "ti-external-link" :
@@ -8799,6 +8837,26 @@
       if (current === "Comprado") return "";
       return "Comprar";
     }
+    // ícone + texto SEPARADOS (pedido do Georges, rodada 5 — "no celular
+    // com a tela fechada... troque o texto dos botões Sinalizar e
+    // Prioridades por ícones sugestivos... evitando texto e diminuindo o
+    // tamanho do botão, para caber tudo numa única linha"). Emoji já
+    // usado nos 2 estados "marcados" vira o ícone; o estado neutro (ainda
+    // não sinalizado) ganha um ícone Tabler outline, já que não tinha
+    // emoji nenhum antes (só o texto "Sinalizar"/"Prioridade"). O texto
+    // continua existindo (buildCycleActionBtn monta os 2), só que
+    // ".supermercado-status-btn-label" some no celular via CSS — ver
+    // styles.css.
+    function statusButtonIcon(status) {
+      if (status === "Comprar") return { emoji: "🛒" };
+      if (status === "Comprado") return { emoji: "✅" };
+      return { ti: "ti-flag-3" };
+    }
+    function statusButtonText(status) {
+      if (status === "Comprar") return "Comprar";
+      if (status === "Comprado") return "Comprado";
+      return "Sinalizar";
+    }
     function statusButtonLabel(status) {
       if (status === "Comprar") return "🛒 Comprar";
       if (status === "Comprado") return "✅ Comprado";
@@ -8819,6 +8877,16 @@
       if (current === "1 - Urgente") return "Sem urgência";
       if (current === "Sem urgência") return "";
       return "1 - Urgente";
+    }
+    function prioridadeButtonIcon(prioridade) {
+      if (prioridade === "1 - Urgente") return { emoji: "🔥" };
+      if (prioridade === "Sem urgência") return { emoji: "🙂" };
+      return { ti: "ti-alert-triangle" };
+    }
+    function prioridadeButtonText(prioridade) {
+      if (prioridade === "1 - Urgente") return "Urgente";
+      if (prioridade === "Sem urgência") return "Sem urgência";
+      return "Prioridade";
     }
     function prioridadeButtonLabel(prioridade) {
       if (prioridade === "1 - Urgente") return "🔥 Urgente";
@@ -8858,6 +8926,7 @@
       // representa "não sinalizado"); vazio = sem filtro (mostra todas as
       // situações).
       situacaoFilter: new Set(),
+      onlyUrgente: false,
       // categorias recolhidas (pedido do Georges — "Crie botões para eu
       // recolher cada agrupamento/categoria, clicando sobre o respectivo
       // nome") — só existe enquanto a página tá aberta (não persiste entre
@@ -8899,6 +8968,18 @@
       Object.keys(tabButtons).forEach(function (id) {
         tabButtons[id].classList.toggle("active", id === state.view);
       });
+      // pedido do Georges, rodada 5 — "Situação" (Não sinalizado/Comprar/
+      // Comprado) não faz sentido dentro das próprias abas Comprar/
+      // Comprados (redundante com a aba). "Só Urgentes" só faz sentido na
+      // aba Comprar. situacaoWrap/onlyUrgenteWrap são declarados mais
+      // abaixo neste mesmo escopo (var hoisted) — updateTabActive só é
+      // CHAMADA depois de tudo montado, então já existem nesse ponto.
+      if (typeof situacaoWrap !== "undefined") {
+        situacaoWrap.style.display = (state.view === "comprar" || state.view === "comprados") ? "none" : "";
+      }
+      if (typeof onlyUrgenteWrap !== "undefined") {
+        onlyUrgenteWrap.style.display = state.view === "comprar" ? "" : "none";
+      }
     }
     wrap.appendChild(tabsWrap);
 
@@ -9068,6 +9149,25 @@
     }
     wrap.appendChild(situacaoWrap);
 
+    // ---- "Só Urgentes" (pedido do Georges, rodada 5 — "crie botão de
+    // filtro (aquele arredondado, de clicar para selecionar e clicar para
+    // deselecionar) para exibir apenas os Urgentes" na aba Comprar) ----
+    // mesmo estilo pílula dos filtros de Situação acima; visibilidade
+    // controlada em updateTabActive() (só aparece na aba Comprar).
+    var onlyUrgenteWrap = document.createElement("div");
+    onlyUrgenteWrap.className = "supermercado-situacao-pills supermercado-urgente-only-wrap";
+    var onlyUrgenteBtn = document.createElement("button");
+    onlyUrgenteBtn.type = "button";
+    onlyUrgenteBtn.className = "supermercado-situacao-pill supermercado-urgente-only-pill";
+    onlyUrgenteBtn.textContent = "\ud83d\udd25 S\u00f3 Urgentes";
+    onlyUrgenteBtn.addEventListener("click", function () {
+      state.onlyUrgente = !state.onlyUrgente;
+      onlyUrgenteBtn.classList.toggle("active", state.onlyUrgente);
+      repaint();
+    });
+    onlyUrgenteWrap.appendChild(onlyUrgenteBtn);
+    wrap.appendChild(onlyUrgenteWrap);
+
     var resultsWrap = document.createElement("div");
     wrap.appendChild(resultsWrap);
 
@@ -9197,6 +9297,33 @@
       return wrap;
     }
 
+    // monta um botão "cicla ao clicar" com ícone (emoji OU Tabler) +
+    // texto — o texto some no celular (ver ".supermercado-status-btn-
+    // label" em styles.css), o ícone sozinho já é suggestivo o bastante
+    // do estado atual (pedido do Georges, rodada 5).
+    function buildCycleActionBtn(extraClass, iconSpec, text, title, onClick) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "supermercado-status-btn" + (extraClass ? " " + extraClass : "");
+      var iconEl;
+      if (iconSpec.emoji) {
+        iconEl = document.createElement("span");
+        iconEl.className = "supermercado-status-btn-icon";
+        iconEl.textContent = iconSpec.emoji;
+      } else {
+        iconEl = document.createElement("i");
+        iconEl.className = "ti " + iconSpec.ti + " supermercado-status-btn-icon";
+      }
+      btn.appendChild(iconEl);
+      var labelEl = document.createElement("span");
+      labelEl.className = "supermercado-status-btn-label";
+      labelEl.textContent = text;
+      btn.appendChild(labelEl);
+      btn.title = title;
+      btn.addEventListener("click", onClick);
+      return btn;
+    }
+
     function buildRow(it) {
       var meta = catMeta(it.categoria);
       var row = document.createElement("div");
@@ -9257,30 +9384,26 @@
       // clique muda o status" — substitui o antigo <select> de Providência)
       // — cicla "" -> Comprar -> Comprado -> "" a cada clique, ver
       // nextSupermercadoStatus acima.
-      var statusBtn = document.createElement("button");
-      statusBtn.type = "button";
-      statusBtn.className = "supermercado-status-btn" +
-        (it.providencia === "Comprar" ? " comprar" : it.providencia === "Comprado" ? " comprado" : "");
-      statusBtn.textContent = statusButtonLabel(it.providencia);
-      statusBtn.title = statusButtonTitle(it.providencia);
-      statusBtn.addEventListener("click", function () {
-        updateItem(it.id, { providencia: nextSupermercadoStatus(it.providencia) });
-      });
+      var statusBtn = buildCycleActionBtn(
+        it.providencia === "Comprar" ? "comprar" : it.providencia === "Comprado" ? "comprado" : "",
+        statusButtonIcon(it.providencia),
+        statusButtonText(it.providencia),
+        statusButtonTitle(it.providencia),
+        function () { updateItem(it.id, { providencia: nextSupermercadoStatus(it.providencia) }); }
+      );
       row.appendChild(statusBtn);
 
       // botão de Prioridade por clique (pedido do Georges, rodada 4 —
       // "consegue fazer a mesma coisa com Prioridade... Se clicar 1 vez,
       // Urgente; se clicar de novo, Sem urgência") — mesmo padrão do botão
       // de status acima, substitui o antigo <select> de Prioridade.
-      var prioBtn = document.createElement("button");
-      prioBtn.type = "button";
-      prioBtn.className = "supermercado-status-btn supermercado-prio-btn" +
-        (it.prioridade === "1 - Urgente" ? " urgente" : it.prioridade === "Sem urgência" ? " sem-urgencia" : "");
-      prioBtn.textContent = prioridadeButtonLabel(it.prioridade);
-      prioBtn.title = prioridadeButtonTitle(it.prioridade);
-      prioBtn.addEventListener("click", function () {
-        updateItem(it.id, { prioridade: nextSupermercadoPrioridade(it.prioridade) });
-      });
+      var prioBtn = buildCycleActionBtn(
+        "supermercado-prio-btn" + (it.prioridade === "1 - Urgente" ? " urgente" : it.prioridade === "Sem urgência" ? " sem-urgencia" : ""),
+        prioridadeButtonIcon(it.prioridade),
+        prioridadeButtonText(it.prioridade),
+        prioridadeButtonTitle(it.prioridade),
+        function () { updateItem(it.id, { prioridade: nextSupermercadoPrioridade(it.prioridade) }); }
+      );
       row.appendChild(prioBtn);
 
       var delBtn = document.createElement("button");
@@ -9307,6 +9430,10 @@
       // (mostra todas as situações); com algo marcado, só bate o que está
       // ligado.
       if (state.situacaoFilter.size && !state.situacaoFilter.has(it.providencia)) return false;
+      // "Só Urgentes" (pedido do Georges, rodada 5) — só filtra de fato
+      // dentro da aba Comprar (onde o botão aparece); fora dela o flag
+      // fica sem efeito, então trocar de aba nunca esconde item por engano.
+      if (state.view === "comprar" && state.onlyUrgente && it.prioridade !== "1 - Urgente") return false;
       if (state.search) {
         var q = state.search.toLowerCase();
         if ((it.produto || "").toLowerCase().indexOf(q) === -1) return false;
@@ -9525,7 +9652,7 @@
       return res;
     }
 
-    var state = { items: [], loaded: false };
+    var state = { items: [], loaded: false, search: "" };
 
     var statusEl = document.createElement("p");
     statusEl.className = "empty";
@@ -9537,8 +9664,10 @@
     wrap.style.display = "none";
     container.appendChild(wrap);
 
-    // ---- "adicionar remédio" (nome só — composição/finalidade/padrão
-    // ficam editáveis depois, mesmo espírito do form de Supermercado) ----
+    // ---- "adicionar remédio" — nome + composição (pedido do Georges,
+    // rodada 2: "eu devo ter opção para editar a composição ao criar ou
+    // alterar um remédio já cadastro"); finalidade/padrão/número continuam
+    // só editáveis depois, inline em cada linha (ver buildRow abaixo). ----
     var addWrap = document.createElement("div");
     addWrap.className = "remedios-add";
     var addInput = document.createElement("input");
@@ -9546,12 +9675,34 @@
     addInput.placeholder = "Nome do remédio…";
     addInput.className = "remedios-add-input";
     addWrap.appendChild(addInput);
+    var addComposicaoInput = document.createElement("input");
+    addComposicaoInput.type = "text";
+    addComposicaoInput.placeholder = "Composição (ex: Dipirona monoidratada - 1g)…";
+    addComposicaoInput.className = "remedios-add-input remedios-add-composicao";
+    addWrap.appendChild(addComposicaoInput);
     var addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "notes-add-btn";
     addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
     addWrap.appendChild(addBtn);
     wrap.appendChild(addWrap);
+
+    // ---- busca (pedido do Georges: "pesquisa pelo nome... pela
+    // composição... ou pela informação que pedi para você adicionar
+    // (Finalidade)") — filtra em memória, mesmo padrão "normalize()"
+    // (acento-insensível) usado no resto do app. ----
+    var searchWrap = document.createElement("div");
+    searchWrap.className = "remedios-search";
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Pesquisar por nome, composição ou finalidade…";
+    searchInput.className = "remedios-search-input";
+    searchWrap.appendChild(searchInput);
+    wrap.appendChild(searchWrap);
+    searchInput.addEventListener("input", function () {
+      state.search = searchInput.value;
+      renderList();
+    });
 
     var listEl = document.createElement("div");
     listEl.className = "remedios-list";
@@ -9564,9 +9715,10 @@
       authFetch(cfg.templateWorkerUrl + "/remedios", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: nome })
+        body: JSON.stringify({ nome: nome, composicao: addComposicaoInput.value.trim() })
       }).then(handle401).then(function () {
         addInput.value = "";
+        addComposicaoInput.value = "";
         loadItems();
       }).catch(function () {
         statusEl.textContent = "Erro ao adicionar remédio.";
@@ -9575,6 +9727,7 @@
     }
     addBtn.addEventListener("click", addItem);
     addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
+    addComposicaoInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
 
     function updateItem(id, patch) {
       return authFetch(cfg.templateWorkerUrl + "/remedios?id=" + encodeURIComponent(id), {
@@ -9620,19 +9773,63 @@
       var row = document.createElement("div");
       row.className = "remedios-row" + (low ? " low" : "");
 
+      // "número" (pedido do Georges, rodada 2 — "escrevo em cada
+      // comprimido o número daquele remédio para depois saber qual
+      // remédio é") — copiado 1x da propriedade "Identificação" do Notion
+      // (ver REMEDIOS_SEED no worker.js), editável, pode ficar em branco
+      // num item novo até o Georges escrever o número físico e preencher
+      // aqui.
+      var numeroWrap = document.createElement("div");
+      numeroWrap.className = "remedios-row-numero";
+      var numeroInput = document.createElement("input");
+      numeroInput.type = "number";
+      numeroInput.min = "0";
+      numeroInput.className = "remedios-row-numero-input";
+      numeroInput.placeholder = "Nº";
+      numeroInput.title = "Número (etiqueta física do comprimido)";
+      if (it.numero !== null && it.numero !== undefined) numeroInput.value = it.numero;
+      numeroInput.addEventListener("change", function () {
+        var raw = numeroInput.value.trim();
+        var n = raw === "" ? null : Math.max(0, Math.round(Number(raw)) || 0);
+        it.numero = n;
+        updateItem(it.id, { numero: n }).catch(function () {});
+      });
+      numeroWrap.appendChild(numeroInput);
+      row.appendChild(numeroWrap);
+
       var mainCol = document.createElement("div");
       mainCol.className = "remedios-row-main";
       var nomeLine = document.createElement("div");
-      nomeLine.className = "remedios-row-nome";
-      nomeLine.textContent = it.nome;
-      mainCol.appendChild(nomeLine);
-      if (it.composicao || it.finalidade) {
-        var subLine = document.createElement("div");
-        subLine.className = "remedios-row-sub";
-        subLine.textContent = it.composicao || it.finalidade;
-        subLine.title = [it.composicao, it.finalidade].filter(Boolean).join(" — ");
-        mainCol.appendChild(subLine);
+      nomeLine.className = "remedios-row-nome-line";
+      var nomeText = document.createElement("span");
+      nomeText.className = "remedios-row-nome";
+      nomeText.textContent = it.nome;
+      nomeLine.appendChild(nomeText);
+      // ícone "i" com a Finalidade no hover (pedido do Georges: "um ícone
+      // de informação... no qual eu coloco o mouse e aparece a
+      // Finalidade") — tooltip nativo (title), só aparece quando existe
+      // finalidade cadastrada.
+      if (it.finalidade) {
+        var infoIcon = document.createElement("i");
+        infoIcon.className = "ti ti-info-circle remedios-info-icon";
+        infoIcon.title = it.finalidade;
+        nomeLine.appendChild(infoIcon);
       }
+      mainCol.appendChild(nomeLine);
+      // composição editável (pedido do Georges: "eu devo ter opção para
+      // editar a composição ao criar ou alterar um remédio já cadastro")
+      // — mesmo padrão de input inline de padraoInput/numeroInput abaixo.
+      var composicaoInput = document.createElement("input");
+      composicaoInput.type = "text";
+      composicaoInput.className = "remedios-row-composicao-input";
+      composicaoInput.placeholder = "Composição…";
+      composicaoInput.value = it.composicao || "";
+      composicaoInput.addEventListener("change", function () {
+        var v = composicaoInput.value.trim();
+        it.composicao = v;
+        updateItem(it.id, { composicao: v }).catch(function () {});
+      });
+      mainCol.appendChild(composicaoInput);
       row.appendChild(mainCol);
 
       var qtyWrap = document.createElement("div");
@@ -9703,7 +9900,22 @@
         listEl.appendChild(empty);
         return;
       }
-      state.items.forEach(function (it) { listEl.appendChild(buildRow(it)); });
+      // busca por nome/composição/finalidade (pedido do Georges) —
+      // "normalize()" (topo do arquivo) já faz acento-insensível.
+      var q = normalize(state.search.trim());
+      var visible = !q ? state.items : state.items.filter(function (it) {
+        return normalize(it.nome).indexOf(q) !== -1 ||
+          normalize(it.composicao || "").indexOf(q) !== -1 ||
+          normalize(it.finalidade || "").indexOf(q) !== -1;
+      });
+      if (!visible.length) {
+        var emptySearch = document.createElement("p");
+        emptySearch.className = "empty";
+        emptySearch.textContent = "Nenhum remédio encontrado pra essa busca.";
+        listEl.appendChild(emptySearch);
+        return;
+      }
+      visible.forEach(function (it) { listEl.appendChild(buildRow(it)); });
     }
 
     function loadItems() {
@@ -10380,7 +10592,14 @@
         .map(function (it) { return it.id; }).sort();
       if (!pendingIds.length) return [];
       var extraObj = {};
-      extraObj[source.dateProperty] = new Date().toISOString();
+      // BUG real (Georges: "sinalizei um item... não apareceu na Central")
+      // — normalizeNotifDate (topo do arquivo) só aceita o formato de data
+      // do NOTION, um objeto "{ start: ... }"; aqui era gravada uma STRING
+      // pura (new Date().toISOString()), então "dp.start" vinha undefined
+      // e o item era descartado ANTES de chegar nos leadTimes — a
+      // notificação nunca existia, silenciosamente. Precisa do wrapper
+      // "{ start: ... }", igual todo campo de data que vem do Notion.
+      extraObj[source.dateProperty] = { start: new Date().toISOString() };
       // texto fixo (pedido do Georges: "não precisa exibir todos eles...
       // exiba apenas assim: Supermercado: itens pendentes para comprar" —
       // sem contagem dinâmica) + deep link direto pra aba Comprar (ver
@@ -10418,7 +10637,9 @@
       }).map(function (it) { return it.id; }).sort();
       if (!lowIds.length) return [];
       var extraObj = {};
-      extraObj[source.dateProperty] = new Date().toISOString();
+      // mesmo bug/fix de fetchSupermercadoNotificationItems acima —
+      // normalizeNotifDate exige "{ start: ... }", nunca uma string pura.
+      extraObj[source.dateProperty] = { start: new Date().toISOString() };
       return [{
         id: "remedios-low::" + lowIds.join(","),
         title: "Atenção: necessidade de repor Remédios",
@@ -11075,6 +11296,61 @@
     }
     notifPanelEl.addEventListener("touchend", notifSwipeEnd);
     notifPanelEl.addEventListener("touchcancel", notifSwipeReset);
+  }
+
+  // Fechar o Menu lateral ESQUERDO arrastando com o dedo pra esquerda
+  // (pedido do Georges, rodada 5 — "faça a mesma coisa no Menu esquerdo,
+  // que vc fez na central de notificações, no sentido de permitir no
+  // celular rolar para esquerda para esconder o menu lateral") — mesmo
+  // padrão exato do notifSwipe acima, só espelhado (o Menu sai pela
+  // ESQUERDA, então arrastar pra ESQUERDA — dx NEGATIVO — é que fecha,
+  // ao contrário da gaveta de notificações que sai pela direita).
+  // setSidebarVisible/isNarrowScreen são declarados mais abaixo neste
+  // mesmo escopo (mesmo padrão de referência adiantada já usado em
+  // notifSwipe acima — só resolvidos de verdade quando o toque dispara,
+  // bem depois do script inteiro já ter rodado).
+  var SIDEBAR_SWIPE_CLOSE_PX = 70;
+  var sidebarSwipe = { active: false, startX: 0, startY: 0, lastDx: 0 };
+
+  function sidebarSwipeReset() {
+    var sbEl = document.getElementById("sidebar");
+    if (sbEl) {
+      sbEl.classList.remove("sidebar-dragging");
+      sbEl.style.transform = "";
+    }
+    sidebarSwipe.active = false;
+    sidebarSwipe.lastDx = 0;
+  }
+
+  var sidebarSwipeEl = document.getElementById("sidebar");
+  if (sidebarSwipeEl) {
+    sidebarSwipeEl.addEventListener("touchstart", function (e) {
+      if (!isNarrowScreen.matches || !e.touches || e.touches.length !== 1) return;
+      sidebarSwipe.active = true;
+      sidebarSwipe.startX = e.touches[0].clientX;
+      sidebarSwipe.startY = e.touches[0].clientY;
+      sidebarSwipe.lastDx = 0;
+    }, { passive: true });
+
+    sidebarSwipeEl.addEventListener("touchmove", function (e) {
+      if (!sidebarSwipe.active || !e.touches || e.touches.length !== 1) return;
+      var dx = e.touches[0].clientX - sidebarSwipe.startX;
+      var dy = e.touches[0].clientY - sidebarSwipe.startY;
+      if (dx < 0 && Math.abs(dx) > Math.abs(dy)) {
+        sidebarSwipe.lastDx = dx;
+        sidebarSwipeEl.classList.add("sidebar-dragging");
+        sidebarSwipeEl.style.transform = "translateX(" + dx + "px)";
+      }
+    }, { passive: true });
+
+    function sidebarSwipeEnd() {
+      if (!sidebarSwipe.active) return;
+      var dx = sidebarSwipe.lastDx;
+      sidebarSwipeReset();
+      if (dx < -SIDEBAR_SWIPE_CLOSE_PX) setSidebarVisible(false);
+    }
+    sidebarSwipeEl.addEventListener("touchend", sidebarSwipeEnd);
+    sidebarSwipeEl.addEventListener("touchcancel", sidebarSwipeReset);
   }
 
   // ---------------- page render / navigation ----------------

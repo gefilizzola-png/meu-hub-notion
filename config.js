@@ -1273,7 +1273,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-22 01:28",
+  appVersion: "2026-09-22 10:43",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1293,7 +1293,15 @@ const APP_CONFIG = {
   // consideram "já estou na home") sem mexer na raiz da árvore. Aponta pra
   // key "inicio" (título "Painel do Dia" hoje, era "Início").
   startPage: "entrada",
-  homePage: "inicio",
+  // voltou a ser "entrada" (pedido do Georges: "você retirou aquela
+  // Página Inicial, que trazia as 5 páginas que fixamos no menu... coloque
+  // de volta, para o app sempre abrir naquela página, ainda que Menu tbm
+  // tenha essas páginas fixas") — "entrada" ganhou de volta o
+  // "quickButtons" (ver pages.entrada abaixo) e virou de novo a tela que
+  // abre primeiro, mesmo os 5 links já existindo fixos no topo do menu
+  // (sidebarPinned) — as duas coisas coexistem de propósito, o Georges
+  // quer as duas.
+  homePage: "entrada",
   templateWorkerUrl: "https://flat-lake-5b3b.gefilizzola.workers.dev",
 
   // Atalhos FIXOS no topo do menu lateral (pedido do Georges: "visual mais
@@ -1366,19 +1374,24 @@ const APP_CONFIG = {
   ],
 
   pages: {
-    // era "Entrada", depois "Início" — pedido do Georges (rodada do menu
-    // lateral moderno): os 5 links de acesso rápido (Painel do Dia, Lista
-    // de Prioridades, Anotações Rápidas, Favoritas, Financeiro) viraram
-    // atalhos FIXOS no topo do menu (ver "sidebarPinned" lá em cima e
-    // renderSidebarPinned no app.js) — sempre visíveis, sem precisar abrir
-    // pasta nenhuma. Essa página virou só a lista das pastas "de verdade"
-    // que sobraram (Criar páginas/Eventos/Central/Categorias/Biblioteca),
-    // por isso o título mudou pra "Pastas". A KEY interna continua
-    // "entrada" de propósito (trocar exigiria atualizar todo "target:
-    // 'entrada'"/startPage à toa — ninguém vê a key, só o title).
-    // "quickButtons" (grade de cards grandes) foi removido daqui — ficou
-    // redundante com os atalhos fixos do menu.
-    // Os 4 itens que viraram atalho fixo (Painel do Dia/Anotações
+    // era "Entrada", depois "Início" — os 5 links de acesso rápido
+    // (Painel do Dia, Lista de Prioridades, Anotações Rápidas, Favoritas,
+    // Financeiro) viraram TAMBÉM atalhos fixos no topo do menu (ver
+    // "sidebarPinned" lá em cima e renderSidebarPinned no app.js), mas o
+    // "quickButtons" abaixo (a grade de cards grandes) voltou pra esta
+    // página (tinha sido removido por parecer redundante com o menu fixo
+    // — o Georges pediu de volta: "coloque de volta, para o app sempre
+    // abrir naquela página, ainda que Menu tbm tenha essas páginas
+    // fixas" — as duas formas de acesso coexistem de propósito). O título
+    // continua "Pastas" (a página ainda é a raiz de onde se alcança
+    // Criar páginas/Eventos/Central/Categorias/Biblioteca pela ÁRVORE do
+    // menu lateral, mesmo os cards grandes cobrindo o corpo dela — ver
+    // comentário de "quickButtons" no app.js: a árvore/busca lê "items"
+    // direto do config, sem depender do que renderContent desenha no
+    // corpo). A KEY interna continua "entrada" de propósito (trocar
+    // exigiria atualizar todo "target: 'entrada'"/startPage à toa —
+    // ninguém vê a key, só o title).
+    // Os 4 itens que também são atalho fixo (Painel do Dia/Anotações
     // Rápidas/Lista de Prioridades/Favoritas) CONTINUAM em "items" abaixo,
     // só com "pinnedOnly:true" — de propósito, NÃO foram removidos de
     // verdade: buildIndex()/buildTreeNode() (app.js) percorrem a árvore a
@@ -1391,6 +1404,16 @@ const APP_CONFIG = {
     // dos panos.
     entrada: {
       title: "Pastas",
+      // grade de cards grandes (mesmos 5 links/ícones/cores de
+      // sidebarPinned, ver comentário grande acima) — é o que o Georges
+      // vê ao abrir o app agora (homePage: "entrada").
+      quickButtons: [
+        { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
+        { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
+        { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
+        { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
+        { label: "Financeiro", target: "financeiro_contas_mensais", icon: "wallet", color: "#0f9b8e" }
+      ],
       items: [
         { label: "Painel do Dia", type: "page", target: "inicio", icon: "home", pinnedOnly: true },
         { label: "Anotações Rápidas", type: "page", target: "anotacoes", icon: "notes", pinnedOnly: true },
@@ -2361,11 +2384,30 @@ const APP_CONFIG = {
           title: "LISTAS",
           items: [
             { label: "Churrasco", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Churrasco-1870481486dd8037a0bfd14598290fff?source=copy_link" },
-            { label: "Remédios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/ecb015baa3b040bcbc6cde03df73ef71?v=4a1b86d1a8dd4cdd881a7d3e834c125f&source=copy_link" },
-            // era link externo pro Notion — agora a Lista de Supermercado
-            // vive no próprio Meu Hub (ver pages.supermercado), então o
-            // botão aqui passa a ser navegação interna (pedido do Georges).
-            { label: "Supermercado", type: "page", target: "supermercado", icon: "shopping-cart" }
+            // Remédios e Supermercado (pedido do Georges, rodada 5 — "coloque
+            // dois botões: um com ícone no Notion que leva para a página do
+            // Notion [...] e outro que leva para nosso app") — ação
+            // principal do card agora é a navegação interna (app), com um
+            // 2º botão pequeno (item.extraAction, ver buildItemEl no
+            // app.js) abrindo a página original do Notion numa nova aba.
+            {
+              label: "Remédios", type: "page", target: "remedios", icon: "pill",
+              extraAction: {
+                type: "notion",
+                url: "https://app.notion.com/p/georges-filizzola/ecb015baa3b040bcbc6cde03df73ef71?v=4a1b86d1a8dd4cdd881a7d3e834c125f&source=copy_link",
+                icon: "notion",
+                title: "Abrir no Notion"
+              }
+            },
+            {
+              label: "Supermercado", type: "page", target: "supermercado", icon: "shopping-cart",
+              extraAction: {
+                type: "notion",
+                url: "https://app.notion.com/p/794248e1d5e6482f82aaecaf7369957a?pvs=204",
+                icon: "notion",
+                title: "Abrir no Notion"
+              }
+            }
           ]
         },
         {
