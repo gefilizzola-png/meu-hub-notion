@@ -1026,11 +1026,16 @@ var PRIORIDADES_PERIODO_SORT_ORDER = ["Manhã", "Expediente", "Tarde", "Noite", 
 // também.
 var SUPERMERCADO_CATEGORIA_OPTIONS = ["Bazar", "Bebidas", "Conservas", "Farmácia", "Frigorífico", "Frios e Laticínios", "Higiene", "Hortifruti", "Limpeza", "Matinais", "Mercearia", "Padaria", "Pet Care"];
 var SUPERMERCADO_PRIORIDADE_OPTIONS = ["1 - Urgente", "2 - Alta", "3 - Média", "4 - Baixa"];
-// Ordem pensada pro fluxo de compras: Comprar (o que falta) primeiro,
-// Comprado/Já tem/Desnecessário depois (já resolvidos), Definir por
-// último (ainda sem decisão) — usada tanto no <select> de edição quanto
-// nos filtros da página.
-var SUPERMERCADO_PROVIDENCIA_OPTIONS = ["Comprar", "Comprado", "Já tem", "Desnecessário", "Definir"];
+// Simplificado pra só 3 estados (pedido do Georges: "Vamos manter somente 3
+// opções de status: Comprar, Comprado ou não sinalizado. Quando precisar
+// comprar, clico em Comprar e sinaliza. Depois que colocar no carrinho,
+// clico e muda para Comprado [...] clico novamente de forma individual
+// para tirar a sinalização") — "não sinalizado" é "" (vazio), não entra
+// nessa lista; o botão de status no app.js cicla ""→Comprar→Comprado→""
+// clicando, igual ao ciclo de 3 estados dos chips da Central de
+// Notificações. Tem que bater EXATAMENTE com SUPERMERCADO_PROVIDENCIA no
+// worker.js.
+var SUPERMERCADO_PROVIDENCIA_OPTIONS = ["Comprar", "Comprado"];
 
 // Emoji + cor por Categoria (pedido do Georges — "visual mais bonito,
 // moderno, pintando de cores diferentes os itens de cada categoria, com
@@ -1220,7 +1225,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-21 22:23",
+  appVersion: "2026-09-21 23:25",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1349,8 +1354,7 @@ const APP_CONFIG = {
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
         { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" },
         { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" },
-        { label: "Recentes", type: "page", target: "recentes", icon: "history" },
-        { label: "Lista de Supermercado", type: "page", target: "supermercado", icon: "shopping-cart" }
+        { label: "Recentes", type: "page", target: "recentes", icon: "history" }
       ]
     },
 
@@ -2036,12 +2040,17 @@ const APP_CONFIG = {
         prioridade: { label: "Prioridade", options: SUPERMERCADO_PRIORIDADE_OPTIONS },
         providencia: { label: "Providência", options: SUPERMERCADO_PROVIDENCIA_OPTIONS }
       },
-      // as 3 visualizações espelham as 3 views que a base tinha no Notion
-      // (Produtos/Comprar/Comprados) — ver renderSupermercadoPage no app.js.
+      // as 3 primeiras visualizações espelham as views que a base tinha no
+      // Notion (Produtos/Comprar/Comprados) — ver renderSupermercadoPage no
+      // app.js. "Favoritos" (pedido do Georges — "itens de mercado que
+      // forem mais recorrentemente sinalizados para Comprar") é nova,
+      // ordenada por comprarCount (worker.js) em vez de alfabética/
+      // categoria.
       views: [
         { id: "produtos", label: "Produtos" },
         { id: "comprar", label: "Comprar" },
-        { id: "comprados", label: "Comprados" }
+        { id: "comprados", label: "Comprados" },
+        { id: "favoritos", label: "Favoritos" }
       ]
     },
 
@@ -2278,7 +2287,10 @@ const APP_CONFIG = {
           items: [
             { label: "Churrasco", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Churrasco-1870481486dd8037a0bfd14598290fff?source=copy_link" },
             { label: "Remédios", type: "notion", url: "https://app.notion.com/p/georges-filizzola/ecb015baa3b040bcbc6cde03df73ef71?v=4a1b86d1a8dd4cdd881a7d3e834c125f&source=copy_link" },
-            { label: "Supermercado", type: "notion", url: "https://app.notion.com/p/georges-filizzola/794248e1d5e6482f82aaecaf7369957a?v=e5c8a3d51bb742ce86bf2bcc5795f618&source=copy_link" }
+            // era link externo pro Notion — agora a Lista de Supermercado
+            // vive no próprio Meu Hub (ver pages.supermercado), então o
+            // botão aqui passa a ser navegação interna (pedido do Georges).
+            { label: "Supermercado", type: "page", target: "supermercado", icon: "shopping-cart" }
           ]
         },
         {
@@ -2322,7 +2334,18 @@ const APP_CONFIG = {
     cat_pessoal: {
       title: "Pessoal",
       items: [
-        { label: "Financeiro", type: "page", target: "financeiro", icon: "wallet" }
+        { label: "Financeiro", type: "page", target: "financeiro", icon: "wallet" },
+        // "Listas" (pedido do Georges — "Mova a pasta Lista de
+        // Supermercados para Categorias->Pessoal->Listas"). Saiu de
+        // "entrada.items" (pasta "Pastas", raiz do menu) pra morar aqui.
+        { label: "Listas", type: "page", target: "cat_pessoal_listas", icon: "list" }
+      ]
+    },
+
+    cat_pessoal_listas: {
+      title: "Listas",
+      items: [
+        { label: "Lista de Supermercado", type: "page", target: "supermercado", icon: "shopping-cart" }
       ]
     },
 
@@ -3165,13 +3188,6 @@ const APP_CONFIG = {
         { label: "Lista de Serviços e Alíquotas", type: "page", target: "pmf_trib_issqn_listaservicosaliquotas" }
       ]
     },
-    pmf_trib_issqn_listaservicosaliquotas: { title: "Lista de Serviços e Alíquotas", items: [] },
-
-    recentes: {
-      title: "Recentes",
-      items: [
-        { label: "Recentes", type: "notion", url: "https://app.notion.com/library/recents?space=georges-filizzola", icon: "clock" }
-      ]
-    }
+    pmf_trib_issqn_listaservicosaliquotas: { title: "Lista de Serviços e Alíquotas", items: [] }
   }
 };

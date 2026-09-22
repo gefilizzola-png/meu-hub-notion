@@ -474,6 +474,20 @@
   var recentSettingsState = { limit: cfg.recentLimitDefault || 8, loaded: false };
   var recentSettingsEditorOpen = false;
 
+  // recolher/expandir a seção inteira (pedido do Georges — "crie um botão
+  // para recolher os itens Recentes, caso em algum momento eu queira
+  // economizar espaço no menu, mantendo como padrão os itens recentes
+  // exibidos, tal como está hoje") — persistido em localStorage, mesmo
+  // padrão de RAIL_COLLAPSE_STORAGE_KEY acima; default é SEMPRE expandido
+  // (getItem novo/nunca mexeu = null !== "1" = false = não recolhido).
+  var RECENT_SECTION_COLLAPSE_KEY = "hub_recent_section_collapsed";
+  function isRecentSectionCollapsed() {
+    try { return localStorage.getItem(RECENT_SECTION_COLLAPSE_KEY) === "1"; } catch (e) { return false; }
+  }
+  function setRecentSectionCollapsed(collapsed) {
+    try { localStorage.setItem(RECENT_SECTION_COLLAPSE_KEY, collapsed ? "1" : "0"); } catch (e) { /* modo privado etc */ }
+  }
+
   function fetchRecentSettings() {
     return authFetch(cfg.templateWorkerUrl + "/recent-settings")
       .then(function (res) { return res.ok ? res.json() : null; })
@@ -535,6 +549,22 @@
     var headActions = document.createElement("span");
     headActions.className = "sidebar-section-head-actions";
 
+    // recolher/expandir a seção inteira (pedido do Georges — "crie um
+    // botão de recolher os itens Recentes [...] mantendo como padrão os
+    // itens recentes exibidos") — chevron, mesmo padrão visual dos outros
+    // toggles de recolher do app.
+    var collapsed = isRecentSectionCollapsed();
+    var collapseBtn = document.createElement("button");
+    collapseBtn.type = "button";
+    collapseBtn.className = "sidebar-section-head-link";
+    collapseBtn.title = collapsed ? "Expandir Recentes" : "Recolher Recentes";
+    collapseBtn.innerHTML = '<i class="ti ' + (collapsed ? "ti-chevron-right" : "ti-chevron-down") + '"></i>';
+    collapseBtn.addEventListener("click", function () {
+      setRecentSectionCollapsed(!isRecentSectionCollapsed());
+      renderSidebarRecent();
+    });
+    headActions.appendChild(collapseBtn);
+
     // engrenagem — abre/fecha o formulariozinho "quantas exibir".
     var gearBtn = document.createElement("button");
     gearBtn.type = "button";
@@ -563,6 +593,10 @@
     headActions.appendChild(moreLink);
     head.appendChild(headActions);
     wrap.appendChild(head);
+
+    // recolhida — só o cabeçalho aparece (com o botão pra expandir de
+    // novo); nem o formulário de quantidade nem a lista são montados.
+    if (collapsed) return;
 
     if (recentSettingsEditorOpen) {
       var editor = document.createElement("div");
@@ -8709,6 +8743,29 @@
       return (cat && meta && meta[cat]) || CAT_FALLBACK_META;
     }
 
+    // ciclo de status por clique (pedido do Georges: "Vamos manter somente
+    // 3 opções de status: Comprar, Comprado ou não sinalizado [...] clico
+    // em Comprar e sinaliza [...] clico e muda para Comprado [...] clico
+    // novamente de forma individual para tirar a sinalização" — mesmo
+    // padrão de ciclo de 3 estados por clique já usado nos chips de
+    // categoria da Central de Notificações, ver cycleNotifCategoryChip).
+    // "" (não sinalizado) -> "Comprar" -> "Comprado" -> "" de novo.
+    function nextSupermercadoStatus(current) {
+      if (current === "Comprar") return "Comprado";
+      if (current === "Comprado") return "";
+      return "Comprar";
+    }
+    function statusButtonLabel(status) {
+      if (status === "Comprar") return "🛒 Comprar";
+      if (status === "Comprado") return "✅ Comprado";
+      return "Sinalizar";
+    }
+    function statusButtonTitle(status) {
+      if (status === "Comprar") return "Clique quando colocar no carrinho — muda pra Comprado";
+      if (status === "Comprado") return "Clique pra tirar a sinalização";
+      return "Clique pra sinalizar que precisa comprar";
+    }
+
     var state = {
       items: [],
       loaded: false,
@@ -8722,9 +8779,16 @@
       // momento).
       groupBy: "categoria",
       // filtro de Situação (pedido do Georges — "Crie filtros pela
-      // Situação") — Set de valores de Providência ativos; vazio = sem
-      // filtro (mostra todas as situações).
+      // Situação") — Set de valores de Providência ativos ("" incluso,
+      // representa "não sinalizado"); vazio = sem filtro (mostra todas as
+      // situações).
       situacaoFilter: new Set(),
+      // categorias recolhidas (pedido do Georges — "Crie botões para eu
+      // recolher cada agrupamento/categoria, clicando sobre o respectivo
+      // nome") — só existe enquanto a página tá aberta (não persiste entre
+      // visitas, mesmo padrão das outras divisórias recolhíveis do app que
+      // nascem sem estado salvo).
+      collapsedCats: new Set(),
       search: ""
     };
 
@@ -8814,18 +8878,40 @@
       organizeSelect.appendChild(o);
     });
     filterWrap.appendChild(organizeSelect);
+
+    // "Limpar situação de todos" (pedido do Georges — "Faça um botão pelo
+    // qual eu consiga limpar a situação de todos os itens [...] uso botão
+    // para limpar todos os itens para não sinalizado") — zera Comprar/
+    // Comprado de TODA a lista de uma vez, sem mexer em produto/categoria/
+    // datas/comprarCount (histórico preservado, ver
+    // handleSupermercadoClearStatus no worker.js). Confirmação antes (mesmo
+    // cuidado do botão de excluir item — ação em massa, difícil de
+    // desfazer manualmente).
+    var clearStatusBtn = document.createElement("button");
+    clearStatusBtn.type = "button";
+    clearStatusBtn.className = "supermercado-clear-status-btn";
+    clearStatusBtn.textContent = "Limpar situação de todos";
+    clearStatusBtn.addEventListener("click", function () {
+      if (!window.confirm("Limpar a situação (Comprar/Comprado) de TODOS os itens da lista? Produtos, categorias e histórico continuam intactos — só a sinalização atual volta pra \"não sinalizado\".")) return;
+      clearAllStatus();
+    });
+    filterWrap.appendChild(clearStatusBtn);
     wrap.appendChild(filterWrap);
 
     // ---- filtro de Situação (pedido do Georges — "Crie filtros pela
-    // Situação") — pílulas multi-select, mesmo padrão visual das abas. ----
+    // Situação") — pílulas multi-select, mesmo padrão visual das abas.
+    // Inclui "" (Não sinalizado) além das opções de fields.providencia —
+    // pedido do Georges de poder achar rápido o que ainda não tem status
+    // nenhum. ----
     var situacaoWrap = document.createElement("div");
     situacaoWrap.className = "supermercado-situacao-pills";
     var situacaoBtns = {};
-    (fields.providencia && fields.providencia.options || []).forEach(function (opt) {
+    var situacaoOptions = [""].concat(fields.providencia && fields.providencia.options || []);
+    situacaoOptions.forEach(function (opt) {
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "supermercado-situacao-pill";
-      btn.textContent = opt;
+      btn.textContent = opt === "" ? "Não sinalizado" : opt;
       btn.addEventListener("click", function () {
         if (state.situacaoFilter.has(opt)) state.situacaoFilter.delete(opt);
         else state.situacaoFilter.add(opt);
@@ -8901,24 +8987,35 @@
       catLabel.style.color = meta.color;
       catLabel.textContent = it.categoria || "Sem categoria";
       subLine.appendChild(catLabel);
-      // sinalizador "precisa comprar" (pedido do Georges) — aparece em
-      // QUALQUER aba onde o item entre (Produtos mostra tudo, Comprar já é
-      // só isso — o selo ainda ajuda a bater o olho rápido).
-      if (it.providencia === "Comprar") {
-        var needBadge = document.createElement("span");
-        needBadge.className = "supermercado-need-badge";
-        needBadge.textContent = "🛒 Precisa comprar";
-        subLine.appendChild(needBadge);
+      // contador de quantas vezes já foi sinalizado "Comprar" (pedido do
+      // Georges — base da aba "Favoritos") — só aparece quando já
+      // aconteceu pelo menos 1 vez, discreto, não é o sinalizador
+      // principal (esse agora é o próprio botão de status, ver abaixo).
+      if (it.comprarCount > 0) {
+        var countBadge = document.createElement("span");
+        countBadge.className = "supermercado-count-badge";
+        countBadge.textContent = "🔁 " + it.comprarCount + "x";
+        countBadge.title = "Já foi sinalizado \"Comprar\" " + it.comprarCount + " vez" + (it.comprarCount === 1 ? "" : "es");
+        subLine.appendChild(countBadge);
       }
       nameCol.appendChild(subLine);
       row.appendChild(nameCol);
 
-      var provWrap = document.createElement("div");
-      provWrap.className = "supermercado-row-field";
-      provWrap.appendChild(buildSelect("providencia", it.providencia, function (v) {
-        updateItem(it.id, { providencia: v, autoStampDate: saoPauloDateKey(Date.now()) });
-      }));
-      row.appendChild(provWrap);
+      // botão de status por clique (pedido do Georges: "Vamos fazer algo
+      // parecido com o que fizemos na Central de Notificações, onde cada
+      // clique muda o status" — substitui o antigo <select> de Providência)
+      // — cicla "" -> Comprar -> Comprado -> "" a cada clique, ver
+      // nextSupermercadoStatus acima.
+      var statusBtn = document.createElement("button");
+      statusBtn.type = "button";
+      statusBtn.className = "supermercado-status-btn" +
+        (it.providencia === "Comprar" ? " comprar" : it.providencia === "Comprado" ? " comprado" : "");
+      statusBtn.textContent = statusButtonLabel(it.providencia);
+      statusBtn.title = statusButtonTitle(it.providencia);
+      statusBtn.addEventListener("click", function () {
+        updateItem(it.id, { providencia: nextSupermercadoStatus(it.providencia), autoStampDate: saoPauloDateKey(Date.now()) });
+      });
+      row.appendChild(statusBtn);
 
       var prioWrap = document.createElement("div");
       prioWrap.className = "supermercado-row-field";
@@ -8972,6 +9069,18 @@
       return true;
     }
 
+    // ordena por comprarCount (desc) na aba Favoritos — desempate
+    // alfabético; nas outras abas é só alfabético (mesmo comportamento de
+    // antes). Usada tanto no agrupamento por categoria (dentro de cada
+    // grupo) quanto na ordem alfabética "flat".
+    function sortForView(a, b) {
+      if (state.view === "favoritos") {
+        var diff = (b.comprarCount || 0) - (a.comprarCount || 0);
+        if (diff !== 0) return diff;
+      }
+      return (a.produto || "").localeCompare(b.produto || "", "pt-BR");
+    }
+
     function repaint() {
       resultsWrap.innerHTML = "";
       var filtered = state.items.filter(matchesFilters);
@@ -8981,6 +9090,13 @@
         viewItems = filtered.filter(function (it) { return it.providencia === "Comprar"; });
       } else if (state.view === "comprados") {
         viewItems = filtered.filter(function (it) { return it.providencia === "Comprado"; });
+      } else if (state.view === "favoritos") {
+        // "Favoritos" (pedido do Georges — "itens de mercado que forem
+        // mais recorrentemente sinalizados para Comprar") — todo item que
+        // já foi sinalizado "Comprar" pelo menos 1 vez, sem importar a
+        // situação ATUAL (comprado ou não); ordenado por comprarCount, ver
+        // sortForView.
+        viewItems = filtered.filter(function (it) { return (it.comprarCount || 0) > 0; });
       } else {
         // "Produtos" (pedido do Georges — sinalizador de "precisa comprar"
         // só faz sentido se o item também aparecer aqui) — TODOS os itens,
@@ -8993,7 +9109,8 @@
       if (!viewItems.length) {
         var empty = document.createElement("p");
         empty.className = "empty";
-        empty.textContent = "Nenhum item aqui.";
+        empty.textContent = state.view === "favoritos" ?
+          "Nenhum item foi sinalizado para comprar ainda." : "Nenhum item aqui.";
         resultsWrap.appendChild(empty);
         return;
       }
@@ -9008,9 +9125,17 @@
         });
         Object.keys(byCat).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (cat) {
           var meta = catMeta(cat === "Sem categoria" ? "" : cat);
+          var isCollapsed = state.collapsedCats.has(cat);
           var head = document.createElement("div");
-          head.className = "supermercado-group-head";
+          head.className = "supermercado-group-head" + (isCollapsed ? " collapsed" : "");
           head.style.setProperty("--cat-color", meta.color);
+          // cabeçalho clicável recolhe/expande o grupo (pedido do Georges
+          // — "Crie botões para eu recolher cada agrupamento/categoria,
+          // clicando sobre o respectivo nome") — mesmo padrão de
+          // buildCollapsibleSection (chevron + clique no título inteiro).
+          var chevron = document.createElement("i");
+          chevron.className = "ti " + (isCollapsed ? "ti-chevron-right" : "ti-chevron-down") + " supermercado-group-head-chevron";
+          head.appendChild(chevron);
           var headEmoji = document.createElement("span");
           headEmoji.className = "supermercado-group-head-emoji";
           headEmoji.textContent = meta.emoji;
@@ -9018,18 +9143,25 @@
           var headText = document.createElement("span");
           headText.textContent = cat + " (" + byCat[cat].length + ")";
           head.appendChild(headText);
-          resultsWrap.appendChild(head);
-          var list = document.createElement("div");
-          list.className = "supermercado-list";
-          byCat[cat].sort(function (a, b) { return (a.produto || "").localeCompare(b.produto || "", "pt-BR"); }).forEach(function (it) {
-            list.appendChild(buildRow(it));
+          head.addEventListener("click", function () {
+            if (state.collapsedCats.has(cat)) state.collapsedCats.delete(cat);
+            else state.collapsedCats.add(cat);
+            repaint();
           });
-          resultsWrap.appendChild(list);
+          resultsWrap.appendChild(head);
+          if (!isCollapsed) {
+            var list = document.createElement("div");
+            list.className = "supermercado-list";
+            byCat[cat].sort(sortForView).forEach(function (it) {
+              list.appendChild(buildRow(it));
+            });
+            resultsWrap.appendChild(list);
+          }
         });
       } else {
         var list2 = document.createElement("div");
         list2.className = "supermercado-list";
-        viewItems.sort(function (a, b) { return (a.produto || "").localeCompare(b.produto || "", "pt-BR"); }).forEach(function (it) {
+        viewItems.sort(sortForView).forEach(function (it) {
           list2.appendChild(buildRow(it));
         });
         resultsWrap.appendChild(list2);
@@ -9070,6 +9202,18 @@
           statusEl.textContent = "Erro ao excluir. Tente novamente.";
           statusEl.style.display = "";
         });
+    }
+
+    // "Limpar situação de todos" (pedido do Georges) — ver
+    // handleSupermercadoClearStatus no worker.js; botão fica desabilitado
+    // enquanto a chamada tá em voo, mesmo cuidado de addItem/addBtn.
+    function clearAllStatus() {
+      clearStatusBtn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/supermercado-clear-status", { method: "POST" })
+        .then(handle401).then(loadItems).catch(function () {
+          statusEl.textContent = "Erro ao limpar situação. Tente novamente.";
+          statusEl.style.display = "";
+        }).finally(function () { clearStatusBtn.disabled = false; });
     }
 
     function addItem() {

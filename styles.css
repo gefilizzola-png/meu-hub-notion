@@ -4219,13 +4219,30 @@ html, body {
   font-size: 12.5px;
   color: #2c2c2a;
 }
+/* "Limpar situação de todos" (pedido do Georges) — botão discreto, mesma
+   altura dos outros controles da barra de filtros, tom neutro (não é uma
+   ação destrutiva de dados, só zera a sinalização — não precisa do
+   vermelho do botão de excluir item). */
+.supermercado-clear-status-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #5c5c58;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.supermercado-clear-status-btn:hover { border-color: #b0413a; color: #b0413a; }
+.supermercado-clear-status-btn:disabled { opacity: 0.6; cursor: default; }
 
-/* cabeçalho de grupo por categoria (aba "Comprar", agrupada — espelha a
-   view "Comprar" do Notion, que era agrupada por Categoria). */
 /* cabeçalho de grupo por categoria (pedido do Georges — "agrupamentos" em
    qualquer aba, com "cores diferentes... ícones/emojis"): pinta o texto e o
    emoji com --cat-color (ver SUPERMERCADO_CATEGORIA_META em config.js,
-   aplicado via categoriaMeta no app.js). */
+   aplicado via categoriaMeta no app.js). Clicável (pedido do Georges —
+   "botões para eu recolher cada agrupamento/categoria, clicando sobre o
+   respectivo nome") — chevron muda de direção conforme .collapsed. */
 .supermercado-group-head {
   display: flex;
   align-items: center;
@@ -4236,9 +4253,13 @@ html, body {
   letter-spacing: 0.02em;
   color: var(--cat-color, #7a7a76);
   margin: 16px 0 6px;
+  cursor: pointer;
+  user-select: none;
 }
 .supermercado-group-head:first-child { margin-top: 0; }
 .supermercado-group-head-emoji { font-size: 16px; }
+.supermercado-group-head-chevron { font-size: 13px; }
+.supermercado-group-head.collapsed { opacity: 0.75; }
 
 .supermercado-list { display: flex; flex-direction: column; gap: 6px; }
 /* linha do item — borda esquerda colorida pela categoria (--cat-color, ver
@@ -4303,21 +4324,44 @@ html, body {
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-/* pílula "precisa comprar" (pedido do Georges — "algum sinalizador
-   naqueles que precisa Comprar") — cor âmbar fixa, sempre a mesma
-   independente da categoria do item (é um SINAL de status, não de
-   identidade). */
-.supermercado-need-badge {
+/* contador "já foi sinalizado Comprar Nx" (pedido do Georges — base da
+   aba Favoritos) — discreto, tom neutro (é histórico, não um alerta). */
+.supermercado-count-badge {
   font-size: 10.5px;
-  font-weight: 700;
-  color: #b35900;
-  background: #fff4e6;
-  border: 1px solid #ffd8a8;
-  border-radius: 999px;
-  padding: 1px 8px;
+  font-weight: 600;
+  color: #8a8a86;
   white-space: nowrap;
 }
 .supermercado-row-field { flex-shrink: 0; }
+/* botão de status por clique (pedido do Georges — "algo parecido com o
+   que fizemos na Central de Notificações, onde cada clique muda o
+   status") — substitui o antigo <select> de Providência; 3 estados
+   visuais, mesmo espírito de .supermercado-view-btn.active (pílula sólida
+   quando "ligado"). */
+.supermercado-status-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #5c5c58;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.supermercado-status-btn:hover { border-color: #4a90d9; }
+.supermercado-status-btn.comprar {
+  background: #fff4e6;
+  border-color: #ffd8a8;
+  color: #b35900;
+}
+.supermercado-status-btn.comprado {
+  background: #ebfbee;
+  border-color: #b2f2bb;
+  color: #2b8a3e;
+}
 /* linha de pílulas do filtro de Situação (pedido do Georges — "Crie
    filtros pela Situação") — clique liga/desliga, seleção múltipla (mesmo
    visual "pílula" das abas de visualização acima, com estado .active). */
