@@ -9298,18 +9298,32 @@
     pages.forEach(function (p) {
       var dp = normalizeNotifDate(p.extra && p.extra[source.dateProperty]);
       if (!dp) return;
-      var eventTime = new Date(dp.start).getTime();
-      if (isNaN(eventTime)) return;
-      // campo só com DATA (sem "T" na string, ex: Aniversários/Vencimento
-      // do Financeiro) não tem hora de verdade — igual ao comentário de
-      // formatDateRangeExtra acima: o Notion manda só "2026-09-22", o JS
-      // entende isso como meia-noite UTC, e exibir isso no fuso de SP
-      // "volta um dia" (22/09 00:00 UTC vira 21/09 21:00 em SP). Guarda se
-      // tinha hora de verdade pra notifDateLabel formatar certo (UTC sem
-      // "voltar o dia" quando não tem hora, SP quando tem) — bug real
-      // reportado pelo Georges: Aniversários de dias DIFERENTES (22/09 e
-      // 23/09) apareciam os dois como "21/09 às 21:00".
+      // campo só com DATA (sem "T" na string, ex: Aniversários/Isenções/
+      // Vencimento do Financeiro) não tem hora de verdade — igual ao
+      // comentário de formatDateRangeExtra acima: o Notion manda só
+      // "2026-09-22", e "new Date(dp.start)" entende isso como MEIA-NOITE
+      // UTC, não meia-noite em Brasília. Isso não é só um problema de
+      // EXIBIÇÃO (já corrigido em notifDateLabel): o GATILHO da
+      // notificação também usava esse instante errado, jogando o "evento"
+      // ~3h pro dia ANTERIOR em Brasília (22/09 00:00 UTC = 21/09 21:00
+      // em SP) — bug real reportado pelo Georges: um item com prazo
+      // 22/09 e antecedência "1 hora antes" já aparecia na Central às 20h
+      // do dia 21/09, quase 1 dia inteiro cedo demais.
       var hasTime = typeof dp.start === "string" && dp.start.indexOf("T") !== -1;
+      var eventTime;
+      if (hasTime) {
+        eventTime = new Date(dp.start).getTime();
+      } else {
+        // pedido do Georges: item sem hora definida (só data) notifica
+        // tomando 08:00 (fuso de Brasília) como a hora do evento — monta
+        // o instante direto em UTC (08:00 America/Sao_Paulo = 11:00 UTC;
+        // fuso fixo, sem horário de verão no Brasil desde 2019) a partir
+        // dos números "YYYY-MM-DD", em vez de deixar o JS interpretar a
+        // string como meia-noite UTC.
+        var dateParts = (dp.start || "").split("-").map(Number);
+        eventTime = Date.UTC(dateParts[0], (dateParts[1] || 1) - 1, dateParts[2] || 1, 11, 0, 0);
+      }
+      if (isNaN(eventTime)) return;
       if (eventTime < now - NOTIF_GRACE_MS) return;
       source.leadTimes.forEach(function (lt) {
         var triggerTime = eventTime - leadTimeMs(lt);
