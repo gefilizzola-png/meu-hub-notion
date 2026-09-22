@@ -1013,6 +1013,25 @@ var PRIORIDADES_PERIODO_OPTIONS = ["Manhã", "Tarde", "Noite", "Final de Semana"
 // e ali "sem valor" sempre vai pro fim). Ver sortItems() no app.js.
 var PRIORIDADES_PERIODO_SORT_ORDER = ["Manhã", "Expediente", "Tarde", "Noite", "", "Final de Semana"];
 
+// ---------------- Lista de Supermercado (página própria, sem Notion) ----------------
+// Trazida pro Meu Hub a partir da base "Pessoal / Listas / Supermercado" do
+// Notion (pedido do Georges — ver pages.supermercado mais abaixo e
+// renderSupermercadoPage no app.js), mas 100% reconstruída em KV a partir
+// daqui pra frente: NUNCA lê nem escreve na base do Notion (mesma decisão
+// de Lista de Prioridades acima — regra permanente do app + as colunas
+// Comprado/Comprar/Já tem/Limpar de lá serem propriedades tipo BOTÃO,
+// impossíveis de acionar pela API). As 3 listas abaixo têm que bater
+// EXATAMENTE (mesmo texto, mesma ordem) com SUPERMERCADO_CATEGORIA/
+// PRIORIDADE/PROVIDENCIA no worker.js — se um valor mudar aqui, muda lá
+// também.
+var SUPERMERCADO_CATEGORIA_OPTIONS = ["Bazar", "Bebidas", "Conservas", "Farmácia", "Frigorífico", "Frios e Laticínios", "Higiene", "Hortifruti", "Limpeza", "Matinais", "Mercearia", "Padaria", "Pet Care"];
+var SUPERMERCADO_PRIORIDADE_OPTIONS = ["1 - Urgente", "2 - Alta", "3 - Média", "4 - Baixa"];
+// Ordem pensada pro fluxo de compras: Comprar (o que falta) primeiro,
+// Comprado/Já tem/Desnecessário depois (já resolvidos), Definir por
+// último (ainda sem decisão) — usada tanto no <select> de edição quanto
+// nos filtros da página.
+var SUPERMERCADO_PROVIDENCIA_OPTIONS = ["Comprar", "Comprado", "Já tem", "Desnecessário", "Definir"];
+
 // ---------------- "Programação" — slots fixos do dia (pedido do Georges) ----------------
 // Divisória nova (ver pages.prioridades.scheduleSlots mais abaixo e o bloco
 // "Programação" dentro de renderPrioritiesTable no app.js — função
@@ -1178,7 +1197,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-21 21:07",
+  appVersion: "2026-09-21 21:45",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1307,7 +1326,8 @@ const APP_CONFIG = {
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
         { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" },
         { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" },
-        { label: "Recentes", type: "page", target: "recentes", icon: "history" }
+        { label: "Recentes", type: "page", target: "recentes", icon: "history" },
+        { label: "Lista de Supermercado", type: "page", target: "supermercado", icon: "shopping-cart" }
       ]
     },
 
@@ -1967,6 +1987,37 @@ const APP_CONFIG = {
       // excluir em "Editar visualizações" fica salvo no Worker (rota
       // /priorities-views) e passa a mandar a partir daí.
       views: { defaults: DEFAULT_PRIORITY_VIEWS }
+    },
+
+    // "Lista de Supermercado" (pedido do Georges — trazer a base do Notion
+    // "Pessoal / Listas / Supermercado" pro Meu Hub, com edição de
+    // Prioridade/Providência pelo próprio app, carimbando Sinalizado em/
+    // Comprado em automaticamente). Confirmado com ele: reconstruída do
+    // zero em KV (worker.js, rotas /supermercado), NUNCA no Notion — mesmo
+    // motivo de Lista de Prioridades acima. Os 181 itens que já existiam na
+    // base foram importados como carga inicial (self-heal no 1º GET, ver
+    // ensureSupermercadoSeeded no worker.js) — a partir daí o Notion nunca
+    // mais é consultado, só o KV. "supermercado: true" é o flag que
+    // renderContent usa pra chamar renderSupermercadoPage no app.js (mesmo
+    // padrão de "priorities: true"/"notes: true" acima).
+    supermercado: {
+      title: "Lista de Supermercado",
+      supermercado: true,
+      // listas de opção das 3 colunas editáveis — mesmo padrão de
+      // priorityFields acima, pendurado no objeto da página pro app.js
+      // ficar genérico.
+      supermercadoFields: {
+        categoria: { label: "Categoria", options: SUPERMERCADO_CATEGORIA_OPTIONS },
+        prioridade: { label: "Prioridade", options: SUPERMERCADO_PRIORIDADE_OPTIONS },
+        providencia: { label: "Providência", options: SUPERMERCADO_PROVIDENCIA_OPTIONS }
+      },
+      // as 3 visualizações espelham as 3 views que a base tinha no Notion
+      // (Produtos/Comprar/Comprados) — ver renderSupermercadoPage no app.js.
+      views: [
+        { id: "produtos", label: "Produtos" },
+        { id: "comprar", label: "Comprar" },
+        { id: "comprados", label: "Comprados" }
+      ]
     },
 
     criar_paginas: {

@@ -4151,3 +4151,147 @@ html, body {
   gap: 6px;
   margin-top: 2px;
 }
+
+/* ---------------- Lista de Supermercado (pedido do Georges — trazida da
+   base do Notion pro Meu Hub, 100% KV, ver renderSupermercadoPage no
+   app.js) ---------------- */
+.supermercado-wrap { display: flex; flex-direction: column; gap: 14px; }
+
+/* abas de visualização (Produtos/Comprar/Comprados) — mesmo visual
+   "pílula" já usado em Filtros Rápidos de Prioridades, só que sem estado
+   "multi-ligado" (só uma aba ativa por vez). */
+.supermercado-views { display: flex; flex-wrap: wrap; gap: 6px; }
+.supermercado-view-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #2c2c2a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.supermercado-view-btn:hover { border-color: #4a90d9; }
+.supermercado-view-btn.active {
+  background: #4a90d9;
+  border-color: #4a90d9;
+  color: #fff;
+}
+
+/* linha "Adicionar item" — mesmo padrão visual de .notes-add-btn (Anotações
+   Rápidas), input à esquerda + botão sólido à direita. */
+.supermercado-add { display: flex; gap: 8px; max-width: 480px; }
+.supermercado-add-input {
+  flex: 1;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  font-size: 13.5px;
+  color: #2c2c2a;
+}
+.supermercado-add-input:focus { outline: none; border-color: #4a90d9; }
+
+/* barra de filtros (busca + categoria) — mesmo visual de
+   .most-visited-filter-select. */
+.supermercado-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.supermercado-search-input {
+  height: 32px;
+  min-width: 200px;
+  flex: 1;
+  max-width: 320px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  padding: 0 10px;
+  font-size: 12.5px;
+  color: #2c2c2a;
+}
+.supermercado-search-input:focus { outline: none; border-color: #4a90d9; }
+.supermercado-filter-select {
+  height: 32px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: #2c2c2a;
+}
+
+/* cabeçalho de grupo por categoria (aba "Comprar", agrupada — espelha a
+   view "Comprar" do Notion, que era agrupada por Categoria). */
+.supermercado-group-head {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #7a7a76;
+  margin: 14px 0 6px;
+}
+.supermercado-group-head:first-child { margin-top: 0; }
+
+.supermercado-list { display: flex; flex-direction: column; gap: 6px; }
+.supermercado-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px #e4e4e0;
+  flex-wrap: wrap;
+}
+.supermercado-row-name {
+  flex: 1;
+  min-width: 140px;
+  font-size: 13.5px;
+  color: #2c2c2a;
+  font-weight: 500;
+}
+.supermercado-row-field { flex-shrink: 0; }
+/* <select> inline de Providência/Prioridade — mesma "caixinha" de
+   .priorities-cell-select, só um pouco mais estreita (célula de linha, não
+   de tabela larga). */
+.supermercado-cell-select {
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 0.5px solid #e2e0da;
+  background: #fbfbfa;
+  color: #2f3a44;
+  font-size: 12.5px;
+  min-width: 110px;
+}
+.supermercado-cell-select:focus { outline: none; border-color: #4a90d9; background: #fff; }
+.supermercado-row-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  color: #8a8a86;
+  flex-shrink: 0;
+  min-width: 130px;
+}
+.supermercado-row-date { white-space: nowrap; }
+.supermercado-row-delete {
+  height: 28px;
+  width: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #b0413a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.supermercado-row-delete:hover { background: #fbeceb; }
+
+@media (max-width: 640px) {
+  .supermercado-row { flex-direction: column; align-items: stretch; }
+  .supermercado-row-name { width: 100%; }
+  .supermercado-row-dates { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+}

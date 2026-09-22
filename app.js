@@ -8669,6 +8669,328 @@
     });
   }
 
+  // ---------------- "page.supermercado" — Lista de Supermercado (100% KV) ----------------
+  // Pedido do Georges: trazer a base "Pessoal / Listas / Supermercado" do
+  // Notion pro Meu Hub, com edição de Prioridade/Providência pelo próprio
+  // app — reconstruída do zero em KV (worker.js, rotas /supermercado),
+  // NUNCA no Notion (confirmado com ele antes de implementar). Mesmo
+  // esquema de renderLegislacoesPage/renderPrioritiesTable: busca 1 vez ao
+  // abrir a página, tudo mais é client-side em cima do array carregado.
+  // "produto"/"providencia"/"prioridade" ficam OTIMISTAMENTE atualizados via
+  // reload completo depois de cada PUT/POST/DELETE (mesmo padrão de
+  // updateItem em renderPrioritiesTable) — sem merge manual no array local,
+  // pra nunca dessincronizar do que o Worker realmente salvou (ex: um
+  // carimbo automático de data calculado no servidor).
+  function renderSupermercadoPage(container, page) {
+    var fields = page.supermercadoFields || {};
+    var viewsCfg = page.views || [];
+
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+
+    function fmtDate(ymd) {
+      if (!ymd) return "";
+      var p = ymd.split("-");
+      return p.length === 3 ? (p[2] + "/" + p[1] + "/" + p[0]) : ymd;
+    }
+
+    var state = {
+      items: [],
+      loaded: false,
+      view: (viewsCfg[0] && viewsCfg[0].id) || "produtos",
+      filterCategoria: "",
+      search: ""
+    };
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando…";
+    container.appendChild(statusEl);
+
+    var wrap = document.createElement("div");
+    wrap.className = "supermercado-wrap";
+    wrap.style.display = "none";
+    container.appendChild(wrap);
+
+    // ---- abas de visualização (Produtos / Comprar / Comprados, espelham
+    // as 3 views que a base tinha no Notion) ----
+    var tabsWrap = document.createElement("div");
+    tabsWrap.className = "supermercado-views";
+    var tabButtons = {};
+    viewsCfg.forEach(function (v) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "supermercado-view-btn";
+      btn.textContent = v.label;
+      btn.addEventListener("click", function () {
+        state.view = v.id;
+        updateTabActive();
+        repaint();
+      });
+      tabButtons[v.id] = btn;
+      tabsWrap.appendChild(btn);
+    });
+    function updateTabActive() {
+      Object.keys(tabButtons).forEach(function (id) {
+        tabButtons[id].classList.toggle("active", id === state.view);
+      });
+    }
+    wrap.appendChild(tabsWrap);
+
+    // ---- adicionar item novo (entra direto como "Comprar" — é assim que
+    // um item novo normalmente entra na lista: precisa comprar) ----
+    var addWrap = document.createElement("div");
+    addWrap.className = "supermercado-add";
+    var addInput = document.createElement("input");
+    addInput.type = "text";
+    addInput.className = "supermercado-add-input";
+    addInput.placeholder = "Adicionar item à lista…";
+    var addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "notes-add-btn";
+    addBtn.textContent = "Adicionar";
+    addWrap.appendChild(addInput);
+    addWrap.appendChild(addBtn);
+    wrap.appendChild(addWrap);
+
+    // ---- filtros: busca por nome + categoria ----
+    var filterWrap = document.createElement("div");
+    filterWrap.className = "supermercado-filters";
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "supermercado-search-input";
+    searchInput.placeholder = "Buscar produto…";
+    filterWrap.appendChild(searchInput);
+
+    var catSelect = document.createElement("select");
+    catSelect.className = "supermercado-filter-select";
+    var catAllOpt = document.createElement("option");
+    catAllOpt.value = "";
+    catAllOpt.textContent = "Todas as categorias";
+    catSelect.appendChild(catAllOpt);
+    (fields.categoria && fields.categoria.options || []).forEach(function (opt) {
+      var o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt;
+      catSelect.appendChild(o);
+    });
+    filterWrap.appendChild(catSelect);
+    wrap.appendChild(filterWrap);
+
+    var resultsWrap = document.createElement("div");
+    wrap.appendChild(resultsWrap);
+
+    // <select> inline de uma célula editável (Providência/Prioridade) —
+    // sempre inclui uma opção vazia "—" quando o valor atual está vazio ou
+    // fora da lista (ex: Prioridade nunca definida na maioria dos 181 itens
+    // importados do Notion).
+    function buildSelect(fieldKey, currentValue, onChange) {
+      var sel = document.createElement("select");
+      sel.className = "supermercado-cell-select";
+      var hasCurrent = false;
+      var opts = (fields[fieldKey] && fields[fieldKey].options) || [];
+      if (!currentValue || opts.indexOf(currentValue) === -1) {
+        var empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "—";
+        sel.appendChild(empty);
+        hasCurrent = true;
+      }
+      opts.forEach(function (opt) {
+        var o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt;
+        if (opt === currentValue) { o.selected = true; hasCurrent = true; }
+        sel.appendChild(o);
+      });
+      if (!hasCurrent) sel.value = "";
+      sel.addEventListener("change", function () { onChange(sel.value); });
+      return sel;
+    }
+
+    function buildRow(it) {
+      var row = document.createElement("div");
+      row.className = "supermercado-row";
+
+      var nameWrap = document.createElement("div");
+      nameWrap.className = "supermercado-row-name";
+      nameWrap.textContent = it.produto;
+      row.appendChild(nameWrap);
+
+      var provWrap = document.createElement("div");
+      provWrap.className = "supermercado-row-field";
+      provWrap.appendChild(buildSelect("providencia", it.providencia, function (v) {
+        updateItem(it.id, { providencia: v, autoStampDate: saoPauloDateKey(Date.now()) });
+      }));
+      row.appendChild(provWrap);
+
+      var prioWrap = document.createElement("div");
+      prioWrap.className = "supermercado-row-field";
+      prioWrap.appendChild(buildSelect("prioridade", it.prioridade, function (v) {
+        updateItem(it.id, { prioridade: v });
+      }));
+      row.appendChild(prioWrap);
+
+      var datesWrap = document.createElement("div");
+      datesWrap.className = "supermercado-row-dates";
+      if (it.sinalizado_em) {
+        var s = document.createElement("span");
+        s.className = "supermercado-row-date";
+        s.textContent = "Sinalizado: " + fmtDate(it.sinalizado_em);
+        datesWrap.appendChild(s);
+      }
+      if (it.comprado_em) {
+        var c = document.createElement("span");
+        c.className = "supermercado-row-date";
+        c.textContent = "Comprado: " + fmtDate(it.comprado_em);
+        datesWrap.appendChild(c);
+      }
+      row.appendChild(datesWrap);
+
+      var delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "supermercado-row-delete";
+      delBtn.title = "Excluir da lista";
+      var delIcon = document.createElement("i");
+      delIcon.className = "ti ti-trash";
+      delBtn.appendChild(delIcon);
+      delBtn.addEventListener("click", function () {
+        if (!window.confirm('Excluir "' + it.produto + '" da lista?')) return;
+        removeItem(it.id);
+      });
+      row.appendChild(delBtn);
+
+      return row;
+    }
+
+    function matchesFilters(it) {
+      if (state.filterCategoria && it.categoria !== state.filterCategoria) return false;
+      if (state.search) {
+        var q = state.search.toLowerCase();
+        if ((it.produto || "").toLowerCase().indexOf(q) === -1) return false;
+      }
+      return true;
+    }
+
+    function repaint() {
+      resultsWrap.innerHTML = "";
+      var filtered = state.items.filter(matchesFilters);
+
+      var viewItems;
+      if (state.view === "comprar") {
+        viewItems = filtered.filter(function (it) { return it.providencia === "Comprar"; });
+      } else if (state.view === "comprados") {
+        viewItems = filtered.filter(function (it) { return it.providencia === "Comprado"; });
+      } else {
+        // "Produtos" — espelha a view padrão da base no Notion: tudo MENOS
+        // o que está marcado "Comprar" (a lista de compras propriamente
+        // dita mora só na aba "Comprar").
+        viewItems = filtered.filter(function (it) { return it.providencia !== "Comprar"; });
+      }
+
+      if (!viewItems.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhum item aqui.";
+        resultsWrap.appendChild(empty);
+        return;
+      }
+
+      if (state.view === "comprar") {
+        // agrupado por categoria — espelha a view "Comprar" da base no
+        // Notion, que era agrupada por Categoria.
+        var byCat = {};
+        viewItems.forEach(function (it) {
+          var cat = it.categoria || "Sem categoria";
+          (byCat[cat] = byCat[cat] || []).push(it);
+        });
+        Object.keys(byCat).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (cat) {
+          var head = document.createElement("div");
+          head.className = "supermercado-group-head";
+          head.textContent = cat + " (" + byCat[cat].length + ")";
+          resultsWrap.appendChild(head);
+          var list = document.createElement("div");
+          list.className = "supermercado-list";
+          byCat[cat].sort(function (a, b) { return (a.produto || "").localeCompare(b.produto || "", "pt-BR"); }).forEach(function (it) {
+            list.appendChild(buildRow(it));
+          });
+          resultsWrap.appendChild(list);
+        });
+      } else {
+        var list2 = document.createElement("div");
+        list2.className = "supermercado-list";
+        viewItems.sort(function (a, b) { return (a.produto || "").localeCompare(b.produto || "", "pt-BR"); }).forEach(function (it) {
+          list2.appendChild(buildRow(it));
+        });
+        resultsWrap.appendChild(list2);
+      }
+    }
+
+    function loadItems() {
+      return authFetch(cfg.templateWorkerUrl + "/supermercado")
+        .then(handle401)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          state.items = data.items || [];
+          state.loaded = true;
+          statusEl.style.display = "none";
+          wrap.style.display = "";
+          repaint();
+        })
+        .catch(function () {
+          statusEl.textContent = "Não foi possível carregar a Lista de Supermercado.";
+          statusEl.style.display = "";
+        });
+    }
+
+    function updateItem(id, patch) {
+      return authFetch(cfg.templateWorkerUrl + "/supermercado?id=" + encodeURIComponent(id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch)
+      }).then(handle401).then(loadItems).catch(function () {
+        statusEl.textContent = "Erro ao salvar. Tente novamente.";
+        statusEl.style.display = "";
+      });
+    }
+
+    function removeItem(id) {
+      authFetch(cfg.templateWorkerUrl + "/supermercado?id=" + encodeURIComponent(id), { method: "DELETE" })
+        .then(handle401).then(loadItems).catch(function () {
+          statusEl.textContent = "Erro ao excluir. Tente novamente.";
+          statusEl.style.display = "";
+        });
+    }
+
+    function addItem() {
+      var produto = addInput.value.trim();
+      if (!produto) { addInput.focus(); return; }
+      addBtn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/supermercado", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ produto: produto, providencia: "Comprar", autoStampDate: saoPauloDateKey(Date.now()) })
+      }).then(handle401).then(function () {
+        addInput.value = "";
+        loadItems();
+      }).catch(function () {
+        statusEl.textContent = "Erro ao adicionar item.";
+        statusEl.style.display = "";
+      }).finally(function () { addBtn.disabled = false; });
+    }
+    addBtn.addEventListener("click", addItem);
+    addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
+
+    searchInput.addEventListener("input", function () { state.search = searchInput.value.trim(); repaint(); });
+    catSelect.addEventListener("change", function () { state.filterCategoria = catSelect.value; repaint(); });
+
+    updateTabActive();
+    loadItems();
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
@@ -8696,6 +9018,14 @@
     // página, tal qual Mais Visitados") — mesmo padrão exclusivo acima.
     if (page.recentPage) {
       renderRecentPage(container);
+      return;
+    }
+
+    // "Lista de Supermercado" (pedido do Georges) — página exclusiva, mesmo
+    // padrão de page.mostVisited/page.recentPage acima: só essa lista, sem
+    // empilhar com outros blocos.
+    if (page.supermercado) {
+      renderSupermercadoPage(container, page);
       return;
     }
 
