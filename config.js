@@ -923,6 +923,29 @@ var NOTIFICATION_SOURCES = [
       { id: "3d", amount: 3, unit: "days", label: "3 dias antes" }
     ]
   },
+  // Lista de Supermercado (pedido do Georges, rodada 4 — "ajuste para
+  // exibir uma notificação de Supermercados... sempre que tiver um item
+  // sinalizado para Comprar"). Fonte 100% KV, sem Notion (mesmo espírito de
+  // "financeiro" acima, kind próprio) — não é uma notificação "por item com
+  // data": é 1 notificação só, "tem N item(ns) pra comprar agora", ver
+  // fetchSupermercadoNotificationItems no app.js. "dateProperty: 'gatilho'"
+  // aqui, igual ao "vencimento" de financeiro acima, NÃO é campo do Notion —
+  // é só a chave de "extra" que reaproveita buildNotificationsFromSource
+  // sem mudar nada nele; o item sintético sempre carrega a hora ATUAL, e o
+  // único leadTime é "0" (dispara assim que existir algum item Comprar).
+  {
+    id: "supermercado",
+    label: "Lista de Supermercado",
+    // mesmo emoji da pasta Categorias->Pessoal->Listas->Lista de Supermercado.
+    icon: "🛒",
+    kind: "supermercado",
+    dateProperty: "gatilho",
+    target: { type: "page", target: "supermercado" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "agora", amount: 0, unit: "hours", label: "Assim que sinalizar" }
+    ]
+  },
   // Aniversários (pedido do Georges). "📚 Página de Origem" = "Pessoal -
   // Aniversários" — mesmo valor usado no bloco "🎂 Aniversários" de Início.
   // SEM exclusão de Andamento de propósito (diferente de todas as outras
@@ -1225,7 +1248,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-21 23:25",
+  appVersion: "2026-09-22 00:24",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1352,9 +1375,11 @@ const APP_CONFIG = {
         { label: "Favoritas", type: "page", target: "favoritas", icon: "star", pinnedOnly: true },
         { label: "Central", type: "page", target: "central", icon: "layout-grid" },
         { label: "Categorias", type: "page", target: "categorias", icon: "category" },
-        { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" },
-        { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" },
-        { label: "Recentes", type: "page", target: "recentes", icon: "history" }
+        // "Mais Visitadas" e "Recentes" (Meu Hub) moveram pra dentro de
+        // Biblioteca (pedido do Georges, rodada 4 — "coloque as subpastas
+        // Mais Visitadas e Recentes dentro de Biblioteca"), ver pages.biblioteca
+        // abaixo.
+        { label: "Biblioteca", type: "page", target: "biblioteca", icon: "books" }
       ]
     },
 
@@ -2126,10 +2151,20 @@ const APP_CONFIG = {
       ]
     },
 
+    // "Mais Visitadas" e "Recentes" (Meu Hub) entraram aqui dentro (pedido
+    // do Georges, rodada 4 — "coloque as subpastas Mais Visitadas e
+    // Recentes dentro de Biblioteca, sendo que o item Recentes já existente
+    // dentro de Biblioteca deve ficar como Recentes (Notion) e o outro deve
+    // ficar como Recentes (Meu Hub)") — o link do Notion só teve o label
+    // renomeado, continua exatamente a mesma URL externa de antes; os 2
+    // novos apontam pras páginas internas que já existiam soltas em Pastas
+    // (mesmos targets mais_visitadas/recentes de sempre).
     biblioteca: {
       title: "Biblioteca",
       items: [
-        { label: "Recentes", type: "notion", url: "https://app.notion.com/library/recents?space=georges-filizzola", icon: "clock" }
+        { label: "Recentes (Notion)", type: "notion", url: "https://app.notion.com/library/recents?space=georges-filizzola", icon: "clock" },
+        { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" },
+        { label: "Recentes (Meu Hub)", type: "page", target: "recentes", icon: "history" }
       ]
     },
 

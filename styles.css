@@ -4180,10 +4180,12 @@ html, body {
 }
 
 /* linha "Adicionar item" — mesmo padrão visual de .notes-add-btn (Anotações
-   Rápidas), input à esquerda + botão sólido à direita. */
-.supermercado-add { display: flex; gap: 8px; max-width: 480px; }
+   Rápidas), input à esquerda + categoria (pedido do Georges, rodada 4) +
+   botão sólido à direita. */
+.supermercado-add { display: flex; flex-wrap: wrap; gap: 8px; max-width: 620px; }
 .supermercado-add-input {
   flex: 1;
+  min-width: 160px;
   height: 34px;
   padding: 0 12px;
   border-radius: 8px;
@@ -4193,6 +4195,7 @@ html, body {
   color: #2c2c2a;
 }
 .supermercado-add-input:focus { outline: none; border-color: #4a90d9; }
+.supermercado-add > .supermercado-filter-select { height: 34px; flex-shrink: 0; }
 
 /* barra de filtros (busca + categoria) — mesmo visual de
    .most-visited-filter-select. */
@@ -4318,11 +4321,25 @@ html, body {
   gap: 8px;
   flex-wrap: wrap;
 }
-.supermercado-row-cat {
+/* categoria editável inline (pedido do Georges, rodada 4 — "como edito a
+   categoria de um item existente?") — <select> compacto colorido pela
+   categoria, substitui o antigo texto estático .supermercado-row-cat;
+   mesma "caixinha" de .supermercado-cell-select, só sem min-width fixo (a
+   coluna já é estreita, fica na sub-linha junto do contador). */
+.supermercado-row-cat-select {
+  height: 22px;
+  min-width: 0;
+  padding: 0 4px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  border-color: transparent;
+  background: transparent;
+}
+.supermercado-row-cat-select:hover, .supermercado-row-cat-select:focus {
+  border-color: #dcdcd8;
+  background: #fbfbfa;
 }
 /* contador "já foi sinalizado Comprar Nx" (pedido do Georges — base da
    aba Favoritos) — discreto, tom neutro (é histórico, não um alerta). */
@@ -4362,6 +4379,19 @@ html, body {
   border-color: #b2f2bb;
   color: #2b8a3e;
 }
+/* botão de Prioridade por clique (pedido do Georges, rodada 4 — mesmo
+   padrão do botão de status acima, cores próprias pra não confundir com
+   Comprar/Comprado). */
+.supermercado-status-btn.urgente {
+  background: #fff0f0;
+  border-color: #ffc9c9;
+  color: #c92a2a;
+}
+.supermercado-status-btn.sem-urgencia {
+  background: #f1f3f5;
+  border-color: #dee2e6;
+  color: #5c5c58;
+}
 /* linha de pílulas do filtro de Situação (pedido do Georges — "Crie
    filtros pela Situação") — clique liga/desliga, seleção múltipla (mesmo
    visual "pílula" das abas de visualização acima, com estado .active). */
@@ -4397,16 +4427,6 @@ html, body {
   min-width: 110px;
 }
 .supermercado-cell-select:focus { outline: none; border-color: #4a90d9; background: #fff; }
-.supermercado-row-dates {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-size: 11px;
-  color: #8a8a86;
-  flex-shrink: 0;
-  min-width: 130px;
-}
-.supermercado-row-date { white-space: nowrap; }
 .supermercado-row-delete {
   height: 28px;
   width: 28px;
@@ -4425,5 +4445,4 @@ html, body {
 @media (max-width: 640px) {
   .supermercado-row { flex-direction: column; align-items: stretch; }
   .supermercado-row-name { width: 100%; }
-  .supermercado-row-dates { flex-direction: row; flex-wrap: wrap; gap: 8px; }
 }

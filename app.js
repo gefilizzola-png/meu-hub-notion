@@ -8728,12 +8728,6 @@
       return res;
     }
 
-    function fmtDate(ymd) {
-      if (!ymd) return "";
-      var p = ymd.split("-");
-      return p.length === 3 ? (p[2] + "/" + p[1] + "/" + p[0]) : ymd;
-    }
-
     // emoji+cor da categoria (pedido do Georges — "pintando de cores
     // diferentes os itens de cada categoria, com ícones/emojis") — ver
     // SUPERMERCADO_CATEGORIA_META no config.js, pendurado em
@@ -8766,11 +8760,36 @@
       return "Clique pra sinalizar que precisa comprar";
     }
 
+    // mesmo ciclo de clique da Providência (pedido do Georges, rodada 4:
+    // "consegue fazer a mesma coisa com Prioridade [...] Se clicar 1 vez,
+    // Urgente; se clicar de novo, Sem urgência") — "" -> Urgente -> Sem
+    // urgência -> "" de novo (3º clique fecha o ciclo, mesmo padrão da
+    // Providência acima, pra sempre dar pra limpar clicando).
+    function nextSupermercadoPrioridade(current) {
+      if (current === "1 - Urgente") return "Sem urgência";
+      if (current === "Sem urgência") return "";
+      return "1 - Urgente";
+    }
+    function prioridadeButtonLabel(prioridade) {
+      if (prioridade === "1 - Urgente") return "🔥 Urgente";
+      if (prioridade === "Sem urgência") return "🙂 Sem urgência";
+      return "Prioridade";
+    }
+    function prioridadeButtonTitle(prioridade) {
+      if (prioridade === "1 - Urgente") return "Clique pra marcar como Sem urgência";
+      if (prioridade === "Sem urgência") return "Clique pra tirar a prioridade";
+      return "Clique pra marcar como Urgente";
+    }
+
     var state = {
       items: [],
       loaded: false,
       view: (viewsCfg[0] && viewsCfg[0].id) || "produtos",
-      filterCategoria: "",
+      // filtro de Categoria (pedido do Georges, rodada 4 — "use aquele
+      // mesmo padrão que usamos em outros filtros para permitir multi_select
+      // e pesquisa dentro do filtro") — Set de nomes de categoria; vazio =
+      // sem filtro (mostra todas), mesmo padrão de situacaoFilter abaixo.
+      filterCategorias: new Set(),
       // "Agrupar por" (pedido do Georges — "poder aplicar agrupamentos,
       // seja na aba Produtos, Comprar ou Comprados, para classificar por
       // ordem alfabética ou por categorias") — nasce em "categoria" (era o
@@ -8835,11 +8854,28 @@
     addInput.type = "text";
     addInput.className = "supermercado-add-input";
     addInput.placeholder = "Adicionar item à lista…";
+    // categoria do item novo (pedido do Georges, rodada 4 — "Quando crio um
+    // item novo em Supermercado, como atribuo a categoria?") — select
+    // simples (não precisa do multi-select/busca do filtro, é 1 valor só),
+    // nasce em "Sem categoria" (opcional, não bloqueia adicionar).
+    var addCatSelect = document.createElement("select");
+    addCatSelect.className = "supermercado-filter-select";
+    var addCatEmptyOpt = document.createElement("option");
+    addCatEmptyOpt.value = "";
+    addCatEmptyOpt.textContent = "Sem categoria";
+    addCatSelect.appendChild(addCatEmptyOpt);
+    (fields.categoria && fields.categoria.options || []).forEach(function (opt) {
+      var o = document.createElement("option");
+      o.value = opt;
+      o.textContent = (catMeta(opt).emoji + " " + opt);
+      addCatSelect.appendChild(o);
+    });
     var addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "notes-add-btn";
     addBtn.textContent = "Adicionar";
     addWrap.appendChild(addInput);
+    addWrap.appendChild(addCatSelect);
     addWrap.appendChild(addBtn);
     wrap.appendChild(addWrap);
 
@@ -8853,19 +8889,25 @@
     searchInput.placeholder = "Buscar produto…";
     filterWrap.appendChild(searchInput);
 
-    var catSelect = document.createElement("select");
-    catSelect.className = "supermercado-filter-select";
-    var catAllOpt = document.createElement("option");
-    catAllOpt.value = "";
-    catAllOpt.textContent = "Todas as categorias";
-    catSelect.appendChild(catAllOpt);
-    (fields.categoria && fields.categoria.options || []).forEach(function (opt) {
-      var o = document.createElement("option");
-      o.value = opt;
-      o.textContent = (catMeta(opt).emoji + " " + opt);
-      catSelect.appendChild(o);
+    // filtro de Categoria (pedido do Georges, rodada 4 — "use aquele mesmo
+    // padrão que usamos em outros filtros para permitir multi_select e
+    // pesquisa dentro do filtro") — buildIconDropdown, mesmo componente de
+    // Assuntos/Tipo/Situação em Legislações. Só aceita ícone ti-* (não
+    // emoji), então o dropdown perde o emoji por categoria — a cor
+    // (catMeta.color) continua diferenciando cada opção.
+    var catFilterOptions = (fields.categoria && fields.categoria.options || []).map(function (opt) {
+      return { pageId: opt, label: opt, icon: "ti-tag", color: catMeta(opt).color };
     });
-    filterWrap.appendChild(catSelect);
+    var catDropdown = buildIconDropdown({
+      label: "Categoria",
+      multi: true,
+      searchable: true,
+      options: catFilterOptions
+    }, function (opts) {
+      state.filterCategorias = new Set(opts.map(function (o) { return o.pageId; }));
+      repaint();
+    });
+    filterWrap.appendChild(catDropdown);
 
     // "Organizar por" (pedido do Georges — agrupamento em qualquer aba).
     var organizeSelect = document.createElement("select");
@@ -8879,14 +8921,44 @@
     });
     filterWrap.appendChild(organizeSelect);
 
+    // "Recolher tudo"/"Expandir tudo" (pedido do Georges, rodada 4 — "usando
+    // o mesmo padrão que usamos nas outras páginas... para expandir ou
+    // recolher as categorias") — mesmo componente/ícones de
+    // collapseAllToolbar em Legislações; aqui recalcula as categorias
+    // ATUALMENTE visíveis (respeitando view/filtros) na hora do clique.
+    var collapseAllWrap = document.createElement("span");
+    collapseAllWrap.className = "legislacoes-collapseall-toolbar";
+    function setAllCatsCollapsed(value) {
+      computeViewItems().forEach(function (it) {
+        state.collapsedCats[value ? "add" : "delete"](it.categoria || "Sem categoria");
+      });
+      repaint();
+    }
+    var collapseAllBtn = document.createElement("button");
+    collapseAllBtn.type = "button";
+    collapseAllBtn.className = "toolbar-icon-btn";
+    collapseAllBtn.title = "Recolher tudo";
+    collapseAllBtn.setAttribute("aria-label", "Recolher tudo");
+    collapseAllBtn.innerHTML = '<i class="ti ti-arrows-minimize"></i>';
+    collapseAllBtn.addEventListener("click", function () { setAllCatsCollapsed(true); });
+    var expandAllBtn = document.createElement("button");
+    expandAllBtn.type = "button";
+    expandAllBtn.className = "toolbar-icon-btn";
+    expandAllBtn.title = "Expandir tudo";
+    expandAllBtn.setAttribute("aria-label", "Expandir tudo");
+    expandAllBtn.innerHTML = '<i class="ti ti-arrows-maximize"></i>';
+    expandAllBtn.addEventListener("click", function () { setAllCatsCollapsed(false); });
+    collapseAllWrap.appendChild(collapseAllBtn);
+    collapseAllWrap.appendChild(expandAllBtn);
+    filterWrap.appendChild(collapseAllWrap);
+
     // "Limpar situação de todos" (pedido do Georges — "Faça um botão pelo
     // qual eu consiga limpar a situação de todos os itens [...] uso botão
     // para limpar todos os itens para não sinalizado") — zera Comprar/
     // Comprado de TODA a lista de uma vez, sem mexer em produto/categoria/
-    // datas/comprarCount (histórico preservado, ver
-    // handleSupermercadoClearStatus no worker.js). Confirmação antes (mesmo
-    // cuidado do botão de excluir item — ação em massa, difícil de
-    // desfazer manualmente).
+    // comprarCount (histórico preservado, ver handleSupermercadoClearStatus
+    // no worker.js). Confirmação antes (mesmo cuidado do botão de excluir
+    // item — ação em massa, difícil de desfazer manualmente).
     var clearStatusBtn = document.createElement("button");
     clearStatusBtn.type = "button";
     clearStatusBtn.className = "supermercado-clear-status-btn";
@@ -8896,6 +8968,18 @@
       clearAllStatus();
     });
     filterWrap.appendChild(clearStatusBtn);
+
+    // "Limpar todas as prioridades" (pedido do Georges, rodada 4 — mesmo
+    // botão/cuidado acima, só que pra Prioridade em vez de Providência).
+    var clearPrioridadeBtn = document.createElement("button");
+    clearPrioridadeBtn.type = "button";
+    clearPrioridadeBtn.className = "supermercado-clear-status-btn";
+    clearPrioridadeBtn.textContent = "Limpar todas as prioridades";
+    clearPrioridadeBtn.addEventListener("click", function () {
+      if (!window.confirm("Limpar a Prioridade de TODOS os itens da lista? Produtos, situação e histórico continuam intactos — só a prioridade atual volta pra \"—\".")) return;
+      clearAllPrioridades();
+    });
+    filterWrap.appendChild(clearPrioridadeBtn);
     wrap.appendChild(filterWrap);
 
     // ---- filtro de Situação (pedido do Georges — "Crie filtros pela
@@ -8982,11 +9066,16 @@
 
       var subLine = document.createElement("div");
       subLine.className = "supermercado-row-sub";
-      var catLabel = document.createElement("span");
-      catLabel.className = "supermercado-row-cat";
-      catLabel.style.color = meta.color;
-      catLabel.textContent = it.categoria || "Sem categoria";
-      subLine.appendChild(catLabel);
+      // categoria agora é editável direto na linha (pedido do Georges,
+      // rodada 4 — "como edito a categoria de um item existente?") — mesmo
+      // <select> compacto já usado pra Prioridade/Providência antes de
+      // virarem botão de ciclo, ver buildSelect acima.
+      var catSelectRow = buildSelect("categoria", it.categoria, function (v) {
+        updateItem(it.id, { categoria: v });
+      });
+      catSelectRow.className += " supermercado-row-cat-select";
+      catSelectRow.style.color = meta.color;
+      subLine.appendChild(catSelectRow);
       // contador de quantas vezes já foi sinalizado "Comprar" (pedido do
       // Georges — base da aba "Favoritos") — só aparece quando já
       // aconteceu pelo menos 1 vez, discreto, não é o sinalizador
@@ -9013,32 +9102,24 @@
       statusBtn.textContent = statusButtonLabel(it.providencia);
       statusBtn.title = statusButtonTitle(it.providencia);
       statusBtn.addEventListener("click", function () {
-        updateItem(it.id, { providencia: nextSupermercadoStatus(it.providencia), autoStampDate: saoPauloDateKey(Date.now()) });
+        updateItem(it.id, { providencia: nextSupermercadoStatus(it.providencia) });
       });
       row.appendChild(statusBtn);
 
-      var prioWrap = document.createElement("div");
-      prioWrap.className = "supermercado-row-field";
-      prioWrap.appendChild(buildSelect("prioridade", it.prioridade, function (v) {
-        updateItem(it.id, { prioridade: v });
-      }));
-      row.appendChild(prioWrap);
-
-      var datesWrap = document.createElement("div");
-      datesWrap.className = "supermercado-row-dates";
-      if (it.sinalizado_em) {
-        var s = document.createElement("span");
-        s.className = "supermercado-row-date";
-        s.textContent = "Sinalizado: " + fmtDate(it.sinalizado_em);
-        datesWrap.appendChild(s);
-      }
-      if (it.comprado_em) {
-        var c = document.createElement("span");
-        c.className = "supermercado-row-date";
-        c.textContent = "Comprado: " + fmtDate(it.comprado_em);
-        datesWrap.appendChild(c);
-      }
-      row.appendChild(datesWrap);
+      // botão de Prioridade por clique (pedido do Georges, rodada 4 —
+      // "consegue fazer a mesma coisa com Prioridade... Se clicar 1 vez,
+      // Urgente; se clicar de novo, Sem urgência") — mesmo padrão do botão
+      // de status acima, substitui o antigo <select> de Prioridade.
+      var prioBtn = document.createElement("button");
+      prioBtn.type = "button";
+      prioBtn.className = "supermercado-status-btn supermercado-prio-btn" +
+        (it.prioridade === "1 - Urgente" ? " urgente" : it.prioridade === "Sem urgência" ? " sem-urgencia" : "");
+      prioBtn.textContent = prioridadeButtonLabel(it.prioridade);
+      prioBtn.title = prioridadeButtonTitle(it.prioridade);
+      prioBtn.addEventListener("click", function () {
+        updateItem(it.id, { prioridade: nextSupermercadoPrioridade(it.prioridade) });
+      });
+      row.appendChild(prioBtn);
 
       var delBtn = document.createElement("button");
       delBtn.type = "button";
@@ -9057,7 +9138,9 @@
     }
 
     function matchesFilters(it) {
-      if (state.filterCategoria && it.categoria !== state.filterCategoria) return false;
+      // filtro de Categoria (pedido do Georges, rodada 4 — agora multi-select,
+      // ver buildIconDropdown acima) — Set vazio = sem filtro (mostra todas).
+      if (state.filterCategorias.size && !state.filterCategorias.has(it.categoria)) return false;
       // filtro de Situação (pedido do Georges) — Set vazio = sem filtro
       // (mostra todas as situações); com algo marcado, só bate o que está
       // ligado.
@@ -9081,30 +9164,38 @@
       return (a.produto || "").localeCompare(b.produto || "", "pt-BR");
     }
 
-    function repaint() {
-      resultsWrap.innerHTML = "";
+    // extraído de repaint() (pedido do Georges, rodada 4 — botões globais
+    // Recolher/Expandir tudo precisam saber quais categorias estão
+    // ATUALMENTE visíveis, respeitando view+filtros, sem duplicar essa
+    // lógica) — mesmos 4 ramos de view de antes, sem mudança de
+    // comportamento.
+    function computeViewItems() {
       var filtered = state.items.filter(matchesFilters);
-
-      var viewItems;
       if (state.view === "comprar") {
-        viewItems = filtered.filter(function (it) { return it.providencia === "Comprar"; });
-      } else if (state.view === "comprados") {
-        viewItems = filtered.filter(function (it) { return it.providencia === "Comprado"; });
-      } else if (state.view === "favoritos") {
+        return filtered.filter(function (it) { return it.providencia === "Comprar"; });
+      }
+      if (state.view === "comprados") {
+        return filtered.filter(function (it) { return it.providencia === "Comprado"; });
+      }
+      if (state.view === "favoritos") {
         // "Favoritos" (pedido do Georges — "itens de mercado que forem
         // mais recorrentemente sinalizados para Comprar") — todo item que
         // já foi sinalizado "Comprar" pelo menos 1 vez, sem importar a
         // situação ATUAL (comprado ou não); ordenado por comprarCount, ver
         // sortForView.
-        viewItems = filtered.filter(function (it) { return (it.comprarCount || 0) > 0; });
-      } else {
-        // "Produtos" (pedido do Georges — sinalizador de "precisa comprar"
-        // só faz sentido se o item também aparecer aqui) — TODOS os itens,
-        // sem excluir "Comprar" (diferente da view original do Notion, que
-        // escondia esses itens; a aba "Comprar" continua sendo a lista de
-        // compras dedicada, agrupada).
-        viewItems = filtered;
+        return filtered.filter(function (it) { return (it.comprarCount || 0) > 0; });
       }
+      // "Produtos" (pedido do Georges — sinalizador de "precisa comprar"
+      // só faz sentido se o item também aparecer aqui) — TODOS os itens,
+      // sem excluir "Comprar" (diferente da view original do Notion, que
+      // escondia esses itens; a aba "Comprar" continua sendo a lista de
+      // compras dedicada, agrupada).
+      return filtered;
+    }
+
+    function repaint() {
+      resultsWrap.innerHTML = "";
+      var viewItems = computeViewItems();
 
       if (!viewItems.length) {
         var empty = document.createElement("p");
@@ -9216,6 +9307,18 @@
         }).finally(function () { clearStatusBtn.disabled = false; });
     }
 
+    // "Limpar todas as prioridades" (pedido do Georges, rodada 4) — mesmo
+    // padrão de clearAllStatus acima, ver handleSupermercadoClearPrioridade
+    // no worker.js.
+    function clearAllPrioridades() {
+      clearPrioridadeBtn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/supermercado-clear-prioridade", { method: "POST" })
+        .then(handle401).then(loadItems).catch(function () {
+          statusEl.textContent = "Erro ao limpar prioridades. Tente novamente.";
+          statusEl.style.display = "";
+        }).finally(function () { clearPrioridadeBtn.disabled = false; });
+    }
+
     function addItem() {
       var produto = addInput.value.trim();
       if (!produto) { addInput.focus(); return; }
@@ -9223,9 +9326,13 @@
       authFetch(cfg.templateWorkerUrl + "/supermercado", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ produto: produto, providencia: "Comprar", autoStampDate: saoPauloDateKey(Date.now()) })
+        // categoria (pedido do Georges, rodada 4 — "como atribuo a categoria
+        // [de um item novo]?") — vem do addCatSelect, opcional ("" = sem
+        // categoria).
+        body: JSON.stringify({ produto: produto, providencia: "Comprar", categoria: addCatSelect.value })
       }).then(handle401).then(function () {
         addInput.value = "";
+        addCatSelect.value = "";
         loadItems();
       }).catch(function () {
         statusEl.textContent = "Erro ao adicionar item.";
@@ -9236,7 +9343,6 @@
     addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
 
     searchInput.addEventListener("input", function () { state.search = searchInput.value.trim(); repaint(); });
-    catSelect.addEventListener("change", function () { state.filterCategoria = catSelect.value; repaint(); });
     organizeSelect.addEventListener("change", function () { state.groupBy = organizeSelect.value; repaint(); });
 
     updateTabActive();
@@ -9860,13 +9966,44 @@
     }).catch(function () { return []; });
   }
 
+  // Lista de Supermercado (kind "supermercado" — pedido do Georges, rodada
+  // 4: "exibir uma notificação de Supermercados... sempre que tiver um item
+  // sinalizado para Comprar"). Diferente de TODAS as outras fontes: não há
+  // "itens com data" pra comparar contra antecedência — é uma contagem só
+  // (quantos itens estão em "Comprar" agora). Por isso monta 1 item
+  // SINTÉTICO só, com "extra[source.dateProperty]" = AGORA, pra reaproveitar
+  // buildNotificationsFromSource sem mexer nele (mesmo truque de
+  // "financeiro" acima, ver comentário em NOTIFICATION_SOURCES/config.js) —
+  // com leadTime "0", a notificação dispara assim que existir ao menos 1
+  // item Comprar, some sozinha quando o último for tirado de Comprar (não
+  // tem mais count>0, a lista sintética fica vazia).
+  function fetchSupermercadoNotificationItems(source) {
+    return authFetch(cfg.templateWorkerUrl + "/supermercado").then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+      return res.ok ? res.json() : { items: [] };
+    }).then(function (data) {
+      var items = (data && data.items) || [];
+      var count = items.filter(function (it) { return it.providencia === "Comprar"; }).length;
+      if (!count) return [];
+      var extraObj = {};
+      extraObj[source.dateProperty] = new Date().toISOString();
+      return [{
+        id: "supermercado-pending",
+        title: count + " item" + (count === 1 ? "" : "s") + " sinalizado" + (count === 1 ? "" : "s") + " para comprar",
+        url: location.origin + location.pathname + "#supermercado",
+        extra: extraObj
+      }];
+    }).catch(function () { return []; });
+  }
+
   // ponto único chamado por computeNotifications — decide QUAL busca usar
   // conforme "source.kind" (default "notion", ver resolvedNotifSources
   // acima). Mantém buildNotificationsFromSource 100% agnóstico: ele só
   // enxerga a lista {id,title,url,extra} pronta, nunca sabe se veio do
-  // /query genérico ou de /financeiro-contas.
+  // /query genérico, de /financeiro-contas ou de /supermercado.
   function fetchNotificationSourceItems(source) {
     if (source.kind === "financeiro") return fetchFinanceiroNotificationItems(source);
+    if (source.kind === "supermercado") return fetchSupermercadoNotificationItems(source);
     return fetchNotionNotificationSourceItems(source);
   }
 
