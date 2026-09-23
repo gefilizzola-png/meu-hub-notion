@@ -13105,7 +13105,13 @@
     var id = amount + (unit === "hours" ? "h" : "d");
     if (s.leadTimes.some(function (lt) { return lt.id === id; })) return; // já existe, ignora silenciosamente
     var label = amount + " " + (unit === "hours" ? (amount === 1 ? "hora antes" : "horas antes") : (amount === 1 ? "dia antes" : "dias antes"));
-    s.leadTimes = s.leadTimes.concat([{ id: id, amount: amount, unit: unit, label: label }]);
+    // channels:[]/repeatWhilePending:false explícitos — SEM isso o objeto
+    // fica com esses campos undefined, e renderNotifSettings (que lê
+    // lt.channels.length pra decidir se a pílula tem "has-config") explode
+    // com TypeError na hora, derrubando o resto do editor (bug reportado
+    // pelo Georges: clicar em "+" em qualquer fonte fazia sumir todas as
+    // fontes seguintes na lista, inclusive o texto do banner de permissão).
+    s.leadTimes = s.leadTimes.concat([{ id: id, amount: amount, unit: unit, label: label, channels: [], repeatWhilePending: false }]);
     s.leadTimes.sort(function (a, b) { return leadTimeMs(b) - leadTimeMs(a); }); // maior antecedência primeiro
     applyNotifSettingsChange();
   }
@@ -13185,6 +13191,14 @@
           // "clicar na própria pilula" — clicar no TEXTO da pilula (não no
           // × de remover) abre/fecha um painel com os mesmos 4 controles
           // (toast/piscar/nativa/repetir) só pra ESSA antecedência.
+          // guarda defensiva: qualquer leadTime que chegue aqui sem
+          // channels/repeatWhilePending (ex: um bug futuro que esqueça de
+          // preenchê-los, como aconteceu com addNotifLeadTime) normaliza na
+          // hora em vez de deixar `lt.channels.length` estourar TypeError e
+          // abortar silenciosamente o resto do editor (mesma classe de bug
+          // já vista em buildRow/Remédios).
+          if (!Array.isArray(lt.channels)) lt.channels = [];
+          if (typeof lt.repeatWhilePending !== "boolean") lt.repeatWhilePending = !!lt.repeatWhilePending;
           var ltKey = s.id + "::" + lt.id;
           var hasConfig = !!(lt.channels.length || lt.repeatWhilePending);
           var expanded = !!notifLeadTimeExpandedKeys[ltKey];
