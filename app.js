@@ -10098,6 +10098,302 @@
     });
   }
 
+  // ---------------- "page.provasVitor" — Provas do Vitor (03EF - NSF - T34, 100% leitura) ----------------
+  // Ícone por matéria (pedido do Georges: "Vitor tem prova de Matemática
+  // amanhã, dia 24/09/2026, com um ícone condizente com o tema") — usado
+  // tanto na tabela quanto na notificação (ver fetchProvasNotificationItems
+  // mais abaixo). Fallback genérico "📝" pra qualquer matéria nova que
+  // apareça na base sem estar mapeada aqui.
+  var PROVAS_MATERIA_ICONS = {
+    "Matemática": "🔢",
+    "Inglês": "🇬🇧",
+    "História": "📜",
+    "Filosofia": "🧠",
+    "Geografia": "🌍",
+    "Ciências": "🔬",
+    "Língua Portuguesa": "📖",
+    "Ensino Religioso": "🙏"
+  };
+  function provasMateriaIcon(materia) {
+    return PROVAS_MATERIA_ICONS[materia] || "📝";
+  }
+  // "24/09/2026" a partir de "2026-09-24" (ou "2026-09-24T..." — só usa os
+  // 10 primeiros caracteres, mesmo padrão de aniversarioDDMM).
+  function provasDataBR(dataISO) {
+    if (!dataISO) return "";
+    var parts = String(dataISO).slice(0, 10).split("-");
+    return parts.length === 3 ? (parts[2] + "/" + parts[1] + "/" + parts[0]) : "";
+  }
+  // dias até a prova (hoje = 0) — diferente de aniversarioDiasAteProximo
+  // (que é anual/circular): aqui é só a diferença simples entre a data da
+  // prova e hoje, no fuso local do navegador (mesmo padrão de
+  // aniversarioIdade).
+  function provasDiasAte(dataISO) {
+    if (!dataISO) return null;
+    var parts = String(dataISO).slice(0, 10).split("-").map(Number);
+    if (parts.length < 3 || !parts[0]) return null;
+    var alvo = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
+    var hoje = new Date();
+    var hojeSemHora = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    return Math.round((alvo - hojeSemHora) / 86400000);
+  }
+  // "hoje"/"amanhã"/"em N dias" (pedido do Georges, exemplo literal:
+  // "...amanhã, dia 24/09/2026") — usado tanto na tabela (sub-label da
+  // coluna Data) quanto no título da notificação.
+  function provasRelativoLabel(dias) {
+    if (dias === null) return "";
+    if (dias <= 0) return "hoje";
+    if (dias === 1) return "amanhã";
+    return "em " + dias + " dias";
+  }
+
+  function provasItemFromPage(p) {
+    var extra = p.extra || {};
+    var materiaRaw = extra["Matéria"];
+    var trimestreRaw = extra["Trimestre"];
+    var tipoRaw = extra["Tipo"];
+    var dataRaw = extra["Data"];
+    var dataISO = (dataRaw && dataRaw.start) ? dataRaw.start : null;
+    return {
+      id: p.id,
+      url: p.url,
+      materia: materiaRaw ? materiaRaw.name : null,
+      materiaColor: materiaRaw ? (NOTION_COLOR[materiaRaw.color] || "") : "",
+      trimestre: trimestreRaw ? trimestreRaw.name : null,
+      tipo: tipoRaw ? tipoRaw.name : null,
+      nota: (typeof extra["Nota"] === "number") ? extra["Nota"] : null,
+      data: dataISO,
+      diasAte: provasDiasAte(dataISO)
+    };
+  }
+  var PROVAS_EXTRA_FIELDS = ["Matéria", "Trimestre", "Tipo", "Nota", "Data"];
+
+  function renderProvasVitorPage(container, page) {
+    var pcfg = page.provasVitor || {};
+    var databaseId = pcfg.database_id;
+
+    var wrap = document.createElement("div");
+    wrap.className = "provas-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "📝 Provas — Vitor (03EF - NSF - T34)";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando provas…";
+    wrap.appendChild(statusEl);
+
+    if (!databaseId) {
+      statusEl.textContent = "Configuração incompleta: falta database_id em page.provasVitor.";
+      return;
+    }
+
+    var allProvas = [];
+    var state = { search: "", materiaSelected: [], sortKey: "data", sortDir: 1 };
+
+    var body = document.createElement("div");
+
+    function matchesFilters(it) {
+      if (state.search) {
+        var s = state.search.toLowerCase();
+        if ((it.materia || "").toLowerCase().indexOf(s) === -1) return false;
+      }
+      if (state.materiaSelected.length && state.materiaSelected.indexOf(it.materia) === -1) return false;
+      return true;
+    }
+
+    function sortProvas(list) {
+      var arr = list.slice();
+      var key = state.sortKey, dir = state.sortDir;
+      arr.sort(function (a, b) {
+        var av, bv;
+        if (key === "materia") { av = a.materia || ""; bv = b.materia || ""; }
+        else if (key === "nota") { av = a.nota === null ? -Infinity : a.nota; bv = b.nota === null ? -Infinity : b.nota; }
+        else { av = a.data || "9999-99-99"; bv = b.data || "9999-99-99"; }
+        if (typeof av === "number") return dir * (av - bv);
+        return dir * String(av).localeCompare(String(bv), "pt-BR");
+      });
+      return arr;
+    }
+
+    // ---- filtro de Matéria — multi-select com pesquisa (buildIconDropdown,
+    // MESMO padrão usado em qualquer outra página do app), opções tiradas
+    // ao vivo das provas já carregadas (mesmo esquema de "Grupo" em
+    // Aniversários/"Situação" em Legislações).
+    var materiaDropdownWrap = document.createElement("div");
+    function buildMateriaOptions() {
+      var map = {};
+      allProvas.forEach(function (it) {
+        if (!it.materia || map[it.materia]) return;
+        map[it.materia] = { label: it.materia, pageId: it.materia, icon: "ti-book-2", color: it.materiaColor || "" };
+      });
+      return Object.keys(map).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).map(function (k) { return map[k]; });
+    }
+
+    var controls = document.createElement("div");
+    controls.className = "legislacoes-controls";
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Buscar por matéria…";
+    searchInput.className = "aniversarios-search-input";
+    searchInput.addEventListener("input", function () {
+      state.search = searchInput.value.trim();
+      applyState();
+    });
+    controls.appendChild(searchInput);
+    controls.appendChild(materiaDropdownWrap);
+
+    wrap.appendChild(controls);
+    wrap.appendChild(body);
+
+    // cabeçalho clicável pra ordenar (mesmo padrão de Contas Mensais/
+    // Aniversários) — Trimestre/Tipo ficam só exibição (a base só tem 1
+    // valor possível hoje em cada, não compensa ordenar por eles).
+    var COLS = [
+      { label: "Matéria", cls: "provas-th-materia", sortKey: "materia" },
+      { label: "Data", cls: "provas-th-data", sortKey: "data" },
+      { label: "Trimestre", cls: "provas-th-trimestre" },
+      { label: "Tipo", cls: "provas-th-tipo" },
+      { label: "Nota", cls: "provas-th-nota", sortKey: "nota" }
+    ];
+
+    function renderTable() {
+      body.innerHTML = "";
+      var filtered = sortProvas(allProvas.filter(matchesFilters));
+      if (!filtered.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhuma prova bate com os filtros.";
+        body.appendChild(empty);
+        return;
+      }
+      var count = document.createElement("p");
+      count.className = "aniversarios-count";
+      count.textContent = filtered.length + (filtered.length === 1 ? " prova" : " provas");
+      body.appendChild(count);
+
+      var table = document.createElement("table");
+      table.className = "financeiro-table provas-table";
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      COLS.forEach(function (col) {
+        var th = document.createElement("th");
+        th.className = "financeiro-th " + col.cls + (col.sortKey ? " financeiro-th-sortable" : "");
+        var thLabel = document.createElement("span");
+        thLabel.className = "financeiro-th-label";
+        thLabel.textContent = col.label;
+        th.appendChild(thLabel);
+        if (col.sortKey) {
+          var arrow = document.createElement("span");
+          arrow.className = "financeiro-th-arrow";
+          if (state.sortKey === col.sortKey) {
+            th.classList.add("active");
+            arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+          }
+          th.appendChild(arrow);
+          th.title = "Clique para classificar por " + col.label;
+          th.addEventListener("click", function () {
+            if (state.sortKey === col.sortKey) { state.sortDir = state.sortDir * -1; }
+            else { state.sortKey = col.sortKey; state.sortDir = col.sortKey === "nota" ? -1 : 1; }
+            renderTable();
+          });
+        }
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      filtered.forEach(function (it) {
+        var row = document.createElement("tr");
+        row.className = "financeiro-row provas-row" + (it.diasAte !== null && it.diasAte <= 1 ? " provas-row-soon" : "");
+
+        var materiaCell = document.createElement("td");
+        var materiaInner = document.createElement("div");
+        materiaInner.className = "provas-materia-inner";
+        var materiaIconEl = document.createElement("span");
+        materiaIconEl.className = "provas-materia-icon";
+        materiaIconEl.textContent = provasMateriaIcon(it.materia);
+        materiaInner.appendChild(materiaIconEl);
+        if (it.materia) {
+          var badge = document.createElement("span");
+          badge.className = "item-sub-badge";
+          if (it.materiaColor) badge.style.color = it.materiaColor;
+          badge.textContent = it.materia;
+          materiaInner.appendChild(badge);
+        } else {
+          materiaInner.appendChild(document.createTextNode("—"));
+        }
+        materiaCell.appendChild(materiaInner);
+        row.appendChild(materiaCell);
+
+        var dataCell = document.createElement("td");
+        if (it.data) {
+          var dataLine = document.createElement("div");
+          dataLine.textContent = provasDataBR(it.data);
+          dataCell.appendChild(dataLine);
+          if (it.diasAte !== null) {
+            var relSub = document.createElement("div");
+            relSub.className = "aniversarios-proximo-sub";
+            relSub.textContent = it.diasAte < 0 ? "já passou" : (it.diasAte === 0 ? "🎯 hoje!" : provasRelativoLabel(it.diasAte));
+            dataCell.appendChild(relSub);
+          }
+        } else {
+          dataCell.textContent = "—";
+        }
+        row.appendChild(dataCell);
+
+        var trimCell = document.createElement("td");
+        trimCell.textContent = it.trimestre || "—";
+        row.appendChild(trimCell);
+
+        var tipoCell = document.createElement("td");
+        tipoCell.textContent = it.tipo || "—";
+        row.appendChild(tipoCell);
+
+        var notaCell = document.createElement("td");
+        notaCell.textContent = (it.nota !== null && it.nota !== undefined) ? String(it.nota) : "—";
+        row.appendChild(notaCell);
+
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      body.appendChild(table);
+    }
+
+    function applyState() {
+      renderTable();
+    }
+
+    var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
+      "&filters=" + encodeURIComponent(JSON.stringify([{ property: "Nome", type: "title", condition: "is_not_empty", value: true }])) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Data", direction: "ascending" }])) +
+      "&extra=" + encodeURIComponent(JSON.stringify(PROVAS_EXTRA_FIELDS));
+
+    authFetch(queryUrl).then(handle401Generic).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar provas");
+      var pages = (result.data && result.data.pages) || [];
+      allProvas = pages.map(provasItemFromPage);
+
+      var materiaDropdown = buildIconDropdown(
+        { property: "Matéria", type: "select", label: "Matéria", searchable: true, options: buildMateriaOptions() },
+        function (opts) { state.materiaSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      );
+      materiaDropdownWrap.appendChild(materiaDropdown);
+
+      statusEl.style.display = "none";
+      applyState();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao buscar provas: " + err.message;
+    });
+  }
+
   // ---------------- "page.supermercado" — Lista de Supermercado (100% KV) ----------------
   // Pedido do Georges: trazer a base "Pessoal / Listas / Supermercado" do
   // Notion pro Meu Hub, com edição de Prioridade/Providência pelo próprio
@@ -11295,7 +11591,7 @@
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
     var hasTabs = !!(page.tabs && page.tabs.length);
 
-    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais && !page.legislacoes && !page.aniversariosList && !page.aniversariosBI) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais && !page.legislacoes && !page.aniversariosList && !page.aniversariosBI && !page.provasVitor) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -11585,6 +11881,20 @@
         container.appendChild(dividerAniversariosBI);
       }
       renderAniversariosBIPage(container, page);
+    }
+
+    // "page.provasVitor" (pedido do Georges: "trazendo uma tabela com as
+    // provas cadastradas nesta página") — mesmo esquema de
+    // "page.legislacoes"/"page.aniversariosList" acima (itemGroups "Abrir"/
+    // "Criar no Notion" renderizados antes, depois o bloco dinâmico). Ver
+    // renderProvasVitorPage.
+    if (page.provasVitor) {
+      if (renderedSomething) {
+        var dividerProvas = document.createElement("hr");
+        dividerProvas.className = "content-divider";
+        container.appendChild(dividerProvas);
+      }
+      renderProvasVitorPage(container, page);
     }
   }
 
@@ -11978,6 +12288,53 @@
     }).catch(function () { return []; });
   }
 
+  // Provas do Vitor (kind "provas" — pedido do Georges: "Vitor tem prova
+  // de Matemática amanhã, dia 24/09/2026, com um ícone condizente com o
+  // tema"). MESMA janela de busca (past_2_days .. next_maxDays_days) da
+  // fonte genérica "notion" (fetchNotionNotificationSourceItems) — só que
+  // monta a MENSAGEM e o ÍCONE na mão, por matéria, em vez de usar o
+  // título cru da página (que é só "VITOR - Estudos - ... - DATA -
+  // MATÉRIA", ilegível numa notificação). "icon" (novo, opcional, por
+  // ITEM) sobrepõe o ícone fixo da fonte em buildNotificationsFromSource —
+  // cada prova usa o ícone da SUA matéria, não sempre o mesmo emoji "📝"
+  // da fonte.
+  function fetchProvasNotificationItems(source) {
+    var maxDays = notifSourceMaxDays(source);
+    var filters = [
+      { property: source.dateProperty, type: "date", condition: "on_or_after", value: "past_2_days" },
+      { property: source.dateProperty, type: "date", condition: "before", value: "next_" + maxDays + "_days" }
+    ];
+    var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(source.database_id) +
+      "&filters=" + encodeURIComponent(JSON.stringify(filters)) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: source.dateProperty, direction: "ascending" }])) +
+      "&extra=" + encodeURIComponent(JSON.stringify([source.dateProperty, "Matéria"]));
+    return authFetch(url).then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { pages: [] }; }
+      return res.ok ? res.json() : { pages: [] };
+    }).then(function (data) {
+      var pages = (data && data.pages) || [];
+      return pages.map(function (p) {
+        var extra = p.extra || {};
+        var dp = extra[source.dateProperty];
+        var dataISO = (dp && dp.start) ? dp.start : null;
+        var materiaRaw = extra["Matéria"];
+        var materia = materiaRaw ? materiaRaw.name : "";
+        var extraObj = {};
+        extraObj[source.dateProperty] = dp;
+        var titulo = dataISO
+          ? ("Vitor tem prova de " + (materia || "(matéria não definida)") + " " + provasRelativoLabel(provasDiasAte(dataISO)) + ", dia " + provasDataBR(dataISO))
+          : ("Vitor tem prova de " + (materia || "(matéria não definida)"));
+        return {
+          id: p.id,
+          title: titulo,
+          url: p.url,
+          icon: provasMateriaIcon(materia),
+          extra: extraObj
+        };
+      });
+    }).catch(function () { return []; });
+  }
+
   // ponto único chamado por computeNotifications — decide QUAL busca usar
   // conforme "source.kind" (default "notion", ver resolvedNotifSources
   // acima). Mantém buildNotificationsFromSource 100% agnóstico: ele só
@@ -11988,6 +12345,7 @@
     if (source.kind === "financeiro") return fetchFinanceiroNotificationItems(source);
     if (source.kind === "supermercado") return fetchSupermercadoNotificationItems(source);
     if (source.kind === "remedios") return fetchRemediosNotificationItems(source);
+    if (source.kind === "provas") return fetchProvasNotificationItems(source);
     return fetchNotionNotificationSourceItems(source);
   }
 
@@ -12035,7 +12393,12 @@
           id: source.id + "::" + lt.id + "::" + p.id,
           sourceId: source.id,
           sourceLabel: source.label,
-          sourceIcon: source.icon || "",
+          // "p.icon" (opcional, por ITEM — pedido do Georges em Provas do
+          // Vitor: "ícone condizente com o tema" de CADA prova, não
+          // sempre o mesmo emoji da fonte) sobrepõe o ícone fixo da fonte
+          // quando presente; toda fonte anterior a "provas" nunca setava
+          // isso, então continua caindo no source.icon de sempre.
+          sourceIcon: p.icon || source.icon || "",
           title: p.title,
           url: p.url,
           target: source.target,

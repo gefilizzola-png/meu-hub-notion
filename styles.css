@@ -4287,6 +4287,18 @@ html, body {
   font-weight: 600;
   margin-top: 2px;
 }
+/* ---------------- Provas do Vitor (03EF - NSF - T34) ---------------- */
+/* reaproveita .financeiro-table/.financeiro-th-sortable/.aniversarios-
+   proximo-sub/.aniversarios-search-input/.legislacoes-controls/
+   .aniversarios-count (mesmo padrão de tabela sortable já usado em
+   Aniversários/Contas Mensais) — só o essencial próprio da tabela de
+   Provas fica aqui. */
+.provas-materia-inner { display: flex; align-items: center; gap: 6px; }
+.provas-materia-icon { font-size: 15px; line-height: 1; }
+/* prova de hoje/amanhã (pedido do Georges — mesmo espírito do destaque
+   "vencendo em breve" de Contas Mensais) ganha um leve realce na linha. */
+.provas-row-soon { background: rgba(236, 72, 153, 0.05); }
+.provas-row-soon:hover td { background: rgba(236, 72, 153, 0.09); }
 /* coluna/botão de Nota (pedido do Georges — rascunho de mensagem de
    parabéns pra copiar/colar no WhatsApp) — reaproveita os mesmos
    ".priorities-note-toggle"/".priorities-note-row"/".priorities-note-

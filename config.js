@@ -420,6 +420,16 @@ var ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO = [
   "Mavros Filizzola", "Filizzola D´Urso", "Ciorlia Filizzola", "Sbeghen Filizzola", "Lavorato Filizzola"
 ];
 
+// "Provas (03EF - T34)" — base do Notion em Pessoal/Vitor/Estudos/Ensino
+// Fundamental/3º ano/NSF (T34)/Provas (pedido do Georges — trazer uma
+// tabela com as provas cadastradas). database_id sem hífen (mesmo padrão
+// de ANIVERSARIOS_DATABASE_ID acima), convertido do data source real
+// "collection://3e404814-86dd-807b-8a11-000b23fca4bd". template_id é o
+// "default_page_template" já configurado por ele nessa base (usado no
+// botão "Criar no Notion", ver pages.provas_vitor mais abaixo).
+var PROVAS_VITOR_DATABASE_ID = "3e40481486dd807b8a11000b23fca4bd";
+var PROVAS_VITOR_TEMPLATE_ID = "3e404814-86dd-8085-8030-fd8171cf85c4";
+
 // "Tags" de família da página de Aniversários (botões de filtro rápido,
 // pedido do Georges) — a "tag" principal de cada pessoa vem AUTOMÁTICO do
 // campo "Grupo Originário" (ver aniversarioAutoTag no app.js: os 5 ramos
@@ -1062,6 +1072,27 @@ var NOTIFICATION_SOURCES = [
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
+  },
+  // Provas do Vitor (pedido do Georges: "exibirá alerta simples..."Vitor
+  // tem prova de Matemática amanhã, dia 24/09/2026", com um ícone
+  // condizente com o tema"). kind PRÓPRIO ("provas", não "notion" padrão)
+  // porque a mensagem e o ícone precisam ser montados na mão por matéria —
+  // o título cru da página na base ("VITOR - Estudos - 03EF - NSF -
+  // Provas - 2026-09-24 - Matemática") não serve pra notificação nenhuma.
+  // Ver fetchProvasNotificationItems no app.js — database_id é a base
+  // PRÓPRIA de Provas (não a Central), mesma de pages.provas_vitor acima.
+  {
+    id: "provas_vitor",
+    label: "Provas do Vitor",
+    icon: "📝",
+    kind: "provas",
+    database_id: PROVAS_VITOR_DATABASE_ID,
+    dateProperty: "Data",
+    target: { type: "page", target: "provas_vitor" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
+    ]
   }
 ];
 
@@ -1326,7 +1357,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-23 15:33",
+  appVersion: "2026-09-23 15:49",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2468,7 +2499,12 @@ const APP_CONFIG = {
           title: "Vitor - Estudos",
           items: [
             { label: "Horários", type: "page", target: "fav_vitor_horarios" },
-            { label: "Provas", type: "page", target: "fav_vitor_provas" },
+            // "Provas" (pedido do Georges) — antes apontava pra uma folha
+            // vazia (fav_vitor_provas) esperando o link; agora que a
+            // página real existe (ver pages.provas_vitor), vira link
+            // interno direto pra ela, mesmo padrão de Remédios/Supermercado
+            // acima.
+            { label: "Provas", type: "page", target: "provas_vitor" },
             { label: "Tarefas Escolares", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7100481486dd83408ca281e5ae087a92?v=5f40481486dd83f38d9708b3f37b2733&source=copy_link" }
           ]
         }
@@ -2509,7 +2545,13 @@ const APP_CONFIG = {
         // "Listas" (pedido do Georges — "Mova a pasta Lista de
         // Supermercados para Categorias->Pessoal->Listas"). Saiu de
         // "entrada.items" (pasta "Pastas", raiz do menu) pra morar aqui.
-        { label: "Listas", type: "page", target: "cat_pessoal_listas", icon: "list" }
+        { label: "Listas", type: "page", target: "cat_pessoal_listas", icon: "list" },
+        // "Vitor" (pedido do Georges — "Categoria -> Pessoal -> Vitor ->
+        // Estudos -> Ensino Fundamental -> 3º ano -> NSF (T34) -> Provas")
+        // — árvore de pastas simples reproduzindo literalmente esse
+        // caminho, cada nível uma página só com 1 item (mesmo padrão de
+        // cat_pessoal_listas acima), até chegar na página real de Provas.
+        { label: "Vitor", type: "page", target: "cat_pessoal_vitor", icon: "ti-user" }
       ]
     },
 
@@ -2522,6 +2564,66 @@ const APP_CONFIG = {
         // Meu Hub).
         { label: "Remédios", type: "page", target: "remedios", icon: "pill" }
       ]
+    },
+
+    cat_pessoal_vitor: {
+      title: "Vitor",
+      items: [
+        { label: "Estudos", type: "page", target: "cat_pessoal_vitor_estudos", icon: "ti-book" }
+      ]
+    },
+    cat_pessoal_vitor_estudos: {
+      title: "Estudos",
+      items: [
+        { label: "Ensino Fundamental", type: "page", target: "cat_pessoal_vitor_estudos_ef", icon: "ti-school" }
+      ]
+    },
+    cat_pessoal_vitor_estudos_ef: {
+      title: "Ensino Fundamental",
+      items: [
+        { label: "3º ano", type: "page", target: "cat_pessoal_vitor_estudos_ef_3ano" }
+      ]
+    },
+    cat_pessoal_vitor_estudos_ef_3ano: {
+      title: "3º ano",
+      items: [
+        { label: "NSF (T34)", type: "page", target: "cat_pessoal_vitor_estudos_ef_3ano_nsf" }
+      ]
+    },
+    cat_pessoal_vitor_estudos_ef_3ano_nsf: {
+      title: "NSF (T34)",
+      items: [
+        { label: "Provas", type: "page", target: "provas_vitor", icon: "ti-writing" }
+      ]
+    },
+
+    // "Provas" (03EF - T34) — pedido do Georges: tabela das provas
+    // cadastradas na base do Notion, com cabeçalho clicável e filtro,
+    // mesmo padrão já usado em Aniversários/Legislações. 100% leitura,
+    // igual toda página dinâmica do app — "Criar no Notion" usa o
+    // template padrão que o Georges já configurou na base (ver
+    // PROVAS_VITOR_TEMPLATE_ID acima). Ver renderProvasVitorPage no
+    // app.js.
+    provas_vitor: {
+      title: "Provas",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir",
+          items: [
+            { label: "Provas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3e40481486dd801eb260eefd461360f1?v=3e40481486dd80ccb4ea000ceb1ae42b&source=copy_link" }
+          ]
+        },
+        {
+          title: "Criar no Notion",
+          items: [
+            { label: "Prova", type: "notion-template", icon: "notion", database_id: PROVAS_VITOR_DATABASE_ID, template_id: PROVAS_VITOR_TEMPLATE_ID }
+          ]
+        }
+      ],
+      provasVitor: {
+        database_id: PROVAS_VITOR_DATABASE_ID
+      }
     },
 
     // "Financeiro → Contas Mensais" (pedido do Georges): tabela simples,
