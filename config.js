@@ -1326,7 +1326,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-23 01:21",
+  appVersion: "2026-09-23 10:15",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2825,6 +2825,16 @@ const APP_CONFIG = {
           items: [
             { label: "Aniversários", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link" },
             { label: "BI de Aniversários", type: "page", target: "pmf_cad_aniversarios_bi" }
+          ]
+        },
+        {
+          // "Criar no Notion" (pedido do Georges — mesmo padrão das outras
+          // páginas) usando o template PADRÃO que ele já configurou na
+          // base (default_page_template do data source, convertido de
+          // 3e40481486dd80d397dbfd67265bdd9f pro formato com hífen).
+          title: "Criar no Notion",
+          items: [
+            { label: "Aniversário", type: "notion-template", icon: "notion", database_id: ANIVERSARIOS_DATABASE_ID, template_id: "3e404814-86dd-80d3-97db-fd67265bdd9f" }
           ]
         }
       ],

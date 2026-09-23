@@ -8897,21 +8897,192 @@
     if (p.diasAteProximo === 0) return p.idade.years;
     return p.idade.years + 1;
   }
+  // extrai o número da Geração ("2ª Geração" -> 2) de forma genérica (via
+  // regex, não hardcoded) — usado pela heurística de parentesco abaixo.
+  function aniversarioGeracaoOrder(geracaoStr) {
+    if (!geracaoStr) return null;
+    var m = String(geracaoStr).match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : null;
+  }
+  // Heurística de parentesco (pai/mãe, filhos, cônjuge, irmãos, gêmeos,
+  // avós/netos) — PEDIDO EXPLÍCITO do Georges sabendo do risco de errar
+  // ("Sim, tenta a heurística"), depois de eu mostrar que a base não tem
+  // um campo de parentesco de verdade (só Grupo/Grupo Originário/Geração).
+  // Construída e validada contra as 52 pessoas reais da família Filizzola
+  // (ver conversa) — 3 regras, da mais confiável pra mais arriscada:
+  // 1) Dentro de um mesmo "Grupo" (núcleo familiar, ex: "Família Borelli
+  //    Filizzola"), quem está na geração mais velha PRESENTE nesse grupo
+  //    é o casal/pessoa-base; quem está numa geração mais nova no MESMO
+  //    grupo é filho(a) dessa base. 2 pessoas na base com gêneros
+  //    diferentes = cônjuges. Mesmo grupo+geração = irmãos entre si;
+  //    mesma data de nascimento = gêmeos.
+  // 2) MAIS ARRISCADO — cruza GRUPOS diferentes do mesmo "Grupo
+  //    Originário" (tronco/sobrenome): o grupo cuja geração-base é a mais
+  //    antiga de todo o tronco é o casal-tronco (avós); qualquer pessoa
+  //    de OUTRO grupo do mesmo tronco cujo NOME contém o sobrenome do
+  //    Grupo Originário é filho(a) desse casal, e os filhos DELA são
+  //    netos do casal-tronco. Essas relações (avos/netos) são só
+  //    "estimadas" — sempre sinalizar isso na UI/mensagem.
+  // Só faz sentido pra quem tem Geração preenchida (os 5 ramos Filizzola —
+  // "Amigos"/PMF/BR2/etc não têm Geração, ficam de fora automaticamente).
+  function aniversarioComputeParentesco(people) {
+    var result = {};
+    people.forEach(function (p) { result[p.id] = { conjuge: null, pais: [], filhos: [], irmaos: [], gemeos: [], avos: [], netos: [] }; });
+    function addRel(fromId, key, toNome) {
+      if (!result[fromId]) return;
+      var arr = result[fromId][key];
+      if (Array.isArray(arr) && arr.indexOf(toNome) === -1) arr.push(toNome);
+    }
+    var byGrupo = {};
+    people.forEach(function (p) {
+      if (!p.grupo || !p.geracao) return;
+      (byGrupo[p.grupo] = byGrupo[p.grupo] || []).push(p);
+    });
+    var grupoCoreMap = {};
+    Object.keys(byGrupo).forEach(function (grupo) {
+      var membros = byGrupo[grupo];
+      var orders = membros.map(function (p) { return aniversarioGeracaoOrder(p.geracao); }).filter(function (o) { return o !== null; });
+      if (!orders.length) return;
+      var coreOrder = Math.min.apply(null, orders);
+      var core = membros.filter(function (p) { return aniversarioGeracaoOrder(p.geracao) === coreOrder; });
+      var rest = membros.filter(function (p) { return aniversarioGeracaoOrder(p.geracao) !== coreOrder; });
+      var directChildOrder = coreOrder + 1;
+      var directChildren = rest.filter(function (p) { return aniversarioGeracaoOrder(p.geracao) === directChildOrder; });
+      grupoCoreMap[grupo] = { coreOrder: coreOrder, core: core, rest: rest, directChildren: directChildren };
+
+      if (core.length === 2 && core[0].genero && core[1].genero && core[0].genero !== core[1].genero) {
+        addRel(core[0].id, "conjuge", core[1].nome);
+        addRel(core[1].id, "conjuge", core[0].nome);
+        result[core[0].id].conjuge = core[1].nome;
+        result[core[1].id].conjuge = core[0].nome;
+      }
+
+      directChildren.forEach(function (filho) {
+        core.forEach(function (pai) {
+          addRel(pai.id, "filhos", filho.nome);
+          addRel(filho.id, "pais", pai.nome);
+        });
+      });
+
+      var byOrder = {};
+      rest.forEach(function (p) { var o = aniversarioGeracaoOrder(p.geracao); (byOrder[o] = byOrder[o] || []).push(p); });
+      Object.keys(byOrder).forEach(function (o) {
+        var mesmaGeracao = byOrder[o];
+        mesmaGeracao.forEach(function (a) {
+          mesmaGeracao.forEach(function (b) {
+            if (a.id === b.id) return;
+            addRel(a.id, "irmaos", b.nome);
+            if (a.nascimento && a.nascimento === b.nascimento) addRel(a.id, "gemeos", b.nome);
+          });
+        });
+      });
+    });
+
+    var byOriginario = {};
+    people.forEach(function (p) {
+      if (!p.grupoOriginario || !p.grupo) return;
+      (byOriginario[p.grupoOriginario] = byOriginario[p.grupoOriginario] || {});
+      byOriginario[p.grupoOriginario][p.grupo] = true;
+    });
+    Object.keys(byOriginario).forEach(function (originario) {
+      var gruposDoTronco = Object.keys(byOriginario[originario]);
+      var melhorGrupo = null, melhorOrder = Infinity;
+      gruposDoTronco.forEach(function (g) {
+        var info = grupoCoreMap[g];
+        if (info && info.coreOrder < melhorOrder) { melhorOrder = info.coreOrder; melhorGrupo = g; }
+      });
+      if (!melhorGrupo) return;
+      var troncoCore = grupoCoreMap[melhorGrupo].core;
+      if (!troncoCore.length) return;
+      gruposDoTronco.forEach(function (g) {
+        if (g === melhorGrupo) return;
+        var info = grupoCoreMap[g];
+        if (!info) return;
+        // membro do núcleo desse outro grupo cujo NOME carrega o
+        // sobrenome do tronco = provável filho(a) do casal-tronco (além
+        // de virar "netos" pro casal, os próprios filhos dele também
+        // entram como "filhos"/"pais" do casal-tronco).
+        var filhosDoTronco = info.core.filter(function (p) { return p.nome.indexOf(originario) !== -1; });
+        if (!filhosDoTronco.length) return;
+        filhosDoTronco.forEach(function (filho) {
+          troncoCore.forEach(function (avo) {
+            addRel(avo.id, "filhos", filho.nome);
+            addRel(filho.id, "pais", avo.nome);
+          });
+        });
+        info.directChildren.forEach(function (neto) {
+          troncoCore.forEach(function (avo) {
+            addRel(avo.id, "netos", neto.nome);
+            addRel(neto.id, "avos", avo.nome);
+          });
+        });
+      });
+    });
+
+    return result;
+  }
+  // junta uma lista em português natural: "A", "A e B", "A, B e C".
+  function aniversarioNaturalJoin(arr) {
+    if (!arr || !arr.length) return "";
+    if (arr.length === 1) return arr[0];
+    return arr.slice(0, -1).join(", ") + " e " + arr[arr.length - 1];
+  }
   // rascunho de mensagem de parabéns pra copiar/colar no WhatsApp (pedido
-  // do Georges: "crie... uma mensagem pré-montada de aniversário"). A base
-  // NÃO tem relação de pai/filho/irmão/cônjuge — só Grupo, Grupo
-  // Originário e Geração — então o texto fica GENÉRICO e só usa dado
-  // confirmado (nome, idade que completa, e a "família"/círculo já
-  // calculado em aniversarioAutoTag), sem inventar parentesco. Georges
-  // mesmo disse que só copia e pede pra IA completar com detalhes (ex.
-  // profissão) antes de mandar.
-  function aniversarioNotaPadrao(p) {
+  // do Georges: "crie... uma mensagem pré-montada de aniversário"). Quando
+  // "parentesco" tem dado pra essa pessoa (heurística acima, só pros 5
+  // ramos Filizzola), a mensagem menciona cônjuge/filhos/pais/netos de
+  // verdade; senão (Amigos/PMF/etc, ou parentesco não calculado) cai no
+  // genérico — nome, idade que completa, e a "família"/círculo
+  // (aniversarioAutoTag). "avos"/"netos" vêm da parte mais arriscada da
+  // heurística (cruza Grupos diferentes — ver aniversarioComputeParentesco),
+  // por isso sempre levam o aviso "(parentesco estimado — confira)".
+  function aniversarioNotaPadrao(p, parentesco) {
     var idade = aniversarioTurningAge(p);
     var familia = aniversarioAutoTag(p) || p.grupo || "";
+    var rel = (parentesco && parentesco[p.id]) || null;
+    var geracaoOrdem = aniversarioGeracaoOrder(p.geracao);
     var linhas = [];
     linhas.push("Parabéns, " + p.nome + "! 🎉🎂");
     if (idade !== null) {
       linhas.push("Hoje você completa " + idade + (idade === 1 ? " aninho" : " anos") + "!");
+    }
+    // personalização por geração (pedido do Georges: "ajuste as msgs de
+    // cada um para colocar coisas relacionadas aos irmãos e pais [na 3ª
+    // geração]; dos filhos e esposa/marido [na 2ª geração] e do
+    // marido/esposa e netos [na 1ª geração]") — quem não tem Geração
+    // preenchida (ou "Não se aplica") cai no fallback genérico de sempre
+    // (filhos > pais, depois netos, sem depender de qual geração é).
+    if (rel) {
+      if (geracaoOrdem === 1) {
+        if (rel.conjuge) linhas.push("Que seu dia seja especial ao lado de " + rel.conjuge + "!");
+        if (rel.netos.length) {
+          var netosTxt1 = rel.netos.length <= 4 ? aniversarioNaturalJoin(rel.netos) : (rel.netos.length + " netos");
+          linhas.push("E que continue vendo " + netosTxt1 + " crescer! (parentesco estimado — confira)");
+        }
+      } else if (geracaoOrdem === 2) {
+        if (rel.filhos.length) {
+          linhas.push("Aproveita o dia ao lado de " + aniversarioNaturalJoin(rel.filhos) + "!");
+        }
+        if (rel.conjuge) linhas.push("Que seu dia seja especial ao lado de " + rel.conjuge + "!");
+      } else if (geracaoOrdem === 3) {
+        if (rel.irmaos.length) {
+          linhas.push("Aproveita o dia ao lado de " + aniversarioNaturalJoin(rel.irmaos) + "!");
+        }
+        if (rel.pais.length) {
+          linhas.push("Que " + aniversarioNaturalJoin(rel.pais) + (rel.pais.length > 1 ? " comemorem" : " comemore") + " esse dia especial com você!");
+        }
+      } else {
+        if (rel.conjuge) linhas.push("Que seu dia seja especial ao lado de " + rel.conjuge + "!");
+        if (rel.filhos.length) {
+          linhas.push("Aproveita o dia ao lado de " + aniversarioNaturalJoin(rel.filhos) + "!");
+        } else if (rel.pais.length) {
+          linhas.push("Que " + aniversarioNaturalJoin(rel.pais) + (rel.pais.length > 1 ? " comemorem" : " comemore") + " esse dia especial com você!");
+        }
+        if (rel.netos.length) {
+          var netosTxtF = rel.netos.length <= 4 ? aniversarioNaturalJoin(rel.netos) : (rel.netos.length + " netos");
+          linhas.push("E que continue vendo " + netosTxtF + " crescer! (parentesco estimado — confira)");
+        }
+      }
     }
     linhas.push(
       "Que seu dia seja repleto de alegria, carinho e muitas felicidades! Desejamos saúde, sucesso e realizações nessa nova fase." +
@@ -8989,7 +9160,7 @@
     // clicar em Nome/Grupo/Nascimento/Idade troca pra ordenação por
     // aquela coluna (mesmo padrão de cabeçalho clicável de Contas
     // Mensais — ver COLS/sortState abaixo).
-    var state = { search: "", grupoSelected: [], tagSelected: [], sortKey: "proximo", sortDir: 1 };
+    var state = { search: "", grupoSelected: [], tagSelected: [], origemSelected: [], sortKey: "proximo", sortDir: 1, nascCycleIdx: -1 };
 
     // notas (rascunho de mensagem de aniversário) — 100% KV, nunca Notion
     // (ver ANIVERSARIOS_NOTAS_KEY no worker.js). "expandedNotaIds" mantém
@@ -8997,6 +9168,11 @@
     // "expandedNoteIds"/"expandedSubitemIds" em Prioridades).
     var notasMap = {};
     var expandedNotaIds = {};
+    // parentesco estimado (heurística — ver aniversarioComputeParentesco)
+    // só faz sentido pra quem tem Geração preenchida, ou seja, só os 5
+    // ramos Filizzola; calculado depois que allPeople chega (ver
+    // Promise.all mais abaixo) e usado em aniversarioNotaPadrao().
+    var parentescoList = {};
 
     var body = document.createElement("div");
 
@@ -9007,6 +9183,7 @@
       }
       if (state.grupoSelected.length && state.grupoSelected.indexOf(p.grupo) === -1) return false;
       if (state.tagSelected.length && !p.tags.some(function (t) { return state.tagSelected.indexOf(t) !== -1; })) return false;
+      if (state.origemSelected.length && state.origemSelected.indexOf(p.grupoOriginario) === -1) return false;
       return true;
     }
 
@@ -9062,6 +9239,41 @@
       });
     }
     wrap.appendChild(tagsWrap);
+
+    // ---- botões de filtro por Grupo Originário (pedido do Georges: "faça
+    // botões para filtrar pelos grupos originários também" — os 5 ramos
+    // Filizzola, mesma lista de ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO
+    // usada no BI, aqui com rótulo curto pra caber no botão) — seleção
+    // múltipla (OU entre as marcadas), mesmo padrão dos pills de família
+    // acima.
+    var ANIVERSARIOS_ORIGEM_LABELS = {
+      "Mavros Filizzola": "Mavros",
+      "Filizzola D´Urso": "D´Urso",
+      "Ciorlia Filizzola": "Ciorlia",
+      "Sbeghen Filizzola": "Sbeghen",
+      "Lavorato Filizzola": "Lavorato"
+    };
+    var origemWrap = document.createElement("div");
+    origemWrap.className = "aniversarios-tag-pills aniversarios-origem-pills";
+    function renderOrigemPills() {
+      origemWrap.innerHTML = "";
+      ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO.forEach(function (origem) {
+        var count = allPeople.filter(function (p) { return p.grupoOriginario === origem; }).length;
+        if (!count) return;
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "aniversarios-tag-pill" + (state.origemSelected.indexOf(origem) !== -1 ? " active" : "");
+        btn.textContent = (ANIVERSARIOS_ORIGEM_LABELS[origem] || origem) + " (" + count + ")";
+        btn.addEventListener("click", function () {
+          var idx = state.origemSelected.indexOf(origem);
+          if (idx === -1) state.origemSelected.push(origem); else state.origemSelected.splice(idx, 1);
+          renderOrigemPills();
+          applyState();
+        });
+        origemWrap.appendChild(btn);
+      });
+    }
+    wrap.appendChild(origemWrap);
 
     // ---- filtro de Grupo — multi-select com pesquisa (buildIconDropdown,
     // MESMO padrão usado em qualquer outra página do app), opções tiradas
@@ -9171,8 +9383,6 @@
           // aniversário, ver NASC_CYCLE acima) — fica "ativa" pra
           // qualquer uma das chaves do ciclo, e mostra um sub-rótulo
           // dizendo qual das 2 tá em uso no momento.
-          var curIdx = -1;
-          col.cycle.forEach(function (st, i) { if (state.sortKey === st.key && state.sortDir === st.dir) curIdx = i; });
           var active = col.cycle.some(function (st) { return st.key === state.sortKey; });
           if (active) {
             th.classList.add("active");
@@ -9181,9 +9391,15 @@
           th.title = "Clique para alternar: data (crescente/decrescente) e proximidade do próximo aniversário";
           th.appendChild(arrow);
           th.addEventListener("click", function () {
-            var nextIdx = curIdx === -1 ? 0 : (curIdx + 1) % col.cycle.length;
-            state.sortKey = col.cycle[nextIdx].key;
-            state.sortDir = col.cycle[nextIdx].dir;
+            // contador PRÓPRIO do ciclo (state.nascCycleIdx), não a posição
+            // do sort GLOBAL atual — o sort padrão da página já nasce em
+            // "próximo aniversário" (index 2 do ciclo), então usar o sort
+            // atual pra achar "onde eu tô no ciclo" fazia o 1º clique pular
+            // direto pro índice 3 em vez de começar do índice 0
+            // (nascimento mais antigo), que é o esperado.
+            state.nascCycleIdx = (state.nascCycleIdx + 1) % col.cycle.length;
+            state.sortKey = col.cycle[state.nascCycleIdx].key;
+            state.sortDir = col.cycle[state.nascCycleIdx].dir;
             renderTable();
           });
         } else {
@@ -9304,7 +9520,7 @@
         notaRowCell.colSpan = COLS.length + 1;
         var notaTextarea = document.createElement("textarea");
         notaTextarea.className = "priorities-note-textarea";
-        notaTextarea.value = notasMap[p.id] || aniversarioNotaPadrao(p);
+        notaTextarea.value = notasMap[p.id] || aniversarioNotaPadrao(p, parentescoList);
         notaRowCell.appendChild(notaTextarea);
 
         var notaActions = document.createElement("div");
@@ -9379,8 +9595,16 @@
       var pages = (result.data && result.data.pages) || [];
       allPeople = aniversarioPessoasFromPages(pages);
       notasMap = (notasResult && notasResult.notas) || {};
+      // parentesco só é calculável pra quem tem "Geração" preenchida (os
+      // 5 ramos Filizzola) — os demais (Amigos/PMF/BR2/etc) ficam de fora
+      // automaticamente (aniversarioComputeParentesco já ignora quem não
+      // tem geracao) e caem no rascunho genérico de aniversarioNotaPadrao.
+      parentescoList = aniversarioComputeParentesco(allPeople.filter(function (p) {
+        return p.grupoOriginario && ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO.indexOf(p.grupoOriginario) !== -1;
+      }));
 
       renderTagPills();
+      renderOrigemPills();
 
       var grupoDropdown = buildIconDropdown(
         { property: "Grupo", type: "select", label: "Grupo", searchable: true, options: buildGrupoOptions() },
@@ -9539,12 +9763,40 @@
         grid.appendChild(kpiCard("👶", "Mais novo(a)", youngest.nome, youngest.idade ? youngest.idade.label : ""));
       }
 
+      // idade mais comum HOJE (pedido do Georges: "crie um card com a
+      // idade que tem mais pessoas na presente data... se for a idade
+      // mais comum hoje, colocar: Idade mais comum hoje - 1 ano - 4
+      // pessoas") — agrupa por idade em ANOS COMPLETOS hoje (p.idade.years,
+      // já calculado por aniversarioIdade; quem tem menos de 1 ano entra
+      // no grupo "menos de 1 ano"). Empate: lista todas as idades
+      // empatadas no topo, mesmo padrão de "grupo com mais membros".
+      var idadeCount = {}, idadeMembers = {};
+      withBirth.forEach(function (p) {
+        if (!p.idade || p.idade.years === null || p.idade.years === undefined) return;
+        var y = p.idade.years;
+        idadeCount[y] = (idadeCount[y] || 0) + 1;
+        (idadeMembers[y] = idadeMembers[y] || []).push(p.nome + (p.ddmm ? " · " + p.ddmm : ""));
+      });
+      function idadeAnoLabel(y) { return y === 0 ? "menos de 1 ano" : (y + (y === 1 ? " ano" : " anos")); }
+      var maxIdadeCount = 0;
+      Object.keys(idadeCount).forEach(function (y) { if (idadeCount[y] > maxIdadeCount) maxIdadeCount = idadeCount[y]; });
+      var topIdades = Object.keys(idadeCount).filter(function (y) { return idadeCount[y] === maxIdadeCount; }).map(function (y) { return parseInt(y, 10); }).sort(function (a, b) { return a - b; });
+      if (topIdades.length && maxIdadeCount > 0) {
+        var idadeValue = topIdades.length === 1 ? idadeAnoLabel(topIdades[0]) : topIdades.map(idadeAnoLabel).join(" e ") + " (empate)";
+        var idadeSub = maxIdadeCount + (maxIdadeCount === 1 ? " pessoa" : " pessoas") + (topIdades.length > 1 ? " cada" : "");
+        grid.appendChild(kpiCard("🎈", "Idade mais comum hoje", idadeValue, idadeSub, function () {
+          toggleDetail("idademax", topIdades.length === 1 ? idadeAnoLabel(topIdades[0]) : topIdades.map(idadeAnoLabel).join(" e "), topIdades.map(function (y) {
+            return { label: idadeAnoLabel(y), items: idadeMembers[y] || [] };
+          }));
+        }));
+      }
+
       // ano com mais nascimentos — clicável, lista quem nasceu naquele ano.
       var yearCount = {}, yearMembers = {};
       withBirth.forEach(function (p) {
         var y = p.nascimento.slice(0, 4);
         yearCount[y] = (yearCount[y] || 0) + 1;
-        (yearMembers[y] = yearMembers[y] || []).push(p.nome);
+        (yearMembers[y] = yearMembers[y] || []).push(p.nome + (p.ddmm ? " · " + p.ddmm : ""));
       });
       var bestYear = null, bestYearCount = 0;
       Object.keys(yearCount).forEach(function (y) {
@@ -9561,7 +9813,8 @@
       withBirth.forEach(function (p) {
         var m = parseInt(p.nascimento.slice(5, 7), 10);
         monthCount[m] = (monthCount[m] || 0) + 1;
-        (monthMembers[m] = monthMembers[m] || []).push(p.nome);
+        var dia = p.ddmm ? p.ddmm.split("/")[0] : "";
+        (monthMembers[m] = monthMembers[m] || []).push(p.nome + (dia ? " · dia " + dia : ""));
       });
       var bestMonth = null, bestMonthCount = 0;
       Object.keys(monthCount).forEach(function (m) {
@@ -9616,28 +9869,27 @@
         }));
       }
 
-      // "avô ou avó com mais netos" (pedido do Georges) — a base não tem
-      // relação explícita de pai/filho, só o ramo de origem (Grupo
-      // Originário: os 5 sobrenomes-tronco). Por isso o card usa, como
-      // proxy honesto, o RAMO com mais descendentes (todo mundo que
-      // carrega aquele Grupo Originário) — não afirma quem é avô/avó de
-      // quem, só mostra qual tronco familiar é o mais numeroso hoje.
-      var ramoCount = {}, ramoMembers = {};
+      // "avô ou avó com mais netos" (pedido do Georges) — agora calculado
+      // de verdade pela heurística de parentesco (aniversarioComputeParentesco,
+      // aprovada explicitamente pelo Georges mesmo sabendo do risco de
+      // errar às vezes: casal-base de cada Grupo + cruzamento de Grupos
+      // do mesmo Grupo Originário por sobrenome). Marcado "(estimado)"
+      // porque a parte que cruza Grupos é a mais arriscada da heurística.
+      var parentescoBI = aniversarioComputeParentesco(people);
+      var netosCount = {}, netosNomes = {};
       people.forEach(function (p) {
-        var ramo = p.grupoOriginario;
-        if (!ramo || ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO.indexOf(ramo) === -1) return;
-        ramoCount[ramo] = (ramoCount[ramo] || 0) + 1;
-        (ramoMembers[ramo] = ramoMembers[ramo] || []).push(p.nome);
+        var n = (parentescoBI[p.id] && parentescoBI[p.id].netos) || [];
+        if (n.length) { netosCount[p.nome] = n.length; netosNomes[p.nome] = n; }
       });
-      var maxRamoCount = 0;
-      Object.keys(ramoCount).forEach(function (r) { if (ramoCount[r] > maxRamoCount) maxRamoCount = ramoCount[r]; });
-      var topRamos = Object.keys(ramoCount).filter(function (r) { return ramoCount[r] === maxRamoCount; }).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); });
-      if (topRamos.length) {
-        var ramoValue = topRamos.length === 1 ? topRamos[0] : (topRamos.length + " ramos empatados");
-        var ramoSub = maxRamoCount + (maxRamoCount === 1 ? " descendente" : " descendentes") + (topRamos.length > 1 ? " cada" : "");
-        grid.appendChild(kpiCard("🌳", "Ramo com mais descendentes", ramoValue, ramoSub, function () {
-          toggleDetail("ramomax", topRamos.length === 1 ? topRamos[0] : topRamos.join(" e "), topRamos.map(function (r) {
-            return { label: r, items: ramoMembers[r] || [] };
+      var maxNetosCount = 0;
+      Object.keys(netosCount).forEach(function (n) { if (netosCount[n] > maxNetosCount) maxNetosCount = netosCount[n]; });
+      var topAvos = Object.keys(netosCount).filter(function (n) { return netosCount[n] === maxNetosCount; }).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); });
+      if (topAvos.length && maxNetosCount > 0) {
+        var avosValue = topAvos.length === 1 ? topAvos[0] : (topAvos.length + " pessoas empatadas");
+        var avosSub = maxNetosCount + (maxNetosCount === 1 ? " neto (estimado)" : " netos (estimado)") + (topAvos.length > 1 ? " cada" : "");
+        grid.appendChild(kpiCard("👴👵", "Avô/avó com mais netos", avosValue, avosSub, function () {
+          toggleDetail("netosmax", topAvos.length === 1 ? topAvos[0] : topAvos.join(" e "), topAvos.map(function (n) {
+            return { label: n, items: netosNomes[n] || [] };
           }));
         }));
       }
