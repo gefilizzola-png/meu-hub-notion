@@ -11350,31 +11350,56 @@
     // quando usei um remédio, diminuindo a quantidade, e outro pra
     // sinalizar que fiz a reposição... aumentando a quantidade") —
     // otimista (mesmo padrão de togglePin/toggleNotifRead): já atualiza o
-    // número na tela, regrava de verdade no Worker em paralelo; se a
-    // resposta trouxer um valor diferente (ex: já tinha chegado em 0),
-    // corrige com o valor real devolvido.
-    function bump(it, delta, btn) {
-      var route = delta < 0 ? "/remedios-usar" : "/remedios-repor";
+    // número na tela na hora.
+    //
+    // DEBOUNCE (pedido do Georges: "quando clico duas vezes rápido pra + ou
+    // -, ele desconsidera uma... parece que clico, inicia a atualização e
+    // quando clico de novo, ele traz a versão atualizada de quando cliquei
+    // a primeira vez") — causa raiz: cada clique disparava um POST
+    // /remedios-usar|repor SEPARADO, cada um fazendo seu próprio
+    // ler+incrementar+gravar no Worker; dois cliques quase juntos podiam
+    // ler o MESMO valor antes de qualquer um gravar (clássica race
+    // condition de "leitura-e-escrita" sem trava), perdendo 1 unidade.
+    // Fix: não manda mais requisição a cada clique — só acumula o delta na
+    // tela (renderList já reflete na hora, sem atraso nenhum pro usuário) e
+    // espera REMEDIO_BUMP_DEBOUNCE_MS sem NENHUM clique novo (qualquer
+    // clique, + ou -, reinicia a espera) antes de mandar UM PUT só com a
+    // quantidade final ABSOLUTA (não delta) — sem "ler antes de escrever"
+    // nenhum, então não tem corrida nenhuma pra perder.
+    var remedioBumpTimers = {};
+    var REMEDIO_BUMP_DEBOUNCE_MS = 700;
+
+    function bump(it, delta) {
       it.quantidade = Math.max(0, (it.quantidade || 0) + delta);
       renderList();
-      if (btn) btn.disabled = true;
-      authFetch(cfg.templateWorkerUrl + route + "?id=" + encodeURIComponent(it.id), { method: "POST" })
-        .then(handle401).then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (data && data.item) {
-            var idx = state.items.findIndex(function (x) { return x.id === it.id; });
-            if (idx !== -1) state.items[idx] = data.item;
-          }
-          renderList();
-        }).catch(function () { loadItems(); });
+      if (remedioBumpTimers[it.id]) clearTimeout(remedioBumpTimers[it.id]);
+      remedioBumpTimers[it.id] = setTimeout(function () {
+        delete remedioBumpTimers[it.id];
+        updateItem(it.id, { quantidade: it.quantidade }).then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data && data.item) {
+              var idx = state.items.findIndex(function (x) { return x.id === it.id; });
+              if (idx !== -1) state.items[idx] = data.item;
+              renderList();
+            }
+          }).catch(function () { loadItems(); });
+      }, REMEDIO_BUMP_DEBOUNCE_MS);
+    }
+
+    // classe de cor do card (pedido do Georges: "quando ficar zerado, ajuste
+    // para ficar em vermelho" — zero manda em cima de "baixo"/laranja,
+    // nunca os dois juntos).
+    function remedioRowClass(it) {
+      var padrao = it.quantidadePadrao || 0;
+      var qtd = it.quantidade || 0;
+      if (qtd === 0) return "remedios-row zero";
+      if (padrao > 0 && qtd <= padrao / 2) return "remedios-row low";
+      return "remedios-row";
     }
 
     function buildRow(it) {
-      var padrao = it.quantidadePadrao || 0;
-      var low = padrao > 0 && (it.quantidade || 0) <= padrao / 2;
-
       var row = document.createElement("div");
-      row.className = "remedios-row" + (low ? " low" : "");
+      row.className = remedioRowClass(it);
 
       // "número" (pedido do Georges, rodada 2 — "escrevo em cada
       // comprimido o número daquele remédio para depois saber qual
@@ -11442,7 +11467,7 @@
       usarBtn.className = "remedios-qty-btn remedios-qty-minus";
       usarBtn.title = "Usei (diminui 1)";
       usarBtn.innerHTML = '<i class="ti ti-minus"></i>';
-      usarBtn.addEventListener("click", function () { bump(it, -1, usarBtn); });
+      usarBtn.addEventListener("click", function () { bump(it, -1); });
       qtyWrap.appendChild(usarBtn);
       var qtyValue = document.createElement("span");
       qtyValue.className = "remedios-qty-value";
@@ -11453,7 +11478,7 @@
       reporBtn.className = "remedios-qty-btn remedios-qty-plus";
       reporBtn.title = "Repus (aumenta 1)";
       reporBtn.innerHTML = '<i class="ti ti-plus"></i>';
-      reporBtn.addEventListener("click", function () { bump(it, 1, reporBtn); });
+      reporBtn.addEventListener("click", function () { bump(it, 1); });
       qtyWrap.appendChild(reporBtn);
       row.appendChild(qtyWrap);
 
@@ -11477,7 +11502,7 @@
         var n = Math.max(0, Math.round(Number(padraoInput.value)) || 0);
         padraoInput.value = n;
         it.quantidadePadrao = n;
-        row.className = "remedios-row" + ((n > 0 && (it.quantidade || 0) <= n / 2) ? " low" : "");
+        row.className = remedioRowClass(it);
         updateItem(it.id, { quantidadePadrao: n }).catch(function () {});
       });
       padraoWrap.appendChild(padraoInput);
@@ -12258,29 +12283,38 @@
   // para cada remédio"). Mesmo truque de "supermercado" acima: junta TODOS
   // os remédios com quantidade <= metade da quantidadePadrao num item
   // SINTÉTICO só, com "extra[dateProperty]" = agora — leadTime "0" dispara
-  // assim que existir pelo menos 1 remédio baixo. "id" inclui os IDs
-  // (ordenados) dos remédios baixos — mesmo fix do bug de "id fixo" corrigido
-  // acima em fetchSupermercadoNotificationItems (rodada 5): sem isso, uma
-  // vez lida a notificação nunca voltaria a aparecer pra um remédio NOVO
-  // que ficasse baixo depois. quantidadePadrao 0 (ainda não configurado)
-  // nunca conta como "baixo" — evita notificação falsa em item recém-criado.
+  // assim que existir pelo menos 1 remédio baixo.
+  //
+  // "id" inclui "id:quantidade" (não só o id) de cada remédio baixo, ORDENADO
+  // por id — bug reportado pelo Georges: "diminuo Novalgina pra 2, notifica
+  // e marco como lida; depois diminuo pra 1 (sem repor), deveria notificar
+  // de novo, mas não notifica". Causa: antes o id só levava a LISTA de
+  // remédios baixos (ex: "novalgina"), então diminuir 2->1 mantinha
+  // Novalgina no MESMO conjunto -> MESMO id -> continuava "lida" pra
+  // sempre, mesmo a quantidade caindo mais. Incluindo a quantidade no id,
+  // QUALQUER mudança de quantidade num remédio já baixo (ou a entrada de um
+  // remédio novo no conjunto, como já era) gera um id novo -> volta a
+  // "não lida" -> notifica de novo. quantidadePadrao 0 (ainda não
+  // configurado) nunca conta como "baixo" — evita notificação falsa em
+  // item recém-criado.
   function fetchRemediosNotificationItems(source) {
     return authFetch(cfg.templateWorkerUrl + "/remedios").then(function (res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
       return res.ok ? res.json() : { items: [] };
     }).then(function (data) {
       var items = (data && data.items) || [];
-      var lowIds = items.filter(function (it) {
+      var lowItems = items.filter(function (it) {
         var padrao = it.quantidadePadrao || 0;
         return padrao > 0 && (it.quantidade || 0) <= padrao / 2;
-      }).map(function (it) { return it.id; }).sort();
-      if (!lowIds.length) return [];
+      }).sort(function (a, b) { return (a.id || "").localeCompare(b.id || ""); });
+      if (!lowItems.length) return [];
+      var signature = lowItems.map(function (it) { return it.id + ":" + (it.quantidade || 0); }).join(",");
       var extraObj = {};
       // mesmo bug/fix de fetchSupermercadoNotificationItems acima —
       // normalizeNotifDate exige "{ start: ... }", nunca uma string pura.
       extraObj[source.dateProperty] = { start: new Date().toISOString() };
       return [{
-        id: "remedios-low::" + lowIds.join(","),
+        id: "remedios-low::" + signature,
         title: "Atenção: necessidade de repor Remédios",
         url: location.origin + location.pathname + "#remedios",
         extra: extraObj
@@ -12431,11 +12465,31 @@
     { id: "native", label: "Notificação nativa", hint: "notificação de verdade do sistema (Windows/Android) — precisa de permissão" }
   ];
 
+  // recolhido/escondido por padrão em CADA fonte (pedido do Georges: "Para
+  // nao tomar toda a tela, faça um botão bem sutil em cada card... as
+  // opções e o texto explicativo ficariam recolhidos"). Só em memória (não
+  // salva no KV, reseta ao recarregar a página) — é só um estado de "tô
+  // olhando isso agora", igual outros colapsos do app (ex: divisórias de
+  // Prioridades).
+  var notifChannelsExpandedIds = {};
+
+  // ordem alfabética (pedido do Georges: "coloque estes itens... em ordem
+  // alfabética") — por LABEL, não pela ordem de cadastro em
+  // NOTIFICATION_SOURCES (que foi crescendo por ordem de pedido ao longo do
+  // tempo, sem nenhuma lógica de exibição). Afeta tanto o editor de gestão
+  // quanto os chips de categoria da lista (ambos iteram notifState.sources).
+  function sortedNotifSourceDefs() {
+    return (window.NOTIFICATION_SOURCES || []).slice().sort(function (a, b) {
+      return (a.label || "").localeCompare(b.label || "", "pt-BR");
+    });
+  }
+
   function resolvedNotifSources(savedSettings) {
-    return (window.NOTIFICATION_SOURCES || []).map(function (source) {
+    return sortedNotifSourceDefs().map(function (source) {
       var s = savedSettings && savedSettings[source.id];
       var leadTimes = (s && Array.isArray(s.leadTimes) && s.leadTimes.length) ? s.leadTimes : source.defaultLeadTimes;
       var channels = (s && Array.isArray(s.channels)) ? s.channels : (source.defaultChannels || []);
+      var repeatWhilePending = (s && typeof s.repeatWhilePending === "boolean") ? s.repeatWhilePending : !!source.defaultRepeatWhilePending;
       return {
         id: source.id,
         label: source.label,
@@ -12448,7 +12502,8 @@
         defaultLeadTimes: source.defaultLeadTimes,
         enabled: s ? !!s.enabled : (source.defaultEnabled !== false),
         leadTimes: leadTimes,
-        channels: channels
+        channels: channels,
+        repeatWhilePending: repeatWhilePending
       };
     });
   }
@@ -12584,6 +12639,34 @@
     if (changed) saveTriggeredNotifIds(triggered);
   }
 
+  // "repetir enquanto pendente" (pedido do Georges — ver checkbox em
+  // renderNotifSettings acima). Roda só UMA VEZ por carregamento de página
+  // (não a cada refresh de 5min, que rodaria com o app já aberto e
+  // "ressuscitaria" algo marcado como lido há poucos minutos, ainda na
+  // mesma sessão) — flag de módulo, reseta sozinha a cada reload de
+  // verdade, exatamente "quando abrir o app". Pra fontes com
+  // repeatWhilePending ligado, tira do readIds qualquer notificação que
+  // ainda esteja presente nos items ATUAIS — ela volta a contar como "não
+  // lida" mesmo tendo sido marcada como lida antes, contanto que a situação
+  // (remédio baixo, conta vencida, item pra comprar…) continue valendo.
+  var notifRepeatPendingAppliedOnce = false;
+
+  function applyRepeatWhilePending(items, readIds) {
+    if (notifRepeatPendingAppliedOnce) return readIds;
+    notifRepeatPendingAppliedOnce = true;
+    var sourceById = {};
+    notifState.sources.forEach(function (s) { sourceById[s.id] = s; });
+    var repeatIds = {};
+    items.forEach(function (n) {
+      var source = sourceById[n.sourceId];
+      if (source && source.repeatWhilePending) repeatIds[n.id] = true;
+    });
+    if (!Object.keys(repeatIds).length) return readIds;
+    var filtered = readIds.filter(function (id) { return !repeatIds[id]; });
+    if (filtered.length !== readIds.length) saveNotifReadIds(filtered.slice());
+    return filtered;
+  }
+
   function refreshNotifications() {
     if (notifState.loading) return Promise.resolve();
     notifState.loading = true;
@@ -12593,7 +12676,7 @@
       return Promise.all([computeNotifications(notifState.sources), fetchNotifReadIds()]);
     }).then(function (results) {
       notifState.items = results[0];
-      notifState.readIds = results[1];
+      notifState.readIds = applyRepeatWhilePending(results[0], results[1]);
       notifState.loaded = true;
       notifState.loading = false;
       updateNotifBellBadge();
@@ -12899,7 +12982,7 @@
   function buildNotifSettingsPayload() {
     var out = {};
     notifState.sources.forEach(function (s) {
-      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, channels: s.channels };
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, channels: s.channels, repeatWhilePending: s.repeatWhilePending };
     });
     return out;
   }
@@ -12955,6 +13038,15 @@
     if (on && idx === -1) s.channels = s.channels.concat([channelId]);
     else if (!on && idx !== -1) s.channels = s.channels.filter(function (c) { return c !== channelId; });
     else return;
+    applyNotifSettingsChange();
+  }
+
+  // "repetir enquanto pendente" (pedido do Georges — ver
+  // applyRepeatWhilePending, chamada de dentro de refreshNotifications).
+  function setNotifSourceRepeatWhilePending(sourceId, on) {
+    var s = findNotifSource(sourceId);
+    if (!s || s.repeatWhilePending === on) return;
+    s.repeatWhilePending = on;
     applyNotifSettingsChange();
   }
 
@@ -13020,6 +13112,29 @@
       label.className = "notif-settings-source-label";
       label.textContent = (s.icon ? s.icon + " " : "") + s.label;
       head.appendChild(label);
+
+      // botão sutil (só ícone) pra abrir/fechar os 3 canais extras desta
+      // fonte — só existe se a fonte estiver ligada (senão os canais nem
+      // fazem sentido, ver comentário abaixo). Ganha destaque (classe
+      // has-channels) quando já tem algum canal marcado, pra dar pra saber
+      // sem precisar abrir.
+      if (s.enabled) {
+        var chToggleBtn = document.createElement("button");
+        chToggleBtn.type = "button";
+        chToggleBtn.className = "notif-settings-channels-toggle-btn" +
+          (s.channels.length ? " has-channels" : "") +
+          (notifChannelsExpandedIds[s.id] ? " active" : "");
+        chToggleBtn.title = s.channels.length
+          ? "Canais de aviso (" + s.channels.length + " ativo" + (s.channels.length > 1 ? "s" : "") + ")"
+          : "Canais de aviso (toast/piscar/nativa)";
+        chToggleBtn.setAttribute("aria-label", "Canais de aviso");
+        chToggleBtn.innerHTML = '<i class="ti ti-adjustments-horizontal"></i>';
+        chToggleBtn.addEventListener("click", function () {
+          notifChannelsExpandedIds[s.id] = !notifChannelsExpandedIds[s.id];
+          renderNotifSettings();
+        });
+        head.appendChild(chToggleBtn);
+      }
 
       var toggle = document.createElement("label");
       toggle.className = "notif-settings-toggle";
@@ -13092,8 +13207,10 @@
 
       // canais extras (toast/piscar+som/nativa) — só faz sentido oferecer
       // se a fonte já está ligada (senão nem chega a computar notificação
-      // nenhuma dela pra disparar canal nenhum).
-      if (s.enabled) {
+      // nenhuma dela pra disparar canal nenhum) E só desenha o conteúdo
+      // quando o botão sutil do head foi clicado (recolhido por padrão —
+      // pedido do Georges: "pra não tomar toda a tela").
+      if (s.enabled && notifChannelsExpandedIds[s.id]) {
         var chWrap = document.createElement("div");
         chWrap.className = "notif-settings-channels";
         NOTIF_CHANNEL_DEFS.forEach(function (chDef) {
@@ -13126,6 +13243,37 @@
           }
           chWrap.appendChild(chRow);
         });
+
+        // "repetir enquanto pendente" (pedido do Georges: "Financeiro...
+        // posso ter uma conta vencida e não paga que marquei a notificação
+        // original como lida e acabei me esquecendo de pagar" / "Supermercado
+        // ou de Remédios... devem ser exibidas novamente quando abrir o app e
+        // continua com item pra comprar") — mesma linha visual dos 3 canais
+        // acima, mas separada por uma divisória (é um tipo de ajuste
+        // diferente: não é "como avisar", é "quando esquecer que já avisou").
+        var repeatDivider = document.createElement("div");
+        repeatDivider.className = "notif-settings-channel-divider";
+        chWrap.appendChild(repeatDivider);
+        var repeatRow = document.createElement("label");
+        repeatRow.className = "notif-settings-channel-row";
+        var repeatCb = document.createElement("input");
+        repeatCb.type = "checkbox";
+        repeatCb.checked = !!s.repeatWhilePending;
+        repeatCb.addEventListener("change", function () { setNotifSourceRepeatWhilePending(s.id, repeatCb.checked); });
+        repeatRow.appendChild(repeatCb);
+        var repeatText = document.createElement("span");
+        repeatText.className = "notif-settings-channel-text";
+        var repeatLabel = document.createElement("span");
+        repeatLabel.className = "notif-settings-channel-label";
+        repeatLabel.textContent = "Repetir enquanto pendente";
+        repeatText.appendChild(repeatLabel);
+        var repeatHint = document.createElement("span");
+        repeatHint.className = "notif-settings-channel-hint";
+        repeatHint.textContent = "mesmo já lida, volta a aparecer como não lida ao abrir o app se a situação continuar (ex: remédio ainda baixo, conta ainda vencida)";
+        repeatText.appendChild(repeatHint);
+        repeatRow.appendChild(repeatText);
+        chWrap.appendChild(repeatRow);
+
         block.appendChild(chWrap);
       }
 

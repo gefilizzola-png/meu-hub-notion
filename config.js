@@ -840,6 +840,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" },
       { id: "3h", amount: 3, unit: "hours", label: "3 horas antes" }
@@ -886,6 +892,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "2d", amount: 2, unit: "days", label: "2 dias antes" }
     ]
@@ -929,6 +941,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "2d", amount: 2, unit: "days", label: "2 dias antes" }
     ]
@@ -974,6 +992,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
@@ -1009,6 +1033,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "3d", amount: 3, unit: "days", label: "3 dias antes" }
     ]
@@ -1042,6 +1072,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "agora", amount: 0, unit: "hours", label: "Assim que sinalizar" }
     ]
@@ -1065,6 +1101,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "agora", amount: 0, unit: "hours", label: "Assim que ficar baixo" }
     ]
@@ -1109,6 +1151,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
@@ -1135,6 +1183,12 @@ var NOTIFICATION_SOURCES = [
     // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
     // escolher fonte por fonte pelo editor de gestão (engrenagem).
     defaultChannels: [],
+    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
+    // configurar que as notificações de Supermercado ou de Remédios... e
+    // Financeiro... devem ser exibidas novamente quando abrir o app e
+    // continuar pendente") — desligado por padrão em todas, mesmo espírito
+    // de defaultChannels acima (Georges escolhe fonte por fonte).
+    defaultRepeatWhilePending: false,
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
@@ -1402,7 +1456,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-23 18:06",
+  appVersion: "2026-09-23 18:42",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha

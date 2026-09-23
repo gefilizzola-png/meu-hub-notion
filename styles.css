@@ -2290,10 +2290,35 @@ html, body {
 .notif-settings-add-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
 .notif-settings-add-btn .ti { font-size: 13px; }
 
+/* botão sutil (só ícone) no cabeçalho de cada fonte, que abre/fecha os 3
+   canais extras abaixo (pedido do Georges, depois de ver o editor tomando a
+   tela toda: "botão bem sutil em cada card... recolhidos/escondidos").
+   Fica entre o nome da fonte e o toggle liga/desliga. Cinza apagado por
+   padrão; ganha uma cor quando já tem algum canal marcado (has-channels) e
+   fica destacado (active) enquanto o card está aberto. */
+.notif-settings-channels-toggle-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #c2c2bc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.notif-settings-channels-toggle-btn:hover { background: #f4f4f2; color: #666; }
+.notif-settings-channels-toggle-btn.has-channels { color: #4a90d9; }
+.notif-settings-channels-toggle-btn.active { background: #eaf2fb; color: #3a7dc4; }
+.notif-settings-channels-toggle-btn .ti { font-size: 14px; }
+
 /* ---------------- canais extras por fonte (pedido do Georges: "criar as 3
    juntas e eu ter a opção de escolher qual tipo quero aplicar a cada
    notificação que configuro") — 3 checkboxes dentro do MESMO bloco
-   .notif-settings-source de cada fonte, abaixo das antecedências. ---------------- */
+   .notif-settings-source de cada fonte, abaixo das antecedências, só
+   desenhadas quando o botão sutil acima está aberto. ---------------- */
 .notif-settings-channels {
   display: flex;
   flex-direction: column;
@@ -2311,6 +2336,9 @@ html, body {
 .notif-settings-channel-text { display: flex; flex-direction: column; min-width: 0; }
 .notif-settings-channel-label { font-size: 11.5px; font-weight: 500; color: #4a4a45; }
 .notif-settings-channel-hint { font-size: 10.5px; color: #b3b3ac; }
+/* separa "Repetir enquanto pendente" dos 3 canais acima — é um ajuste de
+   natureza diferente (quando esquecer que já avisou, não como avisar). */
+.notif-settings-channel-divider { border-top: 0.5px dashed #e2e2de; margin: 2px 0; }
 /* preenchido só quando existe (ver refreshNativePermissionHints em app.js —
    canal "native" ganha um selo de status: concedida/negada/pendente). */
 .notif-settings-channel-native-status {
@@ -5039,6 +5067,11 @@ html, body {
 /* estoque baixo (<= metade da quantidade-padrão, pedido do Georges) —
    mesmo tom de alerta já usado em .financeiro-summary-pending. */
 .remedios-row.low { border-color: #f0dcb0; background: #fdf6ea; }
+/* zerado (pedido do Georges: "quando ficar zerado, ajuste para ficar em
+   vermelho") — mais grave que "baixo", por isso remedioRowClass() nunca
+   aplica os dois juntos (zero sempre vence). */
+.remedios-row.zero { border-color: #eeb4ae; background: #fdecea; }
+.remedios-row.zero .remedios-qty-value { color: #c92a2a; }
 /* "número" — etiqueta física do comprimido (pedido do Georges, rodada 2:
    "escrevo em cada comprimido o número daquele remédio"), copiado 1x de
    "Identificação" no Notion (ver REMEDIOS_SEED no worker.js). Pílula
