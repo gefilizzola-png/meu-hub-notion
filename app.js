@@ -8888,6 +8888,37 @@
     });
     return tags;
   }
+  // idade que a pessoa está COMPLETANDO no próximo aniversário (não a
+  // idade atual) — usa aniversarioIdade (já calculada) + 1, exceto quando
+  // o próximo aniversário É HOJE (diasAteProximo === 0), caso em que
+  // aniversarioIdade já reflete a idade completada hoje.
+  function aniversarioTurningAge(p) {
+    if (!p.idade) return null;
+    if (p.diasAteProximo === 0) return p.idade.years;
+    return p.idade.years + 1;
+  }
+  // rascunho de mensagem de parabéns pra copiar/colar no WhatsApp (pedido
+  // do Georges: "crie... uma mensagem pré-montada de aniversário"). A base
+  // NÃO tem relação de pai/filho/irmão/cônjuge — só Grupo, Grupo
+  // Originário e Geração — então o texto fica GENÉRICO e só usa dado
+  // confirmado (nome, idade que completa, e a "família"/círculo já
+  // calculado em aniversarioAutoTag), sem inventar parentesco. Georges
+  // mesmo disse que só copia e pede pra IA completar com detalhes (ex.
+  // profissão) antes de mandar.
+  function aniversarioNotaPadrao(p) {
+    var idade = aniversarioTurningAge(p);
+    var familia = aniversarioAutoTag(p) || p.grupo || "";
+    var linhas = [];
+    linhas.push("Parabéns, " + p.nome + "! 🎉🎂");
+    if (idade !== null) {
+      linhas.push("Hoje você completa " + idade + (idade === 1 ? " aninho" : " anos") + "!");
+    }
+    linhas.push(
+      "Que seu dia seja repleto de alegria, carinho e muitas felicidades! Desejamos saúde, sucesso e realizações nessa nova fase." +
+      (familia ? " Um grande abraço de toda a " + familia + "!" : " Um grande abraço!")
+    );
+    return linhas.join("\n");
+  }
   // monta a lista de pessoas a partir da resposta de /query (mesmo formato
   // "p.extra[nomeDoCampo]" de qualquer outra página dinâmica) — reaproveitada
   // tanto pela lista quanto pelo BI, pra não duplicar a extração.
@@ -8959,6 +8990,13 @@
     // aquela coluna (mesmo padrão de cabeçalho clicável de Contas
     // Mensais — ver COLS/sortState abaixo).
     var state = { search: "", grupoSelected: [], tagSelected: [], sortKey: "proximo", sortDir: 1 };
+
+    // notas (rascunho de mensagem de aniversário) — 100% KV, nunca Notion
+    // (ver ANIVERSARIOS_NOTAS_KEY no worker.js). "expandedNotaIds" mantém
+    // a linha de nota aberta ao reordenar/filtrar (mesmo padrão de
+    // "expandedNoteIds"/"expandedSubitemIds" em Prioridades).
+    var notasMap = {};
+    var expandedNotaIds = {};
 
     var body = document.createElement("div");
 
@@ -9139,10 +9177,6 @@
           if (active) {
             th.classList.add("active");
             arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
-            var hintEl = document.createElement("div");
-            hintEl.className = "financeiro-th-hint";
-            hintEl.textContent = curIdx !== -1 ? col.cycle[curIdx].hint : "";
-            th.appendChild(hintEl);
           }
           th.title = "Clique para alternar: data (crescente/decrescente) e proximidade do próximo aniversário";
           th.appendChild(arrow);
@@ -9167,6 +9201,13 @@
         }
         headRow.appendChild(th);
       });
+      // coluna "Nota" (pedido do Georges — rascunho de mensagem de
+      // parabéns por pessoa) não ordena nada, então fica de fora do loop
+      // de COLS acima (mesmo th "estático" sem financeiro-th-sortable).
+      var notaTh = document.createElement("th");
+      notaTh.className = "financeiro-th aniversarios-th-nota";
+      notaTh.textContent = "Nota";
+      headRow.appendChild(notaTh);
       thead.appendChild(headRow);
       table.appendChild(thead);
 
@@ -9229,7 +9270,73 @@
         idadeCell.textContent = p.idade ? p.idade.label : "—";
         row.appendChild(idadeCell);
 
+        // botão de Nota (rascunho de mensagem de parabéns pra copiar/colar
+        // no WhatsApp) — mesmo padrão de ícone+textarea colapsável já
+        // usado em Prioridades (addNoteBtn/priorities-note-toggle),
+        // "has-note" preenche o ícone quando já tem texto salvo.
+        var notaCell = document.createElement("td");
+        notaCell.className = "aniversarios-nota-cell";
+        var notaBtn = document.createElement("button");
+        notaBtn.type = "button";
+        var temNota = (notasMap[p.id] || "").trim();
+        notaBtn.className = "notes-item-addtag priorities-note-toggle" + (temNota ? " has-note" : "");
+        notaBtn.appendChild(makeNoteSvg());
+        notaBtn.title = temNota ? "Ver/editar nota de aniversário" : "Criar nota de aniversário";
+        notaBtn.addEventListener("click", function () {
+          if (expandedNotaIds[p.id]) delete expandedNotaIds[p.id];
+          else expandedNotaIds[p.id] = true;
+          applyNotaCollapsed();
+          if (expandedNotaIds[p.id]) notaTextarea.focus();
+        });
+        notaCell.appendChild(notaBtn);
+        row.appendChild(notaCell);
         tbody.appendChild(row);
+
+        // linha própria com a nota — recolhida por padrão, reaproveita
+        // exatamente o mesmo esquema de "priorities-note-row"/textarea de
+        // Prioridades. Se não tem nota salva ainda, o textarea já nasce
+        // com o rascunho AUTOMÁTICO (aniversarioNotaPadrao) — Georges só
+        // ajusta e salva, não precisa escrever do zero.
+        var notaExpanded = !!expandedNotaIds[p.id];
+        var notaRow = document.createElement("tr");
+        notaRow.className = "priorities-note-row aniversarios-nota-row" + (notaExpanded ? "" : " collapsed");
+        var notaRowCell = document.createElement("td");
+        notaRowCell.colSpan = COLS.length + 1;
+        var notaTextarea = document.createElement("textarea");
+        notaTextarea.className = "priorities-note-textarea";
+        notaTextarea.value = notasMap[p.id] || aniversarioNotaPadrao(p);
+        notaRowCell.appendChild(notaTextarea);
+
+        var notaActions = document.createElement("div");
+        notaActions.className = "aniversarios-nota-actions";
+        var notaCopyBtn = document.createElement("button");
+        notaCopyBtn.type = "button";
+        notaCopyBtn.className = "aniversarios-nota-btn";
+        notaCopyBtn.textContent = "📋 Copiar";
+        notaCopyBtn.addEventListener("click", function () {
+          financeiroCopyToClipboard(notaTextarea.value).then(function () {
+            var old = notaCopyBtn.textContent;
+            notaCopyBtn.textContent = "✅ Copiado!";
+            setTimeout(function () { notaCopyBtn.textContent = old; }, 1500);
+          });
+        });
+        var notaSaveBtn = document.createElement("button");
+        notaSaveBtn.type = "button";
+        notaSaveBtn.className = "aniversarios-nota-btn aniversarios-nota-btn-save";
+        notaSaveBtn.textContent = "Salvar";
+        notaSaveBtn.addEventListener("click", function () {
+          saveNota(p.id, notaTextarea.value);
+        });
+        notaActions.appendChild(notaCopyBtn);
+        notaActions.appendChild(notaSaveBtn);
+        notaRowCell.appendChild(notaActions);
+
+        notaRow.appendChild(notaRowCell);
+        tbody.appendChild(notaRow);
+
+        function applyNotaCollapsed() {
+          notaRow.classList.toggle("collapsed", !expandedNotaIds[p.id]);
+        }
       });
       table.appendChild(tbody);
       body.appendChild(table);
@@ -9239,17 +9346,39 @@
       renderTable();
     }
 
+    // salva a nota (PUT /aniversarios-notas, KV — nunca toca no Notion) e
+    // só re-renderiza a linha certa, sem recarregar a base inteira (a
+    // consulta ao Notion é lenta e desnecessária só pra salvar um texto).
+    function saveNota(pageId, texto) {
+      return authFetch(cfg.templateWorkerUrl + "/aniversarios-notas", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId: pageId, texto: texto })
+      }).then(handle401Generic).then(function (r) { return r.json(); }).then(function (d) {
+        notasMap = (d && d.notas) || notasMap;
+        renderTable();
+      }).catch(function () { /* silencioso — o texto continua no textarea */ });
+    }
+
     var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
       "&filters=" + encodeURIComponent(JSON.stringify(ANIVERSARIOS_BASE_FILTER)) +
       "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Nome", direction: "ascending" }])) +
       "&extra=" + encodeURIComponent(JSON.stringify(ANIVERSARIOS_EXTRA_FIELDS));
 
-    authFetch(queryUrl).then(handle401Generic).then(function (r) {
-      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
-    }).then(function (result) {
+    Promise.all([
+      authFetch(queryUrl).then(handle401Generic).then(function (r) {
+        return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+      }),
+      authFetch(cfg.templateWorkerUrl + "/aniversarios-notas").then(handle401Generic).then(function (r) {
+        return r.ok ? r.json() : { notas: {} };
+      }).catch(function () { return { notas: {} }; })
+    ]).then(function (results) {
+      var result = results[0];
+      var notasResult = results[1];
       if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar aniversários");
       var pages = (result.data && result.data.pages) || [];
       allPeople = aniversarioPessoasFromPages(pages);
+      notasMap = (notasResult && notasResult.notas) || {};
 
       renderTagPills();
 
@@ -9298,30 +9427,57 @@
     // crie uma forma de clicar em cima e listar quem são. O mesmo no
     // mês.") — 1 painel só, reaproveitado por qualquer card clicável;
     // clicar de novo no MESMO card fecha (toggle).
+    // "groups" em vez de uma lista solta de nomes (pedido do Georges: "Traz
+    // tudo muito solto, muito bagunçado. Traga organizado conforme o
+    // contexto do card que cliquei") — cada grupo é { label, items }; sem
+    // label (null) = 1 bloco só, sem sub-título (ex: "ano com mais
+    // nascimentos", só 1 ano); com label = cada card empatado (meses/
+    // grupos) vira sua PRÓPRIA seção com sub-título e contagem, em vez de
+    // tudo despejado junto numa fileira só. Reaproveitado tanto pelo
+    // painel de detalhe (cards clicáveis) quanto pelo card de geração
+    // (Masculino/Feminino, ver renderChipGroups mais abaixo).
+    function renderChipGroups(container, groups) {
+      container.innerHTML = "";
+      groups.forEach(function (g) {
+        var items = (g.items || []).slice().sort(function (a, b) { return a.localeCompare(b, "pt-BR"); });
+        if (!items.length) return;
+        if (g.label) {
+          var sub = document.createElement("div");
+          sub.className = "aniversarios-detail-group-label";
+          sub.textContent = g.label + " · " + items.length + (items.length === 1 ? " pessoa" : " pessoas");
+          container.appendChild(sub);
+        }
+        var listWrap = document.createElement("div");
+        listWrap.className = "aniversarios-detail-list";
+        items.forEach(function (n) {
+          var chip = document.createElement("span");
+          chip.className = "aniversarios-detail-chip";
+          chip.textContent = n;
+          listWrap.appendChild(chip);
+        });
+        container.appendChild(listWrap);
+      });
+    }
+
     var detailPanel = document.createElement("div");
     detailPanel.className = "aniversarios-detail-panel";
     detailPanel.style.display = "none";
     var openDetailKey = null;
-    function showDetail(titleText, names) {
+    function showDetail(titleText, groups) {
       detailPanel.innerHTML = "";
       var h = document.createElement("div");
       h.className = "aniversarios-detail-title";
       h.textContent = titleText;
       detailPanel.appendChild(h);
-      var listWrap = document.createElement("div");
-      listWrap.className = "aniversarios-detail-list";
-      names.forEach(function (n) {
-        var chip = document.createElement("span");
-        chip.className = "aniversarios-detail-chip";
-        chip.textContent = n;
-        listWrap.appendChild(chip);
-      });
-      detailPanel.appendChild(listWrap);
+      var groupsWrap = document.createElement("div");
+      groupsWrap.className = "aniversarios-detail-groups";
+      renderChipGroups(groupsWrap, groups);
+      detailPanel.appendChild(groupsWrap);
       detailPanel.style.display = "";
     }
-    function toggleDetail(key, titleText, names) {
+    function toggleDetail(key, titleText, groups) {
       if (openDetailKey === key) { detailPanel.style.display = "none"; openDetailKey = null; return; }
-      showDetail(titleText, names);
+      showDetail(titleText, groups);
       openDetailKey = key;
     }
 
@@ -9396,7 +9552,7 @@
       });
       if (bestYear) {
         grid.appendChild(kpiCard("📅", "Ano com mais nascimentos", bestYear, bestYearCount + (bestYearCount === 1 ? " nascimento" : " nascimentos"), function () {
-          toggleDetail("ano", "Nascidos em " + bestYear, yearMembers[bestYear].sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }));
+          toggleDetail("ano", "Nascidos em " + bestYear, [{ label: null, items: yearMembers[bestYear] }]);
         }));
       }
 
@@ -9414,7 +9570,7 @@
       if (bestMonth) {
         var bestMonthName = FINANCEIRO_MONTH_NAMES_LOCAL[bestMonth - 1];
         grid.appendChild(kpiCard("🗓️", "Mês com mais nascimentos", bestMonthName, bestMonthCount + (bestMonthCount === 1 ? " nascimento" : " nascimentos"), function () {
-          toggleDetail("mes", "Nascidos em " + bestMonthName, monthMembers[bestMonth].sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }));
+          toggleDetail("mes", "Nascidos em " + bestMonthName, [{ label: null, items: monthMembers[bestMonth] }]);
         }));
       }
       // meses com MENOS nascimentos (curiosidade pedida pelo Georges —
@@ -9431,9 +9587,9 @@
         var leastValue = leastNames.length === 1 ? leastNames[0] : leastNames.length + " meses empatados";
         var leastSub = minMonthCount + (minMonthCount === 1 ? " nascimento" : " nascimentos") + (leastNames.length > 1 ? " cada (" + leastNames.join(", ") + ")" : "");
         grid.appendChild(kpiCard("🌙", "Meses com menos nascimentos", leastValue, leastSub, function () {
-          var names = [];
-          leastMonths.forEach(function (m) { (monthMembers[m] || []).forEach(function (n) { names.push(n + " — " + FINANCEIRO_MONTH_NAMES_LOCAL[m - 1]); }); });
-          toggleDetail("mesmin", leastNames.join(" e "), names.length ? names.sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }) : ["(ninguém)"]);
+          toggleDetail("mesmin", leastNames.join(" e "), leastMonths.map(function (m) {
+            return { label: FINANCEIRO_MONTH_NAMES_LOCAL[m - 1], items: monthMembers[m] || [] };
+          }));
         }));
       }
 
@@ -9454,9 +9610,35 @@
         var grupoValue = topGrupos.length === 1 ? topGrupos[0] : (topGrupos.length + " grupos empatados");
         var grupoSub = maxGrupoCount + (maxGrupoCount === 1 ? " pessoa" : " pessoas") + (topGrupos.length > 1 ? " cada" : "");
         grid.appendChild(kpiCard("👪", "Grupo com mais membros", grupoValue, grupoSub, function () {
-          var names = [];
-          topGrupos.forEach(function (g) { grupoMembers[g].forEach(function (n) { names.push(n + " — " + g); }); });
-          toggleDetail("grupomax", topGrupos.length === 1 ? topGrupos[0] : topGrupos.join(" e "), names.sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }));
+          toggleDetail("grupomax", topGrupos.length === 1 ? topGrupos[0] : topGrupos.join(" e "), topGrupos.map(function (g) {
+            return { label: g, items: grupoMembers[g] || [] };
+          }));
+        }));
+      }
+
+      // "avô ou avó com mais netos" (pedido do Georges) — a base não tem
+      // relação explícita de pai/filho, só o ramo de origem (Grupo
+      // Originário: os 5 sobrenomes-tronco). Por isso o card usa, como
+      // proxy honesto, o RAMO com mais descendentes (todo mundo que
+      // carrega aquele Grupo Originário) — não afirma quem é avô/avó de
+      // quem, só mostra qual tronco familiar é o mais numeroso hoje.
+      var ramoCount = {}, ramoMembers = {};
+      people.forEach(function (p) {
+        var ramo = p.grupoOriginario;
+        if (!ramo || ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO.indexOf(ramo) === -1) return;
+        ramoCount[ramo] = (ramoCount[ramo] || 0) + 1;
+        (ramoMembers[ramo] = ramoMembers[ramo] || []).push(p.nome);
+      });
+      var maxRamoCount = 0;
+      Object.keys(ramoCount).forEach(function (r) { if (ramoCount[r] > maxRamoCount) maxRamoCount = ramoCount[r]; });
+      var topRamos = Object.keys(ramoCount).filter(function (r) { return ramoCount[r] === maxRamoCount; }).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); });
+      if (topRamos.length) {
+        var ramoValue = topRamos.length === 1 ? topRamos[0] : (topRamos.length + " ramos empatados");
+        var ramoSub = maxRamoCount + (maxRamoCount === 1 ? " descendente" : " descendentes") + (topRamos.length > 1 ? " cada" : "");
+        grid.appendChild(kpiCard("🌳", "Ramo com mais descendentes", ramoValue, ramoSub, function () {
+          toggleDetail("ramomax", topRamos.length === 1 ? topRamos[0] : topRamos.join(" e "), topRamos.map(function (r) {
+            return { label: r, items: ramoMembers[r] || [] };
+          }));
         }));
       }
 
@@ -9563,14 +9745,19 @@
         card.appendChild(legend);
 
         var detail = document.createElement("div");
-        detail.className = "aniversarios-detail-list aniversarios-geracao-detail";
+        detail.className = "aniversarios-detail-groups aniversarios-geracao-detail";
         detail.style.display = "none";
-        geracaoPessoas[g].sort(function (a, b) { return a.nome.localeCompare(b.nome, "pt-BR"); }).forEach(function (p) {
-          var chip = document.createElement("span");
-          chip.className = "aniversarios-detail-chip";
-          chip.textContent = p.nome;
-          detail.appendChild(chip);
+        var gMasc = [], gFem = [], gOutro = [];
+        geracaoPessoas[g].forEach(function (p) {
+          if (p.genero === "Masculino") gMasc.push(p.nome);
+          else if (p.genero === "Feminino") gFem.push(p.nome);
+          else gOutro.push(p.nome);
         });
+        renderChipGroups(detail, [
+          { label: "♂ Masculino", items: gMasc },
+          { label: "♀ Feminino", items: gFem },
+          { label: "Outro", items: gOutro }
+        ]);
         card.appendChild(detail);
 
         card.addEventListener("click", function () {

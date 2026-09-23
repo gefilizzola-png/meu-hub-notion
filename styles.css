@@ -3918,16 +3918,6 @@ html, body {
 .financeiro-th-sortable.active { color: #0f9b8e; }
 .financeiro-th-label { display: inline; }
 .financeiro-th-arrow { margin-left: 4px; font-size: 10px; }
-/* sub-rótulo de coluna com 2 critérios de ordenação (Nascimento em
-   Aniversários — data ou próximo aniversário, ver NASC_CYCLE no app.js)
-   — mostra qual dos 2 critérios está ativo no momento. */
-.financeiro-th-hint {
-  font-size: 9.5px;
-  font-weight: 500;
-  color: #0f9b8e;
-  white-space: normal;
-  margin-top: 2px;
-}
 .financeiro-row td {
   padding: 9px 10px;
   border-bottom: 0.5px solid #f0efe9;
@@ -4278,9 +4268,7 @@ html, body {
    bordas da linha entre colunas em alguns navegadores (bug reportado
    pelo Georges — "as linhas ficaram meio tortas"). */
 .aniversarios-nome-inner { display: flex; align-items: center; gap: 8px; }
-/* o cabeçalho de Nascimento acumula 2 linhas (rótulo + dica do critério
-   ativo, ver .financeiro-th-hint) — só essa coluna quebra linha. */
-.aniversarios-th-nasc { white-space: normal; max-width: 150px; }
+.aniversarios-th-nasc { white-space: nowrap; }
 .aniversarios-avatar {
   width: 24px;
   height: 24px;
@@ -4299,6 +4287,31 @@ html, body {
   font-weight: 600;
   margin-top: 2px;
 }
+/* coluna/botão de Nota (pedido do Georges — rascunho de mensagem de
+   parabéns pra copiar/colar no WhatsApp) — reaproveita os mesmos
+   ".priorities-note-toggle"/".priorities-note-row"/".priorities-note-
+   textarea" de Prioridades (ver comentário grande no app.js). */
+.aniversarios-th-nota { width: 44px; text-align: center; }
+.aniversarios-nota-cell { text-align: center; }
+.aniversarios-nota-row > td { padding: 0 10px 10px; }
+.aniversarios-nota-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.aniversarios-nota-btn {
+  font-size: 12px;
+  font-weight: 600;
+  border: 0.5px solid #dcdcd8;
+  border-radius: 6px;
+  padding: 5px 12px;
+  background: #fff;
+  color: #3a3a35;
+  cursor: pointer;
+}
+.aniversarios-nota-btn:hover { background: #f5f4ef; }
+.aniversarios-nota-btn-save { background: #ec4899; border-color: #ec4899; color: #fff; }
+.aniversarios-nota-btn-save:hover { background: #d63c85; }
 
 /* BI — cards de KPI (mesma ideia visual de .quick-button-card/
    .financeiro-summary-pill já usados no app: cartão claro, borda sutil,
@@ -4385,6 +4398,25 @@ html, body {
   border-radius: 20px;
   padding: 3px 10px;
   color: #3a3a35;
+}
+/* painel de detalhe organizado por sub-grupo (pedido do Georges: "traga
+   organizado conforme o contexto do card que cliquei" — em vez de um
+   bloco de nomes solto, cada card de KPI/geração mostra os nomes
+   separados por mês/grupo/gênero, ver renderChipGroups no app.js). */
+.aniversarios-detail-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.aniversarios-detail-groups .aniversarios-detail-list {
+  margin-top: 2px;
+}
+.aniversarios-detail-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #9c9b95;
 }
 /* "Gênero por geração" — cards com barra proporcional M/F (pedido do
    Georges: "faça um visual mais legal", substituindo a tabela simples de
