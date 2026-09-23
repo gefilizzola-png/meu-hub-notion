@@ -9071,10 +9071,24 @@
     // (AAAA-MM-DD, ordena certo como texto) e o "próximo aniversário"
     // (padrão da página) usa aniversarioDiasAteProximo, não mais essa
     // comparação de texto.
+    //
+    // A coluna "Nascimento" acumula DOIS critérios de ordenação (pedido
+    // do Georges: "queria poder clicar em alguma coluna [...] e
+    // classificar pela proximidade ou distância para a data do próximo
+    // aniversário") — em vez de 1 clique = 1 sentido, clicar repetido
+    // CICLA pelos 4 estados abaixo: data crescente -> data decrescente ->
+    // próximo aniversário (mais perto primeiro) -> próximo aniversário
+    // (mais longe primeiro) -> volta pro início.
+    var NASC_CYCLE = [
+      { key: "nascimento", dir: 1, hint: "data · mais antigos primeiro" },
+      { key: "nascimento", dir: -1, hint: "data · mais recentes primeiro" },
+      { key: "proximo", dir: 1, hint: "próximo aniversário · mais perto primeiro" },
+      { key: "proximo", dir: -1, hint: "próximo aniversário · mais longe primeiro" }
+    ];
     var COLS = [
       { label: "Nome", cls: "aniversarios-th-nome", sortKey: "nome" },
       { label: "Grupo", cls: "aniversarios-th-grupo", sortKey: "grupo" },
-      { label: "Nascimento", cls: "aniversarios-th-nasc", sortKey: "nascimento" },
+      { label: "Nascimento", cls: "aniversarios-th-nasc", sortKey: "nascimento", cycle: NASC_CYCLE },
       { label: "Idade", cls: "aniversarios-th-idade", sortKey: "idade" }
     ];
 
@@ -9111,19 +9125,46 @@
         thLabel.className = "financeiro-th-label";
         thLabel.textContent = col.label;
         th.appendChild(thLabel);
-        th.title = "Clique para classificar por " + col.label;
         var arrow = document.createElement("span");
         arrow.className = "financeiro-th-arrow";
-        if (state.sortKey === col.sortKey) {
-          th.classList.add("active");
-          arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+
+        if (col.cycle) {
+          // coluna com MAIS de um critério (Nascimento: data ou próximo
+          // aniversário, ver NASC_CYCLE acima) — fica "ativa" pra
+          // qualquer uma das chaves do ciclo, e mostra um sub-rótulo
+          // dizendo qual das 2 tá em uso no momento.
+          var curIdx = -1;
+          col.cycle.forEach(function (st, i) { if (state.sortKey === st.key && state.sortDir === st.dir) curIdx = i; });
+          var active = col.cycle.some(function (st) { return st.key === state.sortKey; });
+          if (active) {
+            th.classList.add("active");
+            arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+            var hintEl = document.createElement("div");
+            hintEl.className = "financeiro-th-hint";
+            hintEl.textContent = curIdx !== -1 ? col.cycle[curIdx].hint : "";
+            th.appendChild(hintEl);
+          }
+          th.title = "Clique para alternar: data (crescente/decrescente) e proximidade do próximo aniversário";
+          th.appendChild(arrow);
+          th.addEventListener("click", function () {
+            var nextIdx = curIdx === -1 ? 0 : (curIdx + 1) % col.cycle.length;
+            state.sortKey = col.cycle[nextIdx].key;
+            state.sortDir = col.cycle[nextIdx].dir;
+            renderTable();
+          });
+        } else {
+          th.title = "Clique para classificar por " + col.label;
+          if (state.sortKey === col.sortKey) {
+            th.classList.add("active");
+            arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+          }
+          th.appendChild(arrow);
+          th.addEventListener("click", function () {
+            if (state.sortKey === col.sortKey) state.sortDir = state.sortDir * -1;
+            else { state.sortKey = col.sortKey; state.sortDir = 1; }
+            renderTable();
+          });
         }
-        th.appendChild(arrow);
-        th.addEventListener("click", function () {
-          if (state.sortKey === col.sortKey) state.sortDir = state.sortDir * -1;
-          else { state.sortKey = col.sortKey; state.sortDir = 1; }
-          renderTable();
-        });
         headRow.appendChild(th);
       });
       thead.appendChild(headRow);
@@ -9134,16 +9175,26 @@
         var row = document.createElement("tr");
         row.className = "financeiro-row aniversarios-row";
 
+        // "linhas tortas" (reportado pelo Georges): o <td> com
+        // "display: flex" direto nele quebra o modelo de tabela — o
+        // navegador para de tratá-lo como célula de verdade e a borda
+        // dessa coluna desalinha da borda das colunas vizinhas na mesma
+        // linha. Corrigido: o <td> continua uma célula normal
+        // (display:table-cell, do jeito que o financeiro-table espera) e
+        // o flex (avatar + nome lado a lado) fica só num <div> por
+        // DENTRO da célula.
         var nomeCell = document.createElement("td");
-        nomeCell.className = "aniversarios-nome-cell";
+        var nomeInner = document.createElement("div");
+        nomeInner.className = "aniversarios-nome-inner";
         var avatar = document.createElement("span");
         avatar.className = "aniversarios-avatar";
         avatar.style.background = avatarColor(p.nome || "?");
         avatar.textContent = (p.nome || "?").trim().charAt(0).toUpperCase();
-        nomeCell.appendChild(avatar);
+        nomeInner.appendChild(avatar);
         var nomeText = document.createElement("span");
         nomeText.textContent = p.nome;
-        nomeCell.appendChild(nomeText);
+        nomeInner.appendChild(nomeText);
+        nomeCell.appendChild(nomeInner);
         row.appendChild(nomeCell);
 
         var grupoCell = document.createElement("td");
@@ -9366,11 +9417,25 @@
           toggleDetail("mes", "Nascidos em " + bestMonthName, monthMembers[bestMonth].sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }));
         }));
       }
-      // meses do ano sem NENHUM nascimento na família (curiosidade pedida
-      // pelo Georges: "pense em outros tipos de informações legais").
-      var monthsWithout = [];
-      for (var mi = 1; mi <= 12; mi++) { if (!monthCount[mi]) monthsWithout.push(FINANCEIRO_MONTH_NAMES_LOCAL[mi - 1]); }
-      grid.appendChild(kpiCard("🌙", "Meses sem nenhum aniversário", String(monthsWithout.length), monthsWithout.length ? monthsWithout.join(", ") : "Todos os meses têm alguém!"));
+      // meses com MENOS nascimentos (curiosidade pedida pelo Georges —
+      // "troque Meses sem nenhum aniversário por Meses com menos
+      // nascimentos", já que todos os 12 meses têm alguém na família) —
+      // trata empate igual ao "grupo com mais membros" acima: se mais de
+      // 1 mês empatar no mínimo, lista todos, clicável mostra os nomes.
+      var minMonthCount = Infinity;
+      for (var mi = 1; mi <= 12; mi++) { var mc = monthCount[mi] || 0; if (mc < minMonthCount) minMonthCount = mc; }
+      var leastMonths = [];
+      for (var mj = 1; mj <= 12; mj++) { if ((monthCount[mj] || 0) === minMonthCount) leastMonths.push(mj); }
+      if (leastMonths.length) {
+        var leastNames = leastMonths.map(function (m) { return FINANCEIRO_MONTH_NAMES_LOCAL[m - 1]; });
+        var leastValue = leastNames.length === 1 ? leastNames[0] : leastNames.length + " meses empatados";
+        var leastSub = minMonthCount + (minMonthCount === 1 ? " nascimento" : " nascimentos") + (leastNames.length > 1 ? " cada (" + leastNames.join(", ") + ")" : "");
+        grid.appendChild(kpiCard("🌙", "Meses com menos nascimentos", leastValue, leastSub, function () {
+          var names = [];
+          leastMonths.forEach(function (m) { (monthMembers[m] || []).forEach(function (n) { names.push(n + " — " + FINANCEIRO_MONTH_NAMES_LOCAL[m - 1]); }); });
+          toggleDetail("mesmin", leastNames.join(" e "), names.length ? names.sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }) : ["(ninguém)"]);
+        }));
+      }
 
       // grupo com mais membros — trata EMPATE (pedido do Georges: "Acho
       // que tem mais de um grupo com 5 membros, mas vc indicou apenas
@@ -9437,65 +9502,86 @@
       });
       var geracaoTitle = document.createElement("h4");
       geracaoTitle.className = "aniversarios-bi-subtitle";
-      geracaoTitle.textContent = "Gênero por geração — clique numa linha pra ver os nomes";
+      geracaoTitle.textContent = "Gênero por geração — clique num card pra ver os nomes";
       body.appendChild(geracaoTitle);
 
-      var geracaoTable = document.createElement("table");
-      geracaoTable.className = "financeiro-table";
-      var gThead = document.createElement("thead");
-      var gHeadRow = document.createElement("tr");
-      ["", "Geração", "Masculino", "Feminino", "Total"].forEach(function (label) {
-        var th = document.createElement("th");
-        th.className = "financeiro-th";
-        th.textContent = label;
-        gHeadRow.appendChild(th);
-      });
-      gThead.appendChild(gHeadRow);
-      geracaoTable.appendChild(gThead);
-      var gTbody = document.createElement("tbody");
+      // visual em cards com barra proporcional Masculino x Feminino
+      // (pedido do Georges: "faça um visual mais legal na tabela de
+      // Geração por Gênero") — substitui a tabela simples por cards com
+      // barrinha de proporção, mais fácil de comparar as gerações de
+      // relance; clicar no card continua expandindo os nomes.
+      var geracaoList = document.createElement("div");
+      geracaoList.className = "aniversarios-geracao-list";
       Object.keys(geracoes).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (g) {
-        var row = document.createElement("tr");
-        row.className = "financeiro-row aniversarios-geracao-row";
+        var stats = geracoes[g];
+        var total = stats.M + stats.F + stats.outro;
+        var pctM = total ? (stats.M / total * 100) : 0;
+        var pctF = total ? (stats.F / total * 100) : 0;
+        var pctOutro = total ? (stats.outro / total * 100) : 0;
 
-        var chevronTd = document.createElement("td");
+        var card = document.createElement("div");
+        card.className = "aniversarios-geracao-card";
+
+        var head = document.createElement("div");
+        head.className = "aniversarios-geracao-card-head";
         var chevron = document.createElement("i");
         chevron.className = "ti ti-chevron-right aniversarios-geracao-chevron";
-        chevronTd.appendChild(chevron);
-        row.appendChild(chevronTd);
+        head.appendChild(chevron);
+        var nameEl = document.createElement("span");
+        nameEl.className = "aniversarios-geracao-name";
+        nameEl.textContent = g;
+        head.appendChild(nameEl);
+        var totalEl = document.createElement("span");
+        totalEl.className = "aniversarios-geracao-total";
+        totalEl.textContent = total + (total === 1 ? " pessoa" : " pessoas");
+        head.appendChild(totalEl);
+        card.appendChild(head);
 
-        var cells = [g, String(geracoes[g].M), String(geracoes[g].F), String(geracoes[g].M + geracoes[g].F + geracoes[g].outro)];
-        cells.forEach(function (c) {
-          var td = document.createElement("td");
-          td.textContent = c;
-          row.appendChild(td);
-        });
-        gTbody.appendChild(row);
+        var bar = document.createElement("div");
+        bar.className = "aniversarios-geracao-bar";
+        if (pctM > 0) { var segM = document.createElement("div"); segM.className = "aniversarios-geracao-bar-m"; segM.style.width = pctM + "%"; bar.appendChild(segM); }
+        if (pctF > 0) { var segF = document.createElement("div"); segF.className = "aniversarios-geracao-bar-f"; segF.style.width = pctF + "%"; bar.appendChild(segF); }
+        if (pctOutro > 0) { var segO = document.createElement("div"); segO.className = "aniversarios-geracao-bar-outro"; segO.style.width = pctOutro + "%"; bar.appendChild(segO); }
+        card.appendChild(bar);
 
-        var detailRow = document.createElement("tr");
-        detailRow.className = "aniversarios-geracao-detail-row";
-        detailRow.style.display = "none";
-        var detailTd = document.createElement("td");
-        detailTd.colSpan = 5;
-        var namesWrap = document.createElement("div");
-        namesWrap.className = "aniversarios-detail-list";
+        var legend = document.createElement("div");
+        legend.className = "aniversarios-geracao-legend";
+        var legM = document.createElement("span");
+        legM.className = "aniversarios-geracao-legend-item aniversarios-geracao-legend-m";
+        legM.textContent = "♂ " + stats.M + " Masculino";
+        legend.appendChild(legM);
+        var legF = document.createElement("span");
+        legF.className = "aniversarios-geracao-legend-item aniversarios-geracao-legend-f";
+        legF.textContent = "♀ " + stats.F + " Feminino";
+        legend.appendChild(legF);
+        if (stats.outro > 0) {
+          var legO = document.createElement("span");
+          legO.className = "aniversarios-geracao-legend-item";
+          legO.textContent = "• " + stats.outro + " outro";
+          legend.appendChild(legO);
+        }
+        card.appendChild(legend);
+
+        var detail = document.createElement("div");
+        detail.className = "aniversarios-detail-list aniversarios-geracao-detail";
+        detail.style.display = "none";
         geracaoPessoas[g].sort(function (a, b) { return a.nome.localeCompare(b.nome, "pt-BR"); }).forEach(function (p) {
           var chip = document.createElement("span");
           chip.className = "aniversarios-detail-chip";
           chip.textContent = p.nome;
-          namesWrap.appendChild(chip);
+          detail.appendChild(chip);
         });
-        detailTd.appendChild(namesWrap);
-        detailRow.appendChild(detailTd);
-        gTbody.appendChild(detailRow);
+        card.appendChild(detail);
 
-        row.addEventListener("click", function () {
-          var opening = detailRow.style.display === "none";
-          detailRow.style.display = opening ? "" : "none";
+        card.addEventListener("click", function () {
+          var opening = detail.style.display === "none";
+          detail.style.display = opening ? "" : "none";
           chevron.className = "ti " + (opening ? "ti-chevron-down" : "ti-chevron-right") + " aniversarios-geracao-chevron";
         });
+
+        geracaoList.appendChild(card);
       });
-      geracaoTable.appendChild(gTbody);
-      body.appendChild(geracaoTable);
+      body.appendChild(geracaoList);
 
       statusEl.style.display = "none";
     }
