@@ -4386,6 +4386,11 @@ html, body {
   color: #262624;
   margin-bottom: 6px;
 }
+/* seletor de ano dentro do painel de detalhe do card "Ano com mais
+   nascimentos" (pedido do Georges — trocar de ano sem fechar o painel) —
+   reaproveita .aniversarios-tag-pill, só um pouco mais compacto. */
+.aniversarios-year-pills { margin-bottom: 8px; }
+.aniversarios-year-pill { padding: 4px 10px; font-size: 11.5px; }
 .aniversarios-detail-list {
   display: flex;
   flex-wrap: wrap;

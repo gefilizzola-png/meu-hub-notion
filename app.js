@@ -9791,7 +9791,11 @@
         }));
       }
 
-      // ano com mais nascimentos — clicável, lista quem nasceu naquele ano.
+      // ano com mais nascimentos — clicável, lista quem nasceu naquele ano
+      // E, dentro do próprio painel de detalhe, deixa trocar pra QUALQUER
+      // outro ano com nascimento (pedido do Georges: "crie tbm a
+      // possibilidade de filtrar os nascimentos por ano... depois que
+      // clico e exibe a divisória, ele deixa eu selecionar outros anos").
       var yearCount = {}, yearMembers = {};
       withBirth.forEach(function (p) {
         var y = p.nascimento.slice(0, 4);
@@ -9802,10 +9806,58 @@
       Object.keys(yearCount).forEach(function (y) {
         if (yearCount[y] > bestYearCount) { bestYear = y; bestYearCount = yearCount[y]; }
       });
+      // painel INTERATIVO (não usa o toggleDetail genérico porque precisa
+      // de pills próprias pra trocar de ano sem fechar) — a chave "ano" em
+      // openDetailKey continua controlando o toggle abrir/fechar do card.
+      function showYearDetail(year) {
+        detailPanel.innerHTML = "";
+        var h = document.createElement("div");
+        h.className = "aniversarios-detail-title";
+        h.textContent = "Nascidos em " + year;
+        detailPanel.appendChild(h);
+
+        var yearsPicker = document.createElement("div");
+        yearsPicker.className = "aniversarios-tag-pills aniversarios-year-pills";
+        Object.keys(yearCount).sort(function (a, b) { return b - a; }).forEach(function (y) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "aniversarios-tag-pill aniversarios-year-pill" + (y === String(year) ? " active" : "");
+          btn.textContent = y + " (" + yearCount[y] + ")";
+          btn.addEventListener("click", function () { showYearDetail(y); });
+          yearsPicker.appendChild(btn);
+        });
+        detailPanel.appendChild(yearsPicker);
+
+        var groupsWrap = document.createElement("div");
+        groupsWrap.className = "aniversarios-detail-groups";
+        renderChipGroups(groupsWrap, [{ label: null, items: yearMembers[year] || [] }]);
+        detailPanel.appendChild(groupsWrap);
+        detailPanel.style.display = "";
+      }
       if (bestYear) {
         grid.appendChild(kpiCard("📅", "Ano com mais nascimentos", bestYear, bestYearCount + (bestYearCount === 1 ? " nascimento" : " nascimentos"), function () {
-          toggleDetail("ano", "Nascidos em " + bestYear, [{ label: null, items: yearMembers[bestYear] }]);
+          if (openDetailKey === "ano") { detailPanel.style.display = "none"; openDetailKey = null; return; }
+          showYearDetail(bestYear);
+          openDetailKey = "ano";
         }));
+      }
+
+      // último ano SEM nenhum nascimento (pedido do Georges — "crie card
+      // com o último ano sem nascimentos") — varre de hoje pra trás até o
+      // ano do nascimento mais antigo da família, procurando o 1º ano
+      // (mais recente) que não tem ninguém. Sem clique (não tem quem
+      // listar) — só a curiosidade em si.
+      if (withBirth.length) {
+        var allYearsNum = withBirth.map(function (p) { return parseInt(p.nascimento.slice(0, 4), 10); });
+        var minYear = Math.min.apply(null, allYearsNum);
+        var maxYearToday = new Date().getFullYear();
+        var lastYearNoBirth = null;
+        for (var yy = maxYearToday; yy >= minYear; yy--) {
+          if (!yearCount[String(yy)]) { lastYearNoBirth = yy; break; }
+        }
+        if (lastYearNoBirth !== null) {
+          grid.appendChild(kpiCard("🕳️", "Último ano sem nascimentos", String(lastYearNoBirth), "nenhum nascimento na família"));
+        }
       }
 
       // mês com mais nascimentos — clicável, lista quem nasceu naquele mês.
