@@ -8791,6 +8791,479 @@
     });
   }
 
+  // ---------------- Aniversários — helpers compartilhados (lista + BI) ----------------
+  // "🎉 Aniversários" (base própria, ver ANIVERSARIOS_DATABASE_ID no
+  // config.js) — SÓ LEITURA em tudo abaixo, igual qualquer outra página
+  // dinâmica do app.
+
+  // idade a partir de "Nascimento" (string "AAAA-MM-DD", como vem de
+  // extractPropValue tipo "date" no worker.js) — anos normalmente; se
+  // ainda não completou 1 ano, mostra em MESES (pedido do Georges: "No
+  // mais novo, sempre coloque idade. Se for menos de 1 ano, coloque em
+  // meses."). Retorna null se não tiver data de nascimento.
+  function aniversarioIdade(nascimentoISO) {
+    if (!nascimentoISO) return null;
+    var parts = String(nascimentoISO).slice(0, 10).split("-");
+    if (parts.length < 3) return null;
+    var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10), d = parseInt(parts[2], 10);
+    if (!y || !m || !d) return null;
+    var today = new Date();
+    var hadBirthdayThisYear = (today.getMonth() + 1 > m) || (today.getMonth() + 1 === m && today.getDate() >= d);
+    var years = today.getFullYear() - y - (hadBirthdayThisYear ? 0 : 1);
+    if (years >= 1) {
+      return { years: years, months: null, label: years + (years === 1 ? " ano" : " anos") };
+    }
+    var months = (today.getFullYear() - y) * 12 + (today.getMonth() + 1 - m) - (today.getDate() < d ? 1 : 0);
+    if (months < 0) months = 0;
+    return { years: 0, months: months, label: months + (months === 1 ? " mês" : " meses") };
+  }
+  // "dias vivido" (pra ordenar por Idade sem reimplementar a comparação —
+  // maior valor = mais velho) e "DD/MM" (pra ordenar por "dia no ano",
+  // ignorando o ano, pedido do Georges).
+  function aniversarioAgeDays(nascimentoISO) {
+    if (!nascimentoISO) return null;
+    var t = Date.parse(String(nascimentoISO).slice(0, 10));
+    if (isNaN(t)) return null;
+    return (Date.now() - t) / 86400000;
+  }
+  function aniversarioDDMM(nascimentoISO) {
+    if (!nascimentoISO) return null;
+    var parts = String(nascimentoISO).slice(0, 10).split("-");
+    if (parts.length < 3) return null;
+    return parts[2] + "/" + parts[1];
+  }
+  // monta a lista de pessoas a partir da resposta de /query (mesmo formato
+  // "p.extra[nomeDoCampo]" de qualquer outra página dinâmica) — reaproveitada
+  // tanto pela lista quanto pelo BI, pra não duplicar a extração.
+  function aniversarioPessoasFromPages(pages) {
+    return pages.map(function (p) {
+      var extra = p.extra || {};
+      var grupoRaw = extra["Grupo"];
+      var generoRaw = extra["Gênero"];
+      var grupoOrigRaw = extra["Grupo Originário"];
+      var geracaoRaw = extra["Geração"];
+      var nascRaw = extra["Nascimento"];
+      var nascimento = (nascRaw && nascRaw.start) ? nascRaw.start : null;
+      return {
+        id: p.id,
+        nome: p.title,
+        url: p.url,
+        grupo: grupoRaw ? grupoRaw.name : null,
+        grupoColor: grupoRaw ? (NOTION_COLOR[grupoRaw.color] || "") : "",
+        genero: generoRaw ? generoRaw.name : null,
+        grupoOriginario: grupoOrigRaw ? grupoOrigRaw.name : null,
+        geracao: geracaoRaw ? geracaoRaw.name : null,
+        nascimento: nascimento,
+        idade: aniversarioIdade(nascimento),
+        ageDays: aniversarioAgeDays(nascimento),
+        ddmm: aniversarioDDMM(nascimento)
+      };
+    });
+  }
+  var ANIVERSARIOS_EXTRA_FIELDS = ["Grupo", "Gênero", "Grupo Originário", "Geração", "Nascimento"];
+  var ANIVERSARIOS_BASE_FILTER = [{ property: "Nome", type: "title", condition: "is_not_empty", value: true }];
+
+  function handle401Generic(res) {
+    if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+    return res;
+  }
+
+  // ---------------- "page.aniversariosList" — Aniversários (lista, 100% leitura) ----------------
+  function renderAniversariosPage(container, page) {
+    var acfg = page.aniversariosList || {};
+    var databaseId = acfg.database_id;
+
+    var wrap = document.createElement("div");
+    wrap.className = "aniversarios-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "Aniversários";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando aniversários…";
+    wrap.appendChild(statusEl);
+
+    if (!databaseId) {
+      statusEl.textContent = "Configuração incompleta: falta database_id em page.aniversariosList.";
+      return;
+    }
+
+    var allPeople = [];
+    // "sortKey" default "nome" (alfabética) — Georges pediu 4 formas de
+    // ordenar (alfabética/dia-mês/Nascimento completo/Idade); vira um
+    // <select> (não cabeçalho clicável, já que "dia no ano" não tem coluna
+    // própria) + botão de direção (▲/▼), mesmo padrão visual (setinha) de
+    // Contas Mensais/Prioridades.
+    var state = { search: "", grupoSelected: [], sortKey: "nome", sortDir: 1 };
+
+    var body = document.createElement("div");
+
+    function matchesFilters(p) {
+      if (state.search) {
+        var s = state.search.toLowerCase();
+        if ((p.nome || "").toLowerCase().indexOf(s) === -1) return false;
+      }
+      if (state.grupoSelected.length && state.grupoSelected.indexOf(p.grupo) === -1) return false;
+      return true;
+    }
+
+    function sortPeople(list) {
+      var arr = list.slice();
+      var key = state.sortKey, dir = state.sortDir;
+      arr.sort(function (a, b) {
+        var av, bv;
+        if (key === "ddmm") { av = a.ddmm || "99/99"; bv = b.ddmm || "99/99"; }
+        else if (key === "nascimento") { av = a.nascimento || "9999-99-99"; bv = b.nascimento || "9999-99-99"; }
+        else if (key === "idade") { av = a.ageDays === null ? Infinity : a.ageDays; bv = b.ageDays === null ? Infinity : b.ageDays; }
+        else { av = a.nome || ""; bv = b.nome || ""; }
+        if (typeof av === "number") return dir * (av - bv);
+        return dir * String(av).localeCompare(String(bv), "pt-BR");
+      });
+      return arr;
+    }
+
+    // ---- filtro de Grupo — opções tiradas ao vivo das pessoas já
+    // carregadas (mesmo esquema de "Situação" em Legislações: sem base
+    // fixa/optionsFrom, já que os 23+ valores já vieram junto com a busca
+    // principal, sem precisar de uma 2ª chamada só pra listar opções).
+    var grupoDropdownWrap = document.createElement("div");
+    function buildGrupoOptions() {
+      var map = {};
+      allPeople.forEach(function (p) {
+        if (!p.grupo || map[p.grupo]) return;
+        map[p.grupo] = { label: p.grupo, pageId: p.grupo, icon: "ti-users", color: p.grupoColor || "" };
+      });
+      return Object.keys(map).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).map(function (k) { return map[k]; });
+    }
+
+    var controls = document.createElement("div");
+    controls.className = "legislacoes-controls";
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Pesquisar por nome…";
+    searchInput.className = "legislacoes-search-input";
+    searchInput.addEventListener("input", function () {
+      state.search = searchInput.value.trim();
+      applyState();
+    });
+    controls.appendChild(searchInput);
+
+    var sortSelect = document.createElement("select");
+    sortSelect.className = "aniversarios-sort-select";
+    [
+      { value: "nome", label: "Nome (A-Z)" },
+      { value: "ddmm", label: "Dia do aniversário (Jan-Dez)" },
+      { value: "nascimento", label: "Nascimento (mais antigo primeiro)" },
+      { value: "idade", label: "Idade (mais novo primeiro)" }
+    ].forEach(function (opt) {
+      var o = document.createElement("option");
+      o.value = opt.value;
+      o.textContent = opt.label;
+      sortSelect.appendChild(o);
+    });
+    sortSelect.value = state.sortKey;
+    sortSelect.addEventListener("change", function () {
+      state.sortKey = sortSelect.value;
+      applyState();
+    });
+    controls.appendChild(sortSelect);
+
+    var sortDirBtn = document.createElement("button");
+    sortDirBtn.type = "button";
+    sortDirBtn.className = "aniversarios-sort-dir-btn";
+    function updateSortDirBtn() { sortDirBtn.textContent = state.sortDir === 1 ? "▲" : "▼"; }
+    updateSortDirBtn();
+    sortDirBtn.addEventListener("click", function () {
+      state.sortDir = state.sortDir * -1;
+      updateSortDirBtn();
+      applyState();
+    });
+    controls.appendChild(sortDirBtn);
+
+    controls.appendChild(grupoDropdownWrap);
+
+    wrap.appendChild(controls);
+    wrap.appendChild(body);
+
+    function renderTable() {
+      body.innerHTML = "";
+      var filtered = sortPeople(allPeople.filter(matchesFilters));
+      if (!filtered.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Ninguém bate com os filtros.";
+        body.appendChild(empty);
+        return;
+      }
+      var count = document.createElement("p");
+      count.className = "aniversarios-count";
+      count.textContent = filtered.length + (filtered.length === 1 ? " pessoa" : " pessoas");
+      body.appendChild(count);
+
+      var table = document.createElement("table");
+      table.className = "financeiro-table";
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      ["Nome", "Grupo", "Nascimento", "Idade"].forEach(function (label) {
+        var th = document.createElement("th");
+        th.className = "financeiro-th";
+        th.textContent = label;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      filtered.forEach(function (p) {
+        var row = document.createElement("tr");
+        row.className = "financeiro-row";
+
+        var nomeCell = document.createElement("td");
+        nomeCell.textContent = p.nome;
+        row.appendChild(nomeCell);
+
+        var grupoCell = document.createElement("td");
+        if (p.grupo) {
+          var badge = document.createElement("span");
+          badge.className = "item-sub-badge";
+          if (p.grupoColor) badge.style.color = p.grupoColor;
+          badge.textContent = p.grupo;
+          grupoCell.appendChild(badge);
+        } else {
+          grupoCell.textContent = "—";
+        }
+        row.appendChild(grupoCell);
+
+        var nascCell = document.createElement("td");
+        nascCell.textContent = p.ddmm ? (p.ddmm + "/" + p.nascimento.slice(0, 4)) : "—";
+        row.appendChild(nascCell);
+
+        var idadeCell = document.createElement("td");
+        idadeCell.textContent = p.idade ? p.idade.label : "—";
+        row.appendChild(idadeCell);
+
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      body.appendChild(table);
+    }
+
+    function applyState() {
+      renderTable();
+    }
+
+    var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
+      "&filters=" + encodeURIComponent(JSON.stringify(ANIVERSARIOS_BASE_FILTER)) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Nome", direction: "ascending" }])) +
+      "&extra=" + encodeURIComponent(JSON.stringify(ANIVERSARIOS_EXTRA_FIELDS));
+
+    authFetch(queryUrl).then(handle401Generic).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar aniversários");
+      var pages = (result.data && result.data.pages) || [];
+      allPeople = aniversarioPessoasFromPages(pages);
+
+      var grupoDropdown = buildIconDropdown(
+        { property: "Grupo", type: "select", label: "Grupo", searchable: true, options: buildGrupoOptions() },
+        function (opts) { state.grupoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      );
+      grupoDropdownWrap.appendChild(grupoDropdown);
+
+      statusEl.style.display = "none";
+      applyState();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao buscar aniversários: " + err.message;
+    });
+  }
+
+  // ---------------- "page.aniversariosBI" — BI de Aniversários (só família Filizzola) ----------------
+  function renderAniversariosBIPage(container, page) {
+    var bcfg = page.aniversariosBI || {};
+    var databaseId = bcfg.database_id;
+    var grupoOriginarioFilter = bcfg.grupoOriginarioFilter || [];
+
+    var wrap = document.createElement("div");
+    wrap.className = "aniversarios-bi-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "BI de Aniversários — Família Filizzola";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Calculando estatísticas…";
+    wrap.appendChild(statusEl);
+
+    if (!databaseId) {
+      statusEl.textContent = "Configuração incompleta: falta database_id em page.aniversariosBI.";
+      return;
+    }
+
+    var body = document.createElement("div");
+    wrap.appendChild(body);
+
+    var FINANCEIRO_MONTH_NAMES_LOCAL = FINANCEIRO_MONTH_NAMES;
+
+    function kpiCard(emoji, label, value, sub) {
+      var card = document.createElement("div");
+      card.className = "aniversarios-kpi-card";
+      var emojiEl = document.createElement("div");
+      emojiEl.className = "aniversarios-kpi-emoji";
+      emojiEl.textContent = emoji;
+      card.appendChild(emojiEl);
+      var valueEl = document.createElement("div");
+      valueEl.className = "aniversarios-kpi-value";
+      valueEl.textContent = value;
+      card.appendChild(valueEl);
+      var labelEl = document.createElement("div");
+      labelEl.className = "aniversarios-kpi-label";
+      labelEl.textContent = label;
+      card.appendChild(labelEl);
+      if (sub) {
+        var subEl = document.createElement("div");
+        subEl.className = "aniversarios-kpi-sub";
+        subEl.textContent = sub;
+        card.appendChild(subEl);
+      }
+      return card;
+    }
+
+    function buildDashboard(people) {
+      body.innerHTML = "";
+      if (!people.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhum registro da família Filizzola encontrado.";
+        body.appendChild(empty);
+        return;
+      }
+
+      var withBirth = people.filter(function (p) { return p.nascimento; });
+
+      var grid = document.createElement("div");
+      grid.className = "aniversarios-kpi-grid";
+
+      // mais velho / mais novo (idade em meses se <1 ano)
+      if (withBirth.length) {
+        var oldest = withBirth.reduce(function (a, b) { return (a.ageDays > b.ageDays) ? a : b; });
+        var youngest = withBirth.reduce(function (a, b) { return (a.ageDays < b.ageDays) ? a : b; });
+        grid.appendChild(kpiCard("🎂", "Mais velho(a)", oldest.nome, oldest.idade ? oldest.idade.label : ""));
+        grid.appendChild(kpiCard("👶", "Mais novo(a)", youngest.nome, youngest.idade ? youngest.idade.label : ""));
+      }
+
+      // ano com mais nascimentos
+      var yearCount = {};
+      withBirth.forEach(function (p) {
+        var y = p.nascimento.slice(0, 4);
+        yearCount[y] = (yearCount[y] || 0) + 1;
+      });
+      var bestYear = null, bestYearCount = 0;
+      Object.keys(yearCount).forEach(function (y) {
+        if (yearCount[y] > bestYearCount) { bestYear = y; bestYearCount = yearCount[y]; }
+      });
+      if (bestYear) grid.appendChild(kpiCard("📅", "Ano com mais nascimentos", bestYear, bestYearCount + (bestYearCount === 1 ? " nascimento" : " nascimentos")));
+
+      // mês com mais nascimentos
+      var monthCount = {};
+      withBirth.forEach(function (p) {
+        var m = parseInt(p.nascimento.slice(5, 7), 10);
+        monthCount[m] = (monthCount[m] || 0) + 1;
+      });
+      var bestMonth = null, bestMonthCount = 0;
+      Object.keys(monthCount).forEach(function (m) {
+        if (monthCount[m] > bestMonthCount) { bestMonth = parseInt(m, 10); bestMonthCount = monthCount[m]; }
+      });
+      if (bestMonth) grid.appendChild(kpiCard("🗓️", "Mês com mais nascimentos", FINANCEIRO_MONTH_NAMES_LOCAL[bestMonth - 1], bestMonthCount + (bestMonthCount === 1 ? " nascimento" : " nascimentos")));
+
+      // grupo com mais membros
+      var grupoCount = {};
+      people.forEach(function (p) {
+        var g = p.grupo || "(Sem grupo)";
+        grupoCount[g] = (grupoCount[g] || 0) + 1;
+      });
+      var bestGrupo = null, bestGrupoCount = 0;
+      Object.keys(grupoCount).forEach(function (g) {
+        if (grupoCount[g] > bestGrupoCount) { bestGrupo = g; bestGrupoCount = grupoCount[g]; }
+      });
+      if (bestGrupo) grid.appendChild(kpiCard("👪", "Grupo com mais membros", bestGrupo, bestGrupoCount + (bestGrupoCount === 1 ? " pessoa" : " pessoas")));
+
+      grid.appendChild(kpiCard("🧑🏻‍🤝‍🧑🏻", "Total de pessoas", String(people.length), ""));
+
+      body.appendChild(grid);
+
+      // gênero por geração
+      var geracoes = {};
+      people.forEach(function (p) {
+        var g = p.geracao || "(Sem geração)";
+        if (!geracoes[g]) geracoes[g] = { M: 0, F: 0, outro: 0 };
+        if (p.genero === "Masculino") geracoes[g].M++;
+        else if (p.genero === "Feminino") geracoes[g].F++;
+        else geracoes[g].outro++;
+      });
+      var geracaoTitle = document.createElement("h4");
+      geracaoTitle.className = "aniversarios-bi-subtitle";
+      geracaoTitle.textContent = "Gênero por geração";
+      body.appendChild(geracaoTitle);
+
+      var geracaoTable = document.createElement("table");
+      geracaoTable.className = "financeiro-table";
+      var gThead = document.createElement("thead");
+      var gHeadRow = document.createElement("tr");
+      ["Geração", "Masculino", "Feminino", "Total"].forEach(function (label) {
+        var th = document.createElement("th");
+        th.className = "financeiro-th";
+        th.textContent = label;
+        gHeadRow.appendChild(th);
+      });
+      gThead.appendChild(gHeadRow);
+      geracaoTable.appendChild(gThead);
+      var gTbody = document.createElement("tbody");
+      Object.keys(geracoes).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (g) {
+        var row = document.createElement("tr");
+        row.className = "financeiro-row";
+        var cells = [g, String(geracoes[g].M), String(geracoes[g].F), String(geracoes[g].M + geracoes[g].F + geracoes[g].outro)];
+        cells.forEach(function (c) {
+          var td = document.createElement("td");
+          td.textContent = c;
+          row.appendChild(td);
+        });
+        gTbody.appendChild(row);
+      });
+      geracaoTable.appendChild(gTbody);
+      body.appendChild(geracaoTable);
+
+      statusEl.style.display = "none";
+    }
+
+    var orPairs = grupoOriginarioFilter.map(function (v) { return { value: v }; });
+    var filters = orPairs.length
+      ? [{ property: "Grupo Originário", type: "select", orPairs: orPairs }]
+      : ANIVERSARIOS_BASE_FILTER;
+
+    var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
+      "&filters=" + encodeURIComponent(JSON.stringify(filters)) +
+      "&extra=" + encodeURIComponent(JSON.stringify(ANIVERSARIOS_EXTRA_FIELDS));
+
+    authFetch(queryUrl).then(handle401Generic).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar aniversários");
+      var pages = (result.data && result.data.pages) || [];
+      var people = aniversarioPessoasFromPages(pages);
+      buildDashboard(people);
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao buscar estatísticas: " + err.message;
+    });
+  }
+
   // ---------------- "page.supermercado" — Lista de Supermercado (100% KV) ----------------
   // Pedido do Georges: trazer a base "Pessoal / Listas / Supermercado" do
   // Notion pro Meu Hub, com edição de Prioridade/Providência pelo próprio
@@ -9988,7 +10461,7 @@
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
     var hasTabs = !!(page.tabs && page.tabs.length);
 
-    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais && !page.legislacoes) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais && !page.legislacoes && !page.aniversariosList && !page.aniversariosBI) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -10256,6 +10729,28 @@
         container.appendChild(dividerLegislacoes);
       }
       renderLegislacoesPage(container, page);
+    }
+
+    // "page.aniversariosList"/"page.aniversariosBI" (pedido do Georges:
+    // "monte página de Aniversários e o BI") — mesmo esquema de
+    // "page.legislacoes" acima (itemGroups "Abrir" renderizados antes,
+    // depois o bloco dinâmico). Ver renderAniversariosPage/
+    // renderAniversariosBIPage.
+    if (page.aniversariosList) {
+      if (renderedSomething) {
+        var dividerAniversarios = document.createElement("hr");
+        dividerAniversarios.className = "content-divider";
+        container.appendChild(dividerAniversarios);
+      }
+      renderAniversariosPage(container, page);
+    }
+    if (page.aniversariosBI) {
+      if (renderedSomething) {
+        var dividerAniversariosBI = document.createElement("hr");
+        dividerAniversariosBI.className = "content-divider";
+        container.appendChild(dividerAniversariosBI);
+      }
+      renderAniversariosBIPage(container, page);
     }
   }
 

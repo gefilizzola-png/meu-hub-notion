@@ -397,6 +397,29 @@ var CONTRATOS_CONTRATO_FILTER = {
   optionsFrom: { database_id: "2310481486dd80079202fe1eaf5e14c4", property: "📖 Processo/Chamado" }
 };
 
+// "🎉 Aniversários" — base PRÓPRIA (não é a Central), campos nativos Nome
+// (title)/Grupo (select, 1 por núcleo familiar)/Gênero (select)/Grupo
+// Originário (select)/Geração (select)/Nascimento (date). Usada pelas 2
+// páginas novas pedidas pelo Georges ("Primeiro, monte página de
+// Aniversários e o BI... depois tratamos a árvore genealógica"):
+// pmf_cad_aniversarios (lista, 100% leitura, TODOS os grupos) e
+// pmf_cad_aniversarios_bi (estatísticas, só família Filizzola). SÓ
+// LEITURA — igual toda página dinâmica do app, nunca escreve nada aqui.
+// database_id no formato sem hífen (mesmo padrão de LEGISLACOES_TIPO_FILTER
+// etc) — convertido do data source real
+// "collection://1f604814-86dd-80c6-8644-000b7f9f3244".
+var ANIVERSARIOS_DATABASE_ID = "1f60481486dd80c68644000b7f9f3244";
+// Os 5 ramos de "Grupo Originário" que formam a família Filizzola
+// (confirmado com o Georges — os demais valores desse campo são PMF/BR2/
+// BSA/Amigos/Cardoso Borelli/Mavros/Mavros Borelli, ainda fora do BI por
+// enquanto: "Desconsidere no BI PMF, Mavros, etc. Será tbm apenas da
+// família Filizzola."). Usado só pra restringir a consulta do BI — a
+// página de lista (pmf_cad_aniversarios) continua mostrando TODOS os
+// grupos, sem esse recorte.
+var ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO = [
+  "Mavros Filizzola", "Filizzola D´Urso", "Ciorlia Filizzola", "Sbeghen Filizzola", "Lavorato Filizzola"
+];
+
 // Versões pra páginas que consultam a Central DIRETO (Betha, Reuniões,
 // Tarefas, TAT — todas usam database_id da própria Central, ver
 // pmf_ctrl_betha/pmf_ctrl_reunioes/pmf_ctrl_tarefas/pmf_col_tat abaixo), ao
@@ -577,9 +600,9 @@ var BUSCA_INSCRICAO_FILTER = {
 // Aniversários" nas 3 abas de Início (Hoje/Amanhã/Próximos 7 dias) — cada
 // item é { type: "notion", url, title } (abre em aba nova) ou
 // { type: "page", target, title } (navega dentro do próprio app, ver
-// app.js). Reuniões e Tarefas já têm página própria no app
-// (pmf_ctrl_reunioes/pmf_ctrl_tarefas), por isso ganham os dois; Aniversários
-// só o link do Notion — ainda não existe página própria pra ela no app.
+// app.js). Reuniões, Tarefas e Aniversários têm página própria no app
+// (pmf_ctrl_reunioes/pmf_ctrl_tarefas/pmf_cad_aniversarios), por isso ganham
+// os dois.
 var TITLELINKS_REUNIOES = [
   { type: "notion", url: "https://app.notion.com/p/georges-filizzola/af1ec75c4a2b4b02a2f6880e78bc8e61?v=d48c2008a5a548ca938faf5ca8b40bfa&source=copy_link", title: "Abrir Reuniões no Notion" },
   { type: "page", target: "pmf_ctrl_reunioes", title: "Abrir Reuniões no app" }
@@ -589,7 +612,8 @@ var TITLELINKS_TAREFAS = [
   { type: "page", target: "pmf_ctrl_tarefas", title: "Abrir Tarefas no app" }
 ];
 var TITLELINKS_ANIVERSARIOS = [
-  { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link", title: "Abrir Aniversários no Notion" }
+  { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link", title: "Abrir Aniversários no Notion" },
+  { type: "page", target: "pmf_cad_aniversarios", title: "Abrir Aniversários no app" }
 ];
 
 // "key"/"label" das 14 contas de "Financeiro → Contas Mensais" — ESPELHA
@@ -636,7 +660,8 @@ var SIDEPANEL_LINKS = [
   {
     title: "Aniversários",
     items: [
-      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link" }
+      { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link" },
+      { type: "page", target: "pmf_cad_aniversarios" }
     ]
   },
   {
@@ -1273,7 +1298,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-22 10:43",
+  appVersion: "2026-09-22 23:39",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2375,7 +2400,8 @@ const APP_CONFIG = {
           title: "CONTROLES - PESSOAL",
           items: [
             { label: "Pessoal – Tarefas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/a0f2b9d15e244ed0b045188a10915714?v=abb77e00ab314a5e9494e0c796dfbf81&source=copy_link" },
-            { label: "Aniversários", type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link" },
+            { label: "Aniversários", type: "page", target: "pmf_cad_aniversarios" },
+            { label: "BI de Aniversários", type: "page", target: "pmf_cad_aniversarios_bi" },
             { label: "Listas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Listas-979a342580cf45299babd95808fc39b5?source=copy_link" },
             { label: "Eventos/Festas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/1270481486dd8044b41ac116a14d7caf?v=057186310de44c4fa92d20b40db38606&source=copy_link" }
           ]
@@ -2752,6 +2778,53 @@ const APP_CONFIG = {
         database_id: "39f8d5dfde534e378a108521c1978e21",
         tipoFilter: LEGISLACOES_TIPO_FILTER,
         assuntosFilter: LEGISLACOES_ASSUNTOS_FILTER
+      }
+    },
+    // "Aniversários" (lista) — pedido do Georges ("Primeiro, monte página
+    // de Aniversários e o BI bem legal, intuitivo e moderno"). Mesma base
+    // ANIVERSARIOS_DATABASE_ID acima, 100% leitura, TODOS os grupos
+    // (Filizzola + Borelli/Mavros/Mavros Borelli + PMF/BR2/BSA/Amigos).
+    // "aniversariosList" (ver renderAniversariosPage no app.js) — tabela
+    // com Nome/Grupo/Nascimento/Idade, ordenável (Nome/dia-mês/Nascimento/
+    // Idade) + filtro de Grupo (multi-select, opções tiradas ao vivo dos
+    // próprios registros carregados, igual "Situação" em Legislações).
+    pmf_cad_aniversarios: {
+      title: "Aniversários",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir",
+          items: [
+            { label: "Aniversários", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link" },
+            { label: "BI de Aniversários", type: "page", target: "pmf_cad_aniversarios_bi" }
+          ]
+        }
+      ],
+      aniversariosList: {
+        database_id: ANIVERSARIOS_DATABASE_ID
+      }
+    },
+    // "BI de Aniversários" — estatísticas (mais velho/mais novo/ano com
+    // mais nascimentos/grupo com mais membros/gênero por geração/mês com
+    // mais nascimentos), restrito só aos 5 ramos da família Filizzola
+    // (Georges: "Desconsidere no BI PMF, Mavros, etc. Será tbm apenas da
+    // família Filizzola") — "grupoOriginarioFilter" abaixo filtra a
+    // consulta ao Notion direto por esses 5 valores (ver
+    // renderAniversariosBIPage no app.js).
+    pmf_cad_aniversarios_bi: {
+      title: "BI de Aniversários",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir",
+          items: [
+            { label: "Aniversários", type: "page", target: "pmf_cad_aniversarios" }
+          ]
+        }
+      ],
+      aniversariosBI: {
+        database_id: ANIVERSARIOS_DATABASE_ID,
+        grupoOriginarioFilter: ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO
       }
     },
     pmf_cad_cargos: { title: "Cargos", items: [] },

@@ -4202,6 +4202,85 @@ html, body {
   margin-top: 2px;
 }
 
+/* ---------------- Aniversários — lista + BI (pedido do Georges: "monte
+   página de Aniversários e o BI bem legal, intuitivo e moderno"), ver
+   renderAniversariosPage/renderAniversariosBIPage no app.js. A lista
+   reaproveita .legislacoes-block/.legislacoes-controls/
+   .legislacoes-search-input (mesmo visual de caixa de busca já usado em
+   Legislações) e .financeiro-table (mesma tabela usada em Contas
+   Mensais) — só o essencial de novo aqui embaixo. ---------------- */
+.aniversarios-block { }
+.aniversarios-count {
+  font-size: 12px;
+  color: #6b6a66;
+  margin: 0 0 8px;
+}
+.aniversarios-sort-select {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #262624;
+}
+.aniversarios-sort-dir-btn {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #262624;
+  cursor: pointer;
+  line-height: 1;
+}
+.aniversarios-sort-dir-btn:hover { background: #f7f6f2; }
+
+/* BI — cards de KPI (mesma ideia visual de .quick-button-card/
+   .financeiro-summary-pill já usados no app: cartão claro, borda sutil,
+   número grande em destaque). */
+.aniversarios-bi-block { }
+.aniversarios-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.aniversarios-kpi-card {
+  background: #fff;
+  border: 0.5px solid #eeede9;
+  border-radius: 10px;
+  padding: 14px 14px 12px;
+  text-align: center;
+}
+.aniversarios-kpi-emoji {
+  font-size: 24px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.aniversarios-kpi-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: #262624;
+  line-height: 1.25;
+}
+.aniversarios-kpi-label {
+  font-size: 11.5px;
+  color: #6b6a66;
+  margin-top: 3px;
+}
+.aniversarios-kpi-sub {
+  font-size: 11px;
+  color: #0f9b8e;
+  margin-top: 4px;
+  font-weight: 600;
+}
+.aniversarios-bi-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #262624;
+  margin: 18px 0 8px;
+}
+
 /* ---------------- Lista de Supermercado (pedido do Georges — trazida da
    base do Notion pro Meu Hub, 100% KV, ver renderSupermercadoPage no
    app.js) ---------------- */
