@@ -4209,31 +4209,79 @@ html, body {
    .legislacoes-search-input (mesmo visual de caixa de busca já usado em
    Legislações) e .financeiro-table (mesma tabela usada em Contas
    Mensais) — só o essencial de novo aqui embaixo. ---------------- */
-.aniversarios-block { }
+.aniversarios-block {
+  background: linear-gradient(180deg, rgba(244, 114, 182, 0.06), rgba(244, 114, 182, 0.015));
+  border: 0.5px solid rgba(244, 114, 182, 0.22);
+  border-left: 3px solid #ec4899;
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+  margin-top: 4px;
+}
 .aniversarios-count {
   font-size: 12px;
   color: #6b6a66;
   margin: 0 0 8px;
 }
-.aniversarios-sort-select {
+/* caixa de busca compacta (pedido do Georges: "diminua o tamanho da barra
+   de pesquisa") — flex-basis pequeno, não ocupa a linha toda como
+   .legislacoes-search-input. */
+.aniversarios-search-input {
+  flex: 0 1 170px;
+  min-width: 120px;
   font-size: 13px;
   padding: 6px 10px;
-  border-radius: 7px;
+  border-radius: 20px;
   border: 0.5px solid #dcdcd8;
   background: #fff;
   color: #262624;
 }
-.aniversarios-sort-dir-btn {
-  font-size: 13px;
-  padding: 6px 10px;
-  border-radius: 7px;
-  border: 0.5px solid #dcdcd8;
+/* "tags" de família/círculo (pedido do Georges: "Crie botões (tipo tags)
+   para eu selecionar Família Filizzola... Família Mavros, Família
+   Borelli, BR2, PMF, Amigos, etc") — pílulas de seleção múltipla, mesmo
+   espírito visual dos chips de categoria da Central de Notificações. */
+.aniversarios-tag-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.aniversarios-tag-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid #ec4899;
   background: #fff;
-  color: #262624;
+  color: #ec4899;
   cursor: pointer;
-  line-height: 1;
+  transition: background 0.12s, color 0.12s;
 }
-.aniversarios-sort-dir-btn:hover { background: #f7f6f2; }
+.aniversarios-tag-pill:hover { background: rgba(236, 72, 153, 0.08); }
+.aniversarios-tag-pill.active { background: #ec4899; color: #fff; }
+
+/* tabela — avatar redondo com iniciais + subtexto "em N dias" abaixo do
+   nascimento (visual mais moderno, pedido do Georges). */
+.aniversarios-table { background: #fff; }
+.aniversarios-row:hover td { background: rgba(236, 72, 153, 0.04); }
+.aniversarios-nome-cell { display: flex; align-items: center; gap: 8px; }
+.aniversarios-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.aniversarios-proximo-sub {
+  font-size: 11px;
+  color: #ec4899;
+  font-weight: 600;
+  margin-top: 2px;
+}
 
 /* BI — cards de KPI (mesma ideia visual de .quick-button-card/
    .financeiro-summary-pill já usados no app: cartão claro, borda sutil,
@@ -4243,7 +4291,7 @@ html, body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 .aniversarios-kpi-card {
   background: #fff;
@@ -4251,6 +4299,13 @@ html, body {
   border-radius: 10px;
   padding: 14px 14px 12px;
   text-align: center;
+  transition: box-shadow 0.12s, transform 0.12s;
+}
+.aniversarios-kpi-card.clickable { cursor: pointer; }
+.aniversarios-kpi-card.clickable:hover {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+  border-color: #ec4899;
 }
 .aniversarios-kpi-emoji {
   font-size: 24px;
@@ -4274,11 +4329,58 @@ html, body {
   margin-top: 4px;
   font-weight: 600;
 }
+.aniversarios-kpi-hint {
+  font-size: 10px;
+  color: #ec4899;
+  margin-top: 6px;
+  opacity: 0.75;
+}
 .aniversarios-bi-subtitle {
   font-size: 13px;
   font-weight: 600;
   color: #262624;
   margin: 18px 0 8px;
+}
+/* painel de detalhe (lista de nomes ao clicar num card de KPI clicável ou
+   numa linha de geração). */
+.aniversarios-detail-panel {
+  background: rgba(236, 72, 153, 0.05);
+  border: 0.5px solid rgba(236, 72, 153, 0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.aniversarios-detail-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #262624;
+  margin-bottom: 6px;
+}
+.aniversarios-detail-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.aniversarios-detail-chip {
+  font-size: 12px;
+  background: #fff;
+  border: 0.5px solid #eeede9;
+  border-radius: 20px;
+  padding: 3px 10px;
+  color: #3a3a35;
+}
+/* linhas de "Gênero por geração" — clicáveis, expandem/recolhem nomes
+   (pedido do Georges). */
+.aniversarios-geracao-row { cursor: pointer; }
+.aniversarios-geracao-row:hover td { background: rgba(236, 72, 153, 0.04); }
+.aniversarios-geracao-chevron {
+  font-size: 12px;
+  color: #6b6a66;
+  transition: transform 0.12s;
+}
+.aniversarios-geracao-detail-row td {
+  background: #faf9f7;
+  padding: 10px 14px;
 }
 
 /* ---------------- Lista de Supermercado (pedido do Georges — trazida da

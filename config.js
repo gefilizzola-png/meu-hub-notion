@@ -420,6 +420,34 @@ var ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO = [
   "Mavros Filizzola", "Filizzola D´Urso", "Ciorlia Filizzola", "Sbeghen Filizzola", "Lavorato Filizzola"
 ];
 
+// "Tags" de família da página de Aniversários (botões de filtro rápido,
+// pedido do Georges) — a "tag" principal de cada pessoa vem AUTOMÁTICO do
+// campo "Grupo Originário" (ver aniversarioAutoTag no app.js: os 5 ramos
+// acima viram "Família Filizzola"; "Mavros"/"Borelli" viram "Família
+// Mavros"/"Família Borelli"; "Amigos" usa o próprio "Grupo" da pessoa —
+// PMF/BR2/BSA/Amigos — já que "Grupo Originário" não distingue esses 4
+// entre si, confirmado consultando a base direto).
+//
+// Só que "Grupo Originário" é um campo ÚNICO no Notion (1 valor por
+// pessoa) — não dá pra representar alguém que pertence a MAIS DE UMA
+// família ao mesmo tempo (pedido do Georges: "Coloque o Nicolas Mavros
+// Borelli nos grupos Família Mavros e Família Borelli", etc). Por isso
+// esses casos são um mapeamento SÓ NO APP (nunca escrito no Notion, igual
+// a regra permanente de sempre) — TAGS EXTRAS somadas à tag automática de
+// cada pessoa, indexado pelo "Nome" já sem o prefixo "PESSOAL -
+// Aniversários - " (ver ANIVERSARIOS_TITLE_PREFIX/aniversarioTagsForPerson
+// no app.js). Confirmado o nome exato de cada um consultando a base:
+// Georges e os irmãos são "Grupo Originário: Mavros Filizzola" (tag
+// automática "Família Filizzola"), Nicolas é "Grupo Originário: Mavros"
+// (tag automática "Família Mavros").
+var ANIVERSARIOS_TAG_OVERRIDES = {
+  "Nicolas Mavros Borelli": ["Família Borelli"],
+  "Georges Mavros Filizzola": ["Família Mavros", "Família Borelli"],
+  "Leonardo Mavros Filizzola": ["Família Mavros"],
+  "Guilherme Mavros Filizzola": ["Família Mavros"],
+  "Letícia Borelli": ["Família Borelli"]
+};
+
 // Versões pra páginas que consultam a Central DIRETO (Betha, Reuniões,
 // Tarefas, TAT — todas usam database_id da própria Central, ver
 // pmf_ctrl_betha/pmf_ctrl_reunioes/pmf_ctrl_tarefas/pmf_col_tat abaixo), ao
@@ -1298,7 +1326,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-22 23:39",
+  appVersion: "2026-09-23 00:26",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
