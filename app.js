@@ -11398,6 +11398,7 @@
     }
 
     function buildRow(it) {
+      var padrao = it.quantidadePadrao || 0;
       var row = document.createElement("div");
       row.className = remedioRowClass(it);
 
@@ -12426,6 +12427,11 @@
         list.push({
           id: source.id + "::" + lt.id + "::" + p.id,
           sourceId: source.id,
+          // pedido do Georges (Aniversários): canais/repetir agora são POR
+          // antecedência, não por fonte — processNotifTriggers/
+          // applyRepeatWhilePending usam isso pra achar a leadTime certa
+          // dentro de source.leadTimes (ver resolvedNotifSources).
+          leadTimeId: lt.id,
           sourceLabel: source.label,
           // "p.icon" (opcional, por ITEM — pedido do Georges em Provas do
           // Vitor: "ícone condizente com o tema" de CADA prova, não
@@ -12465,13 +12471,17 @@
     { id: "native", label: "Notificação nativa", hint: "notificação de verdade do sistema (Windows/Android) — precisa de permissão" }
   ];
 
-  // recolhido/escondido por padrão em CADA fonte (pedido do Georges: "Para
-  // nao tomar toda a tela, faça um botão bem sutil em cada card... as
-  // opções e o texto explicativo ficariam recolhidos"). Só em memória (não
-  // salva no KV, reseta ao recarregar a página) — é só um estado de "tô
-  // olhando isso agora", igual outros colapsos do app (ex: divisórias de
-  // Prioridades).
-  var notifChannelsExpandedIds = {};
+  // recolhido/escondido por padrão em CADA antecedência (pedido do Georges,
+  // Aniversários: "conseguiríamos definir uma forma em que essas regras de
+  // configuração seriam definidas individualmente para cada opção de
+  // notificação?" -> escolheu "clicar na própria pilula" pra abrir/fechar).
+  // Chave composta "sourceId::leadTimeId" (leadTime ids como "1d"/"3h" se
+  // repetem entre fontes diferentes, ex: Aniversários e Reuniões podem ter
+  // as duas uma antecedência "1d" — sem o prefixo da fonte colidiriam e
+  // abrir uma expandiria a outra sem querer). Só em memória (não salva no
+  // KV, reseta ao recarregar a página) — é só um estado de "tô olhando isso
+  // agora", igual outros colapsos do app (ex: divisórias de Prioridades).
+  var notifLeadTimeExpandedKeys = {};
 
   // ordem alfabética (pedido do Georges: "coloque estes itens... em ordem
   // alfabética") — por LABEL, não pela ordem de cadastro em
@@ -12484,12 +12494,32 @@
     });
   }
 
+  // "channels"/"repeatWhilePending" NÃO vivem mais no nível da FONTE — pedido
+  // do Georges: "essas regras de configuração seriam definidas
+  // individualmente para cada opção de notificação" (cada antecedência, ex:
+  // "3 dias antes"/"1 dia antes", tem seu próprio canal/repetir). Aqui cada
+  // objeto de leadTime é normalizado (sempre um objeto NOVO, nunca reaproveita
+  // a referência de source.defaultLeadTimes — evita mutar o array
+  // compartilhado do config.js quando o Georges editar depois) com
+  // channels/repeatWhilePending PRÓPRIOS, default []/false quando a leadTime
+  // (seja ela salva na KV ou vinda do defaultLeadTimes do config.js) ainda
+  // não tem nada configurado.
+  function normalizeNotifLeadTime(lt) {
+    return {
+      id: lt.id,
+      amount: lt.amount,
+      unit: lt.unit,
+      label: lt.label,
+      channels: Array.isArray(lt.channels) ? lt.channels : [],
+      repeatWhilePending: !!lt.repeatWhilePending
+    };
+  }
+
   function resolvedNotifSources(savedSettings) {
     return sortedNotifSourceDefs().map(function (source) {
       var s = savedSettings && savedSettings[source.id];
-      var leadTimes = (s && Array.isArray(s.leadTimes) && s.leadTimes.length) ? s.leadTimes : source.defaultLeadTimes;
-      var channels = (s && Array.isArray(s.channels)) ? s.channels : (source.defaultChannels || []);
-      var repeatWhilePending = (s && typeof s.repeatWhilePending === "boolean") ? s.repeatWhilePending : !!source.defaultRepeatWhilePending;
+      var rawLeadTimes = (s && Array.isArray(s.leadTimes) && s.leadTimes.length) ? s.leadTimes : source.defaultLeadTimes;
+      var leadTimes = (rawLeadTimes || []).map(normalizeNotifLeadTime);
       return {
         id: source.id,
         label: source.label,
@@ -12501,9 +12531,7 @@
         target: source.target,
         defaultLeadTimes: source.defaultLeadTimes,
         enabled: s ? !!s.enabled : (source.defaultEnabled !== false),
-        leadTimes: leadTimes,
-        channels: channels,
-        repeatWhilePending: repeatWhilePending
+        leadTimes: leadTimes
       };
     });
   }
@@ -12626,8 +12654,11 @@
     var changed = false;
     items.forEach(function (n) {
       if (readSet[n.id] || triggeredSet[n.id]) return;
-      var source = sourceById[n.sourceId];
-      var channels = (source && source.channels) || [];
+      // canais agora vivem na LEADTIME específica (pedido do Georges:
+      // Aniversários — cada antecedência com sua própria config), não mais
+      // na fonte inteira.
+      var lt = findNotifLeadTime(sourceById[n.sourceId], n.leadTimeId);
+      var channels = (lt && lt.channels) || [];
       if (!channels.length) return;
       triggeredSet[n.id] = true;
       triggered.push(n.id);
@@ -12651,6 +12682,17 @@
   // (remédio baixo, conta vencida, item pra comprar…) continue valendo.
   var notifRepeatPendingAppliedOnce = false;
 
+  // acha a leadTime específica (por id) dentro das leadTimes de uma fonte já
+  // resolvida — usado por processNotifTriggers/applyRepeatWhilePending, que
+  // agora leem channels/repeatWhilePending da LEADTIME, não mais da fonte.
+  function findNotifLeadTime(source, leadTimeId) {
+    if (!source || !Array.isArray(source.leadTimes)) return null;
+    for (var i = 0; i < source.leadTimes.length; i++) {
+      if (source.leadTimes[i].id === leadTimeId) return source.leadTimes[i];
+    }
+    return null;
+  }
+
   function applyRepeatWhilePending(items, readIds) {
     if (notifRepeatPendingAppliedOnce) return readIds;
     notifRepeatPendingAppliedOnce = true;
@@ -12658,8 +12700,8 @@
     notifState.sources.forEach(function (s) { sourceById[s.id] = s; });
     var repeatIds = {};
     items.forEach(function (n) {
-      var source = sourceById[n.sourceId];
-      if (source && source.repeatWhilePending) repeatIds[n.id] = true;
+      var lt = findNotifLeadTime(sourceById[n.sourceId], n.leadTimeId);
+      if (lt && lt.repeatWhilePending) repeatIds[n.id] = true;
     });
     if (!Object.keys(repeatIds).length) return readIds;
     var filtered = readIds.filter(function (id) { return !repeatIds[id]; });
@@ -12982,7 +13024,10 @@
   function buildNotifSettingsPayload() {
     var out = {};
     notifState.sources.forEach(function (s) {
-      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, channels: s.channels, repeatWhilePending: s.repeatWhilePending };
+      // channels/repeatWhilePending já vivem DENTRO de cada leadTime (ver
+      // resolvedNotifSources/setNotifLeadTimeChannel) — nada em nível de
+      // fonte pra mandar além de enabled/leadTimes.
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes };
     });
     return out;
   }
@@ -13025,28 +13070,32 @@
     applyNotifSettingsChange();
   }
 
-  // liga/desliga UM canal por vez (checkbox independente) — igual ao
-  // liga/desliga da fonte acima, só que numa lista em vez de um booleano.
-  // Não precisa de refetch/recomputeNotifications real (canal não muda QUAL
-  // notificação existe, só COMO ela chama atenção), mas reaproveita
-  // applyNotifSettingsChange mesmo assim pra manter o mesmo fluxo
+  // liga/desliga UM canal por vez (checkbox independente), de UMA
+  // antecedência específica — pedido do Georges (Aniversários): "essas
+  // regras de configuração seriam definidas individualmente para cada opção
+  // de notificação". Não precisa de refetch/recomputeNotifications real
+  // (canal não muda QUAL notificação existe, só COMO ela chama atenção), mas
+  // reaproveita applyNotifSettingsChange mesmo assim pra manter o mesmo fluxo
   // salvar+re-renderizar de todo o resto do editor.
-  function setNotifSourceChannel(sourceId, channelId, on) {
+  function setNotifLeadTimeChannel(sourceId, leadTimeId, channelId, on) {
     var s = findNotifSource(sourceId);
-    if (!s) return;
-    var idx = s.channels.indexOf(channelId);
-    if (on && idx === -1) s.channels = s.channels.concat([channelId]);
-    else if (!on && idx !== -1) s.channels = s.channels.filter(function (c) { return c !== channelId; });
+    var lt = findNotifLeadTime(s, leadTimeId);
+    if (!lt) return;
+    var idx = lt.channels.indexOf(channelId);
+    if (on && idx === -1) lt.channels = lt.channels.concat([channelId]);
+    else if (!on && idx !== -1) lt.channels = lt.channels.filter(function (c) { return c !== channelId; });
     else return;
     applyNotifSettingsChange();
   }
 
   // "repetir enquanto pendente" (pedido do Georges — ver
-  // applyRepeatWhilePending, chamada de dentro de refreshNotifications).
-  function setNotifSourceRepeatWhilePending(sourceId, on) {
+  // applyRepeatWhilePending, chamada de dentro de refreshNotifications),
+  // agora por antecedência específica em vez de por fonte inteira.
+  function setNotifLeadTimeRepeatWhilePending(sourceId, leadTimeId, on) {
     var s = findNotifSource(sourceId);
-    if (!s || s.repeatWhilePending === on) return;
-    s.repeatWhilePending = on;
+    var lt = findNotifLeadTime(s, leadTimeId);
+    if (!lt || lt.repeatWhilePending === on) return;
+    lt.repeatWhilePending = on;
     applyNotifSettingsChange();
   }
 
@@ -13113,29 +13162,6 @@
       label.textContent = (s.icon ? s.icon + " " : "") + s.label;
       head.appendChild(label);
 
-      // botão sutil (só ícone) pra abrir/fechar os 3 canais extras desta
-      // fonte — só existe se a fonte estiver ligada (senão os canais nem
-      // fazem sentido, ver comentário abaixo). Ganha destaque (classe
-      // has-channels) quando já tem algum canal marcado, pra dar pra saber
-      // sem precisar abrir.
-      if (s.enabled) {
-        var chToggleBtn = document.createElement("button");
-        chToggleBtn.type = "button";
-        chToggleBtn.className = "notif-settings-channels-toggle-btn" +
-          (s.channels.length ? " has-channels" : "") +
-          (notifChannelsExpandedIds[s.id] ? " active" : "");
-        chToggleBtn.title = s.channels.length
-          ? "Canais de aviso (" + s.channels.length + " ativo" + (s.channels.length > 1 ? "s" : "") + ")"
-          : "Canais de aviso (toast/piscar/nativa)";
-        chToggleBtn.setAttribute("aria-label", "Canais de aviso");
-        chToggleBtn.innerHTML = '<i class="ti ti-adjustments-horizontal"></i>';
-        chToggleBtn.addEventListener("click", function () {
-          notifChannelsExpandedIds[s.id] = !notifChannelsExpandedIds[s.id];
-          renderNotifSettings();
-        });
-        head.appendChild(chToggleBtn);
-      }
-
       var toggle = document.createElement("label");
       toggle.className = "notif-settings-toggle";
       var cb = document.createElement("input");
@@ -13153,18 +13179,124 @@
         var chips = document.createElement("div");
         chips.className = "notif-settings-leadtimes";
         s.leadTimes.forEach(function (lt) {
+          // pedido do Georges (Aniversários): "conseguiríamos definir uma
+          // forma em que essas regras de configuração seriam definidas
+          // individualmente para cada opção de notificação?" -> escolheu
+          // "clicar na própria pilula" — clicar no TEXTO da pilula (não no
+          // × de remover) abre/fecha um painel com os mesmos 4 controles
+          // (toast/piscar/nativa/repetir) só pra ESSA antecedência.
+          var ltKey = s.id + "::" + lt.id;
+          var hasConfig = !!(lt.channels.length || lt.repeatWhilePending);
+          var expanded = !!notifLeadTimeExpandedKeys[ltKey];
+
+          var item = document.createElement("div");
+          item.className = "notif-settings-leadtime-item";
+
+          var chipRow = document.createElement("div");
+          chipRow.className = "notif-settings-leadtime-chip-row";
+
           var chip = document.createElement("span");
-          chip.className = "notif-settings-leadtime-chip";
+          chip.className = "notif-settings-leadtime-chip" +
+            (hasConfig ? " has-config" : "") +
+            (expanded ? " active" : "");
+
           var chipLabel = document.createElement("span");
+          chipLabel.className = "notif-settings-leadtime-chip-label";
           chipLabel.textContent = lt.label;
+          chipLabel.title = hasConfig
+            ? "Config. de aviso ativa (" + lt.channels.length + " canal" + (lt.channels.length !== 1 ? "is" : "") + (lt.repeatWhilePending ? " + repetir" : "") + ") — clique pra editar"
+            : "Clique pra configurar canais de aviso desta antecedência";
+          chipLabel.addEventListener("click", function () {
+            notifLeadTimeExpandedKeys[ltKey] = !notifLeadTimeExpandedKeys[ltKey];
+            renderNotifSettings();
+          });
           chip.appendChild(chipLabel);
+
           var rm = document.createElement("button");
           rm.type = "button";
           rm.title = "Remover";
           rm.innerHTML = '<i class="ti ti-x"></i>';
-          rm.addEventListener("click", function () { removeNotifLeadTime(s.id, lt.id); });
+          rm.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            removeNotifLeadTime(s.id, lt.id);
+          });
           chip.appendChild(rm);
-          chips.appendChild(chip);
+
+          chipRow.appendChild(chip);
+          item.appendChild(chipRow);
+
+          // painel de canais/repetir desta antecedência — só desenhado
+          // quando a pilula está expandida (recolhido por padrão, mesmo
+          // espírito do antigo botão sutil por fonte).
+          if (expanded) {
+            var chWrap = document.createElement("div");
+            chWrap.className = "notif-settings-channels";
+            NOTIF_CHANNEL_DEFS.forEach(function (chDef) {
+              var chRow = document.createElement("label");
+              chRow.className = "notif-settings-channel-row";
+              var chCb = document.createElement("input");
+              chCb.type = "checkbox";
+              chCb.checked = lt.channels.indexOf(chDef.id) !== -1;
+              chCb.addEventListener("change", function () { setNotifLeadTimeChannel(s.id, lt.id, chDef.id, chCb.checked); });
+              chRow.appendChild(chCb);
+              var chText = document.createElement("span");
+              chText.className = "notif-settings-channel-text";
+              var chLabel = document.createElement("span");
+              chLabel.className = "notif-settings-channel-label";
+              chLabel.textContent = chDef.label;
+              chText.appendChild(chLabel);
+              var chHint = document.createElement("span");
+              chHint.className = "notif-settings-channel-hint";
+              chHint.textContent = chDef.hint;
+              chText.appendChild(chHint);
+              chRow.appendChild(chText);
+              // status de permissão do navegador — só relevante pro canal
+              // "native" (ver refreshNativePermissionHints). Chave composta
+              // (ltKey), já que agora existe 1 badge por ANTECEDÊNCIA, não
+              // mais 1 por fonte.
+              if (chDef.id === "native") {
+                var chStatus = document.createElement("span");
+                chStatus.className = "notif-settings-channel-native-status";
+                chStatus.setAttribute("data-native-status-for", ltKey);
+                chRow.appendChild(chStatus);
+              }
+              chWrap.appendChild(chRow);
+            });
+
+            // "repetir enquanto pendente" (pedido do Georges: "Financeiro...
+            // posso ter uma conta vencida e não paga que marquei a
+            // notificação original como lida e acabei me esquecendo de
+            // pagar" / "Supermercado ou de Remédios... devem ser exibidas
+            // novamente quando abrir o app e continua com item pra
+            // comprar") — mesma linha visual dos 3 canais acima, separada
+            // por divisória; agora também por antecedência específica.
+            var repeatDivider = document.createElement("div");
+            repeatDivider.className = "notif-settings-channel-divider";
+            chWrap.appendChild(repeatDivider);
+            var repeatRow = document.createElement("label");
+            repeatRow.className = "notif-settings-channel-row";
+            var repeatCb = document.createElement("input");
+            repeatCb.type = "checkbox";
+            repeatCb.checked = !!lt.repeatWhilePending;
+            repeatCb.addEventListener("change", function () { setNotifLeadTimeRepeatWhilePending(s.id, lt.id, repeatCb.checked); });
+            repeatRow.appendChild(repeatCb);
+            var repeatText = document.createElement("span");
+            repeatText.className = "notif-settings-channel-text";
+            var repeatLabel = document.createElement("span");
+            repeatLabel.className = "notif-settings-channel-label";
+            repeatLabel.textContent = "Repetir enquanto pendente";
+            repeatText.appendChild(repeatLabel);
+            var repeatHint = document.createElement("span");
+            repeatHint.className = "notif-settings-channel-hint";
+            repeatHint.textContent = "mesmo já lida, volta a aparecer como não lida ao abrir o app se a situação continuar (ex: remédio ainda baixo, conta ainda vencida)";
+            repeatText.appendChild(repeatHint);
+            repeatRow.appendChild(repeatText);
+            chWrap.appendChild(repeatRow);
+
+            item.appendChild(chWrap);
+          }
+
+          chips.appendChild(item);
         });
         block.appendChild(chips);
       } else {
@@ -13204,78 +13336,6 @@
       });
       addRow.appendChild(addBtn);
       block.appendChild(addRow);
-
-      // canais extras (toast/piscar+som/nativa) — só faz sentido oferecer
-      // se a fonte já está ligada (senão nem chega a computar notificação
-      // nenhuma dela pra disparar canal nenhum) E só desenha o conteúdo
-      // quando o botão sutil do head foi clicado (recolhido por padrão —
-      // pedido do Georges: "pra não tomar toda a tela").
-      if (s.enabled && notifChannelsExpandedIds[s.id]) {
-        var chWrap = document.createElement("div");
-        chWrap.className = "notif-settings-channels";
-        NOTIF_CHANNEL_DEFS.forEach(function (chDef) {
-          var chRow = document.createElement("label");
-          chRow.className = "notif-settings-channel-row";
-          var chCb = document.createElement("input");
-          chCb.type = "checkbox";
-          chCb.checked = s.channels.indexOf(chDef.id) !== -1;
-          chCb.addEventListener("change", function () { setNotifSourceChannel(s.id, chDef.id, chCb.checked); });
-          chRow.appendChild(chCb);
-          var chText = document.createElement("span");
-          chText.className = "notif-settings-channel-text";
-          var chLabel = document.createElement("span");
-          chLabel.className = "notif-settings-channel-label";
-          chLabel.textContent = chDef.label;
-          chText.appendChild(chLabel);
-          var chHint = document.createElement("span");
-          chHint.className = "notif-settings-channel-hint";
-          chHint.textContent = chDef.hint;
-          chText.appendChild(chHint);
-          chRow.appendChild(chText);
-          // status de permissão do navegador — só relevante pro canal
-          // "native" (ver renderNativePermissionHints, wired depois que o
-          // botão global "Ativar notificações do sistema" existe).
-          if (chDef.id === "native") {
-            var chStatus = document.createElement("span");
-            chStatus.className = "notif-settings-channel-native-status";
-            chStatus.setAttribute("data-native-status-for", s.id);
-            chRow.appendChild(chStatus);
-          }
-          chWrap.appendChild(chRow);
-        });
-
-        // "repetir enquanto pendente" (pedido do Georges: "Financeiro...
-        // posso ter uma conta vencida e não paga que marquei a notificação
-        // original como lida e acabei me esquecendo de pagar" / "Supermercado
-        // ou de Remédios... devem ser exibidas novamente quando abrir o app e
-        // continua com item pra comprar") — mesma linha visual dos 3 canais
-        // acima, mas separada por uma divisória (é um tipo de ajuste
-        // diferente: não é "como avisar", é "quando esquecer que já avisou").
-        var repeatDivider = document.createElement("div");
-        repeatDivider.className = "notif-settings-channel-divider";
-        chWrap.appendChild(repeatDivider);
-        var repeatRow = document.createElement("label");
-        repeatRow.className = "notif-settings-channel-row";
-        var repeatCb = document.createElement("input");
-        repeatCb.type = "checkbox";
-        repeatCb.checked = !!s.repeatWhilePending;
-        repeatCb.addEventListener("change", function () { setNotifSourceRepeatWhilePending(s.id, repeatCb.checked); });
-        repeatRow.appendChild(repeatCb);
-        var repeatText = document.createElement("span");
-        repeatText.className = "notif-settings-channel-text";
-        var repeatLabel = document.createElement("span");
-        repeatLabel.className = "notif-settings-channel-label";
-        repeatLabel.textContent = "Repetir enquanto pendente";
-        repeatText.appendChild(repeatLabel);
-        var repeatHint = document.createElement("span");
-        repeatHint.className = "notif-settings-channel-hint";
-        repeatHint.textContent = "mesmo já lida, volta a aparecer como não lida ao abrir o app se a situação continuar (ex: remédio ainda baixo, conta ainda vencida)";
-        repeatText.appendChild(repeatHint);
-        repeatRow.appendChild(repeatText);
-        chWrap.appendChild(repeatRow);
-
-        block.appendChild(chWrap);
-      }
 
       listEl.appendChild(block);
     });

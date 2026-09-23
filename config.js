@@ -835,17 +835,14 @@ var NOTIFICATION_SOURCES = [
     // nada aqui pra isso).
     target: { type: "page", target: "pmf_ctrl_reunioes" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" },
       { id: "3h", amount: 3, unit: "hours", label: "3 horas antes" }
@@ -887,17 +884,14 @@ var NOTIFICATION_SOURCES = [
     // botão "abrir no app" que fica restrito ao TAT por enquanto.
     target: { type: "page", target: "pmf_col_tat" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "2d", amount: 2, unit: "days", label: "2 dias antes" }
     ]
@@ -936,17 +930,14 @@ var NOTIFICATION_SOURCES = [
     // certa pros dois casos.
     target: { type: "page", target: "pmf_col_tat" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "2d", amount: 2, unit: "days", label: "2 dias antes" }
     ]
@@ -987,17 +978,14 @@ var NOTIFICATION_SOURCES = [
     // "⭐ Itens Prioritários" — mesma exibição, sem duplicar nada novo.
     target: { type: "page", target: "inicio" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
@@ -1028,17 +1016,14 @@ var NOTIFICATION_SOURCES = [
     dateProperty: "vencimento",
     target: { type: "page", target: "financeiro_contas_mensais" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "3d", amount: 3, unit: "days", label: "3 dias antes" }
     ]
@@ -1067,17 +1052,14 @@ var NOTIFICATION_SOURCES = [
     dateProperty: "gatilho",
     target: { type: "page", target: "supermercado", view: "comprar" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "agora", amount: 0, unit: "hours", label: "Assim que sinalizar" }
     ]
@@ -1096,17 +1078,14 @@ var NOTIFICATION_SOURCES = [
     dateProperty: "gatilho",
     target: { type: "page", target: "remedios" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "agora", amount: 0, unit: "hours", label: "Assim que ficar baixo" }
     ]
@@ -1146,17 +1125,14 @@ var NOTIFICATION_SOURCES = [
     // Aniversários" (dentro das abas Hoje/Amanhã/Próximos 7 dias).
     target: { type: "page", target: "inicio" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
@@ -1178,17 +1154,14 @@ var NOTIFICATION_SOURCES = [
     dateProperty: "Data",
     target: { type: "page", target: "provas_vitor" },
     defaultEnabled: true,
-    // canais extras (pedido do Georges: "toast automático" / "piscar aba +
-    // som" / "notificação nativa"), além do sino/gaveta que já existe hoje.
-    // Nenhum ligado por padrão nas fontes já cadastradas — Georges prefere
-    // escolher fonte por fonte pelo editor de gestão (engrenagem).
-    defaultChannels: [],
-    // "repetir enquanto pendente" (pedido do Georges: "ter a opção de
-    // configurar que as notificações de Supermercado ou de Remédios... e
-    // Financeiro... devem ser exibidas novamente quando abrir o app e
-    // continuar pendente") — desligado por padrão em todas, mesmo espírito
-    // de defaultChannels acima (Georges escolhe fonte por fonte).
-    defaultRepeatWhilePending: false,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
@@ -1456,7 +1429,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-23 18:42",
+  appVersion: "2026-09-23 19:09",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha

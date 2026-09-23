@@ -2218,11 +2218,18 @@ html, body {
 }
 .notif-settings-toggle input:checked + .notif-settings-toggle-track { background: #4a90d9; }
 .notif-settings-toggle input:checked + .notif-settings-toggle-track::before { transform: translateX(14px); }
+/* pedido do Georges (Aniversários): cada antecedência tem sua PRÓPRIA
+   config de canais/repetir agora — em vez de 1 fila de pilulas soltas, cada
+   uma é um "item" empilhado verticalmente, pra caber o painel de config
+   logo abaixo da pilula clicada (sem empurrar as outras pilulas de lugar,
+   que ficam cada uma na sua própria linha de qualquer jeito). */
 .notif-settings-leadtimes {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
 }
+.notif-settings-leadtime-item { display: flex; flex-direction: column; }
+.notif-settings-leadtime-chip-row { display: flex; }
 .notif-settings-leadtime-chip {
   display: flex;
   align-items: center;
@@ -2233,6 +2240,21 @@ html, body {
   font-size: 11px;
   color: #4a4a45;
 }
+/* "has-config": já tem canal/repetir marcado nessa antecedência — pontinho
+   azul antes do texto, pra dar pra ver sem precisar abrir (pedido do
+   Georges: "clicar na própria pilula"). "active": painel aberto agora. */
+.notif-settings-leadtime-chip-label { cursor: pointer; }
+.notif-settings-leadtime-chip.has-config .notif-settings-leadtime-chip-label::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4a90d9;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.notif-settings-leadtime-chip.active { background: #eaf2fb; color: #3a7dc4; }
 .notif-settings-leadtime-chip button {
   width: 16px;
   height: 16px;
@@ -2290,41 +2312,22 @@ html, body {
 .notif-settings-add-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
 .notif-settings-add-btn .ti { font-size: 13px; }
 
-/* botão sutil (só ícone) no cabeçalho de cada fonte, que abre/fecha os 3
-   canais extras abaixo (pedido do Georges, depois de ver o editor tomando a
-   tela toda: "botão bem sutil em cada card... recolhidos/escondidos").
-   Fica entre o nome da fonte e o toggle liga/desliga. Cinza apagado por
-   padrão; ganha uma cor quando já tem algum canal marcado (has-channels) e
-   fica destacado (active) enquanto o card está aberto. */
-.notif-settings-channels-toggle-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: #c2c2bc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.notif-settings-channels-toggle-btn:hover { background: #f4f4f2; color: #666; }
-.notif-settings-channels-toggle-btn.has-channels { color: #4a90d9; }
-.notif-settings-channels-toggle-btn.active { background: #eaf2fb; color: #3a7dc4; }
-.notif-settings-channels-toggle-btn .ti { font-size: 14px; }
-
-/* ---------------- canais extras por fonte (pedido do Georges: "criar as 3
-   juntas e eu ter a opção de escolher qual tipo quero aplicar a cada
-   notificação que configuro") — 3 checkboxes dentro do MESMO bloco
-   .notif-settings-source de cada fonte, abaixo das antecedências, só
-   desenhadas quando o botão sutil acima está aberto. ---------------- */
+/* ---------------- canais extras POR ANTECEDÊNCIA (pedido do Georges,
+   Aniversários: "essas regras de configuração seriam definidas
+   individualmente para cada opção de notificação" — clique na própria
+   pilula abre este painel logo abaixo dela, com os mesmos 3 canais +
+   repetir de antes, agora só valendo pra ESSA antecedência). Substituiu o
+   antigo botão-engrenagem por fonte inteira (Round D), que não existe
+   mais. ---------------- */
 .notif-settings-channels {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-top: 6px;
-  border-top: 0.5px solid #ececea;
+  padding: 8px;
+  margin-top: 2px;
+  background: #f9f9f8;
+  border: 0.5px solid #ececea;
+  border-radius: 8px;
 }
 .notif-settings-channel-row {
   display: flex;
