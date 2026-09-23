@@ -12419,10 +12419,23 @@
   // NOTIFICATION_SOURCES). Uma fonte que não aparece no objeto salvo (ex:
   // eu adiciono uma fonte nova depois) também cai no default dela — não
   // precisa "migrar" nada na KV quando isso acontece.
+  // canais extras (pedido do Georges: "Vcs esta me perguntando quais eu
+  // quero que venham ou quais já vem hoje?" -> nenhum vem ligado hoje,
+  // Georges escolhe fonte por fonte). "channels" é independente de
+  // "enabled": uma fonte pode estar ligada (aparece no sino) sem nenhum
+  // canal extra marcado — nesse caso só o sino/badge tradicional continua
+  // valendo, nada de toast/piscar/nativo.
+  var NOTIF_CHANNEL_DEFS = [
+    { id: "toast", label: "Toast automático", hint: "estoura sozinho na tela, sem precisar abrir o sino" },
+    { id: "blink", label: "Piscar aba + som", hint: "pisca o título/ícone da aba e toca um beep quando a aba não está em foco" },
+    { id: "native", label: "Notificação nativa", hint: "notificação de verdade do sistema (Windows/Android) — precisa de permissão" }
+  ];
+
   function resolvedNotifSources(savedSettings) {
     return (window.NOTIFICATION_SOURCES || []).map(function (source) {
       var s = savedSettings && savedSettings[source.id];
       var leadTimes = (s && Array.isArray(s.leadTimes) && s.leadTimes.length) ? s.leadTimes : source.defaultLeadTimes;
+      var channels = (s && Array.isArray(s.channels)) ? s.channels : (source.defaultChannels || []);
       return {
         id: source.id,
         label: source.label,
@@ -12434,7 +12447,8 @@
         target: source.target,
         defaultLeadTimes: source.defaultLeadTimes,
         enabled: s ? !!s.enabled : (source.defaultEnabled !== false),
-        leadTimes: leadTimes
+        leadTimes: leadTimes,
+        channels: channels
       };
     });
   }
@@ -12516,6 +12530,60 @@
     saveNotifReadIds(notifState.readIds.slice());
   }
 
+  // ---------------- canais extras: rastreamento de disparo único
+  // (localStorage — pedido do Georges: "toast/piscar+som/nativa", cada
+  // notificação só pode disparar UMA vez por navegador, senão repetiria a
+  // cada refreshNotifications (a cada 5min) enquanto continuar não lida.
+  // Local (não KV) de propósito: é um detalhe de "já mostrei isso na TELA
+  // desse aparelho", não um dado que precise sincronizar entre
+  // computador/celular — cada aparelho tem seu próprio histórico de avisos
+  // já mostrados. ----------------
+  var NOTIF_TRIGGERED_KEY = "meuhub_notif_triggered_ids";
+  var NOTIF_TRIGGERED_CAP = 500;
+
+  function loadTriggeredNotifIds() {
+    try {
+      var raw = localStorage.getItem(NOTIF_TRIGGERED_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+
+  function saveTriggeredNotifIds(arr) {
+    try { localStorage.setItem(NOTIF_TRIGGERED_KEY, JSON.stringify(arr.slice(-NOTIF_TRIGGERED_CAP))); } catch (e) {}
+  }
+
+  // dispara toast/piscar+som/nativa só pras notificações NOVAS (não lidas,
+  // nunca disparadas antes neste navegador) cuja fonte tem o canal
+  // correspondente marcado no editor de gestão. Roda só a partir de
+  // refreshNotifications (boot + a cada 5min) — de propósito NÃO roda a
+  // partir de applyNotifSettingsChange (editor de gestão), pra Georges
+  // poder ligar um canal novo sem levar um "susto" imediato com tudo que já
+  // tava pendente; o disparo de verdade acontece no próximo ciclo natural.
+  function processNotifTriggers(items) {
+    var triggered = loadTriggeredNotifIds();
+    var triggeredSet = {};
+    triggered.forEach(function (id) { triggeredSet[id] = true; });
+    var readSet = {};
+    notifState.readIds.forEach(function (id) { readSet[id] = true; });
+    var sourceById = {};
+    notifState.sources.forEach(function (s) { sourceById[s.id] = s; });
+    var changed = false;
+    items.forEach(function (n) {
+      if (readSet[n.id] || triggeredSet[n.id]) return;
+      var source = sourceById[n.sourceId];
+      var channels = (source && source.channels) || [];
+      if (!channels.length) return;
+      triggeredSet[n.id] = true;
+      triggered.push(n.id);
+      changed = true;
+      if (channels.indexOf("toast") !== -1) showAutoToast(n);
+      if (channels.indexOf("blink") !== -1) queueNotifBlink(n);
+      if (channels.indexOf("native") !== -1) fireNativeNotification(n);
+    });
+    if (changed) saveTriggeredNotifIds(triggered);
+  }
+
   function refreshNotifications() {
     if (notifState.loading) return Promise.resolve();
     notifState.loading = true;
@@ -12529,10 +12597,294 @@
       notifState.loaded = true;
       notifState.loading = false;
       updateNotifBellBadge();
+      processNotifTriggers(notifState.items);
       if (notifState.view === "settings") renderNotifSettings(); else renderNotifList();
     }).catch(function () {
       notifState.loading = false;
     });
+  }
+
+  // ---------------- canal "Toast automático" (pedido do Georges: "outra
+  // opção... chamar minha atenção, sem ter que desenvolver tudo aquilo") —
+  // card que estoura sozinho no canto da tela assim que uma notificação
+  // nova é detectada, sem precisar abrir o sino. Puramente visual, dentro
+  // do próprio app (não pede permissão nenhuma, funciona com o app aberto
+  // em qualquer aba/janela). ----------------
+  function ensureAutoToastContainer() {
+    var el = document.getElementById("autoToastContainer");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "autoToastContainer";
+      el.className = "auto-toast-container";
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function dismissAutoToast(card) {
+    if (!card || card.parentNode === null) return;
+    card.classList.add("auto-toast-leaving");
+    setTimeout(function () { if (card.parentNode) card.parentNode.removeChild(card); }, 250);
+  }
+
+  function goToNotifTarget(n) {
+    if (n.target && n.target.type === "page") {
+      var appRoute = n.target.target + (n.target.view ? "?view=" + encodeURIComponent(n.target.view) : "");
+      navigate(appRoute);
+    } else if (n.url) {
+      window.open(n.url, "_blank", "noopener");
+    }
+  }
+
+  function showAutoToast(n) {
+    var container = ensureAutoToastContainer();
+    var card = document.createElement("div");
+    card.className = "auto-toast";
+
+    var closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "auto-toast-close";
+    closeBtn.setAttribute("aria-label", "Fechar");
+    closeBtn.innerHTML = '<i class="ti ti-x"></i>';
+    closeBtn.addEventListener("click", function (e) { e.stopPropagation(); dismissAutoToast(card); });
+    card.appendChild(closeBtn);
+
+    var icon = document.createElement("span");
+    icon.className = "auto-toast-icon";
+    icon.textContent = n.sourceIcon || "🔔";
+    card.appendChild(icon);
+
+    var body = document.createElement("div");
+    body.className = "auto-toast-body";
+    var title = document.createElement("div");
+    title.className = "auto-toast-title";
+    title.textContent = n.title;
+    body.appendChild(title);
+    var meta = document.createElement("div");
+    meta.className = "auto-toast-meta";
+    meta.textContent = (n.sourceLabel || "") + (n.leadLabel ? " · " + n.leadLabel : "");
+    body.appendChild(meta);
+    card.appendChild(body);
+
+    card.addEventListener("click", function () {
+      goToNotifTarget(n);
+      dismissAutoToast(card);
+    });
+
+    container.appendChild(card);
+    // pausa o auto-fechar enquanto o mouse tá em cima (senão sumiria bem na
+    // hora que a pessoa fosse ler no celular sem mouse não muda nada — lá o
+    // toque já conta como clique, que navega e fecha na hora mesmo).
+    var timer = setTimeout(function () { dismissAutoToast(card); }, 9000);
+    card.addEventListener("mouseenter", function () { clearTimeout(timer); });
+    card.addEventListener("mouseleave", function () { timer = setTimeout(function () { dismissAutoToast(card); }, 4000); });
+  }
+
+  // ---------------- canal "Piscar aba + som" (pedido do Georges) — só entra
+  // em ação quando a aba/janela NÃO está em foco (Page Visibility API +
+  // window.hasFocus — cobre tanto "trocou de aba" quanto "trocou de
+  // programa"); favicon com bolinha vermelha gerado na hora via canvas
+  // (sem precisar subir nenhum arquivo de imagem novo pro deploy); beep
+  // curto via Web Audio API (idem, sem arquivo de áudio nenhum). ----------------
+  var notifBlinkQueue = [];
+  var notifBlinkTimer = null;
+  var notifBlinkOn = false;
+  // NÃO captura document.title uma vez só aqui em cima — render() troca o
+  // título a cada navegação (page.title + " · " + cfg.appTitle), então o
+  // título "original" pra restaurar precisa ser o de AGORA, capturado só na
+  // hora de começar a piscar (ver startNotifBlinkIfNeeded abaixo), senão a
+  // aba voltaria sempre pro título da página que estava aberta no boot.
+  var notifBlinkBaseTitle = null;
+  var notifFaviconEl = document.querySelector('link[rel="icon"]');
+  var notifFaviconNormalHref = notifFaviconEl ? notifFaviconEl.getAttribute("href") : null;
+  var notifFaviconBadgeHref = null; // gerado 1x sob demanda, cacheado depois
+
+  function isAppUnfocused() {
+    return document.hidden || !document.hasFocus();
+  }
+
+  function buildBadgeFaviconHref(callback) {
+    if (notifFaviconBadgeHref) { callback(notifFaviconBadgeHref); return; }
+    if (!notifFaviconNormalHref) { callback(null); return; }
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var size = 32;
+        var canvas = document.createElement("canvas");
+        canvas.width = size; canvas.height = size;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, size, size);
+        ctx.beginPath();
+        ctx.arc(size - 7, size - 7, 7, 0, Math.PI * 2);
+        ctx.fillStyle = "#e03131";
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#fff";
+        ctx.stroke();
+        notifFaviconBadgeHref = canvas.toDataURL("image/png");
+      } catch (e) { notifFaviconBadgeHref = null; }
+      callback(notifFaviconBadgeHref);
+    };
+    img.onerror = function () { callback(null); };
+    img.src = notifFaviconNormalHref;
+  }
+
+  function setFaviconHref(href) {
+    if (!notifFaviconEl || !href) return;
+    notifFaviconEl.setAttribute("href", href);
+  }
+
+  function playNotifBeep() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.36);
+      osc.onended = function () { ctx.close(); };
+    } catch (e) {}
+  }
+
+  function stopNotifBlink() {
+    if (notifBlinkTimer) { clearInterval(notifBlinkTimer); notifBlinkTimer = null; }
+    notifBlinkOn = false;
+    notifBlinkQueue = [];
+    if (notifBlinkBaseTitle !== null) document.title = notifBlinkBaseTitle;
+    notifBlinkBaseTitle = null;
+    setFaviconHref(notifFaviconNormalHref);
+  }
+
+  function notifBlinkTick() {
+    notifBlinkOn = !notifBlinkOn;
+    if (notifBlinkOn) {
+      var n = notifBlinkQueue.length;
+      document.title = "🔴 " + n + (n === 1 ? " nova — " : " novas — ") + notifBlinkBaseTitle;
+      buildBadgeFaviconHref(function (href) { setFaviconHref(href || notifFaviconNormalHref); });
+    } else {
+      document.title = notifBlinkBaseTitle;
+      setFaviconHref(notifFaviconNormalHref);
+    }
+  }
+
+  function startNotifBlinkIfNeeded() {
+    if (notifBlinkTimer || !notifBlinkQueue.length || !isAppUnfocused()) return;
+    notifBlinkBaseTitle = document.title;
+    notifBlinkTimer = setInterval(notifBlinkTick, 900);
+    notifBlinkTick();
+  }
+
+  function queueNotifBlink(n) {
+    notifBlinkQueue.push(n);
+    playNotifBeep();
+    startNotifBlinkIfNeeded();
+  }
+
+  // volta ao normal assim que a pessoa dá foco de novo (aba OU janela) —
+  // considera que, se ela voltou a olhar o app, já "viu" o aviso na
+  // barra/ícone, sem precisar decidir nada; some com a fila junto.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) stopNotifBlink(); else startNotifBlinkIfNeeded();
+  });
+  window.addEventListener("focus", stopNotifBlink);
+  window.addEventListener("blur", startNotifBlinkIfNeeded);
+
+  // ---------------- canal "Notificação nativa" (pedido do Georges) — pede
+  // permissão do navegador (Notification.requestPermission(), vale pro app
+  // INTEIRO, não dá pra pedir por fonte separada — é assim que a API do
+  // navegador funciona) e depois dispara via
+  // ServiceWorkerRegistration.showNotification() quando há um service
+  // worker ativo (obrigatório no Android — ver sw.js) ou via
+  // "new Notification()" direto quando não há (funciona liso no desktop
+  // sem precisar de nada mais). SEM push de verdade: zero VAPID, zero
+  // subscription guardada em lugar nenhum — só funciona enquanto o app
+  // estiver aberto numa aba (mesmo minimizado/em background), exatamente
+  // como conversado com o Georges. ----------------
+  function registerNotifServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+    navigator.serviceWorker.addEventListener("message", function (event) {
+      if (event.data && event.data.type === "notif-navigate" && event.data.route) {
+        navigate(event.data.route);
+        closeNotifPanel();
+      }
+    });
+  }
+
+  function nativePermissionSupported() {
+    return typeof Notification !== "undefined";
+  }
+
+  function nativePermissionStatus() {
+    return nativePermissionSupported() ? Notification.permission : "unsupported";
+  }
+
+  function requestNativePermission() {
+    if (!nativePermissionSupported()) return;
+    Notification.requestPermission().then(function () { refreshNativePermissionHints(); }).catch(function () {});
+  }
+
+  // atualiza tanto o selo por fonte (linha do canal "native" em cada bloco)
+  // quanto o banner/botão global — chamado sempre que renderNotifSettings()
+  // desenha o editor de novo e logo depois de pedir permissão.
+  function refreshNativePermissionHints() {
+    var status = nativePermissionStatus();
+    var statusEls = document.querySelectorAll("[data-native-status-for]");
+    for (var i = 0; i < statusEls.length; i++) {
+      var el = statusEls[i];
+      if (status === "unsupported") { el.textContent = ""; continue; }
+      el.textContent = status === "granted" ? "✓ permissão concedida" : status === "denied" ? "✗ permissão negada" : "";
+      el.setAttribute("data-native-status", status);
+    }
+    var textEl = document.getElementById("notifNativePermissionText");
+    var btnEl = document.getElementById("notifNativePermissionBtn");
+    var banner = document.getElementById("notifNativePermissionBanner");
+    if (!banner) return;
+    if (status === "unsupported") {
+      banner.style.display = "none";
+      return;
+    }
+    banner.style.display = "";
+    if (textEl) {
+      textEl.textContent = status === "granted"
+        ? "Notificações do sistema ativadas neste navegador."
+        : status === "denied"
+        ? "Notificações bloqueadas — ative manualmente nas configurações do site, no navegador."
+        : 'Pra usar o canal "Notificação nativa", ative a permissão do navegador (vale pro app inteiro, não por fonte).';
+    }
+    if (btnEl) {
+      btnEl.textContent = status === "granted" ? "Ativada ✓" : status === "denied" ? "Bloqueada" : "Ativar notificações do sistema";
+      btnEl.disabled = status !== "default";
+    }
+  }
+
+  function fireNativeNotification(n) {
+    if (!nativePermissionSupported() || Notification.permission !== "granted") return;
+    var body = (n.sourceLabel || "") + (n.leadLabel ? " · " + n.leadLabel : "");
+    var appRoute = (n.target && n.target.type === "page")
+      ? ("#" + n.target.target + (n.target.view ? "?view=" + encodeURIComponent(n.target.view) : ""))
+      : "";
+    var options = { body: body, icon: "icon-192.png", tag: n.id, data: { route: appRoute } };
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then(function (reg) { reg.showNotification(n.title, options); }).catch(function () {});
+      return;
+    }
+    try {
+      var notif = new Notification(n.title, options);
+      notif.onclick = function () {
+        window.focus();
+        goToNotifTarget(n);
+        notif.close();
+      };
+    } catch (e) {}
   }
 
   // ---------------- gestão de notificações (pedido do Georges: "Eu queria
@@ -12547,7 +12899,7 @@
   function buildNotifSettingsPayload() {
     var out = {};
     notifState.sources.forEach(function (s) {
-      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes };
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, channels: s.channels };
     });
     return out;
   }
@@ -12590,6 +12942,22 @@
     applyNotifSettingsChange();
   }
 
+  // liga/desliga UM canal por vez (checkbox independente) — igual ao
+  // liga/desliga da fonte acima, só que numa lista em vez de um booleano.
+  // Não precisa de refetch/recomputeNotifications real (canal não muda QUAL
+  // notificação existe, só COMO ela chama atenção), mas reaproveita
+  // applyNotifSettingsChange mesmo assim pra manter o mesmo fluxo
+  // salvar+re-renderizar de todo o resto do editor.
+  function setNotifSourceChannel(sourceId, channelId, on) {
+    var s = findNotifSource(sourceId);
+    if (!s) return;
+    var idx = s.channels.indexOf(channelId);
+    if (on && idx === -1) s.channels = s.channels.concat([channelId]);
+    else if (!on && idx !== -1) s.channels = s.channels.filter(function (c) { return c !== channelId; });
+    else return;
+    applyNotifSettingsChange();
+  }
+
   function addNotifLeadTime(sourceId, amount, unit) {
     var s = findNotifSource(sourceId);
     if (!s || !amount || amount <= 0) return;
@@ -12608,10 +12976,33 @@
     applyNotifSettingsChange();
   }
 
+  // banner/botão global de permissão (pedido do Georges: "notificação
+  // nativa exige pedir permissão do navegador, uma vez só, vale pro app
+  // inteiro") — fica no TOPO do editor de gestão, acima de todas as
+  // fontes, já que não dá pra pedir permissão por fonte separada (é uma
+  // permissão do site inteiro, não por notificação).
+  function buildNotifNativePermissionBanner() {
+    var banner = document.createElement("div");
+    banner.id = "notifNativePermissionBanner";
+    banner.className = "notif-settings-native-permission";
+    var text = document.createElement("span");
+    text.id = "notifNativePermissionText";
+    text.className = "notif-settings-native-permission-text";
+    banner.appendChild(text);
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "notifNativePermissionBtn";
+    btn.className = "notif-settings-native-permission-btn";
+    btn.addEventListener("click", requestNativePermission);
+    banner.appendChild(btn);
+    return banner;
+  }
+
   function renderNotifSettings() {
     var listEl = document.getElementById("notifPanelList");
     if (!listEl) return;
     listEl.innerHTML = "";
+    listEl.appendChild(buildNotifNativePermissionBanner());
     if (!notifState.sources.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
@@ -12699,8 +13090,48 @@
       addRow.appendChild(addBtn);
       block.appendChild(addRow);
 
+      // canais extras (toast/piscar+som/nativa) — só faz sentido oferecer
+      // se a fonte já está ligada (senão nem chega a computar notificação
+      // nenhuma dela pra disparar canal nenhum).
+      if (s.enabled) {
+        var chWrap = document.createElement("div");
+        chWrap.className = "notif-settings-channels";
+        NOTIF_CHANNEL_DEFS.forEach(function (chDef) {
+          var chRow = document.createElement("label");
+          chRow.className = "notif-settings-channel-row";
+          var chCb = document.createElement("input");
+          chCb.type = "checkbox";
+          chCb.checked = s.channels.indexOf(chDef.id) !== -1;
+          chCb.addEventListener("change", function () { setNotifSourceChannel(s.id, chDef.id, chCb.checked); });
+          chRow.appendChild(chCb);
+          var chText = document.createElement("span");
+          chText.className = "notif-settings-channel-text";
+          var chLabel = document.createElement("span");
+          chLabel.className = "notif-settings-channel-label";
+          chLabel.textContent = chDef.label;
+          chText.appendChild(chLabel);
+          var chHint = document.createElement("span");
+          chHint.className = "notif-settings-channel-hint";
+          chHint.textContent = chDef.hint;
+          chText.appendChild(chHint);
+          chRow.appendChild(chText);
+          // status de permissão do navegador — só relevante pro canal
+          // "native" (ver renderNativePermissionHints, wired depois que o
+          // botão global "Ativar notificações do sistema" existe).
+          if (chDef.id === "native") {
+            var chStatus = document.createElement("span");
+            chStatus.className = "notif-settings-channel-native-status";
+            chStatus.setAttribute("data-native-status-for", s.id);
+            chRow.appendChild(chStatus);
+          }
+          chWrap.appendChild(chRow);
+        });
+        block.appendChild(chWrap);
+      }
+
       listEl.appendChild(block);
     });
+    refreshNativePermissionHints();
   }
 
   function toggleNotifSettingsView() {
@@ -13331,6 +13762,13 @@
     // pra descobrir um aviso novo que entrou na janela de antecedência).
     refreshNotifications();
     setInterval(refreshNotifications, 5 * 60 * 1000);
+
+    // service worker mínimo (canal "Notificação nativa" — ver sw.js: exigido
+    // pelo Chrome no Android pra chamar showNotification, no desktop nem
+    // precisaria mas registrar aqui não atrapalha). Registro silencioso: se
+    // falhar (arquivo não subiu ainda, navegador sem suporte etc.) o app
+    // segue normal, só esse canal específico fica sem efeito.
+    registerNotifServiceWorker();
 
     // páginas visitadas (Recentes/Mais Visitadas) — busca o log salvo 1x no
     // boot; não trava o boot (mesma lógica de refreshNotifications acima).
