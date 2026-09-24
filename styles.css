@@ -5194,3 +5194,102 @@ html, body {
   .remedios-row { flex-wrap: wrap; }
   .remedios-row-main { flex-basis: 100%; order: -1; }
 }
+
+/* ---------------- "page.backupPage" — Backup dos Dados (pedido do
+   Georges: exportar tbém o que só vive no KV, sem base Notion
+   equivalente) — mesma linguagem visual de .financeiro-summary-pill
+   (cards claros, borda sutil, rótulo pequeno maiúsculo + valor grande)
+   e de .quick-button-card (grid responsivo, cor de destaque #4a90d9). */
+.backup-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 760px;
+}
+.backup-intro {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #5a5a54;
+  margin: 0;
+}
+.backup-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 12.5px;
+  color: #6b6b64;
+}
+.backup-meta-item strong { color: #3a3a35; font-weight: 600; }
+.backup-warning {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 0.5px solid #f0dcb0;
+  background: #fdf1e2;
+  color: #8a5a12;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.backup-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.backup-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 0.5px solid #eeede9;
+  background: #fff;
+}
+.backup-stat-card-error {
+  border-color: #f0c4c0;
+  background: #fdf2f1;
+}
+.backup-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #3a3a35;
+}
+.backup-stat-card-error .backup-stat-value { color: #b0413a; }
+.backup-stat-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6b6b64;
+  line-height: 1.3;
+}
+.backup-stat-hint {
+  font-size: 10.5px;
+  color: #928f86;
+  margin-top: 2px;
+}
+.backup-stat-card-error .backup-stat-hint { color: #b0413a; }
+.backup-download-btn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 10px;
+  border: none;
+  background: #4a90d9;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.backup-download-btn:hover { background: #3a7bc4; }
+.backup-download-btn:active { transform: translateY(1px); }
+.backup-note {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #928f86;
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .backup-stats-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .backup-download-btn { align-self: stretch; justify-content: center; }
+}

@@ -1429,7 +1429,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-23 19:52",
+  appVersion: "2026-09-24 00:42",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1614,6 +1614,27 @@ const APP_CONFIG = {
     recentes: {
       title: "Recentes",
       recentPage: true,
+      noTrackVisit: true
+    },
+
+    // "Backup dos Dados" (pedido do Georges, junto com a criação do
+    // lembrete semanal de backup) — página exclusiva (mesmo padrão de
+    // recentPage/mostVisited acima: "backupPage:true" despacha pra
+    // renderBackupPage no app.js). Busca ao vivo, via as rotas GET que já
+    // existiam, tudo que mora só no KV (sem base Notion equivalente):
+    // Notas, Prioridades (+opções/filtros rápidos/visualizações),
+    // Supermercado, Remédios, página inicial configurada, limite de
+    // Recentes, Legislações Fixadas, Notas de Aniversário, histórico de
+    // visitas e configurações da Central de Notificações. Mostra um resumo
+    // (contagens + data/hora de geração + appVersion, pra acompanhar a
+    // evolução do app com o tempo — pedido explícito do Georges) e baixa
+    // tudo junto num único .json. NÃO precisou de rota nova no worker.js —
+    // só reusa GETs existentes — por isso não precisa de redeploy do
+    // Worker pra existir. noTrackVisit:true pelo mesmo motivo de
+    // recentes/mais_visitadas (página utilitária, não é "conteúdo").
+    backup: {
+      title: "Backup dos Dados",
+      backupPage: true,
       noTrackVisit: true
     },
 
@@ -2383,7 +2404,13 @@ const APP_CONFIG = {
       items: [
         { label: "Recentes (Notion)", type: "notion", url: "https://app.notion.com/library/recents?space=georges-filizzola", icon: "clock" },
         { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" },
-        { label: "Recentes (Meu Hub)", type: "page", target: "recentes", icon: "history" }
+        { label: "Recentes (Meu Hub)", type: "page", target: "recentes", icon: "history" },
+        // pedido do Georges: dados que moram só no KV (Notas, Prioridades,
+        // Supermercado, Remédios, config. de notificações etc. — nada disso
+        // tem base Notion equivalente) precisavam de um jeito de exportar
+        // junto com o backup semanal dos arquivos do app. Ver pages.backup
+        // abaixo.
+        { label: "Backup dos Dados", type: "page", target: "backup", icon: "download" }
       ]
     },
 

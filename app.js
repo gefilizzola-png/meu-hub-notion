@@ -11564,6 +11564,216 @@
     loadItems();
   }
 
+  // ---------------- "page.backupPage" — Backup dos Dados (pedido do
+  // Georges: "muitas informações não estão armazenadas no Notion, mas no
+  // app, como Listas [...] como consigo exportar estes dados atualizados
+  // tbm") — junta as 14 fontes que vivem só no KV (sem base Notion
+  // equivalente) num único JSON pra download, e mostra um resumo (contagem
+  // por fonte + data/hora de geração + appVersion) pra ele acompanhar a
+  // evolução do app ao longo do tempo. Fica de fora (não tem rota "listar
+  // tudo" no Worker, só "me dê 1 dia/mês específico"): a Programação da
+  // Lista de Prioridades (/priorities-schedule) e as contas marcadas como
+  // pagas manualmente no Financeiro (/financeiro-paid) — ver aviso no fim
+  // da página. Zero rota nova no worker.js: as 14 já existem.
+  var BACKUP_SOURCES = [
+    { key: "notes", label: "Anotações Rápidas", route: "/notes", kind: "list", extract: function (json) { return json && json.notes; } },
+    { key: "priorities", label: "Lista de Prioridades — itens", route: "/priorities", kind: "list", extract: function (json) { return json && json.priorities; } },
+    { key: "priorities_options", label: "Prioridades — opções dos campos", route: "/priorities-options", kind: "dict", extract: function (json) { return json && json.options; } },
+    { key: "priorities_quickfilters", label: "Prioridades — Filtros Rápidos", route: "/priorities-quickfilters", kind: "dict", extract: function (json) { return json && json.quickFilters; } },
+    { key: "priorities_views", label: "Prioridades — Visualizações", route: "/priorities-views", kind: "list", extract: function (json) { return json && json.views; } },
+    { key: "supermercado", label: "Lista de Supermercado", route: "/supermercado", kind: "list", extract: function (json) { return json && json.items; } },
+    { key: "remedios", label: "Remédios", route: "/remedios", kind: "list", extract: function (json) { return json && json.items; } },
+    { key: "home_page", label: "Página Inicial configurada", route: "/home-page", kind: "scalar", extract: function (json) { return json && json.homePage; } },
+    { key: "recent_settings", label: "Limite da seção Recentes", route: "/recent-settings", kind: "scalar", extract: function (json) { return json && json.limit; } },
+    { key: "legislacoes_fixadas", label: "Legislações Fixadas", route: "/legislacoes-fixadas", kind: "list", extract: function (json) { return json && json.pinned; } },
+    { key: "aniversarios_notas", label: "Notas de Aniversário personalizadas", route: "/aniversarios-notas", kind: "dict", extract: function (json) { return json && json.notas; } },
+    { key: "page_visits", label: "Histórico de Visitas (Recentes/Mais Visitadas)", route: "/page-visits", kind: "list", extract: function (json) { return json && json.visits; } },
+    { key: "notifications_settings", label: "Config. da Central de Notificações", route: "/notifications-settings", kind: "dict", extract: function (json) { return json && json.settings; } },
+    { key: "notifications_read", label: "Notificações marcadas como lidas", route: "/notifications-read", kind: "list", extract: function (json) { return json && json.read; } }
+  ];
+
+  // busca as 14 fontes em paralelo — cada uma isolada (uma falhar não
+  // derruba as outras, mesmo padrão de "isolamento por fonte" já usado nas
+  // notificações multi-fonte); resultado é um dicionário por "key".
+  function fetchBackupData() {
+    return Promise.all(BACKUP_SOURCES.map(function (src) {
+      return authFetch(cfg.templateWorkerUrl + src.route)
+        .then(function (res) {
+          if (!res.ok) return { key: src.key, ok: false, error: "HTTP " + res.status };
+          return res.json().then(function (json) {
+            return { key: src.key, ok: true, data: src.extract(json) };
+          });
+        })
+        .catch(function () { return { key: src.key, ok: false, error: "falha de rede" }; });
+    })).then(function (results) {
+      var byKey = {};
+      results.forEach(function (r) { byKey[r.key] = r; });
+      return byKey;
+    });
+  }
+
+  // resumo pra "apresentação dos dados exportados" (pedido do Georges) —
+  // contagem por fonte (lista=length, dict=nº de chaves, scalar=definido
+  // ou não), sem inventar nada não confirmado no schema real.
+  function summarizeBackupData(byKey) {
+    var stats = BACKUP_SOURCES.map(function (src) {
+      var r = (byKey && byKey[src.key]) || { ok: false, error: "sem resposta" };
+      var stat = { key: src.key, label: src.label, kind: src.kind, ok: !!r.ok, error: r.error || null, count: 0, hint: "" };
+      if (r.ok) {
+        var data = r.data;
+        if (src.kind === "list") {
+          stat.count = Array.isArray(data) ? data.length : 0;
+        } else if (src.kind === "dict") {
+          stat.count = (data && typeof data === "object") ? Object.keys(data).length : 0;
+        } else {
+          stat.count = (data === null || data === undefined || data === "") ? 0 : 1;
+          stat.hint = stat.count ? String(data) : "não definido";
+        }
+      }
+      return stat;
+    });
+    var errorCount = stats.filter(function (s) { return !s.ok; }).length;
+    var totalItems = stats.reduce(function (sum, s) { return sum + (s.kind !== "scalar" ? s.count : 0); }, 0);
+    return { stats: stats, errorCount: errorCount, totalItems: totalItems };
+  }
+
+  // "DD/MM/YYYY HH:MM" no fuso de São Paulo (mesmo padrão de saoPauloToday
+  // acima, mas com hora — pra carimbar "gerado em" no backup).
+  function saoPauloDateTimeLabel(ts) {
+    var d = ts ? new Date(ts) : new Date();
+    var parts = {};
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false
+    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+    return parts.day + "/" + parts.month + "/" + parts.year + " " + parts.hour + ":" + parts.minute;
+  }
+
+  // monta o JSON completo e dispara o download (Blob + <a download>, sem
+  // precedente igual no código — mais simples que reusar algum padrão
+  // existente, não tem nenhum download de arquivo no app até agora).
+  function downloadBackupJson(byKey, summary) {
+    var payload = {
+      geradoEm: new Date().toISOString(),
+      geradoEmSaoPaulo: saoPauloDateTimeLabel(),
+      appVersion: (cfg && cfg.appVersion) || null,
+      resumo: summary.stats.map(function (s) {
+        return { key: s.key, label: s.label, ok: s.ok, contagem: s.count, erro: s.error || null };
+      }),
+      fontesNaoIncluidas: [
+        { key: "priorities_schedule", label: "Programação da Lista de Prioridades (por dia)", motivo: "rota exige uma data específica — sem modo \"listar tudo\" no Worker" },
+        { key: "financeiro_paid", label: "Contas marcadas como pagas manualmente (Financeiro)", motivo: "rota exige um mês específico — sem modo \"listar tudo\" no Worker" }
+      ],
+      dados: {}
+    };
+    BACKUP_SOURCES.forEach(function (src) {
+      var r = byKey[src.key];
+      payload.dados[src.key] = (r && r.ok) ? r.data : null;
+    });
+
+    var json = JSON.stringify(payload, null, 2);
+    var blob = new Blob([json], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var stamp = saoPauloDateTimeLabel().replace(/[/: ]/g, "-");
+    a.href = url;
+    a.download = "meu-hub-backup-dados_" + stamp + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  // página em si — mesmo padrão exclusivo de renderMostVisitedPage/
+  // renderRecentPage (loading -> fetch -> monta UI, sem empilhar com
+  // outros blocos de page.items/groups).
+  function renderBackupPage(container) {
+    container.innerHTML = "";
+
+    var wrap = document.createElement("div");
+    wrap.className = "backup-page";
+
+    var intro = document.createElement("p");
+    intro.className = "backup-intro";
+    intro.textContent = "Estes dados vivem só no app (armazenados na KV do Worker), sem base equivalente no Notion — Anotações, Prioridades, Supermercado, Remédios e outras configurações. O backup semanal dos arquivos (GitHub) não cobre isso: baixe o JSON abaixo pra ter uma cópia completa.";
+    wrap.appendChild(intro);
+
+    var loading = document.createElement("p");
+    loading.className = "empty";
+    loading.textContent = "Carregando dados...";
+    wrap.appendChild(loading);
+    container.appendChild(wrap);
+
+    fetchBackupData().then(function (byKey) {
+      var summary = summarizeBackupData(byKey);
+      loading.remove();
+
+      var meta = document.createElement("div");
+      meta.className = "backup-meta";
+      var genSpan = document.createElement("span");
+      genSpan.className = "backup-meta-item";
+      genSpan.innerHTML = "<strong>Gerado em:</strong> " + escapeHtml(saoPauloDateTimeLabel());
+      var verSpan = document.createElement("span");
+      verSpan.className = "backup-meta-item";
+      verSpan.innerHTML = "<strong>Versão do app:</strong> " + escapeHtml((cfg && cfg.appVersion) || "—");
+      meta.appendChild(genSpan);
+      meta.appendChild(verSpan);
+      wrap.appendChild(meta);
+
+      if (summary.errorCount > 0) {
+        var warn = document.createElement("div");
+        warn.className = "backup-warning";
+        var failedLabels = summary.stats.filter(function (s) { return !s.ok; }).map(function (s) { return s.label; }).join(", ");
+        warn.textContent = "Não foi possível carregar agora: " + failedLabels + ". O download vai sair sem esses dados — tente de novo em alguns instantes.";
+        wrap.appendChild(warn);
+      }
+
+      var grid = document.createElement("div");
+      grid.className = "backup-stats-grid";
+      summary.stats.forEach(function (s) {
+        var card = document.createElement("div");
+        card.className = "backup-stat-card" + (s.ok ? "" : " backup-stat-card-error");
+        var value = document.createElement("div");
+        value.className = "backup-stat-value";
+        value.textContent = s.ok ? (s.kind === "scalar" ? (s.hint || "—") : String(s.count)) : "—";
+        var label = document.createElement("div");
+        label.className = "backup-stat-label";
+        label.textContent = s.label;
+        card.appendChild(value);
+        card.appendChild(label);
+        if (s.ok && s.kind !== "scalar") {
+          var hint = document.createElement("div");
+          hint.className = "backup-stat-hint";
+          hint.textContent = s.count === 1 ? "1 item" : s.count + " itens";
+          card.appendChild(hint);
+        } else if (!s.ok) {
+          var errHint = document.createElement("div");
+          errHint.className = "backup-stat-hint";
+          errHint.textContent = "falhou: " + (s.error || "erro");
+          card.appendChild(errHint);
+        }
+        grid.appendChild(card);
+      });
+      wrap.appendChild(grid);
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "backup-download-btn";
+      btn.textContent = "Baixar backup completo (JSON)";
+      btn.addEventListener("click", function () {
+        downloadBackupJson(byKey, summary);
+      });
+      wrap.appendChild(btn);
+
+      var note = document.createElement("p");
+      note.className = "backup-note";
+      note.textContent = "Não incluído nesse download (a rota do Worker exige um período específico, sem modo \"listar tudo\"): Programação da Lista de Prioridades por dia, e contas marcadas como pagas manualmente por mês no Financeiro.";
+      wrap.appendChild(note);
+    }).catch(function () {
+      loading.textContent = "Não foi possível carregar os dados agora. Tente novamente em instantes.";
+    });
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
@@ -11605,6 +11815,13 @@
     // "Remédios" (pedido do Georges) — mesmo padrão exclusivo acima.
     if (page.remedios) {
       renderRemediosPage(container, page);
+      return;
+    }
+
+    // "Backup dos Dados" (pedido do Georges: exportar tbém o que só existe
+    // no KV, sem base Notion equivalente) — mesmo padrão exclusivo acima.
+    if (page.backupPage) {
+      renderBackupPage(container);
       return;
     }
 
