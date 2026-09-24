@@ -12531,7 +12531,13 @@
         target: source.target,
         defaultLeadTimes: source.defaultLeadTimes,
         enabled: s ? !!s.enabled : (source.defaultEnabled !== false),
-        leadTimes: leadTimes
+        leadTimes: leadTimes,
+        // "Fixar ao final das notificações" (pedido do Georges: Remédios é
+        // menos importante que outras fontes — quando ligado, os avisos
+        // dessa fonte sempre aparecem no FIM da lista de Não lidas/Todas,
+        // mesmo com prazo mais próximo que outra notificação). É por FONTE
+        // inteira, não por antecedência — desligado por padrão.
+        pinToEnd: !!(s && s.pinToEnd)
       };
     });
   }
@@ -13025,9 +13031,10 @@
     var out = {};
     notifState.sources.forEach(function (s) {
       // channels/repeatWhilePending já vivem DENTRO de cada leadTime (ver
-      // resolvedNotifSources/setNotifLeadTimeChannel) — nada em nível de
-      // fonte pra mandar além de enabled/leadTimes.
-      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes };
+      // resolvedNotifSources/setNotifLeadTimeChannel); pinToEnd é o único
+      // campo que continua em nível de FONTE (card inteiro, não por
+      // antecedência).
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd };
     });
     return out;
   }
@@ -13067,6 +13074,15 @@
     var s = findNotifSource(sourceId);
     if (!s) return;
     s.enabled = enabled;
+    applyNotifSettingsChange();
+  }
+
+  // "Fixar ao final das notificações" (pedido do Georges — ver comentário
+  // em resolvedNotifSources e o sort em renderNotifList).
+  function setNotifSourcePinToEnd(sourceId, on) {
+    var s = findNotifSource(sourceId);
+    if (!s || s.pinToEnd === on) return;
+    s.pinToEnd = on;
     applyNotifSettingsChange();
   }
 
@@ -13351,6 +13367,36 @@
       addRow.appendChild(addBtn);
       block.appendChild(addRow);
 
+      // "Fixar ao final das notificações" (pedido do Georges: "nao
+      // precisaria ser para cada pílula individual" — uma última opção POR
+      // CARD, sempre visível, fora do colapsável de cada antecedência).
+      // Reaproveita o mesmo visual de ".notif-settings-channels" (borda
+      // superior + padding) já usado nos painéis por pílula, só que aqui
+      // fica sempre aberto — é uma opção só, não precisa esconder atrás de
+      // clique nenhum.
+      var pinWrap = document.createElement("div");
+      pinWrap.className = "notif-settings-channels";
+      var pinRow = document.createElement("label");
+      pinRow.className = "notif-settings-channel-row";
+      var pinCb = document.createElement("input");
+      pinCb.type = "checkbox";
+      pinCb.checked = !!s.pinToEnd;
+      pinCb.addEventListener("change", function () { setNotifSourcePinToEnd(s.id, pinCb.checked); });
+      pinRow.appendChild(pinCb);
+      var pinText = document.createElement("span");
+      pinText.className = "notif-settings-channel-text";
+      var pinLabel = document.createElement("span");
+      pinLabel.className = "notif-settings-channel-label";
+      pinLabel.textContent = "Fixar ao final das notificações";
+      pinText.appendChild(pinLabel);
+      var pinHint = document.createElement("span");
+      pinHint.className = "notif-settings-channel-hint";
+      pinHint.textContent = "menos importante — sempre aparece no fim da lista (Não lidas/Todas), mesmo com prazo mais próximo que as demais";
+      pinText.appendChild(pinHint);
+      pinRow.appendChild(pinText);
+      pinWrap.appendChild(pinRow);
+      block.appendChild(pinWrap);
+
       listEl.appendChild(block);
     });
     refreshNativePermissionHints();
@@ -13447,6 +13493,21 @@
       if (notifState.soloSourceId) return n.sourceId === notifState.soloSourceId;
       return notifState.hiddenSourceIds.indexOf(n.sourceId) === -1;
     });
+    // "Fixar ao final das notificações" (pedido do Georges: fontes menos
+    // importantes, ex Remédios, sempre no FIM da lista, mesmo com prazo
+    // mais próximo que outra notificação) — sort ESTÁVEL por "é de fonte
+    // pinToEnd" (0 ou 1): dentro de cada grupo (fixadas/não fixadas) a
+    // ordem original por eventTime (já vinda de computeNotifications) é
+    // preservada, só empurra as fixadas pro final do grupo inteiro. Vale
+    // tanto em "Não lidas" quanto em "Todas" — o Georges citou "Não lidas"
+    // no pedido, mas não faria sentido o comportamento mudar de aba.
+    var pinSourceIds = {};
+    notifState.sources.forEach(function (s) { if (s.pinToEnd) pinSourceIds[s.id] = true; });
+    if (Object.keys(pinSourceIds).length) {
+      items = items.slice().sort(function (a, b) {
+        return (pinSourceIds[a.sourceId] ? 1 : 0) - (pinSourceIds[b.sourceId] ? 1 : 0);
+      });
+    }
     if (!items.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
