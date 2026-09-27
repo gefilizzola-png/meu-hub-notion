@@ -1433,7 +1433,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-27 20:31",
+  appVersion: "2026-09-27 20:53",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2773,10 +2773,11 @@ const APP_CONFIG = {
             // "Notas" (pedido do Georges — "ao lado do botão de ABRIR as
             // Provas no Notion, crie botão de atalho para a página de Notas
             // no nosso app") — link interno (type:"page"), fica no MESMO
-            // grupo "Abrir" acima; o chevron (→ em vez de ↗) já diferencia
-            // visualmente "abre no app" de "abre no Notion" sem precisar de
-            // um grupo à parte (ver buildItemEl no app.js).
-            { label: "Notas", type: "page", target: "notas_vitor", icon: "ti-report" }
+            // grupo "Abrir" acima; icon:"meuhub" (pedido do Georges, rodada
+            // 2 — "deve ter o ícone do Meu Hub, assim como os botões que
+            // levam ao Notion tem") dá o mesmo peso visual do botão Notion
+            // ao lado (ver IMG_ICONS no app.js).
+            { label: "Notas", type: "page", target: "notas_vitor", icon: "meuhub" }
           ]
         },
         {
@@ -2807,8 +2808,9 @@ const APP_CONFIG = {
           items: [
             { label: "Notas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/d709cacdf3a14817b621baea9dbb80b1?v=1af0a0181b9d42db9e6f9d439259b89c&source=copy_link" },
             // "Provas" (pedido do Georges — atalho cruzado de volta pra
-            // Provas, mesmo raciocínio do item "Notas" em provas_vitor).
-            { label: "Provas", type: "page", target: "provas_vitor", icon: "ti-writing" }
+            // Provas, mesmo raciocínio do item "Notas" em provas_vitor) —
+            // icon:"meuhub", mesmo motivo do comentário lá.
+            { label: "Provas", type: "page", target: "provas_vitor", icon: "meuhub" }
           ]
         }
       ],

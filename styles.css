@@ -1295,6 +1295,12 @@ html, body {
   overflow-y: auto;
 }
 .filter-menu.open { display: block; }
+/* corrige overflow horizontal (pedido do Georges — filtro de Data em
+   Provas "força pra direita e mostra barra de rolagem" quando o botão
+   fica perto da borda direita da tela) — ancora o menu pela DIREITA do
+   botão em vez da esquerda nesse caso (ver fixFilterMenuOverflow no
+   app.js), mesmo espírito de "flip" que dropdowns nativos já fazem. */
+.filter-menu.filter-menu-right { left: auto; right: 0; }
 .filter-option {
   display: flex;
   align-items: center;

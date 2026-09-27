@@ -67,7 +67,13 @@
   // mesma lista usada nas linhas densas de Legislações (buildLawRow). Um
   // "item" normal usa isso quando item.icon bate com uma destas chaves (ex:
   // botões de link direto pro Notion usam icon: "notion").
-  var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png", florianopolis: "icon-florianopolis.png", planalto: "icon-planalto.png", tce: "icon-tce.png", pmf: "icon-pmf.png" };
+  // "meuhub" (pedido do Georges — "esses botões que ficam no topo da
+  // página, que vem para páginas dentro do Meu Hub, deve ter o ícone do
+  // Meu Hub, assim como os botões que levam ao Notion tem") — reaproveita
+  // o próprio ícone do app (icon-192.png, o mesmo PWA icon/notificação)
+  // em vez de inventar um logo novo. Usado nos botões type:"page" dos
+  // itemGroups "Abrir" (ex: atalho cruzado Provas<->Notas).
+  var IMG_ICONS = { notion: "icon-notion.png", "leis-municipais": "icon-leis-municipais.png", "diario-oficial": "icon-diario-oficial.png", "file-type-pdf": "icon-pdf.png", florianopolis: "icon-florianopolis.png", planalto: "icon-planalto.png", tce: "icon-tce.png", pmf: "icon-pmf.png", meuhub: "icon-192.png" };
 
   // detecta o domínio de um link de "texto da lei" (campo "Link" nativo de
   // Legislações) e devolve a chave de IMG_ICONS correspondente — mesma
@@ -1479,8 +1485,11 @@
     fromInput.addEventListener("change", emit);
     toInput.addEventListener("change", emit);
 
+    // mesmo bug/correção do filtro de Nota acima (fixFilterMenuOverflow —
+    // gancho compartilhado, não é exclusivo do de Data).
     trigger.addEventListener("click", function (e) {
       e.stopPropagation();
+      fixFilterMenuOverflow(trigger, menu);
       menu.classList.toggle("open");
     });
 
@@ -1496,6 +1505,29 @@
   // filtra em cima do array carregado 1 vez, sem re-consultar o Worker a
   // cada filtro), então "onChange" devolve {op, value} direto, não um
   // filtro pro Notion.
+  // corrige o menu de filtro (".filter-menu", position:absolute/left:0 por
+  // padrão no CSS) "estourando" a borda direita da tela quando o botão que
+  // abre está perto dela — bug real reportado pelo Georges no filtro de
+  // Data em Provas ("força para direita e exibe barra de rolagem"). Só
+  // muda a ÂNCORA horizontal (esquerda de padrão -> direita quando não
+  // sobra espaço), sem tocar no posicionamento vertical (".filter-menu"
+  // já abre pra baixo, relativo ao próprio ".filter-dropdown", e isso
+  // continua funcionando igual). "estimatedMaxWidth" é generoso de
+  // propósito: o menu ainda está com display:none no momento do clique
+  // (a classe "open" só entra depois), então medir a largura real não dá
+  // — chuta o pior caso (menu de Data, com 2 campos "De"/"Até" lado a
+  // lado) em vez de tentar medir algo invisível.
+  function fixFilterMenuOverflow(trigger, menu) {
+    var rect = trigger.getBoundingClientRect();
+    var margin = 8;
+    var estimatedMaxWidth = 300;
+    if (window.innerWidth - rect.left < estimatedMaxWidth + margin) {
+      menu.classList.add("filter-menu-right");
+    } else {
+      menu.classList.remove("filter-menu-right");
+    }
+  }
+
   function buildNumberFilter(filterDef, onChange) {
     var wrap = document.createElement("div");
     wrap.className = "filter-dropdown";
@@ -1532,7 +1564,10 @@
 
     var valInput = document.createElement("input");
     valInput.type = "number";
-    valInput.step = "0.1";
+    // "0.01" (não "0.1") — pedido do Georges: notas têm 2 casas decimais
+    // reais no Notion (ex: "Nota (Convertida)" pode vir 8,25), o passo de
+    // 1 casa impedia digitar/incrementar pra esse nível de precisão.
+    valInput.step = "0.01";
     valInput.className = "filter-number-input";
     valInput.placeholder = "valor";
 
@@ -1573,6 +1608,7 @@
 
     trigger.addEventListener("click", function (e) {
       e.stopPropagation();
+      fixFilterMenuOverflow(trigger, menu);
       menu.classList.toggle("open");
     });
 
@@ -1660,8 +1696,11 @@
     fromInput.addEventListener("change", emit);
     toInput.addEventListener("change", emit);
 
+    // mesmo bug/correção do filtro de Nota acima (fixFilterMenuOverflow —
+    // gancho compartilhado, não é exclusivo do de Data).
     trigger.addEventListener("click", function (e) {
       e.stopPropagation();
+      fixFilterMenuOverflow(trigger, menu);
       menu.classList.toggle("open");
     });
 
@@ -10348,7 +10387,13 @@
     "Geografia": "🌍",
     "Ciências": "🔬",
     "Língua Portuguesa": "📖",
-    "Ensino Religioso": "🙏"
+    "Ensino Religioso": "🙏",
+    // 3 matérias que só existem na base de Notas (conferido direto no
+    // Notion), não em Provas — mesmo mapa é reaproveitado pelas duas
+    // páginas (ver notasVitorMateria abaixo).
+    "Educação Física": "⚽",
+    "Produção Textual": "✍️",
+    "Arte": "🎨"
   };
   function provasMateriaIcon(materia) {
     return PROVAS_MATERIA_ICONS[materia] || "📝";
@@ -10398,11 +10443,24 @@
       trimestre: trimestreRaw ? trimestreRaw.name : null,
       tipo: tipoRaw ? tipoRaw.name : null,
       nota: (typeof extra["Nota"] === "number") ? extra["Nota"] : null,
+      // "Nota (Convertida)" (pedido do Georges — traz as 2 notas, e o
+      // filtro de Nota passa a comparar esta aqui, não a "Nota" crua;
+      // confirmado que a propriedade existe na base via schema do Notion).
+      notaConvertida: (typeof extra["Nota (Convertida)"] === "number") ? extra["Nota (Convertida)"] : null,
       data: dataISO,
       diasAte: provasDiasAte(dataISO)
     };
   }
-  var PROVAS_EXTRA_FIELDS = ["Matéria", "Trimestre", "Tipo", "Nota", "Data"];
+  var PROVAS_EXTRA_FIELDS = ["Matéria", "Trimestre", "Tipo", "Nota", "Nota (Convertida)", "Data"];
+  // mesma lógica de notasVitorFmt (2 casas, vírgula BR, sem zero à
+  // direita forçado) — duplicada em vez de reaproveitada porque mora numa
+  // seção diferente do arquivo (Provas x Notas) e cada uma já foi escrita
+  // isoladamente; comportamento é idêntico de propósito.
+  function provasNotaFmt(v) {
+    if (typeof v !== "number") return "—";
+    var rounded = Math.round(v * 100) / 100;
+    return String(rounded).replace(".", ",");
+  }
 
   function renderProvasVitorPage(container, page) {
     var pcfg = page.provasVitor || {};
@@ -10462,13 +10520,15 @@
         if (it.diasAte === null || it.diasAte >= 0) return false;
       }
       if (state.notaFilter) {
+        // filtro de Nota compara "Nota (Convertida)", não a "Nota" crua
+        // (pedido do Georges).
         var nf = state.notaFilter;
-        if (it.nota === null || it.nota === undefined) return false;
-        if (nf.op === ">=" && !(it.nota >= nf.value)) return false;
-        if (nf.op === "<=" && !(it.nota <= nf.value)) return false;
-        if (nf.op === "=" && !(it.nota === nf.value)) return false;
-        if (nf.op === ">" && !(it.nota > nf.value)) return false;
-        if (nf.op === "<" && !(it.nota < nf.value)) return false;
+        if (it.notaConvertida === null || it.notaConvertida === undefined) return false;
+        if (nf.op === ">=" && !(it.notaConvertida >= nf.value)) return false;
+        if (nf.op === "<=" && !(it.notaConvertida <= nf.value)) return false;
+        if (nf.op === "=" && !(it.notaConvertida === nf.value)) return false;
+        if (nf.op === ">" && !(it.notaConvertida > nf.value)) return false;
+        if (nf.op === "<" && !(it.notaConvertida < nf.value)) return false;
       }
       if (state.dataFilter) {
         var df = state.dataFilter;
@@ -10487,6 +10547,7 @@
         var av, bv;
         if (key === "materia") { av = a.materia || ""; bv = b.materia || ""; }
         else if (key === "nota") { av = a.nota === null ? -Infinity : a.nota; bv = b.nota === null ? -Infinity : b.nota; }
+        else if (key === "notaConvertida") { av = a.notaConvertida === null ? -Infinity : a.notaConvertida; bv = b.notaConvertida === null ? -Infinity : b.notaConvertida; }
         else { av = a.data || "9999-99-99"; bv = b.data || "9999-99-99"; }
         if (typeof av === "number") return dir * (av - bv);
         return dir * String(av).localeCompare(String(bv), "pt-BR");
@@ -10585,7 +10646,9 @@
       { label: "Data", cls: "provas-th-data", sortKey: "data" },
       { label: "Trimestre", cls: "provas-th-trimestre" },
       { label: "Tipo", cls: "provas-th-tipo" },
-      { label: "Nota", cls: "provas-th-nota", sortKey: "nota" }
+      { label: "Nota", cls: "provas-th-nota", sortKey: "nota" },
+      // "Nota (Convertida)" (pedido do Georges — exibir as 2 notas).
+      { label: "Nota (Convertida)", cls: "provas-th-nota-convertida", sortKey: "notaConvertida" }
     ];
 
     function renderTable() {
@@ -10625,7 +10688,7 @@
           th.title = "Clique para classificar por " + col.label;
           th.addEventListener("click", function () {
             if (state.sortKey === col.sortKey) { state.sortDir = state.sortDir * -1; }
-            else { state.sortKey = col.sortKey; state.sortDir = col.sortKey === "nota" ? -1 : 1; }
+            else { state.sortKey = col.sortKey; state.sortDir = (col.sortKey === "nota" || col.sortKey === "notaConvertida") ? -1 : 1; }
             renderTable();
           });
         }
@@ -10691,9 +10754,15 @@
         tipoCell.textContent = it.tipo || "—";
         row.appendChild(tipoCell);
 
+        // "8,5" em vez de "8.5"/"8.50" (pedido do Georges — 2 casas, igual
+        // Notion — ver provasNotaFmt acima).
         var notaCell = document.createElement("td");
-        notaCell.textContent = (it.nota !== null && it.nota !== undefined) ? String(it.nota) : "—";
+        notaCell.textContent = provasNotaFmt(it.nota);
         row.appendChild(notaCell);
+
+        var notaConvertidaCell = document.createElement("td");
+        notaConvertidaCell.textContent = provasNotaFmt(it.notaConvertida);
+        row.appendChild(notaConvertidaCell);
 
         tbody.appendChild(row);
       });
@@ -10776,11 +10845,39 @@
     return "";
   }
   // "8,5" em vez de "8.5" (padrão BR); nota inteira mostra sem decimal
-  // ("8" em vez de "8,0").
+  // ("8" em vez de "8,0"). Arredonda em 2 casas (pedido do Georges —
+  // "pode usar 2 casas decimais, como no Notion": a base tem
+  // number_precision "precision_2", então 1 casa só estava truncando valor
+  // real, ex: 9,87 virava "9,9") — String() de um float já não força zeros
+  // à direita, então "10" continua "10" e "9,8" continua "9,8", igual ao
+  // Notion.
   function notasVitorFmt(v) {
     if (typeof v !== "number") return "—";
-    var rounded = Math.round(v * 10) / 10;
+    var rounded = Math.round(v * 100) / 100;
     return String(rounded).replace(".", ",");
+  }
+  // "Nome" na base de Notas é o título INTEIRO da página ("VITOR - Estudos
+  // - 03EF - NSF - Notas - Matemática"), não só a matéria — igual pediu o
+  // Georges: "não precisa trazer o nome completo... traga apenas
+  // Matemática, História, etc, igual em Provas". O prefixo é sempre
+  // idêntico em todas as linhas, então a matéria é sempre o ÚLTIMO pedaço
+  // depois de " - " (mesmo separador usado no título inteiro).
+  function notasVitorMateria(nomeCompleto) {
+    if (!nomeCompleto) return "";
+    var parts = String(nomeCompleto).split(" - ");
+    return parts[parts.length - 1].trim();
+  }
+  // ícone de festa (nota 10,00 cravada) / atenção (nota abaixo de 9,00) ao
+  // lado do valor (pedido do Georges) — não mexe na regra de cor já
+  // existente (notasVitorCellClass, laranja <8/vermelho <6), só soma um
+  // selo visual a mais. Usa o valor já arredondado em 2 casas pra "10,00"
+  // batido com imprecisão de float (ex: 9.999999999) não escapar do 🎉.
+  function notasVitorGradeIcon(v) {
+    if (typeof v !== "number") return "";
+    var r = Math.round(v * 100) / 100;
+    if (r === 10) return " 🎉";
+    if (r < 9) return " ⚠️";
+    return "";
   }
 
   function renderNotasVitorPage(container, page) {
@@ -10892,16 +10989,20 @@
           row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
         }
 
+        // "Nome" vira só a matéria (pedido do Georges — mesmo recorte/
+        // ícone de Provas, ver notasVitorMateria/PROVAS_MATERIA_ICONS
+        // acima) em vez do título inteiro da página.
+        var materiaNome = notasVitorMateria(it.nome);
         var nomeCell = document.createElement("td");
         var nomeInner = document.createElement("div");
         nomeInner.className = "provas-materia-inner";
         var nomeIconEl = document.createElement("span");
         nomeIconEl.className = "provas-materia-icon";
-        nomeIconEl.textContent = provasMateriaIcon(it.nome);
+        nomeIconEl.textContent = provasMateriaIcon(materiaNome);
         nomeInner.appendChild(nomeIconEl);
         var nomeBadge = document.createElement("span");
         nomeBadge.className = "item-sub-badge";
-        nomeBadge.textContent = it.nome || "—";
+        nomeBadge.textContent = materiaNome || it.nome || "—";
         nomeInner.appendChild(nomeBadge);
         nomeCell.appendChild(nomeInner);
         row.appendChild(nomeCell);
@@ -10909,8 +11010,11 @@
         NOTAS_VITOR_COLS.slice(1).forEach(function (colLabel) {
           var v = it.extra[colLabel];
           var td = document.createElement("td");
-          td.textContent = notasVitorFmt(v);
-          if (NOTAS_VITOR_GRADE_COLS.indexOf(colLabel) !== -1) {
+          var isGrade = NOTAS_VITOR_GRADE_COLS.indexOf(colLabel) !== -1;
+          // 🎉/⚠️ (pedido do Georges) só nas colunas de nota de verdade —
+          // "Requer" fica de fora, mesma exceção que já vale pra cor.
+          td.textContent = notasVitorFmt(v) + (isGrade ? notasVitorGradeIcon(v) : "");
+          if (isGrade) {
             var cls = notasVitorCellClass(v);
             if (cls) td.classList.add(cls);
           }
