@@ -1194,6 +1194,66 @@ html, body {
 .search-block-input:focus { border-color: #b9b9b3; }
 .search-block-filter-bar { margin-bottom: 0; }
 .search-block-results { margin-top: 4px; }
+/* "x" de limpar da Pesquisa Central (pedido do Georges — regra permanente,
+   ver instrucoes.md). ".search-block-input-wrap" já herda
+   "position:relative" de ".search-field-wrap" (ícone de lupa à esquerda),
+   então o "x" entra solto aqui, ancorado à direita — sem duplicar a
+   caixinha como faria "withSearchClear". OBS: esta busca é server-side
+   (Notion API "contains"), então só ganhou o botão "x" — a normalização de
+   acentos não se aplica aqui (ver instrucoes.md). */
+.search-block-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  color: #9a9a94;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+}
+.search-block-clear-btn:hover { background: #eeeee9; color: #5a5a54; }
+
+/* ---------- botão "x" genérico de qualquer barra de busca (helper
+   withSearchClear no app.js) — pedido do Georges, regra permanente: "Toda
+   barra de pesquisa deve ter botão x". Mesmo visual/posicionamento do "x"
+   que já existia só em Prioridades (.priorities-search-clear-btn), agora
+   reaproveitado em Notas/Legislações/Aniversários/Provas/Supermercado/
+   Remédios via classe compartilhada. ---------- */
+.search-input-clearable-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.search-input-clearable { padding-right: 30px !important; }
+.search-input-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  color: #9a9a94;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+}
+.search-input-clear-btn:hover { background: #eeeee9; color: #5a5a54; }
 
 /* ---------- filtros da página "Hoje" (dropdown customizado com ícone) ---------- */
 .filter-bar {
@@ -4963,6 +5023,45 @@ html, body {
   background: #ebfbee;
   border-color: #b2f2bb;
   color: #2b8a3e;
+}
+/* botão cíclico Pendentes/Todas/Passadas em Provas (pedido do Georges —
+   "mesma metodologia que usamos em Supermercado") — mesmo espírito pílula
+   de ".supermercado-status-btn", 3 estados coloridos, ícone+texto num
+   único bloco (aqui não precisa esconder texto no celular, o rótulo é
+   curto). Clique cicla pending → all → past → pending (ver
+   PROVAS_STATUS_CYCLE no app.js). */
+.provas-status-cycle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #5c5c58;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.provas-status-cycle-btn:hover { border-color: #4a90d9; }
+.provas-status-cycle-btn.provas-status-cycle-pending {
+  background: #fff4e6;
+  border-color: #ffd8a8;
+  color: #b35900;
+}
+.provas-status-cycle-btn.provas-status-cycle-all {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #3949ab;
+}
+.provas-status-cycle-btn.provas-status-cycle-past {
+  background: #f1f3f5;
+  border-color: #dee2e6;
+  color: #5c5c58;
 }
 /* botão de Prioridade por clique (pedido do Georges, rodada 4 — mesmo
    padrão do botão de status acima, cores próprias pra não confundir com

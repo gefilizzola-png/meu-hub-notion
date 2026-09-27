@@ -1433,7 +1433,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-27 19:50",
+  appVersion: "2026-09-27 20:31",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2769,7 +2769,14 @@ const APP_CONFIG = {
         {
           title: "Abrir",
           items: [
-            { label: "Provas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3e40481486dd801eb260eefd461360f1?v=3e40481486dd80ccb4ea000ceb1ae42b&source=copy_link" }
+            { label: "Provas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3e40481486dd801eb260eefd461360f1?v=3e40481486dd80ccb4ea000ceb1ae42b&source=copy_link" },
+            // "Notas" (pedido do Georges — "ao lado do botão de ABRIR as
+            // Provas no Notion, crie botão de atalho para a página de Notas
+            // no nosso app") — link interno (type:"page"), fica no MESMO
+            // grupo "Abrir" acima; o chevron (→ em vez de ↗) já diferencia
+            // visualmente "abre no app" de "abre no Notion" sem precisar de
+            // um grupo à parte (ver buildItemEl no app.js).
+            { label: "Notas", type: "page", target: "notas_vitor", icon: "ti-report" }
           ]
         },
         {
@@ -2794,9 +2801,14 @@ const APP_CONFIG = {
       itemsCompact: true,
       itemGroups: [
         {
-          title: "Abrir no Notion",
+          // "Abrir" (não "Abrir no Notion" — o grupo agora mistura um link
+          // externo com um interno, mesmo esquema de provas_vitor acima).
+          title: "Abrir",
           items: [
-            { label: "Notas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/d709cacdf3a14817b621baea9dbb80b1?v=1af0a0181b9d42db9e6f9d439259b89c&source=copy_link" }
+            { label: "Notas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/d709cacdf3a14817b621baea9dbb80b1?v=1af0a0181b9d42db9e6f9d439259b89c&source=copy_link" },
+            // "Provas" (pedido do Georges — atalho cruzado de volta pra
+            // Provas, mesmo raciocínio do item "Notas" em provas_vitor).
+            { label: "Provas", type: "page", target: "provas_vitor", icon: "ti-writing" }
           ]
         }
       ],

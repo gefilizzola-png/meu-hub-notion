@@ -170,6 +170,41 @@
     return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   }
 
+  // "x" de limpar em QUALQUER barra de pesquisa do app (pedido do Georges:
+  // "Toda barra de pesquisa deve ter botão x para excluir o texto que foi
+  // pesquisado/digitado" — regra permanente, ver instrucoes.md). Embrulha
+  // um <input> JÁ CRIADO (com placeholder/className/listener já montados
+  // por quem chamou) numa caixinha própria com position:relative — mesmo
+  // esquema que já resolvia a sobreposição do "x" com botões vizinhos em
+  // Prioridades (".priorities-search-input-box") — e devolve essa caixinha
+  // pra ser anexada NO LUGAR do input puro (quem chamou não muda mais
+  // nada). O "x" só aparece com algo digitado, limpa e refoca o campo, e
+  // dispara um evento "input" sintético no próprio input — como toda barra
+  // de busca do app já escuta "input" pra refiltrar, isso já refaz a busca
+  // sozinho, sem precisar de um callback próprio em cada chamada.
+  function withSearchClear(inputEl) {
+    var box = document.createElement("div");
+    box.className = "search-input-clearable-box";
+    inputEl.classList.add("search-input-clearable");
+    box.appendChild(inputEl);
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "search-input-clear-btn";
+    btn.innerHTML = '<i class="ti ti-x"></i>';
+    btn.title = "Limpar pesquisa";
+    function update() { btn.style.display = inputEl.value ? "flex" : "none"; }
+    btn.addEventListener("click", function () {
+      inputEl.value = "";
+      update();
+      inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+      inputEl.focus();
+    });
+    inputEl.addEventListener("input", update);
+    update();
+    box.appendChild(btn);
+    return box;
+  }
+
   // Uma página pode ter "items" (lista simples, sem caixa) E/OU "groups"
   // (lista de grupos, cada um com "title" + "items" — caixa visual dentro
   // da MESMA página, sem criar subpáginas). Quando os dois existem juntos,
@@ -2450,6 +2485,26 @@
     input.placeholder = s.placeholder || "Buscar…";
     inputWrap.appendChild(searchIcon);
     inputWrap.appendChild(input);
+    // "x" de limpar (pedido do Georges — regra permanente, ver
+    // instrucoes.md) — já tem o ícone de lupa à esquerda dentro de
+    // "inputWrap" (position:relative), então o "x" entra solto aqui, à
+    // direita, em vez de usar withSearchClear (que embrulharia o input de
+    // novo, duplicando a caixinha).
+    var inputClearBtn = document.createElement("button");
+    inputClearBtn.type = "button";
+    inputClearBtn.className = "search-block-clear-btn";
+    inputClearBtn.innerHTML = '<i class="ti ti-x"></i>';
+    inputClearBtn.title = "Limpar pesquisa";
+    function updateInputClearBtn() { inputClearBtn.style.display = input.value ? "flex" : "none"; }
+    inputClearBtn.addEventListener("click", function () {
+      input.value = "";
+      updateInputClearBtn();
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.focus();
+    });
+    input.addEventListener("input", updateInputClearBtn);
+    updateInputClearBtn();
+    inputWrap.appendChild(inputClearBtn);
     row.appendChild(inputWrap);
 
     // "Limpar filtros" — zera texto + todos os filtros ativos de uma vez.
@@ -3039,7 +3094,7 @@
       sortSelect.appendChild(opt);
     });
     sortSelect.value = "priority";
-    filterRow.appendChild(searchInput);
+    filterRow.appendChild(withSearchClear(searchInput));
     filterRow.appendChild(tagSelect);
     filterRow.appendChild(statusSelect);
     filterRow.appendChild(flaggedSelect);
@@ -3130,12 +3185,12 @@
     }
 
     function applyFilters() {
-      var q = searchInput.value.trim().toLowerCase();
+      var q = normalize(searchInput.value.trim());
       var tag = tagSelect.value;
       var status = statusSelect.value;
       var flag = flaggedSelect.value;
       var filtered = allNotes.filter(function (n) {
-        if (q && n.text.toLowerCase().indexOf(q) === -1) return false;
+        if (q && normalize(n.text || "").indexOf(q) === -1) return false;
         if (tag && (n.tags || []).indexOf(tag) === -1) return false;
         if (status === "pending" && n.done) return false;
         if (status === "done" && !n.done) return false;
@@ -6570,7 +6625,7 @@
       // coluna que passou a ter filtro ativo (ver hasActiveFilterForColumn),
       // pra ela já aparecer revelada junto com o resultado filtrado.
       updateColumnVisibility();
-      var q = searchInput.value.trim().toLowerCase();
+      var q = normalize(searchInput.value.trim());
       var status = statusSelect.value;
       var filtered = allItems.filter(function (it) {
         // com texto de busca digitado, o status vem do botão "Só
@@ -6662,7 +6717,7 @@
             if (s.text) hayParts.push(s.text);
             if (s.nota) hayParts.push(s.nota);
           });
-          var hay = hayParts.join(" ").toLowerCase();
+          var hay = normalize(hayParts.join(" "));
           if (hay.indexOf(q) === -1) return false;
         }
         return true;
@@ -8489,8 +8544,8 @@
       return allLaws.filter(function (l) {
         if (!pinnedSet[l.id]) return false;
         if (state.searchFixed) {
-          var sf = state.searchFixed.toLowerCase();
-          if ((l.title || "").toLowerCase().indexOf(sf) === -1) return false;
+          var sf = normalize(state.searchFixed);
+          if (normalize(l.title || "").indexOf(sf) === -1) return false;
         }
         return true;
       });
@@ -8503,8 +8558,8 @@
     // dropdown esteja em "E" — "assuntoMode").
     function matchesFilters(law) {
       if (state.search) {
-        var s = state.search.toLowerCase();
-        if ((law.title || "").toLowerCase().indexOf(s) === -1) return false;
+        var s = normalize(state.search);
+        if (normalize(law.title || "").indexOf(s) === -1) return false;
       }
       if (state.tipoSelected.length && state.tipoSelected.indexOf(law.tipo) === -1) return false;
       if (state.situacaoSelected.length && state.situacaoSelected.indexOf(law.situacao) === -1) return false;
@@ -8784,7 +8839,7 @@
 
     var fixedToolbarRow = document.createElement("div");
     fixedToolbarRow.className = "legislacoes-toolbar-row";
-    fixedToolbarRow.appendChild(searchInputFixed);
+    fixedToolbarRow.appendChild(withSearchClear(searchInputFixed));
     fixedToolbarRow.appendChild(groupBySelect(state.groupByFixed, function (v) { state.groupByFixed = v; applyState(); }));
     fixedToolbarRow.appendChild(collapseAllToolbar(function () { return getFixedLaws(); }, "groupByFixed", state.collapsedFixed));
     body.appendChild(fixedToolbarRow);
@@ -8808,7 +8863,7 @@
     searchInput.placeholder = "Buscar por nome...";
     searchInput.className = "legislacoes-search-input";
     searchInput.addEventListener("input", function () { state.search = searchInput.value; applyState(); });
-    controlsRow.appendChild(searchInput);
+    controlsRow.appendChild(withSearchClear(searchInput));
 
     // Tipo/Situação/Assunto — mesmo dropdown de seleção múltipla (com
     // busca e E/OU) já usado em TODAS as outras páginas do app
@@ -9359,8 +9414,8 @@
 
     function matchesFilters(p) {
       if (state.search) {
-        var s = state.search.toLowerCase();
-        if ((p.nome || "").toLowerCase().indexOf(s) === -1) return false;
+        var s = normalize(state.search);
+        if (normalize(p.nome || "").indexOf(s) === -1) return false;
       }
       if (state.grupoSelected.length && state.grupoSelected.indexOf(p.grupo) === -1) return false;
       if (state.tagSelected.length && !p.tags.some(function (t) { return state.tagSelected.indexOf(t) !== -1; })) return false;
@@ -9485,7 +9540,7 @@
       state.search = searchInput.value.trim();
       applyState();
     });
-    controls.appendChild(searchInput);
+    controls.appendChild(withSearchClear(searchInput));
 
     controls.appendChild(grupoDropdownWrap);
 
@@ -10379,19 +10434,33 @@
       // Matéria — multi-select), Nota (operador+valor) e Data (dia ou
       // intervalo) — os 2 últimos usam buildNumberFilter/
       // buildLocalDateRangeFilter (ver topo do arquivo).
-      trimestreSelected: [], tipoSelected: [], notaFilter: null, dataFilter: null
+      trimestreSelected: [], tipoSelected: [], notaFilter: null, dataFilter: null,
+      // "Pendentes/Todas/Passadas" (pedido do Georges — botão único de
+      // ciclo, mesma metodologia de clique-cicla já usada em Supermercado/
+      // Remédios para status por item, aqui aplicada como filtro de
+      // página): abre em "pending" por padrão.
+      statusCycle: "pending"
     };
 
     var body = document.createElement("div");
 
     function matchesFilters(it) {
       if (state.search) {
-        var s = state.search.toLowerCase();
-        if ((it.materia || "").toLowerCase().indexOf(s) === -1) return false;
+        var s = normalize(state.search);
+        if (normalize(it.materia || "").indexOf(s) === -1) return false;
       }
       if (state.materiaSelected.length && state.materiaSelected.indexOf(it.materia) === -1) return false;
       if (state.trimestreSelected.length && state.trimestreSelected.indexOf(it.trimestre) === -1) return false;
       if (state.tipoSelected.length && state.tipoSelected.indexOf(it.tipo) === -1) return false;
+      // "diasAte < 0" = já aconteceu; "pending" (padrão) mostra hoje/futuro
+      // e também provas sem data cadastrada (diasAte null — não dá pra
+      // saber se já passou, então não escondemos); "past" só as vencidas;
+      // "all" não filtra por data nenhuma.
+      if (state.statusCycle === "pending") {
+        if (it.diasAte !== null && it.diasAte < 0) return false;
+      } else if (state.statusCycle === "past") {
+        if (it.diasAte === null || it.diasAte >= 0) return false;
+      }
       if (state.notaFilter) {
         var nf = state.notaFilter;
         if (it.nota === null || it.nota === undefined) return false;
@@ -10463,6 +10532,33 @@
     var controls = document.createElement("div");
     controls.className = "legislacoes-controls";
 
+    // "Pendentes/Todas/Passadas" (pedido do Georges — "faça um botão para
+    // exibir Todas as Provas, Provas Pendentes ou Provas Passadas, usando
+    // aquela mesma metodologia que usamos em Supermercado": 1 botão só,
+    // cada clique avança pro próximo estado NESSA ordem e volta pro
+    // começo depois do 3º — mesmo padrão de clique-cicla do botão de
+    // status por item em Supermercado/Remédios, aplicado aqui como filtro
+    // de página inteira).
+    var PROVAS_STATUS_CYCLE = ["pending", "all", "past"];
+    var PROVAS_STATUS_LABEL = { pending: "Provas Pendentes", all: "Todas as Provas", past: "Provas Passadas" };
+    var PROVAS_STATUS_ICON = { pending: "ti-hourglass", all: "ti-list", past: "ti-history" };
+    var statusCycleBtn = document.createElement("button");
+    statusCycleBtn.type = "button";
+    statusCycleBtn.className = "provas-status-cycle-btn";
+    function updateStatusCycleBtn() {
+      statusCycleBtn.className = "provas-status-cycle-btn provas-status-cycle-" + state.statusCycle;
+      statusCycleBtn.innerHTML = '<i class="ti ' + PROVAS_STATUS_ICON[state.statusCycle] + '"></i> ' + PROVAS_STATUS_LABEL[state.statusCycle];
+      statusCycleBtn.title = "Clique para alternar (Pendentes → Todas → Passadas)";
+    }
+    statusCycleBtn.addEventListener("click", function () {
+      var idx = PROVAS_STATUS_CYCLE.indexOf(state.statusCycle);
+      state.statusCycle = PROVAS_STATUS_CYCLE[(idx + 1) % PROVAS_STATUS_CYCLE.length];
+      updateStatusCycleBtn();
+      applyState();
+    });
+    updateStatusCycleBtn();
+    controls.appendChild(statusCycleBtn);
+
     var searchInput = document.createElement("input");
     searchInput.type = "text";
     searchInput.placeholder = "Buscar por matéria…";
@@ -10471,7 +10567,7 @@
       state.search = searchInput.value.trim();
       applyState();
     });
-    controls.appendChild(searchInput);
+    controls.appendChild(withSearchClear(searchInput));
     controls.appendChild(materiaDropdownWrap);
     controls.appendChild(trimestreDropdownWrap);
     controls.appendChild(tipoDropdownWrap);
@@ -10713,30 +10809,47 @@
     var body = document.createElement("div");
     wrap.appendChild(body);
 
+    // "Nome" aqui é o nome da MATÉRIA (mesmo domínio de Provas — "Nome" é
+    // o title da base, cada linha é o boletim de 1 matéria) — reaproveita
+    // provasMateriaIcon/PROVAS_MATERIA_ICONS (mesmo mapa de Provas acima)
+    // pro ícone da linha, e cabeçalho clicável pra ordenar (pedido do
+    // Georges: "por que nas Notas fez tão feia?" — mesmo capricho visual +
+    // mesma possibilidade de classificar que Provas/Contas Mensais/
+    // Aniversários já têm).
+    var allNotas = [];
+    var sortState = { key: "nome", dir: 1 };
+
     var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
       "&filters=" + encodeURIComponent(JSON.stringify([{ property: "Nome", type: "title", condition: "is_not_empty", value: true }])) +
       "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Nome", direction: "ascending" }])) +
       "&extra=" + encodeURIComponent(JSON.stringify(NOTAS_VITOR_EXTRA_FIELDS));
 
-    authFetch(queryUrl).then(handle401Generic).then(function (r) {
-      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
-    }).then(function (result) {
-      if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar notas");
-      var pages = (result.data && result.data.pages) || [];
+    function sortNotas(list) {
+      var arr = list.slice();
+      var key = sortState.key, dir = sortState.dir;
+      arr.sort(function (a, b) {
+        var av, bv;
+        if (key === "nome") { av = a.nome || ""; bv = b.nome || ""; }
+        else { av = a.extra[key]; bv = b.extra[key]; av = (typeof av === "number") ? av : -Infinity; bv = (typeof bv === "number") ? bv : -Infinity; }
+        if (typeof av === "number") return dir * (av - bv);
+        return dir * String(av).localeCompare(String(bv), "pt-BR");
+      });
+      return arr;
+    }
 
+    function renderTable() {
       body.innerHTML = "";
-      if (!pages.length) {
+      if (!allNotas.length) {
         var empty = document.createElement("p");
         empty.className = "empty";
         empty.textContent = "Nenhuma nota cadastrada.";
         body.appendChild(empty);
-        statusEl.style.display = "none";
         return;
       }
 
       var count = document.createElement("p");
       count.className = "aniversarios-count";
-      count.textContent = pages.length + (pages.length === 1 ? " registro" : " registros");
+      count.textContent = allNotas.length + (allNotas.length === 1 ? " registro" : " registros");
       body.appendChild(count);
 
       var table = document.createElement("table");
@@ -10744,31 +10857,57 @@
       var thead = document.createElement("thead");
       var headRow = document.createElement("tr");
       NOTAS_VITOR_COLS.forEach(function (label) {
+        var sortKey = label === "Nome" ? "nome" : label;
         var th = document.createElement("th");
-        th.className = "financeiro-th";
-        th.textContent = label;
+        th.className = "financeiro-th financeiro-th-sortable";
+        var thLabel = document.createElement("span");
+        thLabel.className = "financeiro-th-label";
+        thLabel.textContent = label;
+        th.appendChild(thLabel);
+        var arrow = document.createElement("span");
+        arrow.className = "financeiro-th-arrow";
+        if (sortState.key === sortKey) {
+          th.classList.add("active");
+          arrow.textContent = sortState.dir === 1 ? "▲" : "▼";
+        }
+        th.appendChild(arrow);
+        th.title = "Clique para classificar por " + label;
+        th.addEventListener("click", function () {
+          if (sortState.key === sortKey) { sortState.dir = sortState.dir * -1; }
+          else { sortState.key = sortKey; sortState.dir = sortKey === "nome" ? 1 : -1; }
+          renderTable();
+        });
         headRow.appendChild(th);
       });
       thead.appendChild(headRow);
       table.appendChild(thead);
 
       var tbody = document.createElement("tbody");
-      pages.forEach(function (p) {
-        var extra = p.extra || {};
+      sortNotas(allNotas).forEach(function (it) {
         var row = document.createElement("tr");
         row.className = "financeiro-row";
-        if (p.url) {
+        if (it.url) {
           row.classList.add("provas-row-clickable");
           row.title = "Abrir no Notion";
-          row.addEventListener("click", function () { window.open(p.url, "_blank", "noopener"); });
+          row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
         }
 
         var nomeCell = document.createElement("td");
-        nomeCell.textContent = p.title || "—";
+        var nomeInner = document.createElement("div");
+        nomeInner.className = "provas-materia-inner";
+        var nomeIconEl = document.createElement("span");
+        nomeIconEl.className = "provas-materia-icon";
+        nomeIconEl.textContent = provasMateriaIcon(it.nome);
+        nomeInner.appendChild(nomeIconEl);
+        var nomeBadge = document.createElement("span");
+        nomeBadge.className = "item-sub-badge";
+        nomeBadge.textContent = it.nome || "—";
+        nomeInner.appendChild(nomeBadge);
+        nomeCell.appendChild(nomeInner);
         row.appendChild(nomeCell);
 
         NOTAS_VITOR_COLS.slice(1).forEach(function (colLabel) {
-          var v = extra[colLabel];
+          var v = it.extra[colLabel];
           var td = document.createElement("td");
           td.textContent = notasVitorFmt(v);
           if (NOTAS_VITOR_GRADE_COLS.indexOf(colLabel) !== -1) {
@@ -10782,8 +10921,16 @@
       });
       table.appendChild(tbody);
       body.appendChild(table);
+    }
 
+    authFetch(queryUrl).then(handle401Generic).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar notas");
+      var pages = (result.data && result.data.pages) || [];
+      allNotas = pages.map(function (p) { return { id: p.id, url: p.url, nome: p.title, extra: p.extra || {} }; });
       statusEl.style.display = "none";
+      renderTable();
     }).catch(function (err) {
       statusEl.textContent = "Erro ao buscar notas: " + err.message;
     });
@@ -11022,7 +11169,7 @@
     searchInput.type = "text";
     searchInput.className = "supermercado-search-input";
     searchInput.placeholder = "Buscar produto…";
-    filterWrap.appendChild(searchInput);
+    filterWrap.appendChild(withSearchClear(searchInput));
 
     // filtro de Categoria (pedido do Georges, rodada 4 — "use aquele mesmo
     // padrão que usamos em outros filtros para permitir multi_select e
@@ -11433,8 +11580,8 @@
       // fica sem efeito, então trocar de aba nunca esconde item por engano.
       if (state.view === "comprar" && state.onlyUrgente && it.prioridade !== "1 - Urgente") return false;
       if (state.search) {
-        var q = state.search.toLowerCase();
-        if ((it.produto || "").toLowerCase().indexOf(q) === -1) return false;
+        var q = normalize(state.search);
+        if (normalize(it.produto || "").indexOf(q) === -1) return false;
       }
       return true;
     }
@@ -11695,7 +11842,7 @@
     searchInput.type = "text";
     searchInput.placeholder = "Pesquisar por nome, composição ou finalidade…";
     searchInput.className = "remedios-search-input";
-    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(withSearchClear(searchInput));
     wrap.appendChild(searchWrap);
     searchInput.addEventListener("input", function () {
       state.search = searchInput.value;
