@@ -1454,6 +1454,187 @@
     return wrap;
   }
 
+  // "Nota" em Provas do Vitor (pedido do Georges — "filtro de valores, tipo
+  // menor ou igual, maior ou igual, etc") — mesmo "trigger+menu" visual de
+  // buildDateRangeFilter acima, mas com operador + valor numérico em vez de
+  // datas. Client-side puro (ver renderProvasVitorPage — a página inteira já
+  // filtra em cima do array carregado 1 vez, sem re-consultar o Worker a
+  // cada filtro), então "onChange" devolve {op, value} direto, não um
+  // filtro pro Notion.
+  function buildNumberFilter(filterDef, onChange) {
+    var wrap = document.createElement("div");
+    wrap.className = "filter-dropdown";
+
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "filter-trigger";
+    var triggerIcon = document.createElement("i");
+    triggerIcon.className = "ti ti-123";
+    var triggerLabel = document.createElement("span");
+    triggerLabel.textContent = filterDef.label + ": Todas";
+    var chevron = document.createElement("i");
+    chevron.className = "ti ti-chevron-down";
+    trigger.appendChild(triggerIcon);
+    trigger.appendChild(triggerLabel);
+    trigger.appendChild(chevron);
+
+    var menu = document.createElement("div");
+    menu.className = "filter-menu filter-number-menu";
+
+    var row = document.createElement("div");
+    row.className = "filter-number-row";
+    row.addEventListener("click", function (e) { e.stopPropagation(); });
+
+    var opSelect = document.createElement("select");
+    opSelect.className = "filter-number-op";
+    [[">=", "≥"], ["<=", "≤"], ["=", "="], [">", ">"], ["<", "<"]].forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      opSelect.appendChild(opt);
+    });
+    opSelect.value = ">=";
+
+    var valInput = document.createElement("input");
+    valInput.type = "number";
+    valInput.step = "0.1";
+    valInput.className = "filter-number-input";
+    valInput.placeholder = "valor";
+
+    row.appendChild(opSelect);
+    row.appendChild(valInput);
+    menu.appendChild(row);
+
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "filter-date-clear";
+    clearBtn.textContent = "Limpar";
+    clearBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      valInput.value = "";
+      opSelect.value = ">=";
+      menu.classList.remove("open");
+      emit();
+    });
+    menu.appendChild(clearBtn);
+
+    function emit() {
+      var v = valInput.value;
+      if (v === "") {
+        triggerIcon.style.color = "";
+        triggerLabel.textContent = filterDef.label + ": Todas";
+        onChange(null);
+        return;
+      }
+      var num = parseFloat(v);
+      if (isNaN(num)) { onChange(null); return; }
+      triggerIcon.style.color = "#4a90d9";
+      triggerLabel.textContent = filterDef.label + ": " + opSelect.options[opSelect.selectedIndex].textContent + " " + num;
+      onChange({ op: opSelect.value, value: num });
+    }
+
+    opSelect.addEventListener("change", emit);
+    valInput.addEventListener("input", emit);
+
+    trigger.addEventListener("click", function (e) {
+      e.stopPropagation();
+      menu.classList.toggle("open");
+    });
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    return wrap;
+  }
+
+  // "Data" em Provas do Vitor, dia ou intervalo (pedido do Georges) —
+  // MESMO visual/UX de buildDateRangeFilter acima (De/Até + Limpar), mas
+  // client-side: onChange devolve {from, to} (com um dos dois null quando é
+  // um dia só) em vez de pairs pro Worker. Duplicar em vez de reaproveitar
+  // buildDateRangeFilter de propósito — aquele monta filtro pro Notion
+  // (server-side), esta página já carrega tudo de uma vez e filtra local.
+  function buildLocalDateRangeFilter(filterDef, onChange) {
+    var wrap = document.createElement("div");
+    wrap.className = "filter-dropdown";
+
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "filter-trigger";
+    var triggerIcon = document.createElement("i");
+    triggerIcon.className = "ti ti-calendar";
+    var triggerLabel = document.createElement("span");
+    triggerLabel.textContent = filterDef.label + ": Todas";
+    var chevron = document.createElement("i");
+    chevron.className = "ti ti-chevron-down";
+    trigger.appendChild(triggerIcon);
+    trigger.appendChild(triggerLabel);
+    trigger.appendChild(chevron);
+
+    var menu = document.createElement("div");
+    menu.className = "filter-menu filter-date-menu";
+
+    function makeRow(labelText) {
+      var row = document.createElement("label");
+      row.className = "filter-date-row";
+      var lbl = document.createElement("span");
+      lbl.textContent = labelText;
+      var input = document.createElement("input");
+      input.type = "date";
+      input.className = "filter-date-input";
+      row.appendChild(lbl);
+      row.appendChild(input);
+      row.addEventListener("click", function (e) { e.stopPropagation(); });
+      menu.appendChild(row);
+      return input;
+    }
+
+    var fromInput = makeRow("De");
+    var toInput = makeRow("Até");
+
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "filter-date-clear";
+    clearBtn.textContent = "Limpar";
+    clearBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      fromInput.value = "";
+      toInput.value = "";
+      menu.classList.remove("open");
+      emit();
+    });
+    menu.appendChild(clearBtn);
+
+    function fmtBR(iso) {
+      var parts = iso.split("-");
+      return parts.length === 3 ? parts[2] + "/" + parts[1] : iso;
+    }
+
+    function emit() {
+      var from = fromInput.value;
+      var to = toInput.value;
+      if (!from && !to) {
+        triggerIcon.style.color = "";
+        triggerLabel.textContent = filterDef.label + ": Todas";
+        onChange(null);
+        return;
+      }
+      triggerIcon.style.color = "#4a90d9";
+      triggerLabel.textContent = filterDef.label + ": " + (from && to ? (fmtBR(from) + "–" + fmtBR(to)) : fmtBR(from || to));
+      onChange({ from: from || null, to: to || null });
+    }
+
+    fromInput.addEventListener("change", emit);
+    toInput.addEventListener("change", emit);
+
+    trigger.addEventListener("click", function (e) {
+      e.stopPropagation();
+      menu.classList.toggle("open");
+    });
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    return wrap;
+  }
+
   document.addEventListener("click", function () {
     document.querySelectorAll(".filter-menu.open").forEach(function (m) { m.classList.remove("open"); });
   });
@@ -10192,7 +10373,14 @@
     }
 
     var allProvas = [];
-    var state = { search: "", materiaSelected: [], sortKey: "data", sortDir: 1 };
+    var state = {
+      search: "", materiaSelected: [], sortKey: "data", sortDir: 1,
+      // 4 filtros novos (pedido do Georges): Trimestre/Tipo (mesmo padrão de
+      // Matéria — multi-select), Nota (operador+valor) e Data (dia ou
+      // intervalo) — os 2 últimos usam buildNumberFilter/
+      // buildLocalDateRangeFilter (ver topo do arquivo).
+      trimestreSelected: [], tipoSelected: [], notaFilter: null, dataFilter: null
+    };
 
     var body = document.createElement("div");
 
@@ -10202,6 +10390,24 @@
         if ((it.materia || "").toLowerCase().indexOf(s) === -1) return false;
       }
       if (state.materiaSelected.length && state.materiaSelected.indexOf(it.materia) === -1) return false;
+      if (state.trimestreSelected.length && state.trimestreSelected.indexOf(it.trimestre) === -1) return false;
+      if (state.tipoSelected.length && state.tipoSelected.indexOf(it.tipo) === -1) return false;
+      if (state.notaFilter) {
+        var nf = state.notaFilter;
+        if (it.nota === null || it.nota === undefined) return false;
+        if (nf.op === ">=" && !(it.nota >= nf.value)) return false;
+        if (nf.op === "<=" && !(it.nota <= nf.value)) return false;
+        if (nf.op === "=" && !(it.nota === nf.value)) return false;
+        if (nf.op === ">" && !(it.nota > nf.value)) return false;
+        if (nf.op === "<" && !(it.nota < nf.value)) return false;
+      }
+      if (state.dataFilter) {
+        var df = state.dataFilter;
+        if (!it.data) return false;
+        if (df.from && df.to) { if (it.data < df.from || it.data > df.to) return false; }
+        else if (df.from) { if (it.data !== df.from) return false; }
+        else if (df.to) { if (it.data !== df.to) return false; }
+      }
       return true;
     }
 
@@ -10232,6 +10438,27 @@
       });
       return Object.keys(map).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).map(function (k) { return map[k]; });
     }
+    // "Trimestre"/"Tipo" (pedido do Georges) — mesmo esquema de
+    // buildMateriaOptions acima: opções tiradas ao vivo das provas já
+    // carregadas, sem ícone/cor específicos (a base não tem esses campos
+    // estruturados pra eles).
+    function buildSimpleOptionsFrom(key) {
+      var seen = {};
+      var out = [];
+      allProvas.forEach(function (it) {
+        var v = it[key];
+        if (!v || seen[v]) return;
+        seen[v] = true;
+        out.push({ label: v, pageId: v });
+      });
+      out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+      return out;
+    }
+
+    var trimestreDropdownWrap = document.createElement("div");
+    var tipoDropdownWrap = document.createElement("div");
+    var notaFilterWrap = document.createElement("div");
+    var dataFilterWrap = document.createElement("div");
 
     var controls = document.createElement("div");
     controls.className = "legislacoes-controls";
@@ -10246,6 +10473,10 @@
     });
     controls.appendChild(searchInput);
     controls.appendChild(materiaDropdownWrap);
+    controls.appendChild(trimestreDropdownWrap);
+    controls.appendChild(tipoDropdownWrap);
+    controls.appendChild(notaFilterWrap);
+    controls.appendChild(dataFilterWrap);
 
     wrap.appendChild(controls);
     wrap.appendChild(body);
@@ -10311,6 +10542,15 @@
       filtered.forEach(function (it) {
         var row = document.createElement("tr");
         row.className = "financeiro-row provas-row" + (it.diasAte !== null && it.diasAte <= 1 ? " provas-row-soon" : "");
+        // clique na linha abre a prova no Notion (pedido do Georges: "quero
+        // que abra a respectiva página no Notion, para consultar a matéria
+        // que irá cair" — mesma URL que a notificação já usa, ver
+        // fetchProvasNotificationItems).
+        if (it.url) {
+          row.classList.add("provas-row-clickable");
+          row.title = "Abrir no Notion";
+          row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
+        }
 
         var materiaCell = document.createElement("td");
         var materiaInner = document.createElement("div");
@@ -10387,10 +10627,165 @@
       );
       materiaDropdownWrap.appendChild(materiaDropdown);
 
+      var trimestreDropdown = buildIconDropdown(
+        { property: "Trimestre", type: "select", label: "Trimestre", options: buildSimpleOptionsFrom("trimestre") },
+        function (opts) { state.trimestreSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      );
+      trimestreDropdownWrap.appendChild(trimestreDropdown);
+
+      var tipoDropdown = buildIconDropdown(
+        { property: "Tipo", type: "select", label: "Tipo", options: buildSimpleOptionsFrom("tipo") },
+        function (opts) { state.tipoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      );
+      tipoDropdownWrap.appendChild(tipoDropdown);
+
+      var notaFilterEl = buildNumberFilter(
+        { label: "Nota" },
+        function (val) { state.notaFilter = val; applyState(); }
+      );
+      notaFilterWrap.appendChild(notaFilterEl);
+
+      var dataFilterEl = buildLocalDateRangeFilter(
+        { label: "Data" },
+        function (val) { state.dataFilter = val; applyState(); }
+      );
+      dataFilterWrap.appendChild(dataFilterEl);
+
       statusEl.style.display = "none";
       applyState();
     }).catch(function (err) {
       statusEl.textContent = "Erro ao buscar provas: " + err.message;
+    });
+  }
+
+  // ---------------- "page.notasVitor" — Notas do Vitor (03EF - NSF - T34, 100% leitura) ----------------
+  // Pedido do Georges: "criei uma nova página no Notion pra cadastrar as
+  // notas... quero criar uma nova página no Meu Hub... na qual você irá
+  // exibir uma tabela com todas ali existentes, pintando de laranja as
+  // notas abaixo de 8 e de vermelho as abaixo de 6." Schema real da base
+  // (conferido direto no Notion): Nome (title) + TRI 1/TRI 2/TRI 3/Média/
+  // Exame/Requer/"Nota Final", todos number — mesma ordem de colunas da
+  // view padrão do Notion. Fetch único + render client-side, mesmo
+  // esquema de renderProvasVitorPage acima.
+  // "Requer" fica sem cor: é um valor de referência (nota mínima
+  // exigida), não uma nota obtida — se o Georges quiser colorir também é
+  // só somar essa chave em NOTAS_VITOR_GRADE_COLS.
+  var NOTAS_VITOR_EXTRA_FIELDS = ["TRI 1", "TRI 2", "TRI 3", "Média", "Exame", "Requer", "Nota Final"];
+  var NOTAS_VITOR_COLS = ["Nome", "TRI 1", "TRI 2", "TRI 3", "Média", "Exame", "Requer", "Nota Final"];
+  var NOTAS_VITOR_GRADE_COLS = ["TRI 1", "TRI 2", "TRI 3", "Média", "Exame", "Nota Final"];
+  function notasVitorCellClass(v) {
+    if (typeof v !== "number") return "";
+    if (v < 6) return "notas-vitor-cell-red";
+    if (v < 8) return "notas-vitor-cell-orange";
+    return "";
+  }
+  // "8,5" em vez de "8.5" (padrão BR); nota inteira mostra sem decimal
+  // ("8" em vez de "8,0").
+  function notasVitorFmt(v) {
+    if (typeof v !== "number") return "—";
+    var rounded = Math.round(v * 10) / 10;
+    return String(rounded).replace(".", ",");
+  }
+
+  function renderNotasVitorPage(container, page) {
+    var pcfg = page.notasVitor || {};
+    var databaseId = pcfg.database_id;
+
+    var wrap = document.createElement("div");
+    wrap.className = "notas-vitor-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "📊 Notas — Vitor (03EF - NSF - T34)";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando notas…";
+    wrap.appendChild(statusEl);
+
+    if (!databaseId) {
+      statusEl.textContent = "Configuração incompleta: falta database_id em page.notasVitor.";
+      return;
+    }
+
+    var body = document.createElement("div");
+    wrap.appendChild(body);
+
+    var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
+      "&filters=" + encodeURIComponent(JSON.stringify([{ property: "Nome", type: "title", condition: "is_not_empty", value: true }])) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Nome", direction: "ascending" }])) +
+      "&extra=" + encodeURIComponent(JSON.stringify(NOTAS_VITOR_EXTRA_FIELDS));
+
+    authFetch(queryUrl).then(handle401Generic).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar notas");
+      var pages = (result.data && result.data.pages) || [];
+
+      body.innerHTML = "";
+      if (!pages.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhuma nota cadastrada.";
+        body.appendChild(empty);
+        statusEl.style.display = "none";
+        return;
+      }
+
+      var count = document.createElement("p");
+      count.className = "aniversarios-count";
+      count.textContent = pages.length + (pages.length === 1 ? " registro" : " registros");
+      body.appendChild(count);
+
+      var table = document.createElement("table");
+      table.className = "financeiro-table notas-vitor-table";
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      NOTAS_VITOR_COLS.forEach(function (label) {
+        var th = document.createElement("th");
+        th.className = "financeiro-th";
+        th.textContent = label;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      pages.forEach(function (p) {
+        var extra = p.extra || {};
+        var row = document.createElement("tr");
+        row.className = "financeiro-row";
+        if (p.url) {
+          row.classList.add("provas-row-clickable");
+          row.title = "Abrir no Notion";
+          row.addEventListener("click", function () { window.open(p.url, "_blank", "noopener"); });
+        }
+
+        var nomeCell = document.createElement("td");
+        nomeCell.textContent = p.title || "—";
+        row.appendChild(nomeCell);
+
+        NOTAS_VITOR_COLS.slice(1).forEach(function (colLabel) {
+          var v = extra[colLabel];
+          var td = document.createElement("td");
+          td.textContent = notasVitorFmt(v);
+          if (NOTAS_VITOR_GRADE_COLS.indexOf(colLabel) !== -1) {
+            var cls = notasVitorCellClass(v);
+            if (cls) td.classList.add(cls);
+          }
+          row.appendChild(td);
+        });
+
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      body.appendChild(table);
+
+      statusEl.style.display = "none";
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao buscar notas: " + err.message;
     });
   }
 
@@ -12165,7 +12560,7 @@
     var hasDynamicQueries = !!(page.dynamicQueries && page.dynamicQueries.length);
     var hasTabs = !!(page.tabs && page.tabs.length);
 
-    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais && !page.legislacoes && !page.aniversariosList && !page.aniversariosBI && !page.provasVitor) {
+    if (!flatItems.length && !itemGroups.length && !groups.length && !page.search && !hasDynamicQueries && !hasTabs && !page.notes && !page.priorityMiniList && !page.priorities && !page.financeiroContasMensais && !page.legislacoes && !page.aniversariosList && !page.aniversariosBI && !page.provasVitor && !page.notasVitor) {
       var empty = document.createElement("p");
       empty.className = "empty";
       empty.textContent = "Nenhum item aqui ainda. Edite config.js para adicionar.";
@@ -12477,6 +12872,20 @@
         container.appendChild(dividerProvas);
       }
       renderProvasVitorPage(container, page);
+      renderedSomething = true;
+    }
+
+    // "page.notasVitor" (pedido do Georges: "quero criar uma nova página
+    // no Meu Hub... na qual você irá exibir uma tabela com todas ali
+    // existentes") — mesmo esquema de "page.provasVitor" acima. Ver
+    // renderNotasVitorPage.
+    if (page.notasVitor) {
+      if (renderedSomething) {
+        var dividerNotas = document.createElement("hr");
+        dividerNotas.className = "content-divider";
+        container.appendChild(dividerNotas);
+      }
+      renderNotasVitorPage(container, page);
     }
   }
 

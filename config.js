@@ -429,6 +429,10 @@ var ANIVERSARIOS_FILIZZOLA_GRUPOS_ORIGINARIO = [
 // botão "Criar no Notion", ver pages.provas_vitor mais abaixo).
 var PROVAS_VITOR_DATABASE_ID = "3e40481486dd807b8a11000b23fca4bd";
 var PROVAS_VITOR_TEMPLATE_ID = "3e404814-86dd-8085-8030-fd8171cf85c4";
+// "Notas" (03EF - T34) — pedido do Georges: nova base do Notion com as
+// notas do Vitor por trimestre (ver pages.notas_vitor mais abaixo). Só
+// leitura — sem template de criação, o Georges cadastra direto no Notion.
+var NOTAS_VITOR_DATABASE_ID = "d709cacdf3a14817b621baea9dbb80b1";
 
 // "Tags" de família da página de Aniversários (botões de filtro rápido,
 // pedido do Georges) — a "tag" principal de cada pessoa vem AUTOMÁTICO do
@@ -1429,7 +1433,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-27 18:30",
+  appVersion: "2026-09-27 19:50",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2652,6 +2656,9 @@ const APP_CONFIG = {
             // interno direto pra ela, mesmo padrão de Remédios/Supermercado
             // acima.
             { label: "Provas", type: "page", target: "provas_vitor" },
+            // "Notas" (pedido do Georges) — mesmo padrão de "Provas" acima:
+            // link interno direto pra página real (ver pages.notas_vitor).
+            { label: "Notas", type: "page", target: "notas_vitor" },
             { label: "Tarefas Escolares", type: "notion", url: "https://app.notion.com/p/georges-filizzola/7100481486dd83408ca281e5ae087a92?v=5f40481486dd83f38d9708b3f37b2733&source=copy_link" }
           ]
         }
@@ -2740,7 +2747,11 @@ const APP_CONFIG = {
     cat_pessoal_vitor_estudos_ef_3ano_nsf: {
       title: "NSF (T34)",
       items: [
-        { label: "Provas", type: "page", target: "provas_vitor", icon: "ti-writing" }
+        { label: "Provas", type: "page", target: "provas_vitor", icon: "ti-writing" },
+        // "Notas" (pedido do Georges — mesmo caminho de Provas:
+        // Categorias->Pessoal->Vitor->Estudos->Ensino Fundamental->3º
+        // ano->NSF (T34)->Notas).
+        { label: "Notas", type: "page", target: "notas_vitor", icon: "ti-report" }
       ]
     },
 
@@ -2770,6 +2781,27 @@ const APP_CONFIG = {
       ],
       provasVitor: {
         database_id: PROVAS_VITOR_DATABASE_ID
+      }
+    },
+
+    // "Notas" (03EF - T34) — pedido do Georges: tabela com as notas
+    // cadastradas na base do Notion (Nome/TRI 1/TRI 2/TRI 3/Média/Exame/
+    // Requer/Nota Final, todas number), pintando de laranja abaixo de 8 e
+    // de vermelho abaixo de 6. Só leitura, sem "Criar no Notion" (o
+    // Georges cadastra direto lá). Ver renderNotasVitorPage no app.js.
+    notas_vitor: {
+      title: "Notas",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir no Notion",
+          items: [
+            { label: "Notas", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/d709cacdf3a14817b621baea9dbb80b1?v=1af0a0181b9d42db9e6f9d439259b89c&source=copy_link" }
+          ]
+        }
+      ],
+      notasVitor: {
+        database_id: NOTAS_VITOR_DATABASE_ID
       }
     },
 

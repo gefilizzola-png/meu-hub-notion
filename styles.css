@@ -4446,6 +4446,54 @@ html, body {
    "vencendo em breve" de Contas Mensais) ganha um leve realce na linha. */
 .provas-row-soon { background: rgba(236, 72, 153, 0.05); }
 .provas-row-soon:hover td { background: rgba(236, 72, 153, 0.09); }
+/* linha da tabela clicável — abre a página da prova no Notion (pedido do
+   Georges, mesmo padrão de cursor/hover usado em Legislações). */
+.provas-row-clickable { cursor: pointer; }
+.provas-row-clickable:hover td { background: rgba(74, 144, 217, 0.06); }
+
+/* filtro de Nota — .filter-trigger/.filter-menu (mesma família visual dos
+   outros filtros), mas com um seletor de operador (>=, <=, =, >, <) + um
+   campo numérico em vez de lista de opções. Primeiro filtro desse tipo no
+   app — sem padrão anterior pra reaproveitar. */
+.filter-number-menu { min-width: 200px; padding: 10px; }
+.filter-number-row { display: flex; align-items: center; gap: 8px; }
+.filter-number-op {
+  height: 32px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  padding: 0 6px;
+  font-size: 13px;
+  color: #262624;
+  outline: none;
+}
+.filter-number-op:focus { border-color: #b9b9b3; }
+.filter-number-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  padding: 0 8px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+.filter-number-input:focus { border-color: #b9b9b3; }
+/* botão "Limpar" reaproveita .filter-date-clear (já existe acima). */
+
+/* filtro de Data local (buildLocalDateRangeFilter) — mesma casca visual do
+   buildDateRangeFilter (.filter-date-menu/.filter-date-row), reaproveitada
+   direto; nenhuma classe nova precisa aqui. */
+
+/* ---------------- Notas do Vitor (03EF - T34) ---------------- */
+/* reaproveita .financeiro-table/.aniversarios-count/.provas-row-clickable
+   (mesma tabela sortable/clicável já usada em Provas) — só as cores de
+   nota (pedido do Georges: "pintando de laranja as notas abaixo de 8 e de
+   vermelho as abaixo de 6") são novas. */
+.notas-vitor-cell-orange { background: rgba(245, 159, 0, 0.14); color: #a15c00; font-weight: 600; }
+.notas-vitor-cell-red { background: rgba(224, 49, 49, 0.12); color: #c00; font-weight: 600; }
 /* coluna/botão de Nota (pedido do Georges — rascunho de mensagem de
    parabéns pra copiar/colar no WhatsApp) — reaproveita os mesmos
    ".priorities-note-toggle"/".priorities-note-row"/".priorities-note-
