@@ -11652,7 +11652,10 @@
   // monta o JSON completo e dispara o download (Blob + <a download>, sem
   // precedente igual no código — mais simples que reusar algum padrão
   // existente, não tem nenhum download de arquivo no app até agora).
-  function downloadBackupJson(byKey, summary) {
+  // Monta o objeto completo do backup (usado tanto pelo download quanto pela
+  // exposição em window.__meuHubBackupExport, pra automação/scheduled task
+  // conseguir ler sem precisar clicar no botão — ver renderBackupPage).
+  function buildBackupPayload(byKey, summary) {
     var payload = {
       geradoEm: new Date().toISOString(),
       geradoEmSaoPaulo: saoPauloDateTimeLabel(),
@@ -11670,7 +11673,11 @@
       var r = byKey[src.key];
       payload.dados[src.key] = (r && r.ok) ? r.data : null;
     });
+    return payload;
+  }
 
+  function downloadBackupJson(byKey, summary) {
+    var payload = buildBackupPayload(byKey, summary);
     var json = JSON.stringify(payload, null, 2);
     var blob = new Blob([json], { type: "application/json" });
     var url = URL.createObjectURL(blob);
@@ -11706,6 +11713,11 @@
 
     fetchBackupData().then(function (byKey) {
       var summary = summarizeBackupData(byKey);
+      // Expõe o JSON completo já montado numa global — permite que uma
+      // automação (ex: tarefa programada usando o Browser autenticado)
+      // leia o backup direto, sem precisar simular o clique no botão de
+      // download (que depende de Blob + <a download>, inacessível de fora).
+      window.__meuHubBackupExport = buildBackupPayload(byKey, summary);
       loading.remove();
 
       var meta = document.createElement("div");
@@ -11772,6 +11784,325 @@
     }).catch(function () {
       loading.textContent = "Não foi possível carregar os dados agora. Tente novamente em instantes.";
     });
+  }
+
+  // ---------------- "Atalhos de Pastas" (página Pastas / entrada) ----------------
+  // pedido do Georges: grupos de atalho pra outras páginas do Meu Hub, recolhidos
+  // por padrão (clique expande), que ele mesmo cria/edita/exclui — nome do grupo,
+  // ícone, cor, e os links de dentro (cada link aponta pra uma página EXISTENTE,
+  // escolhida por nome+caminho num <select>, nunca digitando a key manualmente).
+  // Registro na KV via /folder-shortcuts (mesmo padrão de /priorities-views): GET
+  // devolve null quando nunca foi salvo -> cai no DEFAULT_FOLDER_SHORTCUTS do
+  // config.js (seed inicial: "Listas" -> Supermercado+Remédios, "Vitor" -> Provas).
+
+  // lista de páginas reais (type "page"), deduplicada por target, com o caminho
+  // completo (pathTitles) pra exibir "Nome — Caminho > Até > Aqui" — mesmo dado
+  // que já alimenta o Ctrl+K (flatIndex), reaproveitado pra Georges escolher o
+  // "target" de um link sem digitar a key manualmente.
+  function folderShortcutsPagePicker() {
+    var seen = {};
+    var out = [];
+    flatIndex.forEach(function (it) {
+      if (it.type !== "page" || !it.target || seen[it.target]) return;
+      seen[it.target] = true;
+      out.push({ target: it.target, label: it.label, path: it.pathTitles.join(" > ") });
+    });
+    out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+    return out;
+  }
+
+  function renderFolderShortcuts(container) {
+    var wrap = document.createElement("div");
+    wrap.className = "folder-shortcuts";
+    container.appendChild(wrap);
+
+    var data = null;     // null = ainda carregando
+    var editMode = false;
+    var editingIdx = null; // index do grupo em edição (-1 = novo), ou null
+    var expanded = {};   // { [groupId]: bool } — todo grupo nasce recolhido
+
+    function save(nextList) {
+      return authFetch(cfg.templateWorkerUrl + "/folder-shortcuts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shortcuts: nextList })
+      }).then(handle401Generic).then(function (r) { return r.json(); }).then(function (resp) {
+        data = (resp && Array.isArray(resp.shortcuts)) ? resp.shortcuts : nextList;
+        editingIdx = null;
+        render();
+      }).catch(function () {
+        var err = document.createElement("p");
+        err.className = "priorities-quickfilter-editor-error";
+        err.textContent = "Não foi possível salvar agora. Tente de novo em instantes.";
+        wrap.appendChild(err);
+      });
+    }
+
+    function buildGroupEditor(index) {
+      var isNew = index === -1;
+      var existing = isNew ? null : data[index];
+      var editor = document.createElement("div");
+      editor.className = "folder-shortcut-editor";
+
+      var nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "priorities-view-editor-label";
+      nameInput.placeholder = "Nome do grupo (ex: Listas)";
+      nameInput.value = existing ? existing.label : "";
+      editor.appendChild(nameInput);
+
+      var iconRow = document.createElement("div");
+      iconRow.className = "folder-shortcut-editor-row";
+      var iconLabel = document.createElement("label");
+      iconLabel.className = "priorities-view-editor-sublabel";
+      iconLabel.textContent = "Ícone (nome Tabler Icons, ex: list, school, star)";
+      iconRow.appendChild(iconLabel);
+      var iconInput = document.createElement("input");
+      iconInput.type = "text";
+      iconInput.className = "priorities-view-editor-label";
+      iconInput.placeholder = "folder";
+      iconInput.value = existing ? existing.icon : "folder";
+      iconRow.appendChild(iconInput);
+      editor.appendChild(iconRow);
+
+      var colorRow = document.createElement("div");
+      colorRow.className = "folder-shortcut-editor-row";
+      var colorLabel = document.createElement("label");
+      colorLabel.className = "priorities-view-editor-sublabel";
+      colorLabel.textContent = "Cor";
+      colorRow.appendChild(colorLabel);
+      var colorInput = document.createElement("input");
+      colorInput.type = "color";
+      colorInput.className = "folder-shortcut-color-input";
+      colorInput.value = existing ? existing.color : "#4a90d9";
+      colorRow.appendChild(colorInput);
+      editor.appendChild(colorRow);
+
+      var linksLabel = document.createElement("div");
+      linksLabel.className = "priorities-view-editor-sublabel";
+      linksLabel.textContent = "Links (páginas do Meu Hub)";
+      editor.appendChild(linksLabel);
+
+      var linksWrap = document.createElement("div");
+      linksWrap.className = "folder-shortcut-editor-links";
+      editor.appendChild(linksWrap);
+
+      var pages = folderShortcutsPagePicker();
+      var linkRows = [];
+
+      function addLinkRow(link) {
+        var row = document.createElement("div");
+        row.className = "folder-shortcut-link-row";
+        var select = document.createElement("select");
+        select.className = "folder-shortcut-link-select";
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Escolha uma página…";
+        select.appendChild(placeholder);
+        pages.forEach(function (p) {
+          var opt = document.createElement("option");
+          opt.value = p.target;
+          opt.textContent = p.label + " — " + p.path;
+          if (link && link.target === p.target) opt.selected = true;
+          select.appendChild(opt);
+        });
+        row.appendChild(select);
+        var removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "folder-shortcut-link-remove";
+        removeBtn.innerHTML = '<i class="ti ti-x"></i>';
+        removeBtn.addEventListener("click", function () {
+          linksWrap.removeChild(row);
+          linkRows = linkRows.filter(function (r) { return r.row !== row; });
+        });
+        row.appendChild(removeBtn);
+        linksWrap.appendChild(row);
+        linkRows.push({ row: row, select: select, id: link ? link.id : "" });
+      }
+
+      var existingLinks = existing ? (existing.links || []) : [];
+      existingLinks.forEach(function (l) { addLinkRow(l); });
+      if (!existingLinks.length) addLinkRow(null);
+
+      var addLinkBtn = document.createElement("button");
+      addLinkBtn.type = "button";
+      addLinkBtn.className = "priorities-clear-btn";
+      addLinkBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar link';
+      addLinkBtn.addEventListener("click", function () { addLinkRow(null); });
+      editor.appendChild(addLinkBtn);
+
+      var editorErr = document.createElement("p");
+      editorErr.className = "priorities-quickfilter-editor-error";
+      editorErr.style.display = "none";
+      editor.appendChild(editorErr);
+
+      var actions = document.createElement("div");
+      actions.className = "priorities-quickfilter-editor-actions";
+      var saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "notes-add-btn";
+      saveBtn.textContent = "Salvar";
+      saveBtn.addEventListener("click", function () {
+        var label = nameInput.value.trim();
+        if (!label) {
+          editorErr.textContent = "Escolha um nome pro grupo.";
+          editorErr.style.display = "block";
+          return;
+        }
+        var links = linkRows.map(function (r) {
+          var target = r.select.value;
+          if (!target) return null;
+          var opt = pages.filter(function (p) { return p.target === target; })[0];
+          return { id: r.id || "", label: opt ? opt.label : target, target: target };
+        }).filter(Boolean);
+        if (!links.length) {
+          editorErr.textContent = "Escolha ao menos 1 página pro grupo.";
+          editorErr.style.display = "block";
+          return;
+        }
+        var newGroup = {
+          id: existing ? existing.id : "",
+          label: label,
+          icon: iconInput.value.trim() || "folder",
+          color: colorInput.value || "#4a90d9",
+          links: links
+        };
+        var nextList = data.slice();
+        if (isNew) nextList.push(newGroup); else nextList[index] = newGroup;
+        save(nextList);
+      });
+      var cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "priorities-clear-btn";
+      cancelBtn.textContent = "Cancelar";
+      cancelBtn.addEventListener("click", function () { editingIdx = null; render(); });
+      actions.appendChild(saveBtn);
+      actions.appendChild(cancelBtn);
+      editor.appendChild(actions);
+
+      return editor;
+    }
+
+    function render() {
+      wrap.innerHTML = "";
+      if (!data) {
+        var loading = document.createElement("p");
+        loading.className = "priorities-quickfilters-loading";
+        loading.textContent = "Carregando atalhos…";
+        wrap.appendChild(loading);
+        return;
+      }
+
+      var header = document.createElement("div");
+      header.className = "folder-shortcuts-header";
+      var editToggle = document.createElement("button");
+      editToggle.type = "button";
+      editToggle.className = "priorities-quickfilters-edit-toggle" + (editMode ? " active" : "");
+      editToggle.innerHTML = editMode
+        ? '<i class="ti ti-check"></i> Concluir edição'
+        : '<i class="ti ti-pencil"></i> Editar atalhos';
+      editToggle.addEventListener("click", function () {
+        editMode = !editMode;
+        editingIdx = null;
+        render();
+      });
+      header.appendChild(editToggle);
+      wrap.appendChild(header);
+
+      var cardsWrap = document.createElement("div");
+      cardsWrap.className = "folder-shortcuts-groups";
+      data.forEach(function (group, idx) {
+        var card = document.createElement("div");
+        card.className = "folder-shortcut-group";
+        card.style.setProperty("--fs-color", group.color || "#4a90d9");
+
+        var head = document.createElement("button");
+        head.type = "button";
+        head.className = "folder-shortcut-group-head";
+        var headIcon = document.createElement("span");
+        headIcon.className = "folder-shortcut-group-icon";
+        var ic = document.createElement("i");
+        ic.className = "ti ti-" + (group.icon || "folder");
+        headIcon.appendChild(ic);
+        head.appendChild(headIcon);
+        var headLabel = document.createElement("span");
+        headLabel.className = "folder-shortcut-group-label";
+        headLabel.textContent = group.label;
+        head.appendChild(headLabel);
+        var chevron = document.createElement("i");
+        chevron.className = "ti ti-chevron-right folder-shortcut-group-chevron" + (expanded[group.id] ? " open" : "");
+        head.appendChild(chevron);
+        if (editMode) {
+          var editIcon = document.createElement("i");
+          editIcon.className = "ti ti-pencil folder-shortcut-group-editbtn";
+          editIcon.title = "Editar grupo";
+          editIcon.addEventListener("click", function (e) {
+            e.stopPropagation();
+            editingIdx = idx;
+            render();
+          });
+          head.appendChild(editIcon);
+          var removeX = document.createElement("i");
+          removeX.className = "ti ti-x folder-shortcut-group-remove";
+          removeX.title = "Excluir grupo";
+          removeX.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var nextList = data.filter(function (_, i2) { return i2 !== idx; });
+            save(nextList);
+          });
+          head.appendChild(removeX);
+        }
+        var linksBody = document.createElement("div");
+        linksBody.className = "folder-shortcut-group-links" + (expanded[group.id] ? " open" : "");
+        head.addEventListener("click", function () {
+          expanded[group.id] = !expanded[group.id];
+          chevron.classList.toggle("open", !!expanded[group.id]);
+          linksBody.classList.toggle("open", !!expanded[group.id]);
+        });
+        card.appendChild(head);
+
+        (group.links || []).forEach(function (link) {
+          var a = document.createElement("a");
+          a.className = "folder-shortcut-link";
+          a.href = "#" + link.target;
+          a.textContent = link.label;
+          a.addEventListener("click", function (e) {
+            if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            navigate(link.target);
+          });
+          linksBody.appendChild(a);
+        });
+        card.appendChild(linksBody);
+
+        if (editMode && editingIdx === idx) card.appendChild(buildGroupEditor(idx));
+        cardsWrap.appendChild(card);
+      });
+      wrap.appendChild(cardsWrap);
+
+      if (editMode) {
+        var addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "priorities-view-btn priorities-view-btn-add";
+        addBtn.innerHTML = '<i class="ti ti-plus"></i> Novo grupo';
+        addBtn.addEventListener("click", function () { editingIdx = -1; render(); });
+        wrap.appendChild(addBtn);
+        if (editingIdx === -1) wrap.appendChild(buildGroupEditor(-1));
+      }
+    }
+
+    render();
+    authFetch(cfg.templateWorkerUrl + "/folder-shortcuts")
+      .then(handle401Generic)
+      .then(function (r) { return r.json(); })
+      .then(function (resp) {
+        data = (resp && Array.isArray(resp.shortcuts)) ? resp.shortcuts : (cfg.DEFAULT_FOLDER_SHORTCUTS || []);
+        render();
+      })
+      .catch(function () {
+        data = cfg.DEFAULT_FOLDER_SHORTCUTS || [];
+        render();
+      });
   }
 
   function renderContent(pageId) {
@@ -11882,6 +12213,14 @@
         qbWrap.appendChild(card);
       });
       container.appendChild(qbWrap);
+      renderedSomething = true;
+    }
+
+    // "Atalhos de Pastas" (pedido do Georges — rodada Atalhos de Pastas): logo
+    // abaixo da grade de quickButtons, grupos dinâmicos vindos de
+    // /folder-shortcuts (ver renderFolderShortcuts acima), self-serve.
+    if (page.folderShortcuts) {
+      renderFolderShortcuts(container);
       renderedSomething = true;
     }
 

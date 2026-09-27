@@ -1429,7 +1429,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-24 00:42",
+  appVersion: "2026-09-27 18:30",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1478,8 +1478,14 @@ const APP_CONFIG = {
   // ordem pedida pelo Georges (rodada rail colapsado/Recentes página):
   // Painel do Dia, Favoritas, Anotações Rápidas, Lista de Prioridades,
   // Financeiro — antes era Painel do Dia/Prioridades/Anotações/Favoritas/
-  // Financeiro.
+  // Financeiro. "Pastas" (pedido do Georges — rodada Atalhos de Pastas)
+  // entrou DEPOIS, na frente de tudo: aponta pra "entrada" (a página
+  // "Pastas" de sempre, com os quickButtons + os Atalhos de Pastas
+  // dinâmicos — ver DEFAULT_FOLDER_SHORTCUTS/page.entrada.folderShortcuts
+  // abaixo), cor neutra (cinza) de propósito pra não repetir as 5 cores já
+  // usadas pelos outros atalhos fixos.
   sidebarPinned: [
+    { label: "Pastas", target: "entrada", icon: "folder", color: "#495057" },
     { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
     { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
     { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
@@ -1529,6 +1535,41 @@ const APP_CONFIG = {
     { label: "📅 3 - Verificar prazo", color: "#4a90d9" }
   ],
 
+  // "Atalhos de Pastas" (pedido do Georges — na página Pastas, grupos de
+  // atalho recolhidos por padrão que expandem ao clicar pra mostrar links
+  // de acesso rápido a outras páginas do app; ele mesmo cria/edita/exclui
+  // esses grupos pelo editor em runPage, ver renderFolderShortcuts no
+  // app.js). Isto é só o SEED inicial (mesma ideia de DEFAULT_QUICKFILTERS/
+  // DEFAULT_PRIORITY_VIEWS) — usado só enquanto o Georges nunca salvou nada
+  // ainda em /folder-shortcuts (KV); a partir da primeira edição pelo
+  // painel, o que está salvo na KV manda, este array vira só o "estado
+  // inicial de fábrica". Formato idêntico ao que o Worker devolve/aceita:
+  // [{ id, label, icon (nome puro do Tabler Icons), color, links: [{ id,
+  // label, target (key de cfg.pages) }] }]. "id" fixo aqui (não gerado)
+  // só pra manter estável entre reloads antes da 1ª edição; depois que
+  // salvar pelo editor, os ids viram os que o Worker gerar/preservar.
+  DEFAULT_FOLDER_SHORTCUTS: [
+    {
+      id: "listas",
+      label: "Listas",
+      icon: "list",
+      color: "#0f9b8e",
+      links: [
+        { id: "listas-supermercado", label: "Supermercado", target: "supermercado" },
+        { id: "listas-remedios", label: "Remédios", target: "remedios" }
+      ]
+    },
+    {
+      id: "vitor",
+      label: "Vitor",
+      icon: "school",
+      color: "#8a63d2",
+      links: [
+        { id: "vitor-provas", label: "Provas", target: "provas_vitor" }
+      ]
+    }
+  ],
+
   pages: {
     // era "Entrada", depois "Início" — os 5 links de acesso rápido
     // (Painel do Dia, Lista de Prioridades, Anotações Rápidas, Favoritas,
@@ -1560,6 +1601,13 @@ const APP_CONFIG = {
     // dos panos.
     entrada: {
       title: "Pastas",
+      // "Atalhos de Pastas" (pedido do Georges — rodada Atalhos de
+      // Pastas): renderContent (app.js) desenha, ABAIXO da grade de
+      // quickButtons, os grupos dinâmicos vindos de /folder-shortcuts (ou
+      // DEFAULT_FOLDER_SHORTCUTS enquanto nada foi salvo ainda) — cada
+      // grupo nasce recolhido, expande ao clicar, com um editor pra
+      // Georges criar/editar/excluir grupos e links direto pelo app.
+      folderShortcuts: true,
       // grade de cards grandes (mesmos 5 links/ícones/cores de
       // sidebarPinned, ver comentário grande acima) — é o que o Georges
       // vê ao abrir o app agora (homePage: "entrada").

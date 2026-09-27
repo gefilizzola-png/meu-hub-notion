@@ -5293,3 +5293,153 @@ html, body {
   .backup-stats-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
   .backup-download-btn { align-self: stretch; justify-content: center; }
 }
+
+/* ---------- "Atalhos de Pastas" (página Pastas / entrada, pedido do
+   Georges) — grupos de atalho recolhidos por padrão, abaixo da grade de
+   .quick-button-card. Cor de destaque por grupo via --fs-color (mesmo
+   truque de --qb-color em .quick-button-card / --pin-color em
+   .sidebar-pinned-icon). Editor reaproveita as classes já existentes de
+   Visualizações (.priorities-view-editor-label/-sublabel,
+   .priorities-quickfilter-editor-error/-actions,
+   .priorities-quickfilters-edit-toggle, .priorities-clear-btn,
+   .notes-add-btn, .priorities-view-btn-add) — só o que é exclusivo daqui
+   (grupo/links) ganha classe nova. */
+.folder-shortcuts { margin-top: 4px; }
+.folder-shortcuts-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.folder-shortcuts-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.folder-shortcut-group {
+  border-radius: 12px;
+  border: 0.5px solid #ececea;
+  background: #fff;
+  overflow: hidden;
+}
+.folder-shortcut-group-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.folder-shortcut-group-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--fs-color, #4a90d9);
+  color: #fff;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.folder-shortcut-group-label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c2c28;
+}
+.folder-shortcut-group-chevron {
+  color: #928f86;
+  font-size: 14px;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.folder-shortcut-group-chevron.open { transform: rotate(90deg); }
+.folder-shortcut-group-editbtn,
+.folder-shortcut-group-remove {
+  color: #928f86;
+  font-size: 14px;
+  padding: 4px;
+  flex-shrink: 0;
+}
+.folder-shortcut-group-editbtn:hover { color: #4a90d9; }
+.folder-shortcut-group-remove:hover { color: #d9534f; }
+.folder-shortcut-group-links {
+  display: none;
+  flex-direction: column;
+  padding: 0 14px 12px 54px;
+  gap: 2px;
+}
+.folder-shortcut-group-links.open { display: flex; }
+.folder-shortcut-link {
+  font-size: 13px;
+  color: #4a4a45;
+  text-decoration: none;
+  padding: 6px 0;
+  border-bottom: 0.5px solid #f1f1ee;
+}
+.folder-shortcut-link:last-child { border-bottom: none; }
+.folder-shortcut-link:hover { color: #4a90d9; }
+
+/* editor — mesmo "cartão" visual de .priorities-view-editor */
+.folder-shortcut-editor {
+  margin: 0 14px 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 0.5px solid #dcdcd8;
+  background: #fbfbfa;
+}
+.folder-shortcut-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.folder-shortcut-editor-row .priorities-view-editor-label { flex: 1; }
+.folder-shortcut-color-input {
+  width: 40px;
+  height: 30px;
+  padding: 2px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  cursor: pointer;
+}
+.folder-shortcut-editor-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.folder-shortcut-link-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.folder-shortcut-link-select {
+  flex: 1;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 0.5px solid #dcdcd8;
+  font-size: 12.5px;
+  background: #fff;
+}
+.folder-shortcut-link-remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: #928f86;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.folder-shortcut-link-remove:hover { color: #d9534f; background: #f7f7f5; }
+@media (max-width: 640px) {
+  .folder-shortcut-group-links { padding-left: 14px; }
+}
