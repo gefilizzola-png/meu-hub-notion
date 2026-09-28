@@ -13558,7 +13558,13 @@
   // completo). SÓ LEITURA no Notion (mesmo /query de sempre); "lida/não
   // lida" é 100% KV (/notifications-read no worker.js), igual "Fixar" de
   // Legislações — nunca escreve em nada do Notion.
-  var notifState = { items: [], readIds: [], settings: null, sources: [], hiddenSourceIds: [], soloSourceId: null, mode: "unread", view: "list", loaded: false, loading: false };
+  // "everReadIds" (pedido do Georges — "repetir enquanto pendente" não
+  // deve mais forçar a bolinha vermelha depois da 1ª leitura): registro
+  // PERSISTENTE (KV, junto de readIds) de todo notifId que já foi marcado
+  // como lido AO MENOS UMA VEZ, mesmo que "repeatWhilePending" já tenha
+  // tirado ele de readIds de novo depois. Ver updateNotifBellBadge/
+  // toggleNotifRead mais abaixo.
+  var notifState = { items: [], readIds: [], everReadIds: [], settings: null, sources: [], hiddenSourceIds: [], soloSourceId: null, mode: "unread", view: "list", loaded: false, loading: false };
 
   function leadTimeMs(lt) {
     return lt.amount * (lt.unit === "hours" ? 3600000 : 86400000);
@@ -13826,6 +13832,47 @@
     }).catch(function () { return []; });
   }
 
+  // Backup semanal (kind "backup" — pedido do Georges: "criar tarefa pra
+  // fazer backup dos dados do app, todo domingo às 20h"). Sem Notion nem
+  // KV — item SINTÉTICO só, recalculado a cada refresh (mesmo espírito de
+  // fetchSupermercadoNotificationItems/fetchRemediosNotificationItems
+  // acima, mas com o "gatilho" sendo uma data FUTURA em vez de "agora").
+  // Brasil sem horário de verão desde 2019 -> fuso fixo UTC-3 (mesmo truque
+  // já usado em buildNotificationsFromSource pra "hora do evento" quando o
+  // item só tem data, ver comentário grande lá).
+  function nextBackupSemanalEventTime() {
+    var spNow = new Date(Date.now() - 3 * 3600000); // "agora" como se já fosse hora de SP, em campos UTC
+    var dow = spNow.getUTCDay(); // 0 = domingo
+    var daysToAdd = (7 - dow) % 7; // domingo desta semana (0) ou o próximo
+    var y = spNow.getUTCFullYear(), m = spNow.getUTCMonth(), d = spNow.getUTCDate() + daysToAdd;
+    // 20h em SP = 23h UTC.
+    var eventTime = Date.UTC(y, m, d, 23, 0, 0);
+    // domingo 20h já passou há mais que a folga de leitura (NOTIF_GRACE_MS)
+    // -> pula pro domingo seguinte, senão o lembrete ficaria preso numa
+    // semana que já foi embora.
+    if (eventTime < Date.now() - NOTIF_GRACE_MS) {
+      d += 7;
+      eventTime = Date.UTC(y, m, d, 23, 0, 0);
+    }
+    return { eventTime: eventTime, y: y, m: m, d: d };
+  }
+  function fetchBackupNotificationItems(source) {
+    var next = nextBackupSemanalEventTime();
+    // "id" embute a data-alvo (AAAA-MM-DD) — cada domingo novo vira um item
+    // NOVO, então volta a notificar do zero mesmo já tendo marcado o
+    // lembrete da semana passada como lida (mesmo raciocínio do "id inclui
+    // quantidade" em Remédios, ver comentário grande lá).
+    var dateKey = next.y + "-" + String(next.m + 1).padStart(2, "0") + "-" + String(next.d).padStart(2, "0");
+    var extraObj = {};
+    extraObj[source.dateProperty] = { start: new Date(next.eventTime).toISOString() };
+    return Promise.resolve([{
+      id: "backup-" + dateKey,
+      title: "Fazer o backup semanal dos dados do Meu Hub",
+      url: location.origin + location.pathname + "#backup",
+      extra: extraObj
+    }]);
+  }
+
   // Provas do Vitor (kind "provas" — pedido do Georges: "Vitor tem prova
   // de Matemática amanhã, dia 24/09/2026, com um ícone condizente com o
   // tema"). MESMA janela de busca (past_2_days .. next_maxDays_days) da
@@ -13884,6 +13931,7 @@
     if (source.kind === "supermercado") return fetchSupermercadoNotificationItems(source);
     if (source.kind === "remedios") return fetchRemediosNotificationItems(source);
     if (source.kind === "provas") return fetchProvasNotificationItems(source);
+    if (source.kind === "backup") return fetchBackupNotificationItems(source);
     return fetchNotionNotificationSourceItems(source);
   }
 
@@ -13930,6 +13978,12 @@
         list.push({
           id: source.id + "::" + lt.id + "::" + p.id,
           sourceId: source.id,
+          // "itemId" (pedido do Georges — não duplicar notificação do MESMO
+          // item quando 2+ antecedências da mesma fonte batem juntas) +
+          // "leadMs" (quão perto do evento essa antecedência dispara) —
+          // usados só por mergeNotifItems, ver comentário grande lá.
+          itemId: p.id,
+          leadMs: leadTimeMs(lt),
           // pedido do Georges (Aniversários): canais/repetir agora são POR
           // antecedência, não por fonte — processNotifTriggers/
           // applyRepeatWhilePending usam isso pra achar a leadTime certa
@@ -13953,6 +14007,46 @@
       });
     });
     return list;
+  }
+
+  // pedido do Georges: o MESMO item disparando em 2+ antecedências ao
+  // mesmo tempo (ex: Provas do Vitor com "1 dia antes" ainda não lida e "1
+  // hora antes" acabando de bater) não deve virar 2 cartões na lista — se
+  // mescla num só, mostrando a antecedência mais PRÓXIMA do evento (mais
+  // urgente = "leadMs" menor). Agrupa por sourceId+itemId (não por notifId
+  // inteiro, que já é único por antecedência de propósito — ver comentário
+  // grande em buildNotificationsFromSource sobre "cada antecedência é um
+  // aviso à parte"). Devolve 1 entrada por GRUPO: "item" pra desenhar o
+  // cartão, "ids" (todos os notifId do grupo — usado por toggleNotifRead
+  // pra marcar/desmarcar todos de uma vez) e "anyUnread" (pelo menos 1 dos
+  // ids ainda não está em readSet — decide se aparece na aba "Não lidas").
+  function mergeNotifItems(items, readSet) {
+    var groups = {};
+    var order = [];
+    items.forEach(function (n) {
+      var key = n.sourceId + "::" + n.itemId;
+      if (!groups[key]) { groups[key] = []; order.push(key); }
+      groups[key].push(n);
+    });
+    return order.map(function (key) {
+      var group = groups[key];
+      var sorted = group.length > 1
+        ? group.slice().sort(function (a, b) { return a.leadMs - b.leadMs; })
+        : group;
+      var primary = sorted[0];
+      var ids = sorted.map(function (n) { return n.id; });
+      var anyUnread = ids.some(function (id) { return !readSet[id]; });
+      var item = primary;
+      if (sorted.length > 1) {
+        item = {};
+        for (var k in primary) item[k] = primary[k];
+        // "leadLabel" mesclado (ex: "1 hora antes + 1 dia antes") — só
+        // texto, não muda em nada o cálculo/gatilho de cada antecedência.
+        var otherLabels = sorted.slice(1).map(function (n) { return n.leadLabel; });
+        item.leadLabel = primary.leadLabel + " + " + otherLabels.join(" + ");
+      }
+      return { item: item, ids: ids, group: sorted, anyUnread: anyUnread };
+    });
   }
 
   // monta a lista de fontes "resolvida": enabled/leadTimes vêm do que foi
@@ -13985,6 +14079,14 @@
   // KV, reseta ao recarregar a página) — é só um estado de "tô olhando isso
   // agora", igual outros colapsos do app (ex: divisórias de Prioridades).
   var notifLeadTimeExpandedKeys = {};
+
+  // mesmo espírito do map acima, só que pra "Fixar ao final" (pedido do
+  // Georges: "ache uma forma de recolher, em cada pílula das
+  // configurações... essa opção de marcar Fixas ao final... e sua
+  // respectiva explicação... não quero excluir essa funcionalidade, quero
+  // apenas recolhê-la"). Chave = sourceId (é 1 opção por FONTE inteira, não
+  // por antecedência — não precisa do prefixo composto do map acima).
+  var notifPinExpandedKeys = {};
 
   // ordem alfabética (pedido do Georges: "coloque estes itens... em ordem
   // alfabética") — por LABEL, não pela ordem de cadastro em
@@ -14067,27 +14169,47 @@
     });
   }
 
-  function fetchNotifReadIds() {
+  function fetchNotifReadState() {
     return authFetch(cfg.templateWorkerUrl + "/notifications-read")
-      .then(function (res) { return res.ok ? res.json() : { read: [] }; })
-      .then(function (data) { return (data && data.read) || []; })
-      .catch(function () { return []; });
+      .then(function (res) { return res.ok ? res.json() : { read: [], everRead: [] }; })
+      .then(function (data) {
+        return {
+          read: (data && Array.isArray(data.read)) ? data.read : [],
+          everRead: (data && Array.isArray(data.everRead)) ? data.everRead : []
+        };
+      })
+      .catch(function () { return { read: [], everRead: [] }; });
   }
 
-  function saveNotifReadIds(ids) {
+  function saveNotifReadState(readIds, everReadIds) {
     return authFetch(cfg.templateWorkerUrl + "/notifications-read", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ read: ids })
+      body: JSON.stringify({ read: readIds, everRead: everReadIds })
     }).catch(function () {});
   }
 
+  // pedido do Georges: "repetir enquanto pendente" continua fazendo a
+  // notificação REAPARECER como não lida na lista (isso não muda), mas
+  // depois da 1ª leitura ela não deve mais forçar a bolinha vermelha do
+  // sino nas reaparições seguintes. "everReadIds" (persistente) é quem
+  // decide isso: uma notificação só conta pro badge se estiver não-lida E
+  // (não for repeatWhilePending OU nunca tiver sido lida antes).
   function updateNotifBellBadge() {
     var badge = document.getElementById("notifBellBadge");
     if (!badge) return;
     var readSet = {};
     notifState.readIds.forEach(function (id) { readSet[id] = true; });
-    var unread = notifState.items.filter(function (n) { return !readSet[n.id]; }).length;
+    var everReadSet = {};
+    notifState.everReadIds.forEach(function (id) { everReadSet[id] = true; });
+    var sourceById = {};
+    notifState.sources.forEach(function (s) { sourceById[s.id] = s; });
+    var unread = notifState.items.filter(function (n) {
+      if (readSet[n.id]) return false;
+      var lt = findNotifLeadTime(sourceById[n.sourceId], n.leadTimeId);
+      if (lt && lt.repeatWhilePending && everReadSet[n.id]) return false;
+      return true;
+    }).length;
     badge.style.display = unread ? "" : "none";
   }
 
@@ -14114,12 +14236,33 @@
   // otimista (igual togglePin de Legislações): já atualiza badge/lista na
   // hora, manda o array inteiro pro Worker depois — se a chamada falhar, o
   // estado local só volta a sincronizar no próximo refreshNotifications().
-  function toggleNotifRead(notifId) {
-    var idx = notifState.readIds.indexOf(notifId);
-    if (idx === -1) notifState.readIds.push(notifId); else notifState.readIds.splice(idx, 1);
+  // Aceita 1 id OU um array de ids (pedido do Georges — mesclar 2
+  // antecedências do mesmo item em 1 card só: marcar/desmarcar como lida
+  // esse card precisa afetar TODAS as ids do grupo mesclado de uma vez, não
+  // só a mais urgente). Se QUALQUER id do grupo ainda está não lida, a ação
+  // é "marcar todas como lidas"; se já estão todas lidas, é "marcar todas
+  // como não lidas" — o grupo age como uma notificação só.
+  function toggleNotifRead(notifIdOrIds) {
+    var ids = Array.isArray(notifIdOrIds) ? notifIdOrIds : [notifIdOrIds];
+    var readSet = {};
+    notifState.readIds.forEach(function (id) { readSet[id] = true; });
+    var anyUnread = ids.some(function (id) { return !readSet[id]; });
+    if (anyUnread) {
+      ids.forEach(function (id) {
+        if (notifState.readIds.indexOf(id) === -1) notifState.readIds.push(id);
+        // registro permanente de "já foi lida ao menos 1 vez" — ver
+        // updateNotifBellBadge/applyRepeatWhilePending.
+        if (notifState.everReadIds.indexOf(id) === -1) notifState.everReadIds.push(id);
+      });
+    } else {
+      ids.forEach(function (id) {
+        var idx = notifState.readIds.indexOf(id);
+        if (idx !== -1) notifState.readIds.splice(idx, 1);
+      });
+    }
     updateNotifBellBadge();
     renderNotifList();
-    saveNotifReadIds(notifState.readIds.slice());
+    saveNotifReadState(notifState.readIds.slice(), notifState.everReadIds.slice());
   }
 
   // ---------------- canais extras: rastreamento de disparo único
@@ -14202,8 +14345,13 @@
     return null;
   }
 
-  function applyRepeatWhilePending(items, readIds) {
-    if (notifRepeatPendingAppliedOnce) return readIds;
+  // devolve {readIds, everReadIds} — além de tirar do readIds qualquer
+  // notificação repeatWhilePending ainda pendente, também GARANTE (self-
+  // heal) que essas ids constem em everReadIds: se estavam em readIds é
+  // porque já foram lidas alguma vez, mesmo que isso tenha acontecido antes
+  // de existir o campo everReadIds (contas/ids antigas).
+  function applyRepeatWhilePending(items, readIds, everReadIds) {
+    if (notifRepeatPendingAppliedOnce) return { readIds: readIds, everReadIds: everReadIds };
     notifRepeatPendingAppliedOnce = true;
     var sourceById = {};
     notifState.sources.forEach(function (s) { sourceById[s.id] = s; });
@@ -14212,10 +14360,18 @@
       var lt = findNotifLeadTime(sourceById[n.sourceId], n.leadTimeId);
       if (lt && lt.repeatWhilePending) repeatIds[n.id] = true;
     });
-    if (!Object.keys(repeatIds).length) return readIds;
-    var filtered = readIds.filter(function (id) { return !repeatIds[id]; });
-    if (filtered.length !== readIds.length) saveNotifReadIds(filtered.slice());
-    return filtered;
+    if (!Object.keys(repeatIds).length) return { readIds: readIds, everReadIds: everReadIds };
+    var everReadSet = {};
+    everReadIds.forEach(function (id) { everReadSet[id] = true; });
+    var newEverRead = everReadIds.slice();
+    var filtered = readIds.filter(function (id) {
+      if (!repeatIds[id]) return true;
+      if (!everReadSet[id]) { everReadSet[id] = true; newEverRead.push(id); }
+      return false;
+    });
+    var changed = filtered.length !== readIds.length || newEverRead.length !== everReadIds.length;
+    if (changed) saveNotifReadState(filtered.slice(), newEverRead.slice());
+    return { readIds: filtered, everReadIds: newEverRead };
   }
 
   function refreshNotifications() {
@@ -14224,10 +14380,12 @@
     return fetchNotifSettings().then(function (savedSettings) {
       notifState.settings = savedSettings;
       notifState.sources = resolvedNotifSources(savedSettings);
-      return Promise.all([computeNotifications(notifState.sources), fetchNotifReadIds()]);
+      return Promise.all([computeNotifications(notifState.sources), fetchNotifReadState()]);
     }).then(function (results) {
       notifState.items = results[0];
-      notifState.readIds = applyRepeatWhilePending(results[0], results[1]);
+      var applied = applyRepeatWhilePending(results[0], results[1].read, results[1].everRead);
+      notifState.readIds = applied.readIds;
+      notifState.everReadIds = applied.everReadIds;
       notifState.loaded = true;
       notifState.loading = false;
       updateNotifBellBadge();
@@ -14870,35 +15028,58 @@
       addRow.appendChild(addBtn);
       block.appendChild(addRow);
 
-      // "Fixar ao final das notificações" (pedido do Georges: "nao
-      // precisaria ser para cada pílula individual" — uma última opção POR
-      // CARD, sempre visível, fora do colapsável de cada antecedência).
-      // Reaproveita o mesmo visual de ".notif-settings-channels" (borda
-      // superior + padding) já usado nos painéis por pílula, só que aqui
-      // fica sempre aberto — é uma opção só, não precisa esconder atrás de
-      // clique nenhum.
-      var pinWrap = document.createElement("div");
-      pinWrap.className = "notif-settings-channels";
-      var pinRow = document.createElement("label");
-      pinRow.className = "notif-settings-channel-row";
-      var pinCb = document.createElement("input");
-      pinCb.type = "checkbox";
-      pinCb.checked = !!s.pinToEnd;
-      pinCb.addEventListener("change", function () { setNotifSourcePinToEnd(s.id, pinCb.checked); });
-      pinRow.appendChild(pinCb);
-      var pinText = document.createElement("span");
-      pinText.className = "notif-settings-channel-text";
-      var pinLabel = document.createElement("span");
-      pinLabel.className = "notif-settings-channel-label";
-      pinLabel.textContent = "Fixar ao final das notificações";
-      pinText.appendChild(pinLabel);
-      var pinHint = document.createElement("span");
-      pinHint.className = "notif-settings-channel-hint";
-      pinHint.textContent = "menos importante — sempre aparece no fim da lista (Não lidas/Todas), mesmo com prazo mais próximo que as demais";
-      pinText.appendChild(pinHint);
-      pinRow.appendChild(pinText);
-      pinWrap.appendChild(pinRow);
-      block.appendChild(pinWrap);
+      // "Fixar ao final das notificações" (pedido do Georges: 1 opção POR
+      // CARD, fora do colapsável de cada antecedência) — mesmo padrão de
+      // "clicar na pílula pra expandir" já usado nas antecedências acima
+      // (pedido explícito: "ache uma forma de recolher... não quero
+      // excluir essa funcionalidade, quero apenas recolhê-la"). Pílula com
+      // "has-config" quando pinToEnd já está ligado, pra dar pra ver o
+      // estado sem precisar abrir.
+      var pinExpanded = !!notifPinExpandedKeys[s.id];
+      var pinChipRow = document.createElement("div");
+      pinChipRow.className = "notif-settings-leadtime-chip-row";
+      var pinChip = document.createElement("span");
+      pinChip.className = "notif-settings-leadtime-chip" +
+        (s.pinToEnd ? " has-config" : "") +
+        (pinExpanded ? " active" : "");
+      var pinChipLabel = document.createElement("span");
+      pinChipLabel.className = "notif-settings-leadtime-chip-label";
+      pinChipLabel.textContent = "📌 Fixar ao final" + (s.pinToEnd ? " (ligado)" : "");
+      pinChipLabel.title = s.pinToEnd
+        ? "Fixar ao final está ligado — clique pra ver/editar"
+        : "Clique pra configurar";
+      pinChipLabel.addEventListener("click", function () {
+        notifPinExpandedKeys[s.id] = !notifPinExpandedKeys[s.id];
+        renderNotifSettings();
+      });
+      pinChip.appendChild(pinChipLabel);
+      pinChipRow.appendChild(pinChip);
+      block.appendChild(pinChipRow);
+
+      if (pinExpanded) {
+        var pinWrap = document.createElement("div");
+        pinWrap.className = "notif-settings-channels";
+        var pinRow = document.createElement("label");
+        pinRow.className = "notif-settings-channel-row";
+        var pinCb = document.createElement("input");
+        pinCb.type = "checkbox";
+        pinCb.checked = !!s.pinToEnd;
+        pinCb.addEventListener("change", function () { setNotifSourcePinToEnd(s.id, pinCb.checked); });
+        pinRow.appendChild(pinCb);
+        var pinText = document.createElement("span");
+        pinText.className = "notif-settings-channel-text";
+        var pinLabel = document.createElement("span");
+        pinLabel.className = "notif-settings-channel-label";
+        pinLabel.textContent = "Fixar ao final das notificações";
+        pinText.appendChild(pinLabel);
+        var pinHint = document.createElement("span");
+        pinHint.className = "notif-settings-channel-hint";
+        pinHint.textContent = "menos importante — sempre aparece no fim da lista (Não lidas/Todas), mesmo com prazo mais próximo que as demais";
+        pinText.appendChild(pinHint);
+        pinRow.appendChild(pinText);
+        pinWrap.appendChild(pinRow);
+        block.appendChild(pinWrap);
+      }
 
       listEl.appendChild(block);
     });
@@ -14950,8 +15131,15 @@
     }
     var readSet = {};
     notifState.readIds.forEach(function (id) { readSet[id] = true; });
-    var modeItems = notifState.items.filter(function (n) {
-      return notifState.mode === "all" ? true : !readSet[n.id];
+    // mescla ANTES de filtrar por modo/categoria (pedido do Georges: 2
+    // antecedências do mesmo item, ex "1 dia antes" + "1 hora antes",
+    // aparecem como 1 card só enquanto a mais urgente ainda não foi lida —
+    // ver mergeNotifItems acima). Cada grupo tem sourceId único (mesma
+    // fonte), então filtrar categoria depois do merge dá o mesmo resultado
+    // que filtrar antes.
+    var allGroups = mergeNotifItems(notifState.items, readSet);
+    var modeGroupsIgnoringCategory = allGroups.filter(function (g) {
+      return notifState.mode === "all" ? true : g.anyUnread;
     });
 
     // filtro rápido por categoria (pedido do Georges: "escolher as
@@ -14992,9 +15180,9 @@
       listEl.appendChild(chipsRow);
     }
 
-    var items = modeItems.filter(function (n) {
-      if (notifState.soloSourceId) return n.sourceId === notifState.soloSourceId;
-      return notifState.hiddenSourceIds.indexOf(n.sourceId) === -1;
+    var groups = modeGroupsIgnoringCategory.filter(function (g) {
+      if (notifState.soloSourceId) return g.item.sourceId === notifState.soloSourceId;
+      return notifState.hiddenSourceIds.indexOf(g.item.sourceId) === -1;
     });
     // "Fixar ao final das notificações" (pedido do Georges: fontes menos
     // importantes, ex Remédios, sempre no FIM da lista, mesmo com prazo
@@ -15007,18 +15195,18 @@
     var pinSourceIds = {};
     notifState.sources.forEach(function (s) { if (s.pinToEnd) pinSourceIds[s.id] = true; });
     if (Object.keys(pinSourceIds).length) {
-      items = items.slice().sort(function (a, b) {
-        return (pinSourceIds[a.sourceId] ? 1 : 0) - (pinSourceIds[b.sourceId] ? 1 : 0);
+      groups = groups.slice().sort(function (a, b) {
+        return (pinSourceIds[a.item.sourceId] ? 1 : 0) - (pinSourceIds[b.item.sourceId] ? 1 : 0);
       });
     }
-    if (!items.length) {
+    if (!groups.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
       // distingue "não tem nada mesmo" de "tem, mas o filtro de categoria
       // acima tá escondendo tudo" (senão os chips ficam sem sentido —
       // pareceria que sumiu tudo de vez, sem dar pra saber que é só clicar
       // de novo).
-      if (modeItems.length && !items.length) {
+      if (modeGroupsIgnoringCategory.length && !groups.length) {
         empty.textContent = "Nada bate com o filtro de categoria acima — clique num chip pra mudar.";
       } else {
         empty.textContent = notifState.mode === "all" ? "Nenhuma notificação." : "Nenhuma notificação não lida.";
@@ -15026,8 +15214,9 @@
       listEl.appendChild(empty);
       return;
     }
-    items.forEach(function (n) {
-      var isRead = !!readSet[n.id];
+    groups.forEach(function (g) {
+      var n = g.item;
+      var isRead = !g.anyUnread;
       var card = document.createElement("div");
       card.className = "notif-card" + (isRead ? " notif-card-read" : "") + (n.overdue ? " notif-card-overdue" : "");
 
@@ -15083,7 +15272,9 @@
       var ric = document.createElement("i");
       ric.className = isRead ? "ti ti-mail-opened" : "ti ti-mail";
       readBtn.appendChild(ric);
-      readBtn.addEventListener("click", function () { toggleNotifRead(n.id); });
+      // grupo mesclado (2+ antecedências do mesmo item): marca/desmarca
+      // TODAS as ids do grupo de uma vez — ver toggleNotifRead acima.
+      readBtn.addEventListener("click", function () { toggleNotifRead(g.ids); });
       actions.appendChild(readBtn);
 
       card.appendChild(actions);
@@ -15135,6 +15326,23 @@
   if (notifPanelCloseBtnEl) notifPanelCloseBtnEl.addEventListener("click", closeNotifPanel);
   var notifPanelSettingsBtnEl = document.getElementById("notifPanelSettingsBtn");
   if (notifPanelSettingsBtnEl) notifPanelSettingsBtnEl.addEventListener("click", toggleNotifSettingsView);
+  // botão "atualizar só a Central" (pedido do Georges: hoje precisa dar F5
+  // em tudo pra atualizar as notificações) — chama refreshNotifications()
+  // direto (mesma função do boot/timer de 5min), sem tocar em mais nada da
+  // página. Ícone gira enquanto a promise não resolve; desabilitado nesse
+  // meio-tempo pra não empilhar cliques.
+  var notifPanelRefreshBtnEl = document.getElementById("notifPanelRefreshBtn");
+  if (notifPanelRefreshBtnEl) {
+    notifPanelRefreshBtnEl.addEventListener("click", function () {
+      if (notifPanelRefreshBtnEl.disabled) return;
+      notifPanelRefreshBtnEl.disabled = true;
+      notifPanelRefreshBtnEl.classList.add("spinning");
+      refreshNotifications().then(function () {
+        notifPanelRefreshBtnEl.disabled = false;
+        notifPanelRefreshBtnEl.classList.remove("spinning");
+      });
+    });
+  }
   var notifPanelTabsEl = document.getElementById("notifPanelTabs");
   if (notifPanelTabsEl) {
     var notifTabBtns = notifPanelTabsEl.querySelectorAll(".notif-panel-tab-btn");

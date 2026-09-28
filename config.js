@@ -1169,6 +1169,28 @@ var NOTIFICATION_SOURCES = [
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
+  },
+  // Backup semanal (pedido do Georges: lembrete fixo pra fazer o backup dos
+  // dados do app "todo domingo às 20h"). kind PRÓPRIO ("backup") porque não
+  // existe Notion nem KV com uma lista de itens aqui — é 1 evento SINTÉTICO
+  // só, recalculado a cada refresh pra sempre apontar pro PRÓXIMO domingo
+  // 20h (fuso São Paulo) que ainda não passou (ou que passou há menos de
+  // NOTIF_GRACE_MS) — ver fetchBackupNotificationItems no app.js. O "id" do
+  // item sintético embute a data do domingo-alvo (ex: "2026-10-04"), então
+  // cada semana vira um item NOVO (volta a notificar do zero, mesmo já
+  // tendo marcado o da semana passada como lida). target aponta pra página
+  // "Backup dos Dados" (pages.backup, ver config.js mais abaixo).
+  {
+    id: "backup_semanal",
+    label: "Backup semanal",
+    icon: "💾",
+    kind: "backup",
+    dateProperty: "gatilho",
+    target: { type: "page", target: "backup" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
+    ]
   }
 ];
 
@@ -1433,7 +1455,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-27 22:07",
+  appVersion: "2026-09-28 00:24",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
