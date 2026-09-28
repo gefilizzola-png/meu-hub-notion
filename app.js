@@ -2237,6 +2237,26 @@
       nameInput.placeholder = qDef.nameSearch.placeholder || "Buscar por nome...";
       nameWrap.appendChild(nameIcon);
       nameWrap.appendChild(nameInput);
+      // "x" de limpar (regra permanente, ver instrucoes.md) — mesmo padrão
+      // de renderSearchBlockReady: solto direto na wrap (já tem a lupa à
+      // esquerda), não usa withSearchClear (embrulharia de novo).
+      var nameClearBtn = document.createElement("button");
+      nameClearBtn.type = "button";
+      nameClearBtn.className = "search-block-clear-btn";
+      nameClearBtn.innerHTML = '<i class="ti ti-x"></i>';
+      nameClearBtn.title = "Limpar pesquisa";
+      function updateNameClearBtn() { nameClearBtn.style.display = nameInput.value ? "flex" : "none"; }
+      nameClearBtn.addEventListener("click", function () {
+        nameInput.value = "";
+        updateNameClearBtn();
+        nameText = "";
+        clearTimeout(nameDebounce);
+        runQuery();
+        nameInput.focus();
+      });
+      nameInput.addEventListener("input", updateNameClearBtn);
+      updateNameClearBtn();
+      nameWrap.appendChild(nameClearBtn);
       row.appendChild(nameWrap);
       nameInput.addEventListener("input", function () {
         nameText = nameInput.value;
@@ -2245,8 +2265,35 @@
       });
     }
 
+    // "Limpar filtros" (regra permanente, ver instrucoes.md — toda página
+    // com filtros precisa de 1 botão que zera tudo de uma vez). Reconstrói
+    // a barra do zero (buildFilterBar) em vez de resetar cada dropdown na
+    // mão, porque buildIconDropdown guarda o próprio estado marcado dentro
+    // do closure — mesmo padrão de renderSearchBlockReady/Legislações.
     if (qDef.filters && qDef.filters.length) {
-      var filterBar = document.createElement("div");
+      var clearFiltersBtn = document.createElement("button");
+      clearFiltersBtn.type = "button";
+      clearFiltersBtn.className = "search-clear-btn";
+      clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+      clearFiltersBtn.addEventListener("click", function () {
+        if (qDef.nameSearch) {
+          nameText = "";
+          nameInput.value = "";
+          updateNameClearBtn();
+        }
+        filterState = {};
+        displayLimit = defaultDisplayLimit;
+        buildFilterBar();
+        runQuery();
+      });
+      titleActionsWrap().appendChild(clearFiltersBtn);
+    }
+
+    var filterBar = null;
+    function buildFilterBar() {
+      if (filterBar) filterBar.remove();
+      if (!(qDef.filters && qDef.filters.length)) return;
+      filterBar = document.createElement("div");
       filterBar.className = "filter-bar" + (qDef.nameSearch ? " search-block-filter-bar" : "");
       qDef.filters.forEach(function (f) {
         if (f.type === "limit") {
@@ -2255,7 +2302,6 @@
             displayLimit = opt ? parseInt(opt.pageId, 10) : null;
             runQuery();
           }));
-          if (f.default) displayLimit = parseInt(f.default, 10);
           return;
         }
         filterBar.appendChild(buildIconDropdown(f, function (opts) {
@@ -2269,15 +2315,26 @@
         // pra a página abrir direto com esse filtro aplicado (ex: "Últimas
         // Reuniões" abre já em "Última semana", sem precisar clicar; ou
         // "Situação" em Contratos, que já abre marcada em "Em licitação" +
-        // "Vigente" — nesse caso "default" é uma LISTA de pageIds).
-        if (f.default) {
+        // "Vigente" — nesse caso "default" é uma LISTA de pageIds). Só
+        // seeda na 1ª montagem (não dentro de "Limpar filtros" — lá o
+        // objetivo é zerar tudo, inclusive os defaults).
+        if (f.default && !filterBarBuilt) {
           var defIds = Array.isArray(f.default) ? f.default : [f.default];
           var defOpts = (f.options || []).filter(function (o) { return defIds.indexOf(o.pageId) !== -1; });
           if (defOpts.length) filterState[f.stateKey || f.property] = filterStateFromOpts(f, defOpts);
         }
       });
       row.appendChild(filterBar);
+      filterBarBuilt = true;
     }
+    var filterBarBuilt = false;
+    var defaultDisplayLimit = null;
+    if (qDef.filters && qDef.filters.length) {
+      var limitFilterDef = qDef.filters.filter(function (f) { return f.type === "limit"; })[0];
+      if (limitFilterDef && limitFilterDef.default) defaultDisplayLimit = parseInt(limitFilterDef.default, 10);
+      displayLimit = defaultDisplayLimit;
+    }
+    buildFilterBar();
 
     var resultsWrap = document.createElement("div");
     resultsWrap.className = "content-plain";
@@ -9610,6 +9667,18 @@
       });
       return Object.keys(map).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).map(function (k) { return map[k]; });
     }
+    // reconstrói o dropdown do zero — chamado na 1ª montagem e no "Limpar
+    // filtros" (ver clearFiltersBtn mais abaixo), mesmo esquema de
+    // Legislações/Provas (buildIconDropdown guarda o estado marcado dentro
+    // do closure).
+    function buildFiltersBar() {
+      grupoDropdownWrap.innerHTML = "";
+      var grupoDropdown = buildIconDropdown(
+        { property: "Grupo", type: "select", label: "Grupo", searchable: true, options: buildGrupoOptions() },
+        function (opts) { state.grupoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      );
+      grupoDropdownWrap.appendChild(grupoDropdown);
+    }
 
     var controls = document.createElement("div");
     controls.className = "legislacoes-controls";
@@ -9628,6 +9697,25 @@
     controls.appendChild(withSearchClear(searchInput));
 
     controls.appendChild(grupoDropdownWrap);
+
+    // "Limpar filtros" (regra permanente, ver instrucoes.md) — zera busca +
+    // dropdown de Grupo + pills de Família/Grupo Originário de uma vez. Não
+    // toca em sortKey/sortDir/nascCycleIdx (ordenação de coluna, não é
+    // filtro que "acumula" — mesmo critério de Legislações, que não reseta
+    // "Agrupar por").
+    var clearFiltersBtn = document.createElement("button");
+    clearFiltersBtn.type = "button";
+    clearFiltersBtn.className = "search-clear-btn";
+    clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearFiltersBtn.addEventListener("click", function () {
+      state.search = ""; searchInput.value = "";
+      state.grupoSelected = []; state.tagSelected = []; state.origemSelected = [];
+      renderTagPills();
+      renderOrigemPills();
+      buildFiltersBar();
+      applyState();
+    });
+    controls.appendChild(clearFiltersBtn);
 
     wrap.appendChild(controls);
     wrap.appendChild(body);
@@ -9926,12 +10014,7 @@
 
       renderTagPills();
       renderOrigemPills();
-
-      var grupoDropdown = buildIconDropdown(
-        { property: "Grupo", type: "select", label: "Grupo", searchable: true, options: buildGrupoOptions() },
-        function (opts) { state.grupoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
-      );
-      grupoDropdownWrap.appendChild(grupoDropdown);
+      buildFiltersBar();
 
       statusEl.style.display = "none";
       applyState();
@@ -10636,6 +10719,46 @@
     var notaFilterWrap = document.createElement("div");
     var dataFilterWrap = document.createElement("div");
 
+    // reconstrói os 5 widgets de filtro do zero — chamado na 1ª montagem
+    // (options recém-carregadas) e no "Limpar filtros" (ver clearFiltersBtn
+    // mais abaixo), mesmo esquema de buildFilterBar em Legislações.
+    function buildFiltersBar() {
+      materiaDropdownWrap.innerHTML = "";
+      var materiaDropdown = buildIconDropdown(
+        { property: "Matéria", type: "select", label: "Matéria", searchable: true, options: buildMateriaOptions() },
+        function (opts) { state.materiaSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      );
+      materiaDropdownWrap.appendChild(materiaDropdown);
+
+      trimestreDropdownWrap.innerHTML = "";
+      var trimestreDropdown = buildIconDropdown(
+        { property: "Trimestre", type: "select", label: "Trimestre", options: buildSimpleOptionsFrom("trimestre") },
+        function (opts) { state.trimestreSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      );
+      trimestreDropdownWrap.appendChild(trimestreDropdown);
+
+      tipoDropdownWrap.innerHTML = "";
+      var tipoDropdown = buildIconDropdown(
+        { property: "Tipo", type: "select", label: "Tipo", options: buildSimpleOptionsFrom("tipo") },
+        function (opts) { state.tipoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      );
+      tipoDropdownWrap.appendChild(tipoDropdown);
+
+      notaFilterWrap.innerHTML = "";
+      var notaFilterEl = buildNumberFilter(
+        { label: "Nota" },
+        function (val) { state.notaFilter = val; applyState(); }
+      );
+      notaFilterWrap.appendChild(notaFilterEl);
+
+      dataFilterWrap.innerHTML = "";
+      var dataFilterEl = buildLocalDateRangeFilter(
+        { label: "Data" },
+        function (val) { state.dataFilter = val; applyState(); }
+      );
+      dataFilterWrap.appendChild(dataFilterEl);
+    }
+
     var controls = document.createElement("div");
     controls.className = "legislacoes-controls";
 
@@ -10680,6 +10803,26 @@
     controls.appendChild(tipoDropdownWrap);
     controls.appendChild(notaFilterWrap);
     controls.appendChild(dataFilterWrap);
+
+    // "Limpar filtros" (regra permanente, ver instrucoes.md). Reconstrói os
+    // 5 widgets do zero (buildFiltersBar) — mesmo motivo de sempre:
+    // buildIconDropdown/buildNumberFilter/buildLocalDateRangeFilter guardam
+    // o próprio estado marcado dentro do closure. Não toca no botão de
+    // ciclo Pendentes/Todas/Passadas (é modo de visualização, não filtro
+    // que acumula — mesmo critério já usado em Legislações, que não reseta
+    // "Agrupar por").
+    var clearFiltersBtn = document.createElement("button");
+    clearFiltersBtn.type = "button";
+    clearFiltersBtn.className = "search-clear-btn";
+    clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearFiltersBtn.addEventListener("click", function () {
+      state.search = ""; searchInput.value = "";
+      state.materiaSelected = []; state.trimestreSelected = [];
+      state.tipoSelected = []; state.notaFilter = null; state.dataFilter = null;
+      buildFiltersBar();
+      applyState();
+    });
+    controls.appendChild(clearFiltersBtn);
 
     wrap.appendChild(controls);
     wrap.appendChild(body);
@@ -10832,35 +10975,7 @@
       var pages = (result.data && result.data.pages) || [];
       allProvas = pages.map(provasItemFromPage);
 
-      var materiaDropdown = buildIconDropdown(
-        { property: "Matéria", type: "select", label: "Matéria", searchable: true, options: buildMateriaOptions() },
-        function (opts) { state.materiaSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
-      );
-      materiaDropdownWrap.appendChild(materiaDropdown);
-
-      var trimestreDropdown = buildIconDropdown(
-        { property: "Trimestre", type: "select", label: "Trimestre", options: buildSimpleOptionsFrom("trimestre") },
-        function (opts) { state.trimestreSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
-      );
-      trimestreDropdownWrap.appendChild(trimestreDropdown);
-
-      var tipoDropdown = buildIconDropdown(
-        { property: "Tipo", type: "select", label: "Tipo", options: buildSimpleOptionsFrom("tipo") },
-        function (opts) { state.tipoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
-      );
-      tipoDropdownWrap.appendChild(tipoDropdown);
-
-      var notaFilterEl = buildNumberFilter(
-        { label: "Nota" },
-        function (val) { state.notaFilter = val; applyState(); }
-      );
-      notaFilterWrap.appendChild(notaFilterEl);
-
-      var dataFilterEl = buildLocalDateRangeFilter(
-        { label: "Data" },
-        function (val) { state.dataFilter = val; applyState(); }
-      );
-      dataFilterWrap.appendChild(dataFilterEl);
+      buildFiltersBar();
 
       statusEl.style.display = "none";
       applyState();
@@ -11364,16 +11479,26 @@
     var catFilterOptions = (fields.categoria && fields.categoria.options || []).map(function (opt) {
       return { pageId: opt, label: opt, icon: "ti-tag", color: catMeta(opt).color };
     });
-    var catDropdown = buildIconDropdown({
-      label: "Categoria",
-      multi: true,
-      searchable: true,
-      options: catFilterOptions
-    }, function (opts) {
-      state.filterCategorias = new Set(opts.map(function (o) { return o.pageId; }));
-      repaint();
-    });
-    filterWrap.appendChild(catDropdown);
+    // wrap próprio (regra permanente de "Limpar filtros", ver instrucoes.md)
+    // — permite destruir e remontar o dropdown do zero (buildFiltersBar
+    // mais abaixo), já que buildIconDropdown guarda o estado marcado
+    // dentro do closure.
+    var catDropdownWrap = document.createElement("div");
+    function buildFiltersBar() {
+      catDropdownWrap.innerHTML = "";
+      var catDropdown = buildIconDropdown({
+        label: "Categoria",
+        multi: true,
+        searchable: true,
+        options: catFilterOptions
+      }, function (opts) {
+        state.filterCategorias = new Set(opts.map(function (o) { return o.pageId; }));
+        repaint();
+      });
+      catDropdownWrap.appendChild(catDropdown);
+    }
+    buildFiltersBar();
+    filterWrap.appendChild(catDropdownWrap);
 
     // "Organizar por" (pedido do Georges — agrupamento em qualquer aba).
     var organizeSelect = document.createElement("select");
@@ -11446,6 +11571,28 @@
       clearAllPrioridades();
     });
     filterWrap.appendChild(clearPrioridadeBtn);
+
+    // "Limpar filtros" (regra permanente, ver instrucoes.md — diferente dos
+    // 2 botões acima, que zeram DADO salvo/histórico; este zera só os
+    // filtros de EXIBIÇÃO da página: busca + Categoria + Situação + Só
+    // Urgentes). Não toca em "Agrupar por"/aba atual/categorias recolhidas
+    // (modo de visualização, não filtro que acumula — mesmo critério já
+    // usado em Legislações/Aniversários/Provas).
+    var clearFiltersBtn = document.createElement("button");
+    clearFiltersBtn.type = "button";
+    clearFiltersBtn.className = "search-clear-btn";
+    clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearFiltersBtn.addEventListener("click", function () {
+      state.search = ""; searchInput.value = "";
+      state.filterCategorias = new Set();
+      state.situacaoFilter = new Set();
+      state.onlyUrgente = false;
+      onlyUrgenteBtn.classList.remove("active");
+      updateSituacaoActive();
+      buildFiltersBar();
+      repaint();
+    });
+    filterWrap.appendChild(clearFiltersBtn);
     wrap.appendChild(filterWrap);
 
     // ---- filtro de Situação (pedido do Georges — "Crie filtros pela
