@@ -7868,6 +7868,32 @@
 
     var body = document.createElement("div");
     body.className = "financeiro-body";
+
+    // busca por conta (pedido do Georges: "Crie também um barra de
+    // pesquisa em Contas Mensais, que não existe, seguindo o mesmo
+    // padrão") — reaproveita ".legislacoes-controls"/".aniversarios-
+    // search-input"/withSearchClear, mesma receita já usada em
+    // Aniversários/Provas (ver instrucoes.md regra 13). Fica FORA de
+    // "body" (que é limpo/reconstruído a cada sort/marcar-pago) pra não
+    // perder o texto digitado nem o foco nesses refreshes.
+    var searchRow = document.createElement("div");
+    searchRow.className = "legislacoes-controls";
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Buscar por conta…";
+    searchInput.className = "aniversarios-search-input";
+    searchInput.addEventListener("input", function () {
+      searchState.search = searchInput.value.trim();
+      // dados ainda não chegaram (1ª carga) — o próprio "then()" abaixo já
+      // vai renderizar considerando searchState quando chegar.
+      if (loadedContasData) {
+        body.innerHTML = "";
+        renderFinanceiroBody(body, page, month, loadedContasData, loadedPaidData, updateSummary, sortState, searchState);
+      }
+    });
+    searchRow.appendChild(withSearchClear(searchInput));
+    wrap.appendChild(searchRow);
+
     var status = document.createElement("p");
     status.className = "financeiro-status";
     status.textContent = filterActive
@@ -7918,6 +7944,14 @@
     // sortState em renderPrioritiesTable.
     var sortState = { key: "vencimento", dir: 1 };
 
+    // busca por conta — mesmo espírito do sortState acima (estado que
+    // sobrevive aos refreshes do "body"). "loadedContasData"/
+    // "loadedPaidData" guardam o último resultado já buscado no Worker,
+    // pra caixa de busca poder re-renderizar na hora sem golpe de rede
+    // novo (ela é montada ANTES da 1ª Promise resolver).
+    var searchState = { search: "" };
+    var loadedContasData = null, loadedPaidData = null;
+
     var contasPromise = filterActive
       ? authFetch(cfg.templateWorkerUrl + "/financeiro-contas?accountKeys=" + encodeURIComponent(activeAccounts.join(","))).then(function (r) { return r.json(); })
       : authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(month)).then(function (r) { return r.json(); });
@@ -7954,9 +7988,11 @@
 
       return overridesPromise.then(function (overrides) {
         var paidData = { overrides: overrides };
+        loadedContasData = contasData;
+        loadedPaidData = paidData;
         body.innerHTML = "";
         updateSummary(contasData, overrides);
-        renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState);
+        renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState, searchState);
       });
     }).catch(function (e) {
       body.innerHTML = "";
@@ -7996,7 +8032,7 @@
     });
   }
 
-  function renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState) {
+  function renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState, searchState) {
     var items = contasData.items || [];
     var errors = contasData.errors || [];
     var overrides = (paidData && paidData.overrides) || {};
@@ -8009,10 +8045,20 @@
       body.appendChild(errBox);
     }
 
+    // busca por conta (pedido do Georges) — sempre ignora acentos
+    // (normalize(), regra 13 de instrucoes.md), nunca só .toLowerCase().
+    var searchTerm = (searchState && searchState.search) || "";
+    if (searchTerm) {
+      var searchNorm = normalize(searchTerm);
+      items = items.filter(function (it) { return normalize(it.accountLabel || "").indexOf(searchNorm) !== -1; });
+    }
+
     if (!items.length) {
       var empty = document.createElement("p");
       empty.className = "empty";
-      empty.textContent = contasData.month ? "Nenhuma conta com vencimento neste mês." : "Nenhuma competência encontrada.";
+      empty.textContent = searchTerm
+        ? "Nenhuma conta encontrada para \"" + searchTerm + "\"."
+        : (contasData.month ? "Nenhuma conta com vencimento neste mês." : "Nenhuma competência encontrada.");
       body.appendChild(empty);
       return;
     }
@@ -8075,7 +8121,7 @@
             sortState.dir = 1;
           }
           body.innerHTML = "";
-          renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState);
+          renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState, searchState);
         });
       }
       headRow.appendChild(th);
@@ -8247,7 +8293,7 @@
             if (paidData) paidData.overrides = overrides;
             if (updateSummary) updateSummary(contasData, overrides);
             body.innerHTML = "";
-            renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState);
+            renderFinanceiroBody(body, page, month, contasData, paidData, updateSummary, sortState, searchState);
           }).catch(function (e) {
             actionBtn.disabled = false;
             alert("Não deu pra salvar: " + e.message);
@@ -11263,7 +11309,41 @@
     addWrap.appendChild(addInput);
     addWrap.appendChild(addCatSelect);
     addWrap.appendChild(addBtn);
-    wrap.appendChild(addWrap);
+    // divisória recolhível (pedido do Georges — "crie um botão para exibir
+    // ou recolher a opção ADICIONAR PRODUTOS, a qual deve ser exibida
+    // sempre de forma recolhida quando eu abrir a tela") — reaproveita
+    // ".priorities-subsection" (mesma receita já usada em Programação/
+    // Criação/Filtros Gerais/Itens/Visualizações na Lista de Prioridades,
+    // ver instrucoes.md regra 9: seguir convenção existente em vez de
+    // inventar um padrão novo).
+    var addSection = document.createElement("div");
+    addSection.className = "priorities-subsection collapsed";
+    var addHeader = document.createElement("div");
+    addHeader.className = "priorities-subsection-header";
+    var addToggleBtn = document.createElement("button");
+    addToggleBtn.type = "button";
+    addToggleBtn.className = "query-collapse-btn priorities-subsection-collapse-btn";
+    addToggleBtn.setAttribute("aria-label", "Recolher/expandir Adicionar Produtos");
+    var addToggleIcon = document.createElement("i");
+    addToggleIcon.className = "ti ti-chevron-right";
+    addToggleBtn.appendChild(addToggleIcon);
+    addHeader.appendChild(addToggleBtn);
+    var addTitle = document.createElement("h4");
+    addTitle.className = "priorities-subsection-title";
+    addTitle.textContent = "Adicionar Produtos";
+    addHeader.appendChild(addTitle);
+    function toggleAddSection() {
+      addSection.classList.toggle("collapsed");
+      addToggleIcon.className = addSection.classList.contains("collapsed") ? "ti ti-chevron-right" : "ti ti-chevron-down";
+    }
+    addToggleBtn.addEventListener("click", toggleAddSection);
+    addTitle.addEventListener("click", toggleAddSection);
+    addSection.appendChild(addHeader);
+    var addBodyWrap = document.createElement("div");
+    addBodyWrap.className = "priorities-subsection-body";
+    addBodyWrap.appendChild(addWrap);
+    addSection.appendChild(addBodyWrap);
+    wrap.appendChild(addSection);
 
     // ---- filtros: busca por nome + categoria + "Organizar por" ----
     var filterWrap = document.createElement("div");
@@ -12154,6 +12234,37 @@
       });
       padraoWrap.appendChild(padraoInput);
       row.appendChild(padraoWrap);
+
+      // sinalizador "Comprar" (pedido do Georges: "quero criar um
+      // sinalizador novo em cada remédio da lista que seria 'Comprar'...
+      // porque às vezes acaba em casa também e não tenho para repor" —
+      // separado da reposição por quantidade baixa (estoque na mochila).
+      // Reaproveita ".supermercado-status-btn"/".comprar" (mesma pílula
+      // laranja já usada em Supermercado pro mesmo significado — "precisa
+      // comprar" — em vez de inventar cor/classe nova, ver instrucoes.md
+      // regra 9).
+      var comprarBtn = document.createElement("button");
+      comprarBtn.type = "button";
+      function refreshComprarBtn() {
+        comprarBtn.className = "supermercado-status-btn" + (it.comprar ? " comprar" : "");
+        comprarBtn.title = it.comprar
+          ? "Sinalizado para comprar na farmácia (clique para desmarcar)"
+          : "Sinalizar que preciso COMPRAR (acabou em casa também, não é só repor a mochila)";
+      }
+      refreshComprarBtn();
+      var comprarIcon = document.createElement("i");
+      comprarIcon.className = "ti ti-shopping-cart supermercado-status-btn-icon";
+      comprarBtn.appendChild(comprarIcon);
+      var comprarLabel = document.createElement("span");
+      comprarLabel.className = "supermercado-status-btn-label";
+      comprarLabel.textContent = "Comprar";
+      comprarBtn.appendChild(comprarLabel);
+      comprarBtn.addEventListener("click", function () {
+        it.comprar = !it.comprar;
+        refreshComprarBtn();
+        updateItem(it.id, { comprar: it.comprar }).catch(function () {});
+      });
+      row.appendChild(comprarBtn);
 
       var delBtn = document.createElement("button");
       delBtn.type = "button";
@@ -13514,6 +13625,18 @@
   // "não lida" -> notifica de novo. quantidadePadrao 0 (ainda não
   // configurado) nunca conta como "baixo" — evita notificação falsa em
   // item recém-criado.
+  // "Comprar" (pedido do Georges — rodada com sinalizador novo): "aquela
+  // sinalização e notificação quando fica com quantidade baixa ou igual a
+  // zero é para eu repor no meu estojo, que fica sempre na minha mochila.
+  // Mas às vezes, acaba em casa e não tenho para repor... quero
+  // diferenciar o que é reposição do que é compra, inclusive na
+  // Notificação... a Central de Notificações faz a devida diferenciação
+  // (mensagem de reposição e de necessidade de compra)". Mesmo truque de
+  // agregação num item SINTÉTICO só (ver comentário grande acima sobre
+  // lowItems), mas agora são DOIS grupos independentes — quantidade baixa
+  // (reposição da mochila) e o novo campo "comprar" (farmácia) — cada um
+  // com seu próprio id/assinatura, então marcar um como lido não afeta o
+  // outro, e cada um dispara de novo se o respectivo conjunto mudar.
   function fetchRemediosNotificationItems(source) {
     return authFetch(cfg.templateWorkerUrl + "/remedios").then(function (res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
@@ -13524,18 +13647,35 @@
         var padrao = it.quantidadePadrao || 0;
         return padrao > 0 && (it.quantidade || 0) <= padrao / 2;
       }).sort(function (a, b) { return (a.id || "").localeCompare(b.id || ""); });
-      if (!lowItems.length) return [];
-      var signature = lowItems.map(function (it) { return it.id + ":" + (it.quantidade || 0); }).join(",");
-      var extraObj = {};
-      // mesmo bug/fix de fetchSupermercadoNotificationItems acima —
-      // normalizeNotifDate exige "{ start: ... }", nunca uma string pura.
-      extraObj[source.dateProperty] = { start: new Date().toISOString() };
-      return [{
-        id: "remedios-low::" + signature,
-        title: "Atenção: necessidade de repor Remédios",
-        url: location.origin + location.pathname + "#remedios",
-        extra: extraObj
-      }];
+      var comprarItems = items.filter(function (it) {
+        return !!it.comprar;
+      }).sort(function (a, b) { return (a.id || "").localeCompare(b.id || ""); });
+      var out = [];
+      if (lowItems.length) {
+        var lowSignature = lowItems.map(function (it) { return it.id + ":" + (it.quantidade || 0); }).join(",");
+        var lowExtra = {};
+        // mesmo bug/fix de fetchSupermercadoNotificationItems acima —
+        // normalizeNotifDate exige "{ start: ... }", nunca uma string pura.
+        lowExtra[source.dateProperty] = { start: new Date().toISOString() };
+        out.push({
+          id: "remedios-low::" + lowSignature,
+          title: "Atenção: necessidade de REPOR Remédios (estojo/mochila)",
+          url: location.origin + location.pathname + "#remedios",
+          extra: lowExtra
+        });
+      }
+      if (comprarItems.length) {
+        var comprarSignature = comprarItems.map(function (it) { return it.id; }).join(",");
+        var comprarExtra = {};
+        comprarExtra[source.dateProperty] = { start: new Date().toISOString() };
+        out.push({
+          id: "remedios-comprar::" + comprarSignature,
+          title: "Atenção: necessidade de COMPRAR Remédios (farmácia)",
+          url: location.origin + location.pathname + "#remedios",
+          extra: comprarExtra
+        });
+      }
+      return out;
     }).catch(function () { return []; });
   }
 
