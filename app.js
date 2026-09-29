@@ -11019,6 +11019,80 @@
     return parts[2] + "/" + parts[1] + "/" + parts[0];
   }
 
+  // Ícone por categoria (pedido do Georges: "emojis ou icons... condizente
+  // com a categoria") — não há lista fixa de categorias no Notion/D1, então
+  // é um mapa de palavras-chave (acento-insensível via normalize()), com
+  // fallback genérico (🏷️) pra qualquer nome que não bata com nada.
+  var TRANSACOES_CATEGORIA_ICON_MAP = [
+    { kw: ["restaurante", "lanchonete", "bar", "pizzaria", "churrascaria", "hamburgueria"], icon: "🍽️" },
+    { kw: ["supermercado", "mercado", "hortifruti", "acougue", "padaria", "feira"], icon: "🛒" },
+    { kw: ["farmacia", "remedio", "saude", "medico", "dentista", "hospital", "clinica", "exame"], icon: "💊" },
+    { kw: ["estetica", "salao", "cabelo", "barbearia", "manicure", "spa", "beleza"], icon: "💅" },
+    { kw: ["compras", "shopping", "loja", "roupa", "vestuario", "calcado", "presente"], icon: "🛍️" },
+    { kw: ["aeroporto", "viagem", "passagem", "voo", "hospedagem", "hotel", "pousada", "ferias"], icon: "✈️" },
+    { kw: ["chocolate", "doce", "sorvete", "confeitaria", "padaria doce"], icon: "🍫" },
+    { kw: ["streaming", "assinatura", "netflix", "spotify", "prime", "disney"], icon: "📺" },
+    { kw: ["combustivel", "gasolina", "posto", "etanol", "alcool"], icon: "⛽" },
+    { kw: ["transporte", "uber", "taxi", "onibus", "estacionamento", "pedagio", "metro"], icon: "🚗" },
+    { kw: ["educacao", "escola", "curso", "faculdade", "livro", "material escolar", "mensalidade"], icon: "📚" },
+    { kw: ["academia", "esporte", "fitness", "ginastica", "personal"], icon: "🏋️" },
+    { kw: ["casa", "moradia", "aluguel", "condominio", "reforma", "manutencao", "imovel"], icon: "🏠" },
+    { kw: ["luz", "energia", "eletrica"], icon: "💡" },
+    { kw: ["agua", "saneamento"], icon: "🚰" },
+    { kw: ["internet", "telefone", "celular", "telecom", "wifi"], icon: "📶" },
+    { kw: ["pet", "veterinario", "racao", "animal", "cachorro", "gato"], icon: "🐾" },
+    { kw: ["imposto", "taxa", "tributo", "iptu", "ipva", "darf"], icon: "🧾" },
+    { kw: ["investimento", "aplicacao", "poupanca", "acao", "renda fixa"], icon: "📈" },
+    { kw: ["salario", "renda", "freelance", "honorario", "pagamento recebido"], icon: "💼" },
+    { kw: ["lazer", "cinema", "show", "entretenimento", "jogo", "parque"], icon: "🎉" },
+    { kw: ["seguro"], icon: "🛡️" },
+    { kw: ["banco", "tarifa", "juros", "financiamento", "emprestimo", "cartao"], icon: "🏦" },
+  ];
+  function transacoesCategoriaIcon(name) {
+    var n = normalize(name || "");
+    if (!n) return "🏷️";
+    for (var i = 0; i < TRANSACOES_CATEGORIA_ICON_MAP.length; i++) {
+      var entry = TRANSACOES_CATEGORIA_ICON_MAP[i];
+      for (var j = 0; j < entry.kw.length; j++) {
+        if (n.indexOf(entry.kw[j]) !== -1) return entry.icon;
+      }
+    }
+    return "🏷️";
+  }
+
+  // Filtro de período pré-definido (pedido do Georges) — mantém os campos
+  // manuais de data (state.start/state.end) como fonte da verdade; o preset
+  // só calcula e escreve neles. "Últimos 30 dias" é o padrão de abertura.
+  var TRANSACOES_PERIOD_PRESETS = [
+    { id: "7d", label: "Última Semana", days: 7 },
+    { id: "15d", label: "Últimos 15 dias", days: 15 },
+    { id: "30d", label: "Últimos 30 dias", days: 30 },
+    { id: "1m", label: "Último mês", months: 1 },
+    { id: "3m", label: "Últimos 3 meses", months: 3 },
+    { id: "6m", label: "Últimos 6 meses", months: 6 },
+    { id: "1y", label: "Último Ano", months: 12 },
+    { id: "lastyear", label: "Ano Passado", special: "lastyear" },
+    { id: "all", label: "Todo o Período", special: "all" },
+  ];
+  function transacoesSubtractMonths(dateStr, months) {
+    var parts = dateStr.split("-").map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCMonth(d.getUTCMonth() - months);
+    return d.toISOString().slice(0, 10);
+  }
+  function transacoesResolvePeriodPreset(id) {
+    var preset = TRANSACOES_PERIOD_PRESETS.filter(function (p) { return p.id === id; })[0];
+    if (!preset) return null;
+    var today = financeiroTodaySP();
+    if (preset.special === "all") return { start: "", end: "" };
+    if (preset.special === "lastyear") {
+      var y = Number(today.slice(0, 4)) - 1;
+      return { start: y + "-01-01", end: y + "-12-31" };
+    }
+    if (preset.months) return { start: transacoesSubtractMonths(today, preset.months), end: today };
+    return { start: financeiroAddDays(today, -preset.days), end: today };
+  }
+
   // Chave da unlock-lock guardada no localStorage — pedido do Georges:
   // "Transações tem informações sensíveis, como podemos aplicar uma camada
   // de verificação antes de abrir?" Optou pelo PIN próprio da página (não
@@ -11323,7 +11397,7 @@
     wrap.appendChild(statusEl);
 
     var totalsRow = document.createElement("div");
-    totalsRow.className = "financeiro-summary";
+    totalsRow.className = "financeiro-summary transacoes-summary";
     totalsRow.style.display = "none";
     wrap.appendChild(totalsRow);
 
@@ -11354,7 +11428,13 @@
       ignoredMode: "exclude",
       search: "",
       sortKey: "date", sortDir: -1,
+      periodPreset: "30d",
     };
+    // abre por padrão em "Últimos 30 dias" (pedido do Georges) — os campos
+    // manuais de data (dateWrap) nascem preenchidos com esse intervalo.
+    var defaultPeriodRange = transacoesResolvePeriodPreset(state.periodPreset);
+    state.start = defaultPeriodRange.start;
+    state.end = defaultPeriodRange.end;
     var lastItems = [];
     var lastTotals = { entradas: 0, saidas: 0, saldo: 0, count: 0 };
 
@@ -11395,20 +11475,44 @@
       return items;
     }
 
-    // período coberto pelos itens que alimentam os totais acima (pedido do
-    // Georges: "para eu saber qual período está sendo considerado" —
-    // "lastItems" já vem do Worker ordenado por t.date DESC, então o mais
-    // recente é o [0] e o mais antigo é o último; não precisa nem olhar o
-    // valor de state.start/end, porque sem filtro de data também precisa
-    // funcionar, refletindo o intervalo REAL dos dados retornados).
-    function transacoesPeriodoExtremos() {
-      if (!lastItems.length) return { min: null, max: null };
-      var min = lastItems[0].date, max = lastItems[0].date;
-      lastItems.forEach(function (it) {
+    // período coberto pelos itens recebidos (pedido do Georges: "para eu
+    // saber qual período está sendo considerado"). Recebe a lista já filtrada
+    // (server-side + busca local) em vez de sempre usar "lastItems" cru —
+    // assim os pills de Período Inicial/Final também refletem a busca.
+    function transacoesPeriodoExtremos(items) {
+      if (!items.length) return { min: null, max: null };
+      var min = items[0].date, max = items[0].date;
+      items.forEach(function (it) {
         if (it.date < min) min = it.date;
         if (it.date > max) max = it.date;
       });
       return { min: min, max: max };
+    }
+
+    // Soma os totais a partir de uma lista de itens já filtrada — usado
+    // tanto pra "lastItems" (filtros do servidor) quanto pra
+    // "sortedFilteredItems()" (filtros + busca local), garantindo que os
+    // totalizadores no topo sempre batam com o que está sendo exibido
+    // (pedido do Georges: "totalizadores... aplicáveis ao que estou
+    // filtrando, seja pelos filtros ou pela pesquisa").
+    function transacoesComputeTotals(items) {
+      var entradas = 0, saidas = 0, maiorEntrada = 0, maiorSaida = 0;
+      items.forEach(function (it) {
+        var amt = Math.abs(it.amount || 0);
+        if (it.flow_type === "entrada") {
+          entradas += amt;
+          if (amt > maiorEntrada) maiorEntrada = amt;
+        } else if (it.flow_type === "saida") {
+          saidas += amt;
+          if (amt > maiorSaida) maiorSaida = amt;
+        }
+      });
+      var count = items.length;
+      return {
+        entradas: entradas, saidas: saidas, saldo: entradas - saidas, count: count,
+        ticketMedio: count ? (entradas + saidas) / count : 0,
+        maiorEntrada: maiorEntrada, maiorSaida: maiorSaida,
+      };
     }
 
     function renderTotals() {
@@ -11426,12 +11530,21 @@
         p.appendChild(l); p.appendChild(v);
         return p;
       }
-      var periodo = transacoesPeriodoExtremos();
+      // "sortedFilteredItems()" já aplica busca local sobre "lastItems"
+      // (que por sua vez já veio com os filtros do servidor aplicados) — a
+      // ordenação em si não importa pra soma/extremos.
+      var items = sortedFilteredItems();
+      var totals = transacoesComputeTotals(items);
+      var periodo = transacoesPeriodoExtremos(items);
       totalsRow.appendChild(pill("financeiro-summary-period", "Período Inicial", periodo.min ? transacoesFmtDateBR(periodo.min) : "—"));
       totalsRow.appendChild(pill("financeiro-summary-period", "Período Final", periodo.max ? transacoesFmtDateBR(periodo.max) : "—"));
-      totalsRow.appendChild(pill("financeiro-summary-paid", "Entradas", transacoesFmtMoney(lastTotals.entradas)));
-      totalsRow.appendChild(pill("financeiro-summary-pending", "Saídas", transacoesFmtMoney(lastTotals.saidas)));
-      totalsRow.appendChild(pill("", "Saldo", transacoesFmtMoney(lastTotals.saldo)));
+      totalsRow.appendChild(pill("financeiro-summary-paid", "Entradas", transacoesFmtMoney(totals.entradas)));
+      totalsRow.appendChild(pill("financeiro-summary-pending", "Saídas", transacoesFmtMoney(totals.saidas)));
+      totalsRow.appendChild(pill("", "Saldo", transacoesFmtMoney(totals.saldo)));
+      totalsRow.appendChild(pill("financeiro-summary-fixa", "Nº Transações", String(totals.count)));
+      totalsRow.appendChild(pill("financeiro-summary-fixa", "Ticket Médio", transacoesFmtMoney(totals.ticketMedio)));
+      totalsRow.appendChild(pill("financeiro-summary-faturas", "Maior Entrada", transacoesFmtMoney(totals.maiorEntrada)));
+      totalsRow.appendChild(pill("financeiro-summary-faturas", "Maior Saída", transacoesFmtMoney(totals.maiorSaida)));
     }
 
     // ícone da Descrição — só distingue Entrada/Saída (não há categoria
@@ -11538,7 +11651,7 @@
         var catTd = document.createElement("td");
         var catChip = document.createElement("span");
         catChip.className = "transacoes-chip";
-        catChip.textContent = it.category_name || "—";
+        catChip.textContent = it.category_name ? (transacoesCategoriaIcon(it.category_name) + " " + it.category_name) : "—";
         catTd.appendChild(catChip);
         tr.appendChild(catTd);
 
@@ -11600,7 +11713,7 @@
       filterBarWrap.innerHTML = "";
 
       var accountsFilterDef = {
-        label: "Conta", multi: true, searchable: true,
+        label: "🏦 Conta", multi: true, searchable: true,
         options: meta.accounts.map(function (a) { return { label: a.name, pageId: a.id, icon: "ti-building-bank", color: "" }; }),
       };
       filterBarWrap.appendChild(buildIconDropdown(accountsFilterDef, function (opts) {
@@ -11609,7 +11722,7 @@
       }));
 
       var categoriesFilterDef = {
-        label: "Categoria", multi: true, searchable: true,
+        label: "🏷️ Categoria", multi: true, searchable: true,
         options: meta.categories.map(function (c) { return { label: c.name, pageId: c.id, icon: "ti-tag", color: "" }; }),
       };
       filterBarWrap.appendChild(buildIconDropdown(categoriesFilterDef, function (opts) {
@@ -11618,7 +11731,7 @@
       }));
 
       var tagsFilterDef = {
-        label: "Tags", multi: true, searchable: true,
+        label: "🔖 Tags", multi: true, searchable: true,
         options: meta.tags.map(function (t) { return { label: t.name, pageId: t.id, icon: "ti-tags", color: t.color || "" }; }),
       };
       filterBarWrap.appendChild(buildIconDropdown(tagsFilterDef, function (opts) {
@@ -11626,25 +11739,61 @@
         fetchData();
       }));
 
-      var tipoFilterDef = { label: "Tipo", multi: true, options: TRANSACOES_TIPO_OPTIONS };
+      var tipoFilterDef = { label: "🔄 Tipo", multi: true, options: TRANSACOES_TIPO_OPTIONS };
       filterBarWrap.appendChild(buildIconDropdown(tipoFilterDef, function (opts) {
         state.tipo = opts.map(function (o) { return o.pageId; });
         fetchData();
       }));
 
+      // filtro de período pré-definido (pedido do Georges) — não substitui
+      // os campos manuais de data abaixo, só escreve neles pra agilizar os
+      // intervalos mais comuns. Abre em "Últimos 30 dias" (state.periodPreset
+      // já nasce assim, ver bloco de "state" acima).
+      var periodWrap = document.createElement("div");
+      periodWrap.className = "filter-dropdown";
+      var periodSelect = document.createElement("select");
+      periodSelect.className = "filter-trigger transacoes-period-select";
+      TRANSACOES_PERIOD_PRESETS.forEach(function (p) {
+        var opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = "📅 " + p.label;
+        periodSelect.appendChild(opt);
+      });
+      periodSelect.value = state.periodPreset || "30d";
+      periodWrap.appendChild(periodSelect);
+      filterBarWrap.appendChild(periodWrap);
+
       // intervalo de datas — 2 campos <input type=date> simples (mesmo
-      // esquema visual do resto da barra de filtros).
+      // esquema visual do resto da barra de filtros). Pedido do Georges:
+      // "quero que mantenha" — continuam existindo lado a lado com o preset.
       var dateWrap = document.createElement("div");
       dateWrap.className = "filter-dropdown";
       dateWrap.style.display = "flex";
       dateWrap.style.gap = "4px";
       dateWrap.style.alignItems = "center";
+      var dateWrapLabel = document.createElement("span");
+      dateWrapLabel.textContent = "📆";
+      dateWrapLabel.title = "Intervalo de datas (manual)";
+      dateWrapLabel.style.fontSize = "13px";
       var startInput = document.createElement("input");
       startInput.type = "date"; startInput.value = state.start; startInput.className = "filter-trigger";
       var endInput = document.createElement("input");
       endInput.type = "date"; endInput.value = state.end; endInput.className = "filter-trigger";
-      startInput.addEventListener("change", function () { state.start = startInput.value; fetchData(); });
-      endInput.addEventListener("change", function () { state.end = endInput.value; fetchData(); });
+      // editar a data manualmente desconecta do preset (fica "Personalizado"
+      // visualmente só pelo fato do select não corresponder mais a nenhuma
+      // opção calculada — não precisa de opção extra na lista do Georges).
+      startInput.addEventListener("change", function () { state.start = startInput.value; state.periodPreset = null; fetchData(); });
+      endInput.addEventListener("change", function () { state.end = endInput.value; state.periodPreset = null; fetchData(); });
+      periodSelect.addEventListener("change", function () {
+        state.periodPreset = periodSelect.value;
+        var range = transacoesResolvePeriodPreset(periodSelect.value);
+        state.start = range.start;
+        state.end = range.end;
+        startInput.value = state.start;
+        endInput.value = state.end;
+        fetchData();
+      });
+      dateWrap.appendChild(dateWrapLabel);
       dateWrap.appendChild(startInput);
       dateWrap.appendChild(endInput);
       filterBarWrap.appendChild(dateWrap);
@@ -11655,12 +11804,17 @@
       valorWrap.style.display = "flex";
       valorWrap.style.gap = "4px";
       valorWrap.style.alignItems = "center";
+      var valorWrapLabel = document.createElement("span");
+      valorWrapLabel.textContent = "💰";
+      valorWrapLabel.title = "Intervalo de valor";
+      valorWrapLabel.style.fontSize = "13px";
       var minInput = document.createElement("input");
       minInput.type = "number"; minInput.step = "0.01"; minInput.placeholder = "Mín."; minInput.value = state.valorMin; minInput.className = "filter-trigger"; minInput.style.width = "80px";
       var maxInput = document.createElement("input");
       maxInput.type = "number"; maxInput.step = "0.01"; maxInput.placeholder = "Máx."; maxInput.value = state.valorMax; maxInput.className = "filter-trigger"; maxInput.style.width = "80px";
       minInput.addEventListener("change", function () { state.valorMin = minInput.value; fetchData(); });
       maxInput.addEventListener("change", function () { state.valorMax = maxInput.value; fetchData(); });
+      valorWrap.appendChild(valorWrapLabel);
       valorWrap.appendChild(minInput);
       valorWrap.appendChild(maxInput);
       filterBarWrap.appendChild(valorWrap);
@@ -11689,7 +11843,10 @@
       clearBtn.className = "filter-trigger";
       clearBtn.innerHTML = '<i class="ti ti-filter-off"></i><span>Limpar filtros</span>';
       clearBtn.addEventListener("click", function () {
-        state.start = ""; state.end = ""; state.accounts = []; state.categories = [];
+        state.periodPreset = "30d";
+        var defaultRange = transacoesResolvePeriodPreset(state.periodPreset);
+        state.start = defaultRange.start; state.end = defaultRange.end;
+        state.accounts = []; state.categories = [];
         state.tags = []; state.tipo = []; state.valorMin = ""; state.valorMax = "";
         state.ignoredMode = "exclude"; state.search = "";
         searchInput.value = "";
@@ -11708,6 +11865,9 @@
     searchInput.addEventListener("input", function () {
       state.search = searchInput.value;
       renderTable();
+      // totalizadores também precisam refletir a busca local, não só os
+      // filtros do servidor (pedido do Georges).
+      if (lastItems.length || totalsRow.style.display !== "none") renderTotals();
     });
     searchWrap.appendChild(withSearchClear(searchInput));
 

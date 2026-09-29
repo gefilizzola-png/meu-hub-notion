@@ -4799,6 +4799,24 @@ html, body {
 .financeiro-summary-period { border-color: #d8d8d3; background: #f7f6f2; }
 .financeiro-summary-period .financeiro-summary-value { color: #55554f; font-size: 13px; }
 
+/* espaçamento entre a linha de totalizadores e a barra de filtros logo
+   abaixo em Transações (pedido do Georges: "arrume espaçamento entre os
+   totalizadores e os filtros" — ".financeiro-summary" sozinha não tem
+   margem própria; escopado com uma classe extra pra não mexer em Contas
+   Mensais, que usa a mesma ".financeiro-summary"). */
+.transacoes-summary { margin-bottom: 16px; }
+
+/* select nativo do filtro de período pré-definido de Transações — reaproveita
+   a aparência de ".filter-trigger" (mesma altura/borda dos outros filtros). */
+.transacoes-period-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 24px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23999'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
 /* tela de PIN de Transações (pedido do Georges: "camada de verificação
    antes de abrir" — ver renderTransacoesLockScreen/renderTransacoesUnlocked
    no app.js) — caixa neutra, mesma família visual de ".legislacoes-block"
