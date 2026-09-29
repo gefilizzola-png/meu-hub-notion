@@ -11098,10 +11098,26 @@
       return items;
     }
 
+    // período coberto pelos itens que alimentam os totais acima (pedido do
+    // Georges: "para eu saber qual período está sendo considerado" —
+    // "lastItems" já vem do Worker ordenado por t.date DESC, então o mais
+    // recente é o [0] e o mais antigo é o último; não precisa nem olhar o
+    // valor de state.start/end, porque sem filtro de data também precisa
+    // funcionar, refletindo o intervalo REAL dos dados retornados).
+    function transacoesPeriodoExtremos() {
+      if (!lastItems.length) return { min: null, max: null };
+      var min = lastItems[0].date, max = lastItems[0].date;
+      lastItems.forEach(function (it) {
+        if (it.date < min) min = it.date;
+        if (it.date > max) max = it.date;
+      });
+      return { min: min, max: max };
+    }
+
     function renderTotals() {
       totalsRow.innerHTML = "";
       totalsRow.style.display = "flex";
-      function pill(cls, label, value) {
+      function pill(cls, label, valueText) {
         var p = document.createElement("div");
         p.className = "financeiro-summary-pill " + cls;
         var l = document.createElement("div");
@@ -11109,15 +11125,40 @@
         l.textContent = label;
         var v = document.createElement("div");
         v.className = "financeiro-summary-value";
-        v.textContent = transacoesFmtMoney(value);
+        v.textContent = valueText;
         p.appendChild(l); p.appendChild(v);
         return p;
       }
-      totalsRow.appendChild(pill("financeiro-summary-paid", "Entradas", lastTotals.entradas));
-      totalsRow.appendChild(pill("financeiro-summary-pending", "Saídas", lastTotals.saidas));
-      totalsRow.appendChild(pill("", "Saldo", lastTotals.saldo));
+      var periodo = transacoesPeriodoExtremos();
+      totalsRow.appendChild(pill("financeiro-summary-period", "Período Inicial", periodo.min ? transacoesFmtDateBR(periodo.min) : "—"));
+      totalsRow.appendChild(pill("financeiro-summary-period", "Período Final", periodo.max ? transacoesFmtDateBR(periodo.max) : "—"));
+      totalsRow.appendChild(pill("financeiro-summary-paid", "Entradas", transacoesFmtMoney(lastTotals.entradas)));
+      totalsRow.appendChild(pill("financeiro-summary-pending", "Saídas", transacoesFmtMoney(lastTotals.saidas)));
+      totalsRow.appendChild(pill("", "Saldo", transacoesFmtMoney(lastTotals.saldo)));
     }
 
+    // ícone da Descrição — só distingue Entrada/Saída (não há categoria
+    // estruturada o bastante pra um mapa tipo provasMateriaIcon aqui).
+    function transacoesDescIcon(it) {
+      return it.flow_type === "entrada" ? "💰" : it.flow_type === "saida" ? "🧾" : "•";
+    }
+
+    var TRANSACOES_COLS = [
+      { key: "date", label: "Data", cls: "transacoes-th-data" },
+      { key: "description", label: "Descrição" },
+      { key: "account", label: "Conta", cls: "transacoes-th-conta" },
+      { key: "category", label: "Categoria", cls: "transacoes-th-categoria" },
+      { key: "tags", label: "Tags", noSort: true, cls: "transacoes-th-tags" },
+      { key: "tipo", label: "Tipo", noSort: true, cls: "transacoes-th-tipo" },
+      { key: "amount", label: "Valor", cls: "transacoes-th-valor" },
+    ];
+
+    // Tabela redesenhada (pedido do Georges: "o visual ficou muito
+    // arcaico") — a versão anterior montava <tr>/<th> sem NENHUMA classe,
+    // por isso saía com o estilo cru do navegador mesmo a tabela já tendo
+    // ".financeiro-table" no <table>. Agora segue o mesmíssimo padrão
+    // visual de Provas/Notas/Contas Mensais: ".financeiro-th"/
+    // ".financeiro-row" + chips coloridos por Tipo/Conta/Categoria/Tags.
     function renderTable() {
       tableWrap.innerHTML = "";
       var items = sortedFilteredItems();
@@ -11128,30 +11169,31 @@
         tableWrap.appendChild(empty);
         return;
       }
+      var count = document.createElement("p");
+      count.className = "transacoes-count";
+      count.textContent = items.length + (items.length === 1 ? " transação" : " transações");
+      tableWrap.appendChild(count);
+
       var table = document.createElement("table");
-      table.className = "financeiro-table";
+      table.className = "financeiro-table transacoes-table";
       var thead = document.createElement("thead");
       var trh = document.createElement("tr");
-      var cols = [
-        { key: "date", label: "Data" },
-        { key: "description", label: "Descrição" },
-        { key: "account", label: "Conta" },
-        { key: "category", label: "Categoria" },
-        { key: "tags", label: "Tags", noSort: true },
-        { key: "tipo", label: "Tipo", noSort: true },
-        { key: "amount", label: "Valor" },
-      ];
-      cols.forEach(function (col) {
+      TRANSACOES_COLS.forEach(function (col) {
         var th = document.createElement("th");
-        if (col.noSort) {
-          th.textContent = col.label;
-        } else {
-          th.className = "financeiro-th-sortable";
-          th.textContent = col.label;
+        th.className = "financeiro-th " + (col.cls || "") + (col.noSort ? "" : " financeiro-th-sortable");
+        var thLabel = document.createElement("span");
+        thLabel.className = "financeiro-th-label";
+        thLabel.textContent = col.label;
+        th.appendChild(thLabel);
+        if (!col.noSort) {
           var arrow = document.createElement("span");
           arrow.className = "financeiro-th-arrow";
-          if (state.sortKey === col.key) arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+          if (state.sortKey === col.key) {
+            th.classList.add("active");
+            arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+          }
           th.appendChild(arrow);
+          th.title = "Clique para classificar por " + col.label;
           th.addEventListener("click", function () {
             if (state.sortKey === col.key) state.sortDir *= -1;
             else { state.sortKey = col.key; state.sortDir = col.key === "date" ? -1 : 1; }
@@ -11166,26 +11208,69 @@
       var tbody = document.createElement("tbody");
       items.forEach(function (it) {
         var tr = document.createElement("tr");
-        if (it.ignored) tr.style.opacity = "0.55";
-        function td(text) { var c = document.createElement("td"); c.textContent = text; tr.appendChild(c); return c; }
-        td(transacoesFmtDateBR(it.date));
-        td(it.description || "—");
-        td(it.account_name || "—");
-        td(it.category_name || "—");
+        tr.className = "financeiro-row" + (it.ignored ? " transacoes-row-ignored" : "");
+        if (it.ignored) tr.title = "Transação ignorada";
+
+        var dataTd = document.createElement("td");
+        dataTd.className = "transacoes-data-cell";
+        dataTd.textContent = transacoesFmtDateBR(it.date);
+        tr.appendChild(dataTd);
+
+        var descTd = document.createElement("td");
+        var descInner = document.createElement("div");
+        descInner.className = "transacoes-desc-cell";
+        var descIcon = document.createElement("span");
+        descIcon.className = "transacoes-desc-icon";
+        descIcon.textContent = transacoesDescIcon(it);
+        var descText = document.createElement("span");
+        descText.className = "transacoes-desc-text";
+        descText.textContent = it.description || "—";
+        descText.title = it.description || "";
+        descInner.appendChild(descIcon);
+        descInner.appendChild(descText);
+        descTd.appendChild(descInner);
+        tr.appendChild(descTd);
+
+        var contaTd = document.createElement("td");
+        var contaChip = document.createElement("span");
+        contaChip.className = "transacoes-chip";
+        contaChip.textContent = it.account_name || "—";
+        contaTd.appendChild(contaChip);
+        tr.appendChild(contaTd);
+
+        var catTd = document.createElement("td");
+        var catChip = document.createElement("span");
+        catChip.className = "transacoes-chip";
+        catChip.textContent = it.category_name || "—";
+        catTd.appendChild(catChip);
+        tr.appendChild(catTd);
+
         var tagsTd = document.createElement("td");
         (it.tags || []).forEach(function (t) {
           var chip = document.createElement("span");
-          chip.className = "financeiro-account-tag";
-          chip.style.marginRight = "4px";
-          if (t.color) chip.style.borderColor = t.color;
-          chip.textContent = t.name;
+          chip.className = "transacoes-tag-badge";
+          var dot = document.createElement("span");
+          dot.className = "transacoes-tag-dot";
+          if (t.color) dot.style.background = t.color;
+          chip.appendChild(dot);
+          chip.appendChild(document.createTextNode(t.name));
           tagsTd.appendChild(chip);
         });
+        if (!(it.tags || []).length) tagsTd.textContent = "—";
         tr.appendChild(tagsTd);
-        var tipoTd = td(it.flow_type === "entrada" ? "Entrada" : it.flow_type === "saida" ? "Saída" : "—");
-        tipoTd.style.color = it.flow_type === "entrada" ? "#2f9e44" : it.flow_type === "saida" ? "#c0392b" : "";
-        var valorTd = td((it.flow_type === "saida" ? "− " : "") + transacoesFmtMoney(Math.abs(it.amount || 0)));
-        valorTd.style.color = it.flow_type === "entrada" ? "#2f9e44" : it.flow_type === "saida" ? "#c0392b" : "";
+
+        var tipoTd = document.createElement("td");
+        var tipoBadge = document.createElement("span");
+        tipoBadge.className = "transacoes-tipo-badge " + (it.flow_type === "entrada" ? "transacoes-tipo-entrada" : it.flow_type === "saida" ? "transacoes-tipo-saida" : "");
+        tipoBadge.textContent = (it.flow_type === "entrada" ? "↓ Entrada" : it.flow_type === "saida" ? "↑ Saída" : "—");
+        tipoTd.appendChild(tipoBadge);
+        tr.appendChild(tipoTd);
+
+        var valorTd = document.createElement("td");
+        valorTd.className = "transacoes-valor-cell " + (it.flow_type === "entrada" ? "transacoes-valor-entrada" : it.flow_type === "saida" ? "transacoes-valor-saida" : "");
+        valorTd.textContent = (it.flow_type === "saida" ? "− " : "") + transacoesFmtMoney(Math.abs(it.amount || 0));
+        tr.appendChild(valorTd);
+
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);

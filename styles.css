@@ -4717,6 +4717,87 @@ html, body {
    vermelho as abaixo de 6") são novas. */
 .notas-vitor-cell-orange { background: rgba(245, 159, 0, 0.14); color: #a15c00; font-weight: 600; }
 .notas-vitor-cell-red { background: rgba(224, 49, 49, 0.12); color: #c00; font-weight: 600; }
+
+/* ---------------- Transações (D1 Visor) ---------------- */
+/* reaproveita .financeiro-table/.financeiro-th/.financeiro-row/
+   .financeiro-summary-pill (mesma base visual de Provas/Notas/Contas
+   Mensais) — pedido do Georges: "o visual ficou muito arcaico... algo mais
+   bonito". A versão anterior não aplicava NENHUMA dessas classes no
+   cabeçalho/linhas (só no <table> em si), por isso saía crua/sem estilo
+   mesmo a folha de estilo já existindo — o problema era 100% de
+   app.js, não de CSS faltando. */
+.transacoes-count { font-size: 12.5px; color: #928f86; margin: 2px 0 8px; }
+.transacoes-th-data,
+.transacoes-th-conta,
+.transacoes-th-categoria,
+.transacoes-th-tags,
+.transacoes-th-tipo { width: 1%; white-space: nowrap; }
+.transacoes-th-valor { width: 1%; text-align: right; white-space: nowrap; }
+.transacoes-data-cell { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.transacoes-desc-cell { display: flex; align-items: center; gap: 8px; min-width: 160px; }
+.transacoes-desc-icon { font-size: 14px; line-height: 1; flex-shrink: 0; }
+.transacoes-desc-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+/* chip neutro pra Conta/Categoria (mesma pílula de ".financeiro-account-tag",
+   mas sem o estado "active" de filtro — aqui é só exibição). */
+.transacoes-chip {
+  display: inline-block;
+  border: 0.5px solid #e2e0da;
+  background: #f7f6f2;
+  color: #55554f;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.transacoes-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0.5px solid #e2e0da;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #55554f;
+  margin: 1px 4px 1px 0;
+  white-space: nowrap;
+}
+.transacoes-tag-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: #b9b9b3; }
+.transacoes-tipo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.transacoes-tipo-entrada { background: #e6f4ea; color: #2f9e44; }
+.transacoes-tipo-saida { background: #fbe3df; color: #c0392b; }
+.transacoes-valor-cell { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.transacoes-valor-entrada { color: #2f9e44; }
+.transacoes-valor-saida { color: #c0392b; }
+/* transação ignorada (Ativas/Todas/Ignoradas) — mesmo esmaecimento que já
+   existia (era inline style antes), agora com fundo levemente diferenciado
+   igual ".financeiro-row.is-missing". */
+.transacoes-row-ignored { opacity: 0.55; }
+.transacoes-row-ignored td { background: #faf9f6; }
+@media (max-width: 640px) {
+  .transacoes-table { min-width: 760px; }
+}
+/* pills de "Período Inicial"/"Período Final" (pedido do Georges: "para eu
+   saber qual período está sendo considerado" nos totais acima) — mesma
+   família visual de ".financeiro-summary-pill", tom neutro (não é dinheiro,
+   só o intervalo de datas coberto pelos itens que alimentam os totais). */
+.financeiro-summary-period { border-color: #d8d8d3; background: #f7f6f2; }
+.financeiro-summary-period .financeiro-summary-value { color: #55554f; font-size: 13px; }
 /* coluna/botão de Nota (pedido do Georges — rascunho de mensagem de
    parabéns pra copiar/colar no WhatsApp) — reaproveita os mesmos
    ".priorities-note-toggle"/".priorities-note-row"/".priorities-note-
