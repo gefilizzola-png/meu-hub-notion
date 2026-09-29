@@ -14088,6 +14088,27 @@
   // por antecedência — não precisa do prefixo composto do map acima).
   var notifPinExpandedKeys = {};
 
+  // recolhido por padrão (pedido do Georges: chips de categoria da LISTA
+  // principal, não da tela de gestão, atrás de um botão "Filtrar por
+  // Categorias") — só em memória, reseta a cada reload de verdade.
+  var notifCategoryChipsExpanded = false;
+
+  // pedido do Georges (tela de gestão): cada FONTE vira uma linha recolhida
+  // (ícone+nome+toggle); clicar no nome expande pra ver antecedências/add/
+  // pin. Chave = sourceId, só em memória, mesmo espírito dos outros mapas
+  // de expansão desta tela.
+  var notifSourceExpandedKeys = {};
+
+  // pedido do Georges: "criar" vira só um botão + que revela Qtd+unidade ao
+  // clicar, em vez de aparecer sempre. Chave = sourceId — fecha sozinho de
+  // novo depois de criar (ver addBtn abaixo).
+  var notifAddLeadTimeExpandedKeys = {};
+
+  // "Notificação Inteligente" — mesmo padrão de notifPinExpandedKeys: 1
+  // chave por fonte, controla só se o painel de dias/períodos está aberto
+  // na tela (não é o "enabled" salvo, que vive em s.smartSchedule.enabled).
+  var notifSmartScheduleExpandedKeys = {};
+
   // ordem alfabética (pedido do Georges: "coloque estes itens... em ordem
   // alfabética") — por LABEL, não pela ordem de cadastro em
   // NOTIFICATION_SOURCES (que foi crescendo por ordem de pedido ao longo do
@@ -14142,9 +14163,60 @@
         // dessa fonte sempre aparecem no FIM da lista de Não lidas/Todas,
         // mesmo com prazo mais próximo que outra notificação). É por FONTE
         // inteira, não por antecedência — desligado por padrão.
-        pinToEnd: !!(s && s.pinToEnd)
+        pinToEnd: !!(s && s.pinToEnd),
+        // "Notificação Inteligente" (pedido do Georges: "selecionar em quais
+        // dias da semana... e o período... a notificação daquela categoria
+        // deverá ser exibida somente no dia e período configurado") — por
+        // FONTE inteira, igual pinToEnd. Sem dias OU sem períodos marcados
+        // enquanto enabled:true = self-heal, "sem restrição" (ver
+        // getSmartScheduleActive) — evita a fonte sumir sozinha por engano.
+        smartSchedule: normalizeNotifSmartSchedule(s && s.smartSchedule)
       };
     });
+  }
+
+  var SMART_SCHEDULE_DAY_DEFS = [
+    { id: "mon", label: "Seg" },
+    { id: "tue", label: "Ter" },
+    { id: "wed", label: "Qua" },
+    { id: "thu", label: "Qui" },
+    { id: "fri", label: "Sex" },
+    { id: "sat", label: "Sáb" },
+    { id: "sun", label: "Dom" }
+  ];
+  // 06h-12h / 12h-18h / 18h-24h — confirmado com o Georges via pergunta
+  // explícita antes de implementar.
+  var SMART_SCHEDULE_PERIOD_DEFS = [
+    { id: "morning", label: "Manhã", startHour: 6, endHour: 12 },
+    { id: "afternoon", label: "Tarde", startHour: 12, endHour: 18 },
+    { id: "evening", label: "Noite", startHour: 18, endHour: 24 }
+  ];
+
+  function normalizeNotifSmartSchedule(raw) {
+    var obj = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw : {};
+    var validDays = SMART_SCHEDULE_DAY_DEFS.map(function (d) { return d.id; });
+    var validPeriods = SMART_SCHEDULE_PERIOD_DEFS.map(function (p) { return p.id; });
+    var days = Array.isArray(obj.days) ? obj.days.filter(function (d) { return validDays.indexOf(d) !== -1; }) : [];
+    var periods = Array.isArray(obj.periods) ? obj.periods.filter(function (p) { return validPeriods.indexOf(p) !== -1; }) : [];
+    return { enabled: !!obj.enabled, days: days, periods: periods };
+  }
+
+  // Devolve se a Notificação Inteligente de uma fonte está de fato
+  // restringindo AGORA (pra usar tanto no cálculo de notificações quanto
+  // na UI). Self-heal (confirmado com o Georges): enabled:true mas sem
+  // nenhum dia OU sem nenhum período marcado = trata como não configurado,
+  // sem restrição nenhuma (em vez da fonte sumir sozinha por engano).
+  function notifSmartScheduleAllowsNow(smartSchedule, when) {
+    var ss = smartSchedule || {};
+    if (!ss.enabled || !ss.days || !ss.days.length || !ss.periods || !ss.periods.length) return true;
+    var d = when instanceof Date ? when : new Date();
+    var dayId = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d.getDay()];
+    if (ss.days.indexOf(dayId) === -1) return false;
+    var hour = d.getHours();
+    var periodOk = SMART_SCHEDULE_PERIOD_DEFS.some(function (p) {
+      return ss.periods.indexOf(p.id) !== -1 && hour >= p.startHour && hour < p.endHour;
+    });
+    return periodOk;
   }
 
   function fetchNotifSettings() {
@@ -14158,6 +14230,10 @@
   // gestão evita a busca dela inteira, não só esconde o resultado depois.
   function computeNotifications(sources) {
     return Promise.all(sources.filter(function (s) { return s.enabled; }).map(function (source) {
+      // "Notificação Inteligente" (pedido do Georges): fora do dia/período
+      // configurado, a fonte inteira some — nem busca no Notion/KV, já
+      // corta aqui antes do fetch (evita gasto de request à toa).
+      if (!notifSmartScheduleAllowsNow(source.smartSchedule)) return [];
       return fetchNotificationSourceItems(source).then(function (pages) {
         return buildNotificationsFromSource(source, pages);
       });
@@ -14695,7 +14771,7 @@
       // resolvedNotifSources/setNotifLeadTimeChannel); pinToEnd é o único
       // campo que continua em nível de FONTE (card inteiro, não por
       // antecedência).
-      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd };
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd, smartSchedule: s.smartSchedule };
     });
     return out;
   }
@@ -14744,6 +14820,34 @@
     var s = findNotifSource(sourceId);
     if (!s || s.pinToEnd === on) return;
     s.pinToEnd = on;
+    applyNotifSettingsChange();
+  }
+
+  // "Notificação Inteligente" (pedido do Georges — ver comentário em
+  // resolvedNotifSources/normalizeNotifSmartSchedule). toggle liga/desliga
+  // e os setters de dia/período operam sobre o MESMO objeto smartSchedule
+  // por fonte; sempre substitui o array inteiro (dias/períodos), igual ao
+  // padrão de outros multi-selects do app (nunca faz merge campo a campo).
+  function setNotifSourceSmartScheduleEnabled(sourceId, on) {
+    var s = findNotifSource(sourceId);
+    if (!s || s.smartSchedule.enabled === on) return;
+    s.smartSchedule.enabled = on;
+    applyNotifSettingsChange();
+  }
+  function toggleNotifSourceSmartScheduleDay(sourceId, dayId) {
+    var s = findNotifSource(sourceId);
+    if (!s) return;
+    var idx = s.smartSchedule.days.indexOf(dayId);
+    if (idx === -1) s.smartSchedule.days.push(dayId);
+    else s.smartSchedule.days.splice(idx, 1);
+    applyNotifSettingsChange();
+  }
+  function toggleNotifSourceSmartSchedulePeriod(sourceId, periodId) {
+    var s = findNotifSource(sourceId);
+    if (!s) return;
+    var idx = s.smartSchedule.periods.indexOf(periodId);
+    if (idx === -1) s.smartSchedule.periods.push(periodId);
+    else s.smartSchedule.periods.splice(idx, 1);
     applyNotifSettingsChange();
   }
 
@@ -14838,12 +14942,31 @@
       var block = document.createElement("div");
       block.className = "notif-settings-source";
 
+      // pedido do Georges: a fonte inteira nasce recolhida — só ícone+nome+
+      // toggle aparecem; clicar no nome (não no toggle) expande o resto
+      // (antecedências, criar, fixar ao final). Área de clique de expandir
+      // é só o "headClick" (ícone+nome+seta) — o toggle fica FORA dela, de
+      // propósito, senão ligar/desligar a fonte também expandiria/
+      // recolheria sem querer.
+      var sourceExpanded = !!notifSourceExpandedKeys[s.id];
+
       var head = document.createElement("div");
       head.className = "notif-settings-source-head";
+
+      var headClick = document.createElement("div");
+      headClick.className = "notif-settings-source-headclick";
       var label = document.createElement("span");
       label.className = "notif-settings-source-label";
       label.textContent = (s.icon ? s.icon + " " : "") + s.label;
-      head.appendChild(label);
+      headClick.appendChild(label);
+      var chevron = document.createElement("i");
+      chevron.className = "ti " + (sourceExpanded ? "ti-chevron-up" : "ti-chevron-down") + " notif-settings-source-chevron";
+      headClick.appendChild(chevron);
+      headClick.addEventListener("click", function () {
+        notifSourceExpandedKeys[s.id] = !notifSourceExpandedKeys[s.id];
+        renderNotifSettings();
+      });
+      head.appendChild(headClick);
 
       var toggle = document.createElement("label");
       toggle.className = "notif-settings-toggle";
@@ -14857,6 +14980,11 @@
       toggle.appendChild(track);
       head.appendChild(toggle);
       block.appendChild(head);
+
+      if (!sourceExpanded) {
+        listEl.appendChild(block);
+        return;
+      }
 
       if (s.leadTimes.length) {
         var chips = document.createElement("div");
@@ -14997,36 +15125,73 @@
         block.appendChild(noneEl);
       }
 
-      var addRow = document.createElement("div");
-      addRow.className = "notif-settings-add-row";
-      var amountInput = document.createElement("input");
-      amountInput.type = "number";
-      amountInput.min = "1";
-      amountInput.className = "notif-settings-add-amount";
-      amountInput.placeholder = "Qtd";
-      addRow.appendChild(amountInput);
-      var unitSelect = document.createElement("select");
-      unitSelect.className = "notif-settings-add-unit";
-      [["days", "dias"], ["hours", "horas"]].forEach(function (opt) {
-        var o = document.createElement("option");
-        o.value = opt[0];
-        o.textContent = opt[1];
-        unitSelect.appendChild(o);
-      });
-      addRow.appendChild(unitSelect);
-      var addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "notif-settings-add-btn";
-      addBtn.title = "Adicionar antecedência";
-      addBtn.innerHTML = '<i class="ti ti-plus"></i>';
-      addBtn.addEventListener("click", function () {
-        var amount = parseInt(amountInput.value, 10);
-        if (!amount || amount <= 0) return;
-        addNotifLeadTime(s.id, amount, unitSelect.value);
-        amountInput.value = "";
-      });
-      addRow.appendChild(addBtn);
-      block.appendChild(addRow);
+      // linha combinada (pedido do Georges: "diminuindo o tamanho da opção
+      // de criar (+), conseguiríamos colocar o botão Fixar ao final na
+      // mesma altura") — "+" de criar antecedência e a pílula "Fixar ao
+      // final" convivem lado a lado nesta linha com wrap; quando o "+" se
+      // expande em formulário, ele quebra pra própria linha (flex-wrap) em
+      // vez de espremer/desalinhar a pílula.
+      var addPinRow = document.createElement("div");
+      addPinRow.className = "notif-settings-addpin-row";
+
+      var addInline = document.createElement("div");
+      addInline.className = "notif-settings-add-inline";
+      var addExpanded = !!notifAddLeadTimeExpandedKeys[s.id];
+      if (!addExpanded) {
+        var addToggleBtn = document.createElement("button");
+        addToggleBtn.type = "button";
+        addToggleBtn.className = "notif-settings-add-toggle-btn";
+        addToggleBtn.title = "Adicionar antecedência";
+        addToggleBtn.setAttribute("aria-label", "Adicionar antecedência");
+        addToggleBtn.innerHTML = '<i class="ti ti-plus"></i>';
+        addToggleBtn.addEventListener("click", function () {
+          notifAddLeadTimeExpandedKeys[s.id] = true;
+          renderNotifSettings();
+        });
+        addInline.appendChild(addToggleBtn);
+      } else {
+        var amountInput = document.createElement("input");
+        amountInput.type = "number";
+        amountInput.min = "1";
+        amountInput.className = "notif-settings-add-amount";
+        amountInput.placeholder = "Qtd";
+        addInline.appendChild(amountInput);
+        var unitSelect = document.createElement("select");
+        unitSelect.className = "notif-settings-add-unit";
+        [["days", "dias"], ["hours", "horas"]].forEach(function (opt) {
+          var o = document.createElement("option");
+          o.value = opt[0];
+          o.textContent = opt[1];
+          unitSelect.appendChild(o);
+        });
+        addInline.appendChild(unitSelect);
+        var addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "notif-settings-add-btn";
+        addBtn.title = "Adicionar antecedência";
+        addBtn.innerHTML = '<i class="ti ti-check"></i>';
+        addBtn.addEventListener("click", function () {
+          var amount = parseInt(amountInput.value, 10);
+          if (!amount || amount <= 0) return;
+          // recolhe de volta pro "+" antes de chamar addNotifLeadTime, já
+          // que applyNotifSettingsChange() re-renderiza de forma síncrona
+          // (ver comentário na declaração de notifAddLeadTimeExpandedKeys)
+          notifAddLeadTimeExpandedKeys[s.id] = false;
+          addNotifLeadTime(s.id, amount, unitSelect.value);
+        });
+        addInline.appendChild(addBtn);
+        var addCancelBtn = document.createElement("button");
+        addCancelBtn.type = "button";
+        addCancelBtn.className = "notif-settings-add-cancel-btn";
+        addCancelBtn.title = "Cancelar";
+        addCancelBtn.innerHTML = '<i class="ti ti-x"></i>';
+        addCancelBtn.addEventListener("click", function () {
+          notifAddLeadTimeExpandedKeys[s.id] = false;
+          renderNotifSettings();
+        });
+        addInline.appendChild(addCancelBtn);
+      }
+      addPinRow.appendChild(addInline);
 
       // "Fixar ao final das notificações" (pedido do Georges: 1 opção POR
       // CARD, fora do colapsável de cada antecedência) — mesmo padrão de
@@ -15054,7 +15219,86 @@
       });
       pinChip.appendChild(pinChipLabel);
       pinChipRow.appendChild(pinChip);
-      block.appendChild(pinChipRow);
+      addPinRow.appendChild(pinChipRow);
+
+      // "Notificação Inteligente" (pedido do Georges: "botão com ícone de
+      // inteligente... pra configurar em quais dias da semana e período
+      // aquela notificação deve ser exibida") — mesmo padrão de pílula
+      // clicável de Fixar ao final, ao lado dela na mesma linha.
+      var smartExpanded = !!notifSmartScheduleExpandedKeys[s.id];
+      var smartActiveNow = notifSmartScheduleAllowsNow(s.smartSchedule) === false; // só informativo, não usado no texto
+      var smartHasConfig = s.smartSchedule.enabled && s.smartSchedule.days.length && s.smartSchedule.periods.length;
+      var smartChipRow = document.createElement("div");
+      smartChipRow.className = "notif-settings-leadtime-chip-row";
+      var smartChip = document.createElement("span");
+      smartChip.className = "notif-settings-leadtime-chip" +
+        (smartHasConfig ? " has-config" : "") +
+        (smartExpanded ? " active" : "");
+      var smartChipLabel = document.createElement("span");
+      smartChipLabel.className = "notif-settings-leadtime-chip-label";
+      smartChipLabel.textContent = "🧠 Notificação Inteligente" + (smartHasConfig ? " (ligado)" : "");
+      smartChipLabel.title = smartHasConfig
+        ? "Notificação Inteligente está ligada — clique pra ver/editar"
+        : "Clique pra configurar em quais dias/períodos aparece";
+      smartChipLabel.addEventListener("click", function () {
+        notifSmartScheduleExpandedKeys[s.id] = !notifSmartScheduleExpandedKeys[s.id];
+        renderNotifSettings();
+      });
+      smartChip.appendChild(smartChipLabel);
+      smartChipRow.appendChild(smartChip);
+      addPinRow.appendChild(smartChipRow);
+      block.appendChild(addPinRow);
+
+      if (smartExpanded) {
+        var smartWrap = document.createElement("div");
+        smartWrap.className = "notif-settings-channels";
+        var smartToggleRow = document.createElement("label");
+        smartToggleRow.className = "notif-settings-channel-row";
+        var smartToggleCb = document.createElement("input");
+        smartToggleCb.type = "checkbox";
+        smartToggleCb.checked = !!s.smartSchedule.enabled;
+        smartToggleCb.addEventListener("change", function () { setNotifSourceSmartScheduleEnabled(s.id, smartToggleCb.checked); });
+        smartToggleRow.appendChild(smartToggleCb);
+        var smartToggleText = document.createElement("span");
+        smartToggleText.className = "notif-settings-channel-text";
+        var smartToggleLabel = document.createElement("span");
+        smartToggleLabel.className = "notif-settings-channel-label";
+        smartToggleLabel.textContent = "Notificação Inteligente";
+        smartToggleText.appendChild(smartToggleLabel);
+        var smartToggleHint = document.createElement("span");
+        smartToggleHint.className = "notif-settings-channel-hint";
+        smartToggleHint.textContent = "só mostra os avisos dessa fonte nos dias/períodos marcados abaixo — some completamente fora disso. Sem nenhum dia ou período marcado, funciona sem restrição.";
+        smartToggleText.appendChild(smartToggleHint);
+        smartToggleRow.appendChild(smartToggleText);
+        smartWrap.appendChild(smartToggleRow);
+
+        var smartDaysRow = document.createElement("div");
+        smartDaysRow.className = "notif-settings-smart-pills-row";
+        SMART_SCHEDULE_DAY_DEFS.forEach(function (d) {
+          var dayPill = document.createElement("button");
+          dayPill.type = "button";
+          dayPill.className = "notif-settings-smart-pill" + (s.smartSchedule.days.indexOf(d.id) !== -1 ? " active" : "");
+          dayPill.textContent = d.label;
+          dayPill.addEventListener("click", function () { toggleNotifSourceSmartScheduleDay(s.id, d.id); });
+          smartDaysRow.appendChild(dayPill);
+        });
+        smartWrap.appendChild(smartDaysRow);
+
+        var smartPeriodsRow = document.createElement("div");
+        smartPeriodsRow.className = "notif-settings-smart-pills-row";
+        SMART_SCHEDULE_PERIOD_DEFS.forEach(function (p) {
+          var periodPill = document.createElement("button");
+          periodPill.type = "button";
+          periodPill.className = "notif-settings-smart-pill" + (s.smartSchedule.periods.indexOf(p.id) !== -1 ? " active" : "");
+          periodPill.textContent = p.label;
+          periodPill.title = p.label + " (" + p.startHour + "h–" + p.endHour + "h)";
+          periodPill.addEventListener("click", function () { toggleNotifSourceSmartSchedulePeriod(s.id, p.id); });
+          smartPeriodsRow.appendChild(periodPill);
+        });
+        smartWrap.appendChild(smartPeriodsRow);
+
+        block.appendChild(smartWrap);
+      }
 
       if (pinExpanded) {
         var pinWrap = document.createElement("div");
@@ -15157,27 +15401,46 @@
       return { id: s.id, icon: s.icon, label: s.label };
     });
     if (chipSources.length > 1) {
-      var chipsRow = document.createElement("div");
-      chipsRow.className = "notif-category-chips";
-      chipSources.forEach(function (cs) {
-        var isSolo = notifState.soloSourceId === cs.id;
-        var isHidden = !isSolo && notifState.hiddenSourceIds.indexOf(cs.id) !== -1;
-        var chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "notif-category-chip" +
-          (isSolo ? " notif-category-chip-solo" : "") +
-          (isHidden ? " notif-category-chip-off" : "");
-        chip.textContent = (cs.icon ? cs.icon + " " : "") + cs.label;
-        chip.title = isSolo ? "Exibindo só esta — clique pra ocultar" :
-          isHidden ? "Oculta — clique pra voltar ao normal" :
-          "Clique pra exibir só esta categoria";
-        chip.addEventListener("click", function () {
-          cycleNotifCategoryChip(cs.id);
-          renderNotifList();
-        });
-        chipsRow.appendChild(chip);
+      // recolhido por padrão (pedido do Georges: "esconder esses botões de
+      // filtro dentro de um botão de recolher/expandir, chamado Filtrar por
+      // Categorias") — estado só em memória (notifCategoryChipsExpanded),
+      // igual outros colapsos do painel; reseta a cada reload de verdade.
+      var anyActiveFilter = !!notifState.soloSourceId || notifState.hiddenSourceIds.length > 0;
+      var chipsToggle = document.createElement("button");
+      chipsToggle.type = "button";
+      chipsToggle.className = "notif-category-toggle" + (notifCategoryChipsExpanded ? " active" : "") + (anyActiveFilter ? " has-filter" : "");
+      chipsToggle.innerHTML = '<i class="ti ti-filter"></i><span>Filtrar por Categorias</span>' +
+        (anyActiveFilter ? '<span class="notif-category-toggle-dot"></span>' : "") +
+        '<i class="ti ' + (notifCategoryChipsExpanded ? "ti-chevron-up" : "ti-chevron-down") + '"></i>';
+      chipsToggle.addEventListener("click", function () {
+        notifCategoryChipsExpanded = !notifCategoryChipsExpanded;
+        renderNotifList();
       });
-      listEl.appendChild(chipsRow);
+      listEl.appendChild(chipsToggle);
+
+      if (notifCategoryChipsExpanded) {
+        var chipsRow = document.createElement("div");
+        chipsRow.className = "notif-category-chips";
+        chipSources.forEach(function (cs) {
+          var isSolo = notifState.soloSourceId === cs.id;
+          var isHidden = !isSolo && notifState.hiddenSourceIds.indexOf(cs.id) !== -1;
+          var chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "notif-category-chip" +
+            (isSolo ? " notif-category-chip-solo" : "") +
+            (isHidden ? " notif-category-chip-off" : "");
+          chip.textContent = (cs.icon ? cs.icon + " " : "") + cs.label;
+          chip.title = isSolo ? "Exibindo só esta — clique pra ocultar" :
+            isHidden ? "Oculta — clique pra voltar ao normal" :
+            "Clique pra exibir só esta categoria";
+          chip.addEventListener("click", function () {
+            cycleNotifCategoryChip(cs.id);
+            renderNotifList();
+          });
+          chipsRow.appendChild(chip);
+        });
+        listEl.appendChild(chipsRow);
+      }
     }
 
     var groups = modeGroupsIgnoringCategory.filter(function (g) {

@@ -2168,11 +2168,41 @@ html, body {
    #notifPanelList, primeiro filho, renderizado de novo a cada
    renderNotifList() junto com os cards; some sozinho quando a tela de
    gestão substitui o conteúdo da lista (troca de innerHTML). */
+/* botão "Filtrar por Categorias" (pedido do Georges) — recolhe a fileira de
+   chips abaixo; ".has-filter" acende o pontinho quando solo/oculta já está
+   ativo em alguma categoria, pra dar pra notar mesmo com a fileira fechada. */
+.notif-category-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #4a4a45;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  width: 100%;
+}
+.notif-category-toggle:hover { border-color: #b9b9b3; background: #f7f7f5; }
+.notif-category-toggle.active { border-color: #4a90d9; color: #2f6cb0; }
+.notif-category-toggle span:first-of-type { flex: 1; text-align: left; }
+.notif-category-toggle i:last-child { font-size: 14px; color: #999; }
+.notif-category-toggle-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4a90d9;
+  flex-shrink: 0;
+}
 .notif-category-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding-bottom: 2px;
+  margin-bottom: 4px;
 }
 .notif-category-chip {
   border: 0.5px solid #dcdcd8;
@@ -2274,6 +2304,23 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* pedido do Georges: fonte inteira nasce recolhida — só a área do
+   ícone+nome+seta (headclick) é clicável pra expandir/recolher; o toggle
+   liga/desliga (.notif-settings-toggle, irmão fora daqui) fica de fora de
+   propósito, senão ligar a fonte também abriria o card sem querer. */
+.notif-settings-source-headclick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.notif-settings-source-chevron {
+  font-size: 13px;
+  color: #999;
+  flex-shrink: 0;
 }
 .notif-settings-source-label {
   font-size: 12.5px;
@@ -2413,6 +2460,80 @@ html, body {
 }
 .notif-settings-add-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
 .notif-settings-add-btn .ti { font-size: 13px; }
+
+/* linha combinada "+" (criar antecedência) + "Fixar ao final" (pedido do
+   Georges: "diminuindo o tamanho da opção de criar (+), conseguiríamos
+   colocar o botão Fixar ao final na mesma altura"). flex-wrap: quando o
+   "+" vira formulário (Qtd+unidade+confirmar+cancelar), ele quebra pra
+   própria linha em vez de espremer/desalinhar a pílula de Fixar ao final. */
+.notif-settings-addpin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.notif-settings-add-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.notif-settings-add-toggle-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #4a90d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.notif-settings-add-toggle-btn:hover { border-color: #b9b9b3; background: #f7f7f5; }
+.notif-settings-add-toggle-btn .ti { font-size: 13px; }
+.notif-settings-add-cancel-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.notif-settings-add-cancel-btn:hover { border-color: #b9b9b3; background: #f7f7f5; color: #666; }
+.notif-settings-add-cancel-btn .ti { font-size: 12px; }
+
+/* "Notificação Inteligente" (pedido do Georges: selecionar dias da
+   semana + período em que a fonte deve aparecer) — pílulas de seleção
+   múltipla, mesmo espírito visual dos chips de antecedência/canal já
+   usados no resto do editor de gestão. */
+.notif-settings-smart-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+.notif-settings-smart-pill {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #4a4a45;
+  font-size: 11px;
+  cursor: pointer;
+}
+.notif-settings-smart-pill:hover { border-color: #b9b9b3; background: #f7f7f5; }
+.notif-settings-smart-pill.active {
+  background: #eaf2fb;
+  border-color: #4a90d9;
+  color: #3a7dc4;
+  font-weight: 600;
+}
 
 /* ---------------- canais extras POR ANTECEDÊNCIA (pedido do Georges,
    Aniversários: "essas regras de configuração seriam definidas
