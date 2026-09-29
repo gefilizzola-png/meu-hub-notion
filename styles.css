@@ -4798,6 +4798,24 @@ html, body {
    só o intervalo de datas coberto pelos itens que alimentam os totais). */
 .financeiro-summary-period { border-color: #d8d8d3; background: #f7f6f2; }
 .financeiro-summary-period .financeiro-summary-value { color: #55554f; font-size: 13px; }
+
+/* tela de PIN de Transações (pedido do Georges: "camada de verificação
+   antes de abrir" — ver renderTransacoesLockScreen/renderTransacoesUnlocked
+   no app.js) — caixa neutra, mesma família visual de ".legislacoes-block"
+   mas em tom âmbar (cadeado, não é um filtro/busca comum). */
+.transacoes-lock-box {
+  background: rgba(217, 119, 6, 0.05);
+  border: 0.5px solid rgba(217, 119, 6, 0.25);
+  border-left: 3px solid #d97706;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 8px;
+  max-width: 420px;
+}
+.transacoes-lock-desc { font-size: 13px; color: #55554f; margin: 0 0 10px; }
+.transacoes-lock-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.transacoes-lock-input { width: 130px; letter-spacing: 0.15em; }
+.transacoes-lock-error { font-size: 12.5px; color: #c0392b; margin: 8px 0 0; }
 /* coluna/botão de Nota (pedido do Georges — rascunho de mensagem de
    parabéns pra copiar/colar no WhatsApp) — reaproveita os mesmos
    ".priorities-note-toggle"/".priorities-note-row"/".priorities-note-

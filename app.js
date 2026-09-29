@@ -11019,15 +11019,303 @@
     return parts[2] + "/" + parts[1] + "/" + parts[0];
   }
 
+  // Chave da unlock-lock guardada no localStorage — pedido do Georges:
+  // "Transações tem informações sensíveis, como podemos aplicar uma camada
+  // de verificação antes de abrir?" Optou pelo PIN próprio da página (não
+  // WebAuthn/biometria — mais simples de manter). O token devolvido por
+  // POST /transacoes-unlock é assinado (HMAC, mesmo segredo da sessão) e
+  // expira sozinho (TRANSACOES_UNLOCK_TTL_MIN no worker.js, hoje 20min) —
+  // sem ele, /transacoes e /transacoes-filtros devolvem 423 mesmo com
+  // sessão de login válida (rule: só a sessão do Google/própria NÃO basta
+  // pra ler os dados financeiros).
+  var TRANSACOES_UNLOCK_KEY = "meuhub_transacoes_unlock";
+
+  function transacoesGetStoredUnlock() {
+    try {
+      var raw = localStorage.getItem(TRANSACOES_UNLOCK_KEY);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      if (!obj || !obj.token || !obj.exp) return null;
+      if (Math.floor(Date.now() / 1000) >= obj.exp - 5) return null; // margem de 5s
+      return obj;
+    } catch (e) { return null; }
+  }
+  function transacoesStoreUnlock(token, exp) {
+    try { localStorage.setItem(TRANSACOES_UNLOCK_KEY, JSON.stringify({ token: token, exp: exp })); } catch (e) {}
+  }
+  function transacoesClearUnlock() {
+    try { localStorage.removeItem(TRANSACOES_UNLOCK_KEY); } catch (e) {}
+  }
+
   function renderTransacoesPage(container, page) {
     var wrap = document.createElement("div");
     wrap.className = "transacoes-block";
     container.appendChild(wrap);
 
+    var stored = transacoesGetStoredUnlock();
+    if (stored) renderTransacoesUnlocked(wrap, stored.token);
+    else renderTransacoesLockScreen(wrap);
+  }
+
+  // Consulta se já existe PIN configurado e mostra a tela certa (criar 1ª
+  // vez, ou digitar o já existente).
+  function renderTransacoesLockScreen(wrap) {
+    wrap.innerHTML = "";
     var title = document.createElement("h3");
     title.className = "group-title";
     title.textContent = "💳 Transações";
     wrap.appendChild(title);
+
+    var lockBox = document.createElement("div");
+    lockBox.className = "transacoes-lock-box";
+    wrap.appendChild(lockBox);
+    var loadingMsg = document.createElement("p");
+    loadingMsg.className = "empty";
+    loadingMsg.textContent = "Verificando…";
+    lockBox.appendChild(loadingMsg);
+
+    authFetch(cfg.templateWorkerUrl + "/transacoes-pin-status")
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
+      .then(function (result) {
+        if (result.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+        if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao verificar PIN");
+        if (result.data.hasPin) renderTransacoesPinEntry(wrap, lockBox);
+        else renderTransacoesPinSetup(wrap, lockBox);
+      })
+      .catch(function (err) {
+        lockBox.innerHTML = "";
+        var e = document.createElement("p");
+        e.className = "empty";
+        e.textContent = "Erro: " + err.message;
+        lockBox.appendChild(e);
+      });
+  }
+
+  function renderTransacoesPinEntry(wrap, box) {
+    box.innerHTML = "";
+    var desc = document.createElement("p");
+    desc.className = "transacoes-lock-desc";
+    desc.textContent = "Transações tem dados financeiros sensíveis — digite o PIN pra continuar.";
+    box.appendChild(desc);
+
+    var row = document.createElement("div");
+    row.className = "transacoes-lock-row";
+    var input = document.createElement("input");
+    input.type = "password";
+    input.inputMode = "numeric";
+    input.maxLength = 6;
+    input.placeholder = "PIN";
+    input.className = "filter-trigger transacoes-lock-input";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "financeiro-pay-btn";
+    btn.textContent = "Entrar";
+    row.appendChild(input);
+    row.appendChild(btn);
+    box.appendChild(row);
+
+    var errEl = document.createElement("p");
+    errEl.className = "transacoes-lock-error";
+    errEl.style.display = "none";
+    box.appendChild(errEl);
+
+    function submit() {
+      var pin = input.value.trim();
+      if (!pin) return;
+      btn.disabled = true;
+      errEl.style.display = "none";
+      authFetch(cfg.templateWorkerUrl + "/transacoes-unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pin }),
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
+        .then(function (result) {
+          btn.disabled = false;
+          if (result.status === 401 && window.Auth && result.data && /faça login/i.test((result.data && result.data.error) || "")) { Auth.signOut(); return; }
+          if (!result.ok) {
+            errEl.textContent = (result.data && result.data.error) || "PIN incorreto";
+            errEl.style.display = "block";
+            input.value = "";
+            input.focus();
+            return;
+          }
+          transacoesStoreUnlock(result.data.token, result.data.exp);
+          renderTransacoesUnlocked(wrap, result.data.token);
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          errEl.textContent = "Erro: " + err.message;
+          errEl.style.display = "block";
+        });
+    }
+    btn.addEventListener("click", submit);
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") submit(); });
+    input.focus();
+  }
+
+  function renderTransacoesPinSetup(wrap, box) {
+    box.innerHTML = "";
+    var desc = document.createElement("p");
+    desc.className = "transacoes-lock-desc";
+    desc.textContent = "Primeira vez aqui — crie um PIN (4 a 6 dígitos) pra proteger o acesso a Transações.";
+    box.appendChild(desc);
+
+    var row = document.createElement("div");
+    row.className = "transacoes-lock-row";
+    var input1 = document.createElement("input");
+    input1.type = "password"; input1.inputMode = "numeric"; input1.maxLength = 6;
+    input1.placeholder = "Novo PIN"; input1.className = "filter-trigger transacoes-lock-input";
+    var input2 = document.createElement("input");
+    input2.type = "password"; input2.inputMode = "numeric"; input2.maxLength = 6;
+    input2.placeholder = "Confirmar PIN"; input2.className = "filter-trigger transacoes-lock-input";
+    var btn = document.createElement("button");
+    btn.type = "button"; btn.className = "financeiro-pay-btn"; btn.textContent = "Criar PIN";
+    row.appendChild(input1);
+    row.appendChild(input2);
+    row.appendChild(btn);
+    box.appendChild(row);
+
+    var errEl = document.createElement("p");
+    errEl.className = "transacoes-lock-error";
+    errEl.style.display = "none";
+    box.appendChild(errEl);
+
+    function submit() {
+      var pin1 = input1.value.trim(), pin2 = input2.value.trim();
+      if (!/^\d{4,6}$/.test(pin1)) {
+        errEl.textContent = "PIN deve ter de 4 a 6 dígitos.";
+        errEl.style.display = "block";
+        return;
+      }
+      if (pin1 !== pin2) {
+        errEl.textContent = "Os dois PINs digitados não são iguais.";
+        errEl.style.display = "block";
+        return;
+      }
+      btn.disabled = true;
+      errEl.style.display = "none";
+      authFetch(cfg.templateWorkerUrl + "/transacoes-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPin: pin1 }),
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
+        .then(function (result) {
+          if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao criar PIN");
+          // já criado — desbloqueia na sequência, sem pedir de novo.
+          return authFetch(cfg.templateWorkerUrl + "/transacoes-unlock", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pin: pin1 }),
+          }).then(function (res2) { return res2.json().then(function (data2) { return { ok: res2.ok, status: res2.status, data: data2 }; }); });
+        })
+        .then(function (result2) {
+          btn.disabled = false;
+          if (!result2.ok) throw new Error((result2.data && result2.data.error) || "Falha ao desbloquear");
+          transacoesStoreUnlock(result2.data.token, result2.data.exp);
+          renderTransacoesUnlocked(wrap, result2.data.token);
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          errEl.textContent = "Erro: " + err.message;
+          errEl.style.display = "block";
+        });
+    }
+    btn.addEventListener("click", submit);
+    [input1, input2].forEach(function (el) { el.addEventListener("keydown", function (e) { if (e.key === "Enter") submit(); }); });
+    input1.focus();
+  }
+
+  // pequeno painel pra trocar o PIN sem sair da página (pedido implícito —
+  // um PIN precisa poder ser trocado se vazar/for esquecido). Fica atrás de
+  // um botão discreto ao lado do título, igual outros painéis do app
+  // (ex: engrenagem de Notificações).
+  function renderTransacoesChangePinPanel(wrap, holder, unlockToken) {
+    holder.innerHTML = "";
+    var row1 = document.createElement("div");
+    row1.className = "transacoes-lock-row";
+    var curInput = document.createElement("input");
+    curInput.type = "password"; curInput.inputMode = "numeric"; curInput.maxLength = 6;
+    curInput.placeholder = "PIN atual"; curInput.className = "filter-trigger transacoes-lock-input";
+    var newInput = document.createElement("input");
+    newInput.type = "password"; newInput.inputMode = "numeric"; newInput.maxLength = 6;
+    newInput.placeholder = "Novo PIN"; newInput.className = "filter-trigger transacoes-lock-input";
+    var saveBtn = document.createElement("button");
+    saveBtn.type = "button"; saveBtn.className = "financeiro-pay-btn"; saveBtn.textContent = "Salvar";
+    row1.appendChild(curInput); row1.appendChild(newInput); row1.appendChild(saveBtn);
+    holder.appendChild(row1);
+
+    var errEl = document.createElement("p");
+    errEl.className = "transacoes-lock-error";
+    errEl.style.display = "none";
+    holder.appendChild(errEl);
+
+    saveBtn.addEventListener("click", function () {
+      var currentPin = curInput.value.trim(), newPin = newInput.value.trim();
+      if (!/^\d{4,6}$/.test(newPin)) { errEl.textContent = "Novo PIN deve ter de 4 a 6 dígitos."; errEl.style.display = "block"; return; }
+      saveBtn.disabled = true;
+      errEl.style.display = "none";
+      authFetch(cfg.templateWorkerUrl + "/transacoes-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPin: currentPin, newPin: newPin }),
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
+        .then(function (result) {
+          saveBtn.disabled = false;
+          if (!result.ok) {
+            errEl.textContent = (result.data && result.data.error) || "Falha ao trocar o PIN";
+            errEl.style.display = "block";
+            return;
+          }
+          holder.innerHTML = "";
+          var ok = document.createElement("p");
+          ok.className = "empty";
+          ok.textContent = "PIN alterado.";
+          holder.appendChild(ok);
+        })
+        .catch(function (err) {
+          saveBtn.disabled = false;
+          errEl.textContent = "Erro: " + err.message;
+          errEl.style.display = "block";
+        });
+    });
+  }
+
+  function renderTransacoesUnlocked(wrap, unlockToken) {
+    wrap.innerHTML = "";
+
+    var titleRow = document.createElement("div");
+    titleRow.style.display = "flex";
+    titleRow.style.alignItems = "center";
+    titleRow.style.justifyContent = "space-between";
+    titleRow.style.flexWrap = "wrap";
+    titleRow.style.gap = "8px";
+    wrap.appendChild(titleRow);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "💳 Transações";
+    title.style.margin = "0";
+    titleRow.appendChild(title);
+
+    var changePinBtn = document.createElement("button");
+    changePinBtn.type = "button";
+    changePinBtn.className = "filter-trigger";
+    changePinBtn.innerHTML = '<i class="ti ti-lock"></i><span>Trocar PIN</span>';
+    titleRow.appendChild(changePinBtn);
+
+    var changePinPanel = document.createElement("div");
+    changePinPanel.className = "transacoes-lock-box";
+    changePinPanel.style.display = "none";
+    wrap.appendChild(changePinPanel);
+    changePinBtn.addEventListener("click", function () {
+      var showing = changePinPanel.style.display !== "none";
+      if (showing) { changePinPanel.style.display = "none"; return; }
+      renderTransacoesChangePinPanel(wrap, changePinPanel, unlockToken);
+      changePinPanel.style.display = "block";
+    });
 
     var statusEl = document.createElement("p");
     statusEl.className = "empty";
@@ -11049,6 +11337,14 @@
 
     var tableWrap = document.createElement("div");
     wrap.appendChild(tableWrap);
+
+    // sessão de desbloqueio expirada/inválida (423 do worker.js) — limpa o
+    // token guardado e volta pra tela de PIN, em vez de mostrar um erro
+    // genérico pro Georges.
+    function transacoesHandleLocked() {
+      transacoesClearUnlock();
+      renderTransacoesLockScreen(wrap);
+    }
 
     var meta = { accounts: [], categories: [], tags: [] };
     var state = {
@@ -11073,6 +11369,7 @@
       if (state.valorMin !== "") qs.push("valorMin=" + encodeURIComponent(state.valorMin));
       if (state.valorMax !== "") qs.push("valorMax=" + encodeURIComponent(state.valorMax));
       qs.push("ignored=" + encodeURIComponent(state.ignoredMode));
+      qs.push("unlock=" + encodeURIComponent(unlockToken));
       return qs.join("&");
     }
 
@@ -11284,6 +11581,7 @@
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
         .then(function (result) {
           if (result.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+          if (result.status === 423) { transacoesHandleLocked(); return; }
           if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar transações");
           lastItems = result.data.items || [];
           lastTotals = result.data.totals || { entradas: 0, saidas: 0, saldo: 0, count: 0 };
@@ -11416,11 +11714,12 @@
     // fetch inicial: metadados dos filtros (contas/categorias/tags) + 1ª
     // busca de transações, em paralelo.
     Promise.all([
-      authFetch(cfg.templateWorkerUrl + "/transacoes-filtros")
+      authFetch(cfg.templateWorkerUrl + "/transacoes-filtros?unlock=" + encodeURIComponent(unlockToken))
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); }),
     ]).then(function (results) {
       var metaResult = results[0];
       if (metaResult.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      if (metaResult.status === 423) { transacoesHandleLocked(); return; }
       if (!metaResult.ok) throw new Error((metaResult.data && metaResult.data.error) || "Falha ao buscar filtros");
       meta = metaResult.data || meta;
       buildFilterBar();
