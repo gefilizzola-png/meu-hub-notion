@@ -1463,7 +1463,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-29 00:29",
+  appVersion: "2026-09-29 12:47",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2868,7 +2868,8 @@ const APP_CONFIG = {
     financeiro: {
       title: "Financeiro",
       items: [
-        { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" }
+        { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
+        { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" }
       ]
     },
 
@@ -2881,6 +2882,34 @@ const APP_CONFIG = {
       // (GET /financeiro-contas?accountKeys=...), ainda ordenável pelas
       // colunas (ver renderFinanceiroContasMensais no app.js).
       financeiroAccounts: FINANCEIRO_ACCOUNT_KEYS,
+      // botão cruzado pra Transações (regra permanente #13a — páginas
+      // vinculadas ganham atalho cruzado no mesmo itemGroup "Abrir").
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "meuhub" }
+        ] }
+      ],
+      items: []
+    },
+
+    // "page.transacoes" (pedido do Georges: "página de exibição das
+    // Transações, com diversos filtros dinâmicos e pesquisas") — espelho
+    // das transações do Visor mantido no D1 "meu-hub-visor" (ver
+    // contexto.md, migração Visor→D1 + tarefa programada "visor-d1-sync").
+    // Só LEITURA (GET /transacoes + GET /transacoes-filtros no worker.js) —
+    // nada aqui escreve no D1 nem no Visor. Mesmo esquema de
+    // "page.financeiroContasMensais"/"page.provasVitor" (tudo que a página
+    // precisa vem pendurado aqui, o app.js só lê "page.*" de forma
+    // genérica) — ver renderTransacoesPage no app.js.
+    financeiro_transacoes: {
+      title: "Transações",
+      transacoes: true,
+      // botão cruzado pra Contas Mensais (mesma regra #13a de cima).
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "meuhub" }
+        ] }
+      ],
       items: []
     },
 

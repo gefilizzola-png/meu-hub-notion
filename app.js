@@ -10984,6 +10984,367 @@
     });
   }
 
+  // ---------------- "page.transacoes" — Transações (espelho do Visor no D1, 100% leitura) ----------------
+  // Pedido do Georges: "página de exibição das Transações no Meu Hub, com
+  // diversos filtros dinâmicos e pesquisas" — tabela sortable (mesmo
+  // padrão de Contas Mensais/Provas/Notas), 7 filtros (Data/Conta/
+  // Categoria/Tags/Tipo/Valor/Ignoradas) + totais do período filtrado no
+  // topo. Fonte: GET /transacoes(-filtros) no worker.js, que lê o D1
+  // "meu-hub-visor" (ver contexto.md — migração Visor→D1). Filtros de
+  // Data/Conta/Categoria/Tags/Tipo/Valor/Ignoradas são todos aplicados NO
+  // SERVIDOR (query params — a base tem ~4900 linhas, não dá pra trazer
+  // tudo e filtrar no cliente como em Provas/Notas); só a busca por texto
+  // (nome/conta/categoria/tag) é client-side, sobre o conjunto já
+  // filtrado/trazido.
+  var TRANSACOES_TIPO_OPTIONS = [
+    { label: "Entrada", pageId: "entrada", icon: "ti-arrow-down", color: "#2f9e44" },
+    { label: "Saída", pageId: "saida", icon: "ti-arrow-up", color: "#c0392b" },
+  ];
+  // ciclo Ativas→Todas→Ignoradas (mesmo padrão do botão de status em
+  // Supermercado/Provas) — "ignoredMode" bate 1:1 com o parâmetro
+  // ?ignored= do worker.js.
+  var TRANSACOES_IGNORED_CYCLE = [
+    { mode: "exclude", label: "Ativas", icon: "ti-eye" },
+    { mode: "include", label: "Todas", icon: "ti-list" },
+    { mode: "only", label: "Ignoradas", icon: "ti-eye-off" },
+  ];
+  function transacoesFmtMoney(v) {
+    var n = typeof v === "number" ? v : 0;
+    return "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function transacoesFmtDateBR(iso) {
+    if (!iso) return "—";
+    var parts = String(iso).slice(0, 10).split("-");
+    if (parts.length !== 3) return iso;
+    return parts[2] + "/" + parts[1] + "/" + parts[0];
+  }
+
+  function renderTransacoesPage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "transacoes-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "💳 Transações";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando transações…";
+    wrap.appendChild(statusEl);
+
+    var totalsRow = document.createElement("div");
+    totalsRow.className = "financeiro-summary";
+    totalsRow.style.display = "none";
+    wrap.appendChild(totalsRow);
+
+    var filterBarWrap = document.createElement("div");
+    filterBarWrap.className = "filter-bar";
+    wrap.appendChild(filterBarWrap);
+
+    var searchWrap = document.createElement("div");
+    searchWrap.style.margin = "10px 0";
+    wrap.appendChild(searchWrap);
+
+    var tableWrap = document.createElement("div");
+    wrap.appendChild(tableWrap);
+
+    var meta = { accounts: [], categories: [], tags: [] };
+    var state = {
+      start: "", end: "",
+      accounts: [], categories: [], tags: [], tipo: [],
+      valorMin: "", valorMax: "",
+      ignoredMode: "exclude",
+      search: "",
+      sortKey: "date", sortDir: -1,
+    };
+    var lastItems = [];
+    var lastTotals = { entradas: 0, saidas: 0, saldo: 0, count: 0 };
+
+    function transacoesQueryString() {
+      var qs = [];
+      if (state.start) qs.push("start=" + encodeURIComponent(state.start));
+      if (state.end) qs.push("end=" + encodeURIComponent(state.end));
+      if (state.accounts.length) qs.push("accounts=" + encodeURIComponent(state.accounts.join(",")));
+      if (state.categories.length) qs.push("categories=" + encodeURIComponent(state.categories.join(",")));
+      if (state.tags.length) qs.push("tags=" + encodeURIComponent(state.tags.join(",")));
+      if (state.tipo.length) qs.push("tipo=" + encodeURIComponent(state.tipo.join(",")));
+      if (state.valorMin !== "") qs.push("valorMin=" + encodeURIComponent(state.valorMin));
+      if (state.valorMax !== "") qs.push("valorMax=" + encodeURIComponent(state.valorMax));
+      qs.push("ignored=" + encodeURIComponent(state.ignoredMode));
+      return qs.join("&");
+    }
+
+    function sortedFilteredItems() {
+      var term = normalize(state.search);
+      var items = !term ? lastItems.slice() : lastItems.filter(function (it) {
+        return normalize(it.description).indexOf(term) !== -1 ||
+          normalize(it.account_name).indexOf(term) !== -1 ||
+          normalize(it.category_name).indexOf(term) !== -1 ||
+          (it.tags || []).some(function (t) { return normalize(t.name).indexOf(term) !== -1; });
+      });
+      var key = state.sortKey, dir = state.sortDir;
+      items.sort(function (a, b) {
+        var av, bv;
+        if (key === "amount") { av = Math.abs(a.amount || 0); bv = Math.abs(b.amount || 0); }
+        else if (key === "account") { av = a.account_name || ""; bv = b.account_name || ""; }
+        else if (key === "category") { av = a.category_name || ""; bv = b.category_name || ""; }
+        else if (key === "description") { av = a.description || ""; bv = b.description || ""; }
+        else { av = a.date || ""; bv = b.date || ""; } // "date" (padrão)
+        if (typeof av === "number") return (av - bv) * dir;
+        return String(av).localeCompare(String(bv), "pt-BR") * dir;
+      });
+      return items;
+    }
+
+    function renderTotals() {
+      totalsRow.innerHTML = "";
+      totalsRow.style.display = "flex";
+      function pill(cls, label, value) {
+        var p = document.createElement("div");
+        p.className = "financeiro-summary-pill " + cls;
+        var l = document.createElement("div");
+        l.className = "financeiro-summary-label";
+        l.textContent = label;
+        var v = document.createElement("div");
+        v.className = "financeiro-summary-value";
+        v.textContent = transacoesFmtMoney(value);
+        p.appendChild(l); p.appendChild(v);
+        return p;
+      }
+      totalsRow.appendChild(pill("financeiro-summary-paid", "Entradas", lastTotals.entradas));
+      totalsRow.appendChild(pill("financeiro-summary-pending", "Saídas", lastTotals.saidas));
+      totalsRow.appendChild(pill("", "Saldo", lastTotals.saldo));
+    }
+
+    function renderTable() {
+      tableWrap.innerHTML = "";
+      var items = sortedFilteredItems();
+      if (!items.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhuma transação encontrada com esses filtros.";
+        tableWrap.appendChild(empty);
+        return;
+      }
+      var table = document.createElement("table");
+      table.className = "financeiro-table";
+      var thead = document.createElement("thead");
+      var trh = document.createElement("tr");
+      var cols = [
+        { key: "date", label: "Data" },
+        { key: "description", label: "Descrição" },
+        { key: "account", label: "Conta" },
+        { key: "category", label: "Categoria" },
+        { key: "tags", label: "Tags", noSort: true },
+        { key: "tipo", label: "Tipo", noSort: true },
+        { key: "amount", label: "Valor" },
+      ];
+      cols.forEach(function (col) {
+        var th = document.createElement("th");
+        if (col.noSort) {
+          th.textContent = col.label;
+        } else {
+          th.className = "financeiro-th-sortable";
+          th.textContent = col.label;
+          var arrow = document.createElement("span");
+          arrow.className = "financeiro-th-arrow";
+          if (state.sortKey === col.key) arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+          th.appendChild(arrow);
+          th.addEventListener("click", function () {
+            if (state.sortKey === col.key) state.sortDir *= -1;
+            else { state.sortKey = col.key; state.sortDir = col.key === "date" ? -1 : 1; }
+            renderTable();
+          });
+        }
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      items.forEach(function (it) {
+        var tr = document.createElement("tr");
+        if (it.ignored) tr.style.opacity = "0.55";
+        function td(text) { var c = document.createElement("td"); c.textContent = text; tr.appendChild(c); return c; }
+        td(transacoesFmtDateBR(it.date));
+        td(it.description || "—");
+        td(it.account_name || "—");
+        td(it.category_name || "—");
+        var tagsTd = document.createElement("td");
+        (it.tags || []).forEach(function (t) {
+          var chip = document.createElement("span");
+          chip.className = "financeiro-account-tag";
+          chip.style.marginRight = "4px";
+          if (t.color) chip.style.borderColor = t.color;
+          chip.textContent = t.name;
+          tagsTd.appendChild(chip);
+        });
+        tr.appendChild(tagsTd);
+        var tipoTd = td(it.flow_type === "entrada" ? "Entrada" : it.flow_type === "saida" ? "Saída" : "—");
+        tipoTd.style.color = it.flow_type === "entrada" ? "#2f9e44" : it.flow_type === "saida" ? "#c0392b" : "";
+        var valorTd = td((it.flow_type === "saida" ? "− " : "") + transacoesFmtMoney(Math.abs(it.amount || 0)));
+        valorTd.style.color = it.flow_type === "entrada" ? "#2f9e44" : it.flow_type === "saida" ? "#c0392b" : "";
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      tableWrap.appendChild(table);
+    }
+
+    function fetchData() {
+      statusEl.style.display = "block";
+      statusEl.textContent = "Carregando transações…";
+      return authFetch(cfg.templateWorkerUrl + "/transacoes?" + transacoesQueryString())
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
+        .then(function (result) {
+          if (result.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+          if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar transações");
+          lastItems = result.data.items || [];
+          lastTotals = result.data.totals || { entradas: 0, saidas: 0, saldo: 0, count: 0 };
+          statusEl.style.display = "none";
+          renderTotals();
+          renderTable();
+        }).catch(function (err) {
+          statusEl.style.display = "block";
+          statusEl.textContent = "Erro ao buscar transações: " + err.message;
+        });
+    }
+
+    // "Limpar filtros" (regra #13e) — reconstrói a barra inteira do zero
+    // (buildIconDropdown não expõe reset), zerando também data/valor/busca.
+    function buildFilterBar() {
+      filterBarWrap.innerHTML = "";
+
+      var accountsFilterDef = {
+        label: "Conta", multi: true, searchable: true,
+        options: meta.accounts.map(function (a) { return { label: a.name, pageId: a.id, icon: "ti-building-bank", color: "" }; }),
+      };
+      filterBarWrap.appendChild(buildIconDropdown(accountsFilterDef, function (opts) {
+        state.accounts = opts.map(function (o) { return o.pageId; });
+        fetchData();
+      }));
+
+      var categoriesFilterDef = {
+        label: "Categoria", multi: true, searchable: true,
+        options: meta.categories.map(function (c) { return { label: c.name, pageId: c.id, icon: "ti-tag", color: "" }; }),
+      };
+      filterBarWrap.appendChild(buildIconDropdown(categoriesFilterDef, function (opts) {
+        state.categories = opts.map(function (o) { return o.pageId; });
+        fetchData();
+      }));
+
+      var tagsFilterDef = {
+        label: "Tags", multi: true, searchable: true,
+        options: meta.tags.map(function (t) { return { label: t.name, pageId: t.id, icon: "ti-tags", color: t.color || "" }; }),
+      };
+      filterBarWrap.appendChild(buildIconDropdown(tagsFilterDef, function (opts) {
+        state.tags = opts.map(function (o) { return o.pageId; });
+        fetchData();
+      }));
+
+      var tipoFilterDef = { label: "Tipo", multi: true, options: TRANSACOES_TIPO_OPTIONS };
+      filterBarWrap.appendChild(buildIconDropdown(tipoFilterDef, function (opts) {
+        state.tipo = opts.map(function (o) { return o.pageId; });
+        fetchData();
+      }));
+
+      // intervalo de datas — 2 campos <input type=date> simples (mesmo
+      // esquema visual do resto da barra de filtros).
+      var dateWrap = document.createElement("div");
+      dateWrap.className = "filter-dropdown";
+      dateWrap.style.display = "flex";
+      dateWrap.style.gap = "4px";
+      dateWrap.style.alignItems = "center";
+      var startInput = document.createElement("input");
+      startInput.type = "date"; startInput.value = state.start; startInput.className = "filter-trigger";
+      var endInput = document.createElement("input");
+      endInput.type = "date"; endInput.value = state.end; endInput.className = "filter-trigger";
+      startInput.addEventListener("change", function () { state.start = startInput.value; fetchData(); });
+      endInput.addEventListener("change", function () { state.end = endInput.value; fetchData(); });
+      dateWrap.appendChild(startInput);
+      dateWrap.appendChild(endInput);
+      filterBarWrap.appendChild(dateWrap);
+
+      // intervalo de valor — 2 campos numéricos (valor absoluto).
+      var valorWrap = document.createElement("div");
+      valorWrap.className = "filter-dropdown";
+      valorWrap.style.display = "flex";
+      valorWrap.style.gap = "4px";
+      valorWrap.style.alignItems = "center";
+      var minInput = document.createElement("input");
+      minInput.type = "number"; minInput.step = "0.01"; minInput.placeholder = "Mín."; minInput.value = state.valorMin; minInput.className = "filter-trigger"; minInput.style.width = "80px";
+      var maxInput = document.createElement("input");
+      maxInput.type = "number"; maxInput.step = "0.01"; maxInput.placeholder = "Máx."; maxInput.value = state.valorMax; maxInput.className = "filter-trigger"; maxInput.style.width = "80px";
+      minInput.addEventListener("change", function () { state.valorMin = minInput.value; fetchData(); });
+      maxInput.addEventListener("change", function () { state.valorMax = maxInput.value; fetchData(); });
+      valorWrap.appendChild(minInput);
+      valorWrap.appendChild(maxInput);
+      filterBarWrap.appendChild(valorWrap);
+
+      // ciclo Ativas/Todas/Ignoradas (botão único, mesmo padrão de
+      // Supermercado/Provas — ver TRANSACOES_IGNORED_CYCLE).
+      var ignoredBtn = document.createElement("button");
+      ignoredBtn.type = "button";
+      ignoredBtn.className = "filter-trigger";
+      function updateIgnoredBtn() {
+        var cur = TRANSACOES_IGNORED_CYCLE.filter(function (c) { return c.mode === state.ignoredMode; })[0] || TRANSACOES_IGNORED_CYCLE[0];
+        ignoredBtn.innerHTML = '<i class="ti ' + cur.icon + '"></i><span>' + cur.label + "</span>";
+      }
+      updateIgnoredBtn();
+      ignoredBtn.addEventListener("click", function () {
+        var idx = TRANSACOES_IGNORED_CYCLE.map(function (c) { return c.mode; }).indexOf(state.ignoredMode);
+        state.ignoredMode = TRANSACOES_IGNORED_CYCLE[(idx + 1) % TRANSACOES_IGNORED_CYCLE.length].mode;
+        updateIgnoredBtn();
+        fetchData();
+      });
+      filterBarWrap.appendChild(ignoredBtn);
+
+      // "Limpar filtros" (regra #13e).
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "filter-trigger";
+      clearBtn.innerHTML = '<i class="ti ti-filter-off"></i><span>Limpar filtros</span>';
+      clearBtn.addEventListener("click", function () {
+        state.start = ""; state.end = ""; state.accounts = []; state.categories = [];
+        state.tags = []; state.tipo = []; state.valorMin = ""; state.valorMax = "";
+        state.ignoredMode = "exclude"; state.search = "";
+        searchInput.value = "";
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+        buildFilterBar();
+        fetchData();
+      });
+      filterBarWrap.appendChild(clearBtn);
+    }
+
+    // barra de busca (regra #13c/#13d — botão "x" + accent-insensitive).
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Pesquisar por descrição, conta, categoria ou tag…";
+    searchInput.className = "search-input";
+    searchInput.addEventListener("input", function () {
+      state.search = searchInput.value;
+      renderTable();
+    });
+    searchWrap.appendChild(withSearchClear(searchInput));
+
+    // fetch inicial: metadados dos filtros (contas/categorias/tags) + 1ª
+    // busca de transações, em paralelo.
+    Promise.all([
+      authFetch(cfg.templateWorkerUrl + "/transacoes-filtros")
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); }),
+    ]).then(function (results) {
+      var metaResult = results[0];
+      if (metaResult.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      if (!metaResult.ok) throw new Error((metaResult.data && metaResult.data.error) || "Falha ao buscar filtros");
+      meta = metaResult.data || meta;
+      buildFilterBar();
+      return fetchData();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao carregar página de Transações: " + err.message;
+    });
+  }
+
   // ---------------- "page.notasVitor" — Notas do Vitor (03EF - NSF - T34, 100% leitura) ----------------
   // Pedido do Georges: "criei uma nova página no Notion pra cadastrar as
   // notas... quero criar uma nova página no Meu Hub... na qual você irá
@@ -13395,6 +13756,19 @@
         container.appendChild(dividerNotas);
       }
       renderNotasVitorPage(container, page);
+      renderedSomething = true;
+    }
+
+    // "page.transacoes" (pedido do Georges: "página de exibição das
+    // Transações, com diversos filtros dinâmicos e pesquisas") — mesmo
+    // esquema de "page.notasVitor" acima. Ver renderTransacoesPage.
+    if (page.transacoes) {
+      if (renderedSomething) {
+        var dividerTransacoes = document.createElement("hr");
+        dividerTransacoes.className = "content-divider";
+        container.appendChild(dividerTransacoes);
+      }
+      renderTransacoesPage(container, page);
     }
   }
 
