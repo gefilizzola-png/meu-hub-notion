@@ -829,8 +829,16 @@ var NOTIFICATION_SOURCES = [
     // Georges — facilitar a leitura visual de qual fonte é cada aviso).
     icon: "📅",
     database_id: "2310481486dd80079202fe1eaf5e14c4",
+    // "🧲 Andamento" != Concluído/Cancelado (pedido do Georges: "a
+    // respectiva tarefa no Notion está na situação concluída, mas cuja
+    // notificação também continua sendo exibida... não precisaria
+    // continuar exibindo") — faltava aqui; Sessões TAT/JART/COMAT,
+    // Processos TAT/JART e Itens Prioritários já tinham esse mesmo par
+    // fixo, só Reuniões tinha ficado de fora.
     baseFilters: [
-      { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" }
+      { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
+      { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "d228224dee1d43dabb72744097f10028" },
+      { property: "🧲 Andamento", type: "relation", condition: "does_not_contain", value: "2410481486dd80a3a8b0d819542a55c5" }
     ],
     dateProperty: "📅 Data/Prazo",
     // pra onde vai o botão "abrir no app" de cada aviso dessa fonte (o
@@ -1455,7 +1463,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-28 23:03",
+  appVersion: "2026-09-29 00:29",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha

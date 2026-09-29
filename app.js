@@ -14104,11 +14104,6 @@
   // novo depois de criar (ver addBtn abaixo).
   var notifAddLeadTimeExpandedKeys = {};
 
-  // "Notificação Inteligente" — mesmo padrão de notifPinExpandedKeys: 1
-  // chave por fonte, controla só se o painel de dias/períodos está aberto
-  // na tela (não é o "enabled" salvo, que vive em s.smartSchedule.enabled).
-  var notifSmartScheduleExpandedKeys = {};
-
   // ordem alfabética (pedido do Georges: "coloque estes itens... em ordem
   // alfabética") — por LABEL, não pela ordem de cadastro em
   // NOTIFICATION_SOURCES (que foi crescendo por ordem de pedido ao longo do
@@ -14137,7 +14132,13 @@
       unit: lt.unit,
       label: lt.label,
       channels: Array.isArray(lt.channels) ? lt.channels : [],
-      repeatWhilePending: !!lt.repeatWhilePending
+      repeatWhilePending: !!lt.repeatWhilePending,
+      // "Notificação Inteligente" (pedido do Georges: "Eu que ter opção de
+      // Not Inteligente para cada opção de notificação que eu criei" —
+      // Provas: "1 dia antes" precisa poder disparar de noite mesmo numa
+      // prova de tarde, então uma janela só por FONTE não serve) — igual
+      // channels/repeatWhilePending acima, agora é por antecedência.
+      smartSchedule: normalizeNotifSmartSchedule(lt.smartSchedule)
     };
   }
 
@@ -14163,14 +14164,12 @@
         // dessa fonte sempre aparecem no FIM da lista de Não lidas/Todas,
         // mesmo com prazo mais próximo que outra notificação). É por FONTE
         // inteira, não por antecedência — desligado por padrão.
-        pinToEnd: !!(s && s.pinToEnd),
-        // "Notificação Inteligente" (pedido do Georges: "selecionar em quais
-        // dias da semana... e o período... a notificação daquela categoria
-        // deverá ser exibida somente no dia e período configurado") — por
-        // FONTE inteira, igual pinToEnd. Sem dias OU sem períodos marcados
-        // enquanto enabled:true = self-heal, "sem restrição" (ver
-        // getSmartScheduleActive) — evita a fonte sumir sozinha por engano.
-        smartSchedule: normalizeNotifSmartSchedule(s && s.smartSchedule)
+        pinToEnd: !!(s && s.pinToEnd)
+        // "Notificação Inteligente" NÃO mora mais aqui (nível de fonte) —
+        // pedido do Georges: "Eu que ter opção de Not Inteligente para
+        // cada opção de notificação que eu criei", porque cada antecedência
+        // da mesma fonte pode precisar de uma janela diferente. Agora vive
+        // dentro de cada leadTime (ver normalizeNotifLeadTime acima).
       };
     });
   }
@@ -14229,17 +14228,24 @@
   // só consulta o Notion das fontes LIGADAS — desligar uma fonte pela
   // gestão evita a busca dela inteira, não só esconde o resultado depois.
   function computeNotifications(sources) {
+    var sourceById = {};
+    sources.forEach(function (s) { sourceById[s.id] = s; });
     return Promise.all(sources.filter(function (s) { return s.enabled; }).map(function (source) {
-      // "Notificação Inteligente" (pedido do Georges): fora do dia/período
-      // configurado, a fonte inteira some — nem busca no Notion/KV, já
-      // corta aqui antes do fetch (evita gasto de request à toa).
-      if (!notifSmartScheduleAllowsNow(source.smartSchedule)) return [];
       return fetchNotificationSourceItems(source).then(function (pages) {
         return buildNotificationsFromSource(source, pages);
       });
     })).then(function (perSource) {
       var all = [];
       perSource.forEach(function (arr) { all = all.concat(arr); });
+      // "Notificação Inteligente" (pedido do Georges: "Eu que ter opção de
+      // Not Inteligente para cada opção de notificação que eu criei" — cada
+      // antecedência tem sua PRÓPRIA janela agora, não dá mais pra cortar a
+      // fonte inteira antes do fetch como antes; filtra item por item aqui,
+      // olhando o smartSchedule da leadTime específica que gerou cada um).
+      all = all.filter(function (n) {
+        var lt = findNotifLeadTime(sourceById[n.sourceId], n.leadTimeId);
+        return notifSmartScheduleAllowsNow(lt && lt.smartSchedule);
+      });
       all.sort(function (a, b) { return a.eventTime - b.eventTime; });
       return all;
     });
@@ -14431,10 +14437,31 @@
     notifRepeatPendingAppliedOnce = true;
     var sourceById = {};
     notifState.sources.forEach(function (s) { sourceById[s.id] = s; });
+    // fontes cujo "evento" tem uma data de calendário DE VERDADE (Reuniões,
+    // Sessões, Processos, Itens Prioritários, Aniversários, Provas do
+    // Vitor) — nessas, "pendente" naturalmente acaba quando o evento já
+    // aconteceu. Fontes com kind PRÓPRIO (financeiro/remédios/supermercado/
+    // backup) usam "extra[dateProperty]" sintético (ex: "agora" a cada
+    // fetch, ou o vencimento de uma conta que o Georges quer que continue
+    // avisando MESMO vencida enquanto não paga — caso citado por ele:
+    // "conta vencida e não paga") — ficam de fora da restrição abaixo.
+    var NOTIF_EVENT_KINDS = { notion: true, provas: true };
     var repeatIds = {};
     items.forEach(function (n) {
-      var lt = findNotifLeadTime(sourceById[n.sourceId], n.leadTimeId);
-      if (lt && lt.repeatWhilePending) repeatIds[n.id] = true;
+      var src = sourceById[n.sourceId];
+      var lt = findNotifLeadTime(src, n.leadTimeId);
+      if (!lt || !lt.repeatWhilePending) return;
+      // pedido do Georges (Provas do Vitor, sem campo de status no Notion:
+      // "como a Notificação considere que ainda está pendente?") — pra
+      // fontes ligadas a um EVENTO de calendário de verdade, "repetir
+      // enquanto pendente" só faz sentido enquanto o evento ainda não
+      // aconteceu: uma prova/reunião de ontem não tem mais o que "ficar
+      // pendente", então para de repetir sozinho assim que "overdue"
+      // (eventTime já passou — ver buildNotificationsFromSource). Não
+      // precisa de status nenhum no Notion pra isso.
+      var isEventKind = NOTIF_EVENT_KINDS[(src && src.kind) || "notion"];
+      if (isEventKind && n.overdue) return;
+      repeatIds[n.id] = true;
     });
     if (!Object.keys(repeatIds).length) return { readIds: readIds, everReadIds: everReadIds };
     var everReadSet = {};
@@ -14767,11 +14794,11 @@
   function buildNotifSettingsPayload() {
     var out = {};
     notifState.sources.forEach(function (s) {
-      // channels/repeatWhilePending já vivem DENTRO de cada leadTime (ver
-      // resolvedNotifSources/setNotifLeadTimeChannel); pinToEnd é o único
-      // campo que continua em nível de FONTE (card inteiro, não por
-      // antecedência).
-      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd, smartSchedule: s.smartSchedule };
+      // channels/repeatWhilePending/smartSchedule já vivem DENTRO de cada
+      // leadTime (ver resolvedNotifSources/normalizeNotifLeadTime); pinToEnd
+      // é o único campo que continua em nível de FONTE (card inteiro, não
+      // por antecedência).
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd };
     });
     return out;
   }
@@ -14823,31 +14850,37 @@
     applyNotifSettingsChange();
   }
 
-  // "Notificação Inteligente" (pedido do Georges — ver comentário em
-  // resolvedNotifSources/normalizeNotifSmartSchedule). toggle liga/desliga
-  // e os setters de dia/período operam sobre o MESMO objeto smartSchedule
-  // por fonte; sempre substitui o array inteiro (dias/períodos), igual ao
-  // padrão de outros multi-selects do app (nunca faz merge campo a campo).
-  function setNotifSourceSmartScheduleEnabled(sourceId, on) {
+  // "Notificação Inteligente" (pedido do Georges: "Eu que ter opção de Not
+  // Inteligente para cada opção de notificação que eu criei" — Provas: "1
+  // dia antes" precisa de uma janela diferente de "hoje", então mora
+  // dentro de CADA antecedência agora, não mais na fonte inteira). toggle
+  // liga/desliga e os setters de dia/período operam sobre o smartSchedule
+  // DAQUELA leadTime específica; sempre substitui o array inteiro (dias/
+  // períodos), igual ao padrão de outros multi-selects do app (nunca faz
+  // merge campo a campo).
+  function setNotifLeadTimeSmartScheduleEnabled(sourceId, leadTimeId, on) {
     var s = findNotifSource(sourceId);
-    if (!s || s.smartSchedule.enabled === on) return;
-    s.smartSchedule.enabled = on;
+    var lt = s && findNotifLeadTime(s, leadTimeId);
+    if (!lt || lt.smartSchedule.enabled === on) return;
+    lt.smartSchedule.enabled = on;
     applyNotifSettingsChange();
   }
-  function toggleNotifSourceSmartScheduleDay(sourceId, dayId) {
+  function toggleNotifLeadTimeSmartScheduleDay(sourceId, leadTimeId, dayId) {
     var s = findNotifSource(sourceId);
-    if (!s) return;
-    var idx = s.smartSchedule.days.indexOf(dayId);
-    if (idx === -1) s.smartSchedule.days.push(dayId);
-    else s.smartSchedule.days.splice(idx, 1);
+    var lt = s && findNotifLeadTime(s, leadTimeId);
+    if (!lt) return;
+    var idx = lt.smartSchedule.days.indexOf(dayId);
+    if (idx === -1) lt.smartSchedule.days.push(dayId);
+    else lt.smartSchedule.days.splice(idx, 1);
     applyNotifSettingsChange();
   }
-  function toggleNotifSourceSmartSchedulePeriod(sourceId, periodId) {
+  function toggleNotifLeadTimeSmartSchedulePeriod(sourceId, leadTimeId, periodId) {
     var s = findNotifSource(sourceId);
-    if (!s) return;
-    var idx = s.smartSchedule.periods.indexOf(periodId);
-    if (idx === -1) s.smartSchedule.periods.push(periodId);
-    else s.smartSchedule.periods.splice(idx, 1);
+    var lt = s && findNotifLeadTime(s, leadTimeId);
+    if (!lt) return;
+    var idx = lt.smartSchedule.periods.indexOf(periodId);
+    if (idx === -1) lt.smartSchedule.periods.push(periodId);
+    else lt.smartSchedule.periods.splice(idx, 1);
     applyNotifSettingsChange();
   }
 
@@ -14886,13 +14919,14 @@
     var id = amount + (unit === "hours" ? "h" : "d");
     if (s.leadTimes.some(function (lt) { return lt.id === id; })) return; // já existe, ignora silenciosamente
     var label = amount + " " + (unit === "hours" ? (amount === 1 ? "hora antes" : "horas antes") : (amount === 1 ? "dia antes" : "dias antes"));
-    // channels:[]/repeatWhilePending:false explícitos — SEM isso o objeto
-    // fica com esses campos undefined, e renderNotifSettings (que lê
-    // lt.channels.length pra decidir se a pílula tem "has-config") explode
-    // com TypeError na hora, derrubando o resto do editor (bug reportado
-    // pelo Georges: clicar em "+" em qualquer fonte fazia sumir todas as
-    // fontes seguintes na lista, inclusive o texto do banner de permissão).
-    s.leadTimes = s.leadTimes.concat([{ id: id, amount: amount, unit: unit, label: label, channels: [], repeatWhilePending: false }]);
+    // channels:[]/repeatWhilePending:false/smartSchedule explícitos — SEM
+    // isso o objeto fica com esses campos undefined, e renderNotifSettings
+    // (que lê lt.channels.length pra decidir se a pílula tem "has-config")
+    // explode com TypeError na hora, derrubando o resto do editor (bug
+    // reportado pelo Georges: clicar em "+" em qualquer fonte fazia sumir
+    // todas as fontes seguintes na lista, inclusive o texto do banner de
+    // permissão).
+    s.leadTimes = s.leadTimes.concat([{ id: id, amount: amount, unit: unit, label: label, channels: [], repeatWhilePending: false, smartSchedule: normalizeNotifSmartSchedule(null) }]);
     s.leadTimes.sort(function (a, b) { return leadTimeMs(b) - leadTimeMs(a); }); // maior antecedência primeiro
     applyNotifSettingsChange();
   }
@@ -15004,8 +15038,10 @@
           // já vista em buildRow/Remédios).
           if (!Array.isArray(lt.channels)) lt.channels = [];
           if (typeof lt.repeatWhilePending !== "boolean") lt.repeatWhilePending = !!lt.repeatWhilePending;
+          if (!lt.smartSchedule || typeof lt.smartSchedule !== "object") lt.smartSchedule = normalizeNotifSmartSchedule(null);
           var ltKey = s.id + "::" + lt.id;
-          var hasConfig = !!(lt.channels.length || lt.repeatWhilePending);
+          var ltSmartHasConfig = lt.smartSchedule.enabled && lt.smartSchedule.days.length && lt.smartSchedule.periods.length;
+          var hasConfig = !!(lt.channels.length || lt.repeatWhilePending || ltSmartHasConfig);
           var expanded = !!notifLeadTimeExpandedKeys[ltKey];
 
           var item = document.createElement("div");
@@ -15111,6 +15147,60 @@
             repeatText.appendChild(repeatHint);
             repeatRow.appendChild(repeatText);
             chWrap.appendChild(repeatRow);
+
+            // "Notificação Inteligente" (pedido do Georges: "Eu que ter
+            // opção de Not Inteligente para cada opção de notificação que
+            // eu criei" — Provas: "1 dia antes" à noite, mas a prova em si
+            // pode ser de tarde) — 3ª seção do MESMO painel desta
+            // antecedência, junto de canais/repetir, não mais um chip à
+            // parte no card da fonte inteira.
+            var smartDivider = document.createElement("div");
+            smartDivider.className = "notif-settings-channel-divider";
+            chWrap.appendChild(smartDivider);
+            var smartToggleRow = document.createElement("label");
+            smartToggleRow.className = "notif-settings-channel-row";
+            var smartToggleCb = document.createElement("input");
+            smartToggleCb.type = "checkbox";
+            smartToggleCb.checked = !!lt.smartSchedule.enabled;
+            smartToggleCb.addEventListener("change", function () { setNotifLeadTimeSmartScheduleEnabled(s.id, lt.id, smartToggleCb.checked); });
+            smartToggleRow.appendChild(smartToggleCb);
+            var smartToggleText = document.createElement("span");
+            smartToggleText.className = "notif-settings-channel-text";
+            var smartToggleLabel = document.createElement("span");
+            smartToggleLabel.className = "notif-settings-channel-label";
+            smartToggleLabel.textContent = "🧠 Notificação Inteligente";
+            smartToggleText.appendChild(smartToggleLabel);
+            var smartToggleHint = document.createElement("span");
+            smartToggleHint.className = "notif-settings-channel-hint";
+            smartToggleHint.textContent = "só mostra ESTA antecedência nos dias/períodos marcados abaixo — some completamente fora disso. Sem nenhum dia ou período marcado, funciona sem restrição.";
+            smartToggleText.appendChild(smartToggleHint);
+            smartToggleRow.appendChild(smartToggleText);
+            chWrap.appendChild(smartToggleRow);
+
+            var smartDaysRow = document.createElement("div");
+            smartDaysRow.className = "notif-settings-smart-pills-row";
+            SMART_SCHEDULE_DAY_DEFS.forEach(function (d) {
+              var dayPill = document.createElement("button");
+              dayPill.type = "button";
+              dayPill.className = "notif-settings-smart-pill" + (lt.smartSchedule.days.indexOf(d.id) !== -1 ? " active" : "");
+              dayPill.textContent = d.label;
+              dayPill.addEventListener("click", function () { toggleNotifLeadTimeSmartScheduleDay(s.id, lt.id, d.id); });
+              smartDaysRow.appendChild(dayPill);
+            });
+            chWrap.appendChild(smartDaysRow);
+
+            var smartPeriodsRow = document.createElement("div");
+            smartPeriodsRow.className = "notif-settings-smart-pills-row";
+            SMART_SCHEDULE_PERIOD_DEFS.forEach(function (p) {
+              var periodPill = document.createElement("button");
+              periodPill.type = "button";
+              periodPill.className = "notif-settings-smart-pill" + (lt.smartSchedule.periods.indexOf(p.id) !== -1 ? " active" : "");
+              periodPill.textContent = p.label;
+              periodPill.title = p.label + " (" + p.startHour + "h–" + p.endHour + "h)";
+              periodPill.addEventListener("click", function () { toggleNotifLeadTimeSmartSchedulePeriod(s.id, lt.id, p.id); });
+              smartPeriodsRow.appendChild(periodPill);
+            });
+            chWrap.appendChild(smartPeriodsRow);
 
             item.appendChild(chWrap);
           }
@@ -15220,85 +15310,7 @@
       pinChip.appendChild(pinChipLabel);
       pinChipRow.appendChild(pinChip);
       addPinRow.appendChild(pinChipRow);
-
-      // "Notificação Inteligente" (pedido do Georges: "botão com ícone de
-      // inteligente... pra configurar em quais dias da semana e período
-      // aquela notificação deve ser exibida") — mesmo padrão de pílula
-      // clicável de Fixar ao final, ao lado dela na mesma linha.
-      var smartExpanded = !!notifSmartScheduleExpandedKeys[s.id];
-      var smartActiveNow = notifSmartScheduleAllowsNow(s.smartSchedule) === false; // só informativo, não usado no texto
-      var smartHasConfig = s.smartSchedule.enabled && s.smartSchedule.days.length && s.smartSchedule.periods.length;
-      var smartChipRow = document.createElement("div");
-      smartChipRow.className = "notif-settings-leadtime-chip-row";
-      var smartChip = document.createElement("span");
-      smartChip.className = "notif-settings-leadtime-chip" +
-        (smartHasConfig ? " has-config" : "") +
-        (smartExpanded ? " active" : "");
-      var smartChipLabel = document.createElement("span");
-      smartChipLabel.className = "notif-settings-leadtime-chip-label";
-      smartChipLabel.textContent = "🧠 Notificação Inteligente" + (smartHasConfig ? " (ligado)" : "");
-      smartChipLabel.title = smartHasConfig
-        ? "Notificação Inteligente está ligada — clique pra ver/editar"
-        : "Clique pra configurar em quais dias/períodos aparece";
-      smartChipLabel.addEventListener("click", function () {
-        notifSmartScheduleExpandedKeys[s.id] = !notifSmartScheduleExpandedKeys[s.id];
-        renderNotifSettings();
-      });
-      smartChip.appendChild(smartChipLabel);
-      smartChipRow.appendChild(smartChip);
-      addPinRow.appendChild(smartChipRow);
       block.appendChild(addPinRow);
-
-      if (smartExpanded) {
-        var smartWrap = document.createElement("div");
-        smartWrap.className = "notif-settings-channels";
-        var smartToggleRow = document.createElement("label");
-        smartToggleRow.className = "notif-settings-channel-row";
-        var smartToggleCb = document.createElement("input");
-        smartToggleCb.type = "checkbox";
-        smartToggleCb.checked = !!s.smartSchedule.enabled;
-        smartToggleCb.addEventListener("change", function () { setNotifSourceSmartScheduleEnabled(s.id, smartToggleCb.checked); });
-        smartToggleRow.appendChild(smartToggleCb);
-        var smartToggleText = document.createElement("span");
-        smartToggleText.className = "notif-settings-channel-text";
-        var smartToggleLabel = document.createElement("span");
-        smartToggleLabel.className = "notif-settings-channel-label";
-        smartToggleLabel.textContent = "Notificação Inteligente";
-        smartToggleText.appendChild(smartToggleLabel);
-        var smartToggleHint = document.createElement("span");
-        smartToggleHint.className = "notif-settings-channel-hint";
-        smartToggleHint.textContent = "só mostra os avisos dessa fonte nos dias/períodos marcados abaixo — some completamente fora disso. Sem nenhum dia ou período marcado, funciona sem restrição.";
-        smartToggleText.appendChild(smartToggleHint);
-        smartToggleRow.appendChild(smartToggleText);
-        smartWrap.appendChild(smartToggleRow);
-
-        var smartDaysRow = document.createElement("div");
-        smartDaysRow.className = "notif-settings-smart-pills-row";
-        SMART_SCHEDULE_DAY_DEFS.forEach(function (d) {
-          var dayPill = document.createElement("button");
-          dayPill.type = "button";
-          dayPill.className = "notif-settings-smart-pill" + (s.smartSchedule.days.indexOf(d.id) !== -1 ? " active" : "");
-          dayPill.textContent = d.label;
-          dayPill.addEventListener("click", function () { toggleNotifSourceSmartScheduleDay(s.id, d.id); });
-          smartDaysRow.appendChild(dayPill);
-        });
-        smartWrap.appendChild(smartDaysRow);
-
-        var smartPeriodsRow = document.createElement("div");
-        smartPeriodsRow.className = "notif-settings-smart-pills-row";
-        SMART_SCHEDULE_PERIOD_DEFS.forEach(function (p) {
-          var periodPill = document.createElement("button");
-          periodPill.type = "button";
-          periodPill.className = "notif-settings-smart-pill" + (s.smartSchedule.periods.indexOf(p.id) !== -1 ? " active" : "");
-          periodPill.textContent = p.label;
-          periodPill.title = p.label + " (" + p.startHour + "h–" + p.endHour + "h)";
-          periodPill.addEventListener("click", function () { toggleNotifSourceSmartSchedulePeriod(s.id, p.id); });
-          smartPeriodsRow.appendChild(periodPill);
-        });
-        smartWrap.appendChild(smartPeriodsRow);
-
-        block.appendChild(smartWrap);
-      }
 
       if (pinExpanded) {
         var pinWrap = document.createElement("div");
