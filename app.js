@@ -11093,6 +11093,91 @@
     return { start: financeiroAddDays(today, -preset.days), end: today };
   }
 
+  // ---------------- BI Financeiro: mapa categoria (individual) -> raiz ----------------
+  // D1 (mirror do Visor) só guarda a categoria FOLHA (flat, sem hierarquia —
+  // tabela "categories" tem só id/name). O Visor, na origem, TEM 2 níveis
+  // (raiz/individual) com emoji próprio por raiz. Pra render "Por Categoria
+  // Geral" no BI sem depender de uma nova coluna/migração no D1, capturamos
+  // aqui um snapshot estático dessa hierarquia (via get_categories do Visor,
+  // 29/09/2026) — cobre todas as ~113 categorias folha vistas na origem.
+  // Categoria nova criada no Visor depois deste snapshot cai no fallback
+  // "Outros" (mesmo comportamento de transacoesCategoriaIcon: nunca quebra,
+  // só fica genérica até alguém atualizar este mapa).
+  var TRANSACOES_RAIZ_ICON = {
+    "Alimentação": "🍽️", "Automotivo": "🚗", "Compras": "🛍️", "Doações": "🎁",
+    "Educação": "🎓", "Empréstimos e Financiamentos": "💳", "Impostos": "📋",
+    "Investimentos": "📈", "Jogos de azar": "🎰", "Lazer": "🎟", "Moradia": "🏠",
+    "Obrigações legais": "⚖️", "Outros": "📦", "Pets": "🐕‍🦺", "Saúde": "💊",
+    "Seguros": "☂️", "Serviços": "📱", "Serviços digitais": "🌐",
+    "Tarifas bancárias": "🏦", "Transferências": "🔄", "Transporte": "🚌",
+    "Utilidades": "🔌", "Viagens": "🏖", "Receita": "💰",
+  };
+  var TRANSACOES_CATEGORIA_RAIZ_MAP = {
+    "Acessórios para veículos": "Automotivo", "Alimentação (Pets)": "Pets",
+    "Aquisição de veículo": "Automotivo", "Banca e tabacaria": "Compras",
+    "Banho e Tosa": "Pets", "Chocolate": "Alimentação", "Condomínio": "Moradia",
+    "Estética": "Saúde", "Inteligência Artificial": "Serviços digitais",
+    "Papelaria/Material Escola": "Educação", "Parques": "Lazer",
+    "Passagens Aéreas": "Viagens", "Plano de Saúde": "Saúde", "Presentes": "Compras",
+    "Suplementos": "Alimentação", "Hospedagem": "Viagens",
+    "Tarifas de conta": "Tarifas bancárias", "Aeroporto": "Viagens",
+    "Pensão alimentícia": "Obrigações legais", "Investimento automático": "Investimentos",
+    "Boleto": "Transferências", "Bicicleta": "Transporte",
+    "Saldos bloqueados": "Obrigações legais", "Livraria": "Compras",
+    "Passagens de ônibus": "Viagens", "Aluguel de carro": "Transporte",
+    "Cashback": "Serviços digitais", "Entretenimento": "Lazer", "Roupas": "Compras",
+    "Tarifas de cartão de crédito": "Tarifas bancárias",
+    "Pagamento de cartão de crédito": "Transferências", "Dentista": "Saúde",
+    "DOC": "Transferências", "Restaurantes": "Alimentação",
+    "Energia elétrica": "Utilidades", "Eletrônicos": "Compras",
+    "Financiamento": "Empréstimos e Financiamentos", "Renda fixa": "Investimentos",
+    "Delivery": "Alimentação", "Jogos": "Serviços digitais", "Gás": "Utilidades",
+    "Postos de combustível": "Automotivo", "Supermercado": "Alimentação",
+    "Academia": "Lazer", "Seguro saúde": "Saúde", "Seguro residencial": "Seguros",
+    "Hospital/Labs": "Saúde", "Utensílios domésticos": "Moradia",
+    "Imposto de renda": "Impostos", "Juros cobrados": "Empréstimos e Financiamentos",
+    "Internet": "Serviços", "Infantil e brinquedos": "Compras",
+    "Jardim de infância": "Educação", "Turismo": "Lazer",
+    "Juros/Multas": "Empréstimos e Financiamentos", "Seguro de vida": "Seguros",
+    "Empréstimos": "Empréstimos e Financiamentos", "Loteria": "Jogos de azar",
+    "Margem": "Investimentos", "Milhagem": "Viagens", "Celular": "Serviços",
+    "Música": "Serviços digitais", "Fundos de investimento": "Investimentos",
+    "Material de escritório": "Compras", "Aposta online": "Jogos de azar",
+    "Cursos online": "Educação", "Compras online": "Compras", "Optometria": "Saúde",
+    "Estacionamento": "Automotivo", "Previdência": "Investimentos", "Pet": "Compras",
+    "Farmácia": "Saúde", "PIX": "Transferências", "Juros e dividendos": "Investimentos",
+    "Transporte público": "Transporte",
+    "Financiamento imobiliário": "Empréstimos e Financiamentos", "Aluguel": "Moradia",
+    "Transferência mesma pessoa": "Transferências", "Escola": "Educação",
+    "Artigos esportivos": "Compras", "Prática esportiva": "Lazer",
+    "Estádios e arenas": "Lazer",
+    "Empréstimo estudantil": "Empréstimos e Financiamentos", "IOF": "Impostos",
+    "Táxi e apps": "Transporte", "TED": "Transferências",
+    "Telecomunicações": "Serviços", "Transferências a terceiros": "Transferências",
+    "Ingressos": "Lazer", "Pedágios": "Automotivo", "Multas de trânsito": "Automotivo",
+    "Transferência interna": "Transferências", "TV": "Serviços",
+    "Universidade": "Educação", "IPTU": "Moradia", "Renda variável": "Investimentos",
+    "Financiamento de veículo": "Empréstimos e Financiamentos",
+    "Seguro de veículo": "Seguros", "Manutenção de veículo": "Automotivo",
+    "IPVA/Taxas": "Automotivo", "Streaming": "Serviços digitais", "Água": "Utilidades",
+    "Bem-estar": "Lazer", "Bem-estar e fitness": "Lazer",
+    "Tarifas ATM": "Tarifas bancárias",
+    "Honorários": "Receita", "Atividades empresariais": "Receita",
+    "Auxílio governamental": "Receita", "Receita não recorrente": "Receita",
+    "Aposentadoria": "Receita", "Salário": "Receita",
+  };
+  // categoriasRaízPossíveis: já vêm da própria D1 como nome de raiz também
+  // (ex.: "Alimentação" pode ser lançada direto, sem folha) — nesse caso o
+  // nome bate 1:1 com o próprio mapa de ícones de raiz.
+  function transacoesCategoriaRaiz(leafName) {
+    var n = String(leafName || "").trim();
+    if (!n) return { root: "Outros", icon: TRANSACOES_RAIZ_ICON["Outros"] };
+    if (TRANSACOES_RAIZ_ICON[n]) return { root: n, icon: TRANSACOES_RAIZ_ICON[n] };
+    var root = TRANSACOES_CATEGORIA_RAIZ_MAP[n];
+    if (root) return { root: root, icon: TRANSACOES_RAIZ_ICON[root] || "📦" };
+    return { root: "Outros", icon: TRANSACOES_RAIZ_ICON["Outros"] };
+  }
+
   // Chave da unlock-lock guardada no localStorage — pedido do Georges:
   // "Transações tem informações sensíveis, como podemos aplicar uma camada
   // de verificação antes de abrir?" Optou pelo PIN próprio da página (não
@@ -11128,16 +11213,20 @@
 
     var stored = transacoesGetStoredUnlock();
     if (stored) renderTransacoesUnlocked(wrap, stored.token);
-    else renderTransacoesLockScreen(wrap);
+    else renderTransacoesLockScreen(wrap, function (token) { renderTransacoesUnlocked(wrap, token); });
   }
 
   // Consulta se já existe PIN configurado e mostra a tela certa (criar 1ª
-  // vez, ou digitar o já existente).
-  function renderTransacoesLockScreen(wrap) {
+  // vez, ou digitar o já existente). "onUnlocked(token)" — preparação pra
+  // reaproveitar essa mesma tela de PIN numa futura página de Relatórios/BI
+  // Financeiro (mesmo dado sensível, mesmo PIN), sem duplicar a lógica de
+  // desbloqueio: quem chamou decide o que renderizar depois de desbloquear,
+  // em vez desta função sempre abrir Transações direto.
+  function renderTransacoesLockScreen(wrap, onUnlocked, titleText) {
     wrap.innerHTML = "";
     var title = document.createElement("h3");
     title.className = "group-title";
-    title.textContent = "💳 Transações";
+    title.textContent = titleText || "💳 Transações";
     wrap.appendChild(title);
 
     var lockBox = document.createElement("div");
@@ -11153,8 +11242,8 @@
       .then(function (result) {
         if (result.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
         if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao verificar PIN");
-        if (result.data.hasPin) renderTransacoesPinEntry(wrap, lockBox);
-        else renderTransacoesPinSetup(wrap, lockBox);
+        if (result.data.hasPin) renderTransacoesPinEntry(wrap, lockBox, onUnlocked);
+        else renderTransacoesPinSetup(wrap, lockBox, onUnlocked);
       })
       .catch(function (err) {
         lockBox.innerHTML = "";
@@ -11165,7 +11254,7 @@
       });
   }
 
-  function renderTransacoesPinEntry(wrap, box) {
+  function renderTransacoesPinEntry(wrap, box, onUnlocked) {
     box.innerHTML = "";
     var desc = document.createElement("p");
     desc.className = "transacoes-lock-desc";
@@ -11215,7 +11304,7 @@
             return;
           }
           transacoesStoreUnlock(result.data.token, result.data.exp);
-          renderTransacoesUnlocked(wrap, result.data.token);
+          onUnlocked(result.data.token);
         })
         .catch(function (err) {
           btn.disabled = false;
@@ -11228,7 +11317,7 @@
     input.focus();
   }
 
-  function renderTransacoesPinSetup(wrap, box) {
+  function renderTransacoesPinSetup(wrap, box, onUnlocked) {
     box.innerHTML = "";
     var desc = document.createElement("p");
     desc.className = "transacoes-lock-desc";
@@ -11288,7 +11377,7 @@
           btn.disabled = false;
           if (!result2.ok) throw new Error((result2.data && result2.data.error) || "Falha ao desbloquear");
           transacoesStoreUnlock(result2.data.token, result2.data.exp);
-          renderTransacoesUnlocked(wrap, result2.data.token);
+          onUnlocked(result2.data.token);
         })
         .catch(function (err) {
           btn.disabled = false;
@@ -11888,6 +11977,547 @@
       statusEl.textContent = "Erro ao carregar página de Transações: " + err.message;
     });
   }
+
+  // ---------------- BI Financeiro (Relatórios) — rodada 1 ----------------
+  // Pedido do Georges: dashboard de BI sobre Transações, dentro do Meu Hub,
+  // reaproveitando o mesmo PIN de Transações (mesmo dado sensível) e sem
+  // rota nova no worker.js (usa GET /transacoes + GET /transacoes-filtros,
+  // já existentes). Explicitamente pedido: "quero algo moderno e
+  // funcional. Não vai me entregar um gráfico de Excel 1995" — por isso
+  // Chart.js (carregado só aqui, lazy, via CDN) em vez de tabela/ASCII, com
+  // paleta própria, cantos arredondados e tooltip formatado em R$.
+  var FINANCEIRO_BI_CHARTJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js";
+  var financeiroBIChartJsPromise = null;
+  function loadChartJs() {
+    if (window.Chart) return Promise.resolve(window.Chart);
+    if (financeiroBIChartJsPromise) return financeiroBIChartJsPromise;
+    financeiroBIChartJsPromise = new Promise(function (resolve, reject) {
+      var script = document.createElement("script");
+      script.src = FINANCEIRO_BI_CHARTJS_URL;
+      script.onload = function () { resolve(window.Chart); };
+      script.onerror = function () { reject(new Error("Falha ao carregar Chart.js")); };
+      document.head.appendChild(script);
+    });
+    return financeiroBIChartJsPromise;
+  }
+  // paleta própria (pedido: "moderno", não reaproveita os 2 tons fixos de
+  // Entrada/Saída — esses continuam só nos KPIs/evolução mensal). 12 tons
+  // distintos e sóbrios, o bastante pra até 12 categorias no gráfico de
+  // barras sem repetir.
+  var FINANCEIRO_BI_PALETTE = [
+    "#6366f1", "#06b6d4", "#f59e0b", "#ef4444", "#10b981", "#8b5cf6",
+    "#ec4899", "#14b8a6", "#f97316", "#3b82f6", "#84cc16", "#a855f7",
+  ];
+  var FINANCEIRO_BI_ENTRADA_COLOR = "#2f9e44";
+  var FINANCEIRO_BI_SAIDA_COLOR = "#c0392b";
+
+  function financeiroBIPrevRange(start, end) {
+    if (!start || !end) return { start: "", end: "" };
+    var s = new Date(start + "T00:00:00Z"), e = new Date(end + "T00:00:00Z");
+    var diffDays = Math.round((e - s) / 86400000) + 1;
+    var prevEnd = financeiroAddDays(start, -1);
+    var prevStart = financeiroAddDays(prevEnd, -(diffDays - 1));
+    return { start: prevStart, end: prevEnd };
+  }
+
+  function financeiroBIComputeKpis(items) {
+    var entradas = 0, saidas = 0, maior = 0, minDate = null, maxDate = null;
+    items.forEach(function (it) {
+      var amt = Math.abs(it.amount || 0);
+      if (it.flow_type === "entrada") entradas += amt;
+      else if (it.flow_type === "saida") saidas += amt;
+      if (amt > maior) maior = amt;
+      if (!minDate || it.date < minDate) minDate = it.date;
+      if (!maxDate || it.date > maxDate) maxDate = it.date;
+    });
+    var count = items.length;
+    return {
+      entradas: entradas, saidas: saidas, saldo: entradas - saidas, count: count,
+      ticketMedio: count ? (entradas + saidas) / count : 0,
+      maiorTransacao: maior, minDate: minDate, maxDate: maxDate,
+    };
+  }
+
+  // agrega Saídas por categoria RAIZ (via transacoesCategoriaRaiz) e por
+  // categoria INDIVIDUAL (direto, sem hierarquia) — separado porque cada
+  // um alimenta um dos 2 gráficos lado a lado (pedido do Georges, item 4).
+  function financeiroBIAggregateSaidasRaiz(items) {
+    var map = {};
+    items.forEach(function (it) {
+      if (it.flow_type !== "saida") return;
+      var raiz = transacoesCategoriaRaiz(it.category_name);
+      var key = raiz.root;
+      if (!map[key]) map[key] = { label: key, icon: raiz.icon, valor: 0, qtde: 0 };
+      map[key].valor += Math.abs(it.amount || 0);
+      map[key].qtde += 1;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; });
+  }
+  function financeiroBIAggregateSaidasIndividual(items) {
+    var map = {};
+    items.forEach(function (it) {
+      if (it.flow_type !== "saida") return;
+      var key = it.category_name || "Sem categoria";
+      if (!map[key]) map[key] = { label: key, icon: transacoesCategoriaIcon(key), valor: 0, qtde: 0 };
+      map[key].valor += Math.abs(it.amount || 0);
+      map[key].qtde += 1;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; });
+  }
+  function financeiroBIAggregateEntradas(items) {
+    var map = {};
+    items.forEach(function (it) {
+      if (it.flow_type !== "entrada") return;
+      var key = it.category_name || "Sem categoria";
+      if (!map[key]) map[key] = { label: key, icon: transacoesCategoriaIcon(key), valor: 0, qtde: 0 };
+      map[key].valor += Math.abs(it.amount || 0);
+      map[key].qtde += 1;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; });
+  }
+  // evolução mensal (Entradas x Saídas + saldo acumulado) dentro do período
+  // filtrado — chave "YYYY-MM", ordenada cronologicamente.
+  function financeiroBIAggregateMonthly(items) {
+    var map = {};
+    items.forEach(function (it) {
+      var mk = String(it.date || "").slice(0, 7);
+      if (!mk) return;
+      if (!map[mk]) map[mk] = { month: mk, entradas: 0, saidas: 0 };
+      var amt = Math.abs(it.amount || 0);
+      if (it.flow_type === "entrada") map[mk].entradas += amt;
+      else if (it.flow_type === "saida") map[mk].saidas += amt;
+    });
+    var months = Object.keys(map).sort();
+    var saldoAcumulado = 0;
+    return months.map(function (mk) {
+      var row = map[mk];
+      saldoAcumulado += row.entradas - row.saidas;
+      return { month: mk, entradas: row.entradas, saidas: row.saidas, saldoAcumulado: saldoAcumulado };
+    });
+  }
+  function financeiroBIMonthLabel(mk) {
+    var parts = mk.split("-");
+    var meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    var idx = Number(parts[1]) - 1;
+    return (meses[idx] || mk) + "/" + parts[0].slice(2);
+  }
+
+  function renderFinanceiroBIPage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "financeiro-bi-block";
+    container.appendChild(wrap);
+
+    var stored = transacoesGetStoredUnlock();
+    if (stored) renderFinanceiroBIUnlocked(wrap, stored.token);
+    else renderTransacoesLockScreen(wrap, function (token) { renderFinanceiroBIUnlocked(wrap, token); }, "📊 Relatórios — Financeiro");
+  }
+
+  function renderFinanceiroBIUnlocked(wrap, unlockToken) {
+    wrap.innerHTML = "";
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "📊 Relatórios — Financeiro";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando…";
+    wrap.appendChild(statusEl);
+
+    var filterBarWrap = document.createElement("div");
+    filterBarWrap.className = "filter-bar";
+    wrap.appendChild(filterBarWrap);
+
+    var kpiWrap = document.createElement("div");
+    kpiWrap.className = "financeiro-bi-kpi-grid";
+    kpiWrap.style.display = "none";
+    wrap.appendChild(kpiWrap);
+
+    var categoriesSection = document.createElement("div");
+    categoriesSection.className = "financeiro-bi-section";
+    categoriesSection.style.display = "none";
+    wrap.appendChild(categoriesSection);
+
+    var monthlySection = document.createElement("div");
+    monthlySection.className = "financeiro-bi-section";
+    monthlySection.style.display = "none";
+    wrap.appendChild(monthlySection);
+
+    function transacoesHandleLocked() {
+      transacoesClearUnlock();
+      renderTransacoesLockScreen(wrap, function (token) { renderFinanceiroBIUnlocked(wrap, token); }, "📊 Relatórios — Financeiro");
+    }
+
+    var meta = { tags: [] };
+    var state = { periodPreset: "30d", start: "", end: "", tags: [] };
+    var defaultRange = transacoesResolvePeriodPreset(state.periodPreset);
+    state.start = defaultRange.start;
+    state.end = defaultRange.end;
+    var lastItems = [];
+    var charts = {}; // canvasId -> Chart.js instance (destruída antes de remontar)
+    var catSaidasMode = "valor"; // "valor" | "qtde" — toggle dos 2 gráficos de categoria
+
+    function bqs(extraStart, extraEnd) {
+      var qs = [];
+      qs.push("start=" + encodeURIComponent(extraStart !== undefined ? extraStart : state.start));
+      qs.push("end=" + encodeURIComponent(extraEnd !== undefined ? extraEnd : state.end));
+      if (state.tags.length) qs.push("tags=" + encodeURIComponent(state.tags.join(",")));
+      qs.push("ignored=exclude");
+      qs.push("unlock=" + encodeURIComponent(unlockToken));
+      return qs.join("&");
+    }
+
+    function destroyChart(id) {
+      if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    }
+
+    function moneyTick(v) {
+      return "R$ " + Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+    }
+
+    function renderKpis(kpis, prevKpis) {
+      kpiWrap.innerHTML = "";
+      kpiWrap.style.display = "grid";
+      function pill(label, value, cls, compareBase) {
+        var el = document.createElement("div");
+        el.className = "financeiro-bi-kpi" + (cls ? " " + cls : "");
+        var lab = document.createElement("span");
+        lab.className = "financeiro-bi-kpi-label";
+        lab.textContent = label;
+        var val = document.createElement("span");
+        val.className = "financeiro-bi-kpi-value";
+        val.textContent = value;
+        el.appendChild(lab);
+        el.appendChild(val);
+        if (compareBase !== undefined && compareBase !== null && prevKpis) {
+          var diff = compareBase, base = null;
+          // compareBase é o valor atual já calculado fora; comparamos com o
+          // campo homônimo de prevKpis passado via closure abaixo.
+        }
+        return el;
+      }
+      function pctChange(cur, prev) {
+        if (!prev) return null;
+        return ((cur - prev) / Math.abs(prev)) * 100;
+      }
+      function compareBadge(cur, prev) {
+        var pct = pctChange(cur, prev);
+        if (pct === null) return null;
+        var badge = document.createElement("span");
+        badge.className = "financeiro-bi-kpi-compare " + (pct >= 0 ? "up" : "down");
+        badge.textContent = (pct >= 0 ? "↑" : "↓") + Math.abs(pct).toFixed(0) + "% vs período anterior";
+        return badge;
+      }
+      var defs = [
+        { label: "💰 Entradas", value: transacoesFmtMoney(kpis.entradas), cls: "kpi-entrada", cur: kpis.entradas, prev: prevKpis && prevKpis.entradas },
+        { label: "💸 Saídas", value: transacoesFmtMoney(kpis.saidas), cls: "kpi-saida", cur: kpis.saidas, prev: prevKpis && prevKpis.saidas },
+        { label: "⚖️ Saldo", value: transacoesFmtMoney(kpis.saldo), cls: kpis.saldo >= 0 ? "kpi-entrada" : "kpi-saida", cur: kpis.saldo, prev: prevKpis && prevKpis.saldo },
+        { label: "🧾 Nº de Transações", value: String(kpis.count) },
+        { label: "🎯 Ticket Médio", value: transacoesFmtMoney(kpis.ticketMedio) },
+        { label: "🔺 Maior Transação", value: transacoesFmtMoney(kpis.maiorTransacao) },
+        { label: "📅 Período Inicial", value: transacoesFmtDateBR(kpis.minDate) },
+        { label: "📅 Período Final", value: transacoesFmtDateBR(kpis.maxDate) },
+      ];
+      defs.forEach(function (d) {
+        var el = pill(d.label, d.value, d.cls);
+        if (d.prev !== undefined && d.prev !== null) {
+          var badge = compareBadge(d.cur, d.prev);
+          if (badge) el.appendChild(badge);
+        }
+        kpiWrap.appendChild(el);
+      });
+    }
+
+    function renderHorizontalBarChart(canvasId, rows, mode, colorOffset) {
+      destroyChart(canvasId);
+      var canvasEl = document.getElementById(canvasId);
+      if (!canvasEl) return;
+      var sorted = rows.slice().sort(function (a, b) { return b[mode] - a[mode]; }).slice(0, 12);
+      var labels = sorted.map(function (r) { return (r.icon ? r.icon + " " : "") + r.label; });
+      var data = sorted.map(function (r) { return r[mode]; });
+      var colors = sorted.map(function (r, i) { return FINANCEIRO_BI_PALETTE[(i + (colorOffset || 0)) % FINANCEIRO_BI_PALETTE.length]; });
+      charts[canvasId] = new window.Chart(canvasEl.getContext("2d"), {
+        type: "bar",
+        data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderRadius: 6, maxBarThickness: 26 }] },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return mode === "valor" ? transacoesFmtMoney(ctx.parsed.x) : ctx.parsed.x + " transações";
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              ticks: { callback: function (v) { return mode === "valor" ? moneyTick(v) : v; } },
+              grid: { color: "rgba(0,0,0,0.06)" },
+            },
+            y: { grid: { display: false } },
+          },
+        },
+      });
+    }
+
+    function renderMonthlyChart(rows) {
+      destroyChart("financeiroBIMonthlyChart");
+      var canvasEl = document.getElementById("financeiroBIMonthlyChart");
+      if (!canvasEl) return;
+      var labels = rows.map(function (r) { return financeiroBIMonthLabel(r.month); });
+      charts.financeiroBIMonthlyChart = new window.Chart(canvasEl.getContext("2d"), {
+        data: {
+          labels: labels,
+          datasets: [
+            { type: "bar", label: "Entradas", data: rows.map(function (r) { return r.entradas; }), backgroundColor: FINANCEIRO_BI_ENTRADA_COLOR, borderRadius: 5, order: 2 },
+            { type: "bar", label: "Saídas", data: rows.map(function (r) { return r.saidas; }), backgroundColor: FINANCEIRO_BI_SAIDA_COLOR, borderRadius: 5, order: 2 },
+            { type: "line", label: "Saldo Acumulado", data: rows.map(function (r) { return r.saldoAcumulado; }), borderColor: "#6366f1", backgroundColor: "rgba(99,102,241,0.12)", tension: 0.35, fill: false, order: 1, pointRadius: 3, pointBackgroundColor: "#6366f1" },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { position: "bottom" },
+            tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + transacoesFmtMoney(ctx.parsed.y); } } },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } },
+          },
+        },
+      });
+    }
+
+    function renderCategoriesSection(items) {
+      categoriesSection.innerHTML = "";
+      categoriesSection.style.display = "block";
+
+      var secTitle = document.createElement("h4");
+      secTitle.className = "financeiro-bi-subtitle";
+      secTitle.textContent = "🏷️ Categorias — Saídas";
+      categoriesSection.appendChild(secTitle);
+
+      var toggleRow = document.createElement("div");
+      toggleRow.className = "financeiro-bi-toggle-row";
+      var valorBtn = document.createElement("button");
+      valorBtn.type = "button";
+      valorBtn.className = "filter-trigger" + (catSaidasMode === "valor" ? " active" : "");
+      valorBtn.textContent = "💰 Por Valor";
+      var qtdeBtn = document.createElement("button");
+      qtdeBtn.type = "button";
+      qtdeBtn.className = "filter-trigger" + (catSaidasMode === "qtde" ? " active" : "");
+      qtdeBtn.textContent = "🔢 Por Quantidade";
+      valorBtn.addEventListener("click", function () { catSaidasMode = "valor"; renderCategoriesSection(items); });
+      qtdeBtn.addEventListener("click", function () { catSaidasMode = "qtde"; renderCategoriesSection(items); });
+      toggleRow.appendChild(valorBtn);
+      toggleRow.appendChild(qtdeBtn);
+      categoriesSection.appendChild(toggleRow);
+
+      var chartsRow = document.createElement("div");
+      chartsRow.className = "financeiro-bi-charts-row";
+      var geralBox = document.createElement("div");
+      geralBox.className = "financeiro-bi-chart-box";
+      var geralTitle = document.createElement("p");
+      geralTitle.className = "financeiro-bi-chart-title";
+      geralTitle.textContent = "Por Categoria Geral";
+      var geralCanvasWrap = document.createElement("div");
+      geralCanvasWrap.className = "financeiro-bi-canvas-wrap";
+      var geralCanvas = document.createElement("canvas");
+      geralCanvas.id = "financeiroBICatGeralChart";
+      geralCanvasWrap.appendChild(geralCanvas);
+      geralBox.appendChild(geralTitle);
+      geralBox.appendChild(geralCanvasWrap);
+
+      var indivBox = document.createElement("div");
+      indivBox.className = "financeiro-bi-chart-box";
+      var indivTitle = document.createElement("p");
+      indivTitle.className = "financeiro-bi-chart-title";
+      indivTitle.textContent = "Por Categoria Individual";
+      var indivCanvasWrap = document.createElement("div");
+      indivCanvasWrap.className = "financeiro-bi-canvas-wrap";
+      var indivCanvas = document.createElement("canvas");
+      indivCanvas.id = "financeiroBICatIndividualChart";
+      indivCanvasWrap.appendChild(indivCanvas);
+      indivBox.appendChild(indivTitle);
+      indivBox.appendChild(indivCanvasWrap);
+
+      chartsRow.appendChild(geralBox);
+      chartsRow.appendChild(indivBox);
+      categoriesSection.appendChild(chartsRow);
+
+      // Entradas por categoria — card simples separado (pedido do Georges:
+      // "mostrar só Saídas aqui... reservar Entradas pra um card
+      // separado", já que Entradas tem poucas categorias).
+      var entradasBox = document.createElement("div");
+      entradasBox.className = "financeiro-bi-chart-box financeiro-bi-entradas-box";
+      var entradasTitle = document.createElement("p");
+      entradasTitle.className = "financeiro-bi-chart-title";
+      entradasTitle.textContent = "💰 Entradas por Categoria";
+      entradasBox.appendChild(entradasTitle);
+      var entradasRows = financeiroBIAggregateEntradas(items).sort(function (a, b) { return b.valor - a.valor; });
+      if (!entradasRows.length) {
+        var emptyP = document.createElement("p");
+        emptyP.className = "empty";
+        emptyP.textContent = "Sem entradas no período.";
+        entradasBox.appendChild(emptyP);
+      } else {
+        var list = document.createElement("div");
+        list.className = "financeiro-bi-entradas-list";
+        var maxVal = entradasRows[0].valor || 1;
+        entradasRows.forEach(function (r) {
+          var row = document.createElement("div");
+          row.className = "financeiro-bi-entradas-row";
+          var lab = document.createElement("span");
+          lab.className = "financeiro-bi-entradas-label";
+          lab.textContent = r.icon + " " + r.label;
+          var barWrap = document.createElement("div");
+          barWrap.className = "financeiro-bi-entradas-barwrap";
+          var bar = document.createElement("div");
+          bar.className = "financeiro-bi-entradas-bar";
+          bar.style.width = Math.max(4, (r.valor / maxVal) * 100) + "%";
+          barWrap.appendChild(bar);
+          var val = document.createElement("span");
+          val.className = "financeiro-bi-entradas-value";
+          val.textContent = transacoesFmtMoney(r.valor);
+          row.appendChild(lab);
+          row.appendChild(barWrap);
+          row.appendChild(val);
+          list.appendChild(row);
+        });
+        entradasBox.appendChild(list);
+      }
+      categoriesSection.appendChild(entradasBox);
+
+      loadChartJs().then(function () {
+        renderHorizontalBarChart("financeiroBICatGeralChart", financeiroBIAggregateSaidasRaiz(items), catSaidasMode, 0);
+        renderHorizontalBarChart("financeiroBICatIndividualChart", financeiroBIAggregateSaidasIndividual(items), catSaidasMode, 3);
+      }).catch(function (err) {
+        categoriesSection.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Erro ao carregar gráficos: " + err.message }));
+      });
+    }
+
+    function renderMonthlySection(items) {
+      monthlySection.innerHTML = "";
+      monthlySection.style.display = "block";
+      var secTitle = document.createElement("h4");
+      secTitle.className = "financeiro-bi-subtitle";
+      secTitle.textContent = "📈 Evolução Mensal";
+      monthlySection.appendChild(secTitle);
+      var canvasWrap = document.createElement("div");
+      canvasWrap.className = "financeiro-bi-canvas-wrap financeiro-bi-canvas-wide";
+      var canvasEl = document.createElement("canvas");
+      canvasEl.id = "financeiroBIMonthlyChart";
+      canvasWrap.appendChild(canvasEl);
+      monthlySection.appendChild(canvasWrap);
+      loadChartJs().then(function () {
+        renderMonthlyChart(financeiroBIAggregateMonthly(items));
+      }).catch(function (err) {
+        monthlySection.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Erro ao carregar gráfico: " + err.message }));
+      });
+    }
+
+    function fetchData() {
+      statusEl.style.display = "block";
+      statusEl.textContent = "Carregando…";
+      var prevRange = financeiroBIPrevRange(state.start, state.end);
+      return Promise.all([
+        authFetch(cfg.templateWorkerUrl + "/transacoes?" + bqs())
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); }),
+        prevRange.start
+          ? authFetch(cfg.templateWorkerUrl + "/transacoes?" + bqs(prevRange.start, prevRange.end))
+              .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
+          : Promise.resolve(null),
+      ]).then(function (results) {
+        var result = results[0], prevResult = results[1];
+        if (result.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+        if (result.status === 423) { transacoesHandleLocked(); return; }
+        if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar transações");
+        lastItems = result.data.items || [];
+        statusEl.style.display = "none";
+        var kpis = financeiroBIComputeKpis(lastItems);
+        var prevKpis = prevResult && prevResult.ok ? financeiroBIComputeKpis(prevResult.data.items || []) : null;
+        renderKpis(kpis, prevKpis);
+        renderCategoriesSection(lastItems);
+        renderMonthlySection(lastItems);
+      }).catch(function (err) {
+        statusEl.style.display = "block";
+        statusEl.textContent = "Erro ao buscar dados: " + err.message;
+      });
+    }
+
+    function buildFilterBar() {
+      filterBarWrap.innerHTML = "";
+
+      var tagsFilterDef = {
+        label: "🔖 Tags", multi: true, searchable: true,
+        options: meta.tags.map(function (t) { return { label: t.name, pageId: t.id, icon: "ti-tags", color: t.color || "" }; }),
+      };
+      filterBarWrap.appendChild(buildIconDropdown(tagsFilterDef, function (opts) {
+        state.tags = opts.map(function (o) { return o.pageId; });
+        fetchData();
+      }));
+
+      var periodWrap = document.createElement("div");
+      periodWrap.className = "filter-dropdown";
+      var periodSelect = document.createElement("select");
+      periodSelect.className = "filter-trigger transacoes-period-select";
+      TRANSACOES_PERIOD_PRESETS.forEach(function (p) {
+        var opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = "📅 " + p.label;
+        periodSelect.appendChild(opt);
+      });
+      periodSelect.value = state.periodPreset || "30d";
+      periodSelect.addEventListener("change", function () {
+        state.periodPreset = periodSelect.value;
+        var range = transacoesResolvePeriodPreset(periodSelect.value);
+        state.start = range.start;
+        state.end = range.end;
+        fetchData();
+      });
+      periodWrap.appendChild(periodSelect);
+      filterBarWrap.appendChild(periodWrap);
+
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "filter-trigger";
+      clearBtn.innerHTML = '<i class="ti ti-filter-off"></i><span>Limpar filtros</span>';
+      clearBtn.addEventListener("click", function () {
+        state.tags = [];
+        state.periodPreset = "30d";
+        var range = transacoesResolvePeriodPreset("30d");
+        state.start = range.start;
+        state.end = range.end;
+        buildFilterBar();
+        fetchData();
+      });
+      filterBarWrap.appendChild(clearBtn);
+    }
+
+    Promise.all([
+      authFetch(cfg.templateWorkerUrl + "/transacoes-filtros?unlock=" + encodeURIComponent(unlockToken))
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); }),
+    ]).then(function (results) {
+      var metaResult = results[0];
+      if (metaResult.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      if (metaResult.status === 423) { transacoesHandleLocked(); return; }
+      if (!metaResult.ok) throw new Error((metaResult.data && metaResult.data.error) || "Falha ao buscar filtros");
+      meta = metaResult.data || meta;
+      buildFilterBar();
+      return fetchData();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao carregar Relatórios: " + err.message;
+    });
+  }
+
 
   // ---------------- "page.notasVitor" — Notas do Vitor (03EF - NSF - T34, 100% leitura) ----------------
   // Pedido do Georges: "criei uma nova página no Notion pra cadastrar as
@@ -14313,6 +14943,19 @@
         container.appendChild(dividerTransacoes);
       }
       renderTransacoesPage(container, page);
+      renderedSomething = true;
+    }
+
+    // "page.financeiroBI" (pedido do Georges: "relatórios e BI's" sobre
+    // Transações) — mesmo esquema de "page.transacoes" acima. Ver
+    // renderFinanceiroBIPage.
+    if (page.financeiroBI) {
+      if (renderedSomething) {
+        var dividerFinanceiroBI = document.createElement("hr");
+        dividerFinanceiroBI.className = "content-divider";
+        container.appendChild(dividerFinanceiroBI);
+      }
+      renderFinanceiroBIPage(container, page);
     }
   }
 

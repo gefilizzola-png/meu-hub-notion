@@ -1463,7 +1463,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-29 13:32",
+  appVersion: "2026-09-29 23:16",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2869,7 +2869,8 @@ const APP_CONFIG = {
       title: "Financeiro",
       items: [
         { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
-        { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" }
+        { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
+        { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" }
       ]
     },
 
@@ -2904,10 +2905,29 @@ const APP_CONFIG = {
     financeiro_transacoes: {
       title: "Transações",
       transacoes: true,
-      // botão cruzado pra Contas Mensais (mesma regra #13a de cima).
+      // botão cruzado pra Contas Mensais e Relatórios (mesma regra #13a de cima).
       itemGroups: [
         { title: "Abrir", items: [
-          { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "meuhub" }
+          { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "meuhub" },
+          { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "meuhub" }
+        ] }
+      ],
+      items: []
+    },
+
+    // "page.financeiroBI" — Relatórios/BI de Transações (pedido do Georges,
+    // rodada 1: filtros globais de período+tag, KPIs, categorias
+    // geral/individual em Saídas, evolução mensal). Mesmo PIN de Transações
+    // (dado sensível, ver renderTransacoesLockScreen/onUnlocked no app.js) —
+    // reaproveita GET /transacoes-filtros e GET /transacoes já existentes no
+    // worker.js, sem rota nova. Ver renderFinanceiroBIPage no app.js.
+    financeiro_bi: {
+      title: "Relatórios — Financeiro",
+      financeiroBI: true,
+      // botão cruzado pra Transações (mesma regra #13a de cima).
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "meuhub" }
         ] }
       ],
       items: []
