@@ -11000,6 +11000,10 @@
     { label: "Entrada", pageId: "entrada", icon: "ti-arrow-down", color: "#2f9e44" },
     { label: "Saída", pageId: "saida", icon: "ti-arrow-up", color: "#c0392b" },
   ];
+  // id sentinela da opção "Sem Tag" no filtro de Tags — nunca existe na
+  // tabela tags do D1, nem é mandado ao worker como tags= (vira tagsNone=1
+  // à parte, ver transacoesQueryString()).
+  var TRANSACOES_TAG_SEM_TAG_ID = "__sem_tag__";
   // ciclo Ativas→Todas→Ignoradas (mesmo padrão do botão de status em
   // Supermercado/Provas) — "ignoredMode" bate 1:1 com o parâmetro
   // ?ignored= do worker.js.
@@ -11067,6 +11071,7 @@
     { id: "7d", label: "Última Semana", days: 7 },
     { id: "15d", label: "Últimos 15 dias", days: 15 },
     { id: "30d", label: "Últimos 30 dias", days: 30 },
+    { id: "60d", label: "Últimos 60 dias", days: 60 },
     { id: "1m", label: "Último mês", months: 1 },
     { id: "3m", label: "Últimos 3 meses", months: 3 },
     { id: "6m", label: "Últimos 6 meses", months: 6 },
@@ -11518,6 +11523,7 @@
       search: "",
       sortKey: "date", sortDir: -1,
       periodPreset: "30d",
+      raizOnly: false,
     };
     // abre por padrão em "Últimos 30 dias" (pedido do Georges) — os campos
     // manuais de data (dateWrap) nascem preenchidos com esse intervalo.
@@ -11533,10 +11539,17 @@
       if (state.end) qs.push("end=" + encodeURIComponent(state.end));
       if (state.accounts.length) qs.push("accounts=" + encodeURIComponent(state.accounts.join(",")));
       if (state.categories.length) qs.push("categories=" + encodeURIComponent(state.categories.join(",")));
-      if (state.tags.length) qs.push("tags=" + encodeURIComponent(state.tags.join(",")));
+      // "Sem Tag" é um id sentinela client-only — separa dos ids reais antes
+      // de montar a query (tags= só leva ids de verdade; tagsNone=1 avisa o
+      // worker pra incluir também quem não tem nenhuma tag).
+      var realTagIds = state.tags.filter(function (id) { return id !== TRANSACOES_TAG_SEM_TAG_ID; });
+      var wantsSemTag = state.tags.indexOf(TRANSACOES_TAG_SEM_TAG_ID) !== -1;
+      if (realTagIds.length) qs.push("tags=" + encodeURIComponent(realTagIds.join(",")));
+      if (wantsSemTag) qs.push("tagsNone=1");
       if (state.tipo.length) qs.push("tipo=" + encodeURIComponent(state.tipo.join(",")));
       if (state.valorMin !== "") qs.push("valorMin=" + encodeURIComponent(state.valorMin));
       if (state.valorMax !== "") qs.push("valorMax=" + encodeURIComponent(state.valorMax));
+      if (state.raizOnly) qs.push("raizOnly=1");
       qs.push("ignored=" + encodeURIComponent(state.ignoredMode));
       qs.push("unlock=" + encodeURIComponent(unlockToken));
       return qs.join("&");
@@ -11819,9 +11832,37 @@
         fetchData();
       }));
 
+      // "Categorias-Raiz" (pedido do Georges) — toda transação deveria cair
+      // numa SUBcategoria, mas o app de origem (Visor) às vezes categoriza
+      // automático direto na categoria-mãe (raiz). Botão liga/desliga um
+      // filtro à parte (raizOnly=1, ver worker.js) pra achar só essas —
+      // assim o Georges vai ajustando manualmente no Visor. Independente da
+      // Categoria normal acima (dá pra usar as duas juntas, viram AND).
+      var raizOnlyBtn = document.createElement("button");
+      raizOnlyBtn.type = "button";
+      raizOnlyBtn.className = "filter-trigger";
+      raizOnlyBtn.title = "Mostrar só transações categorizadas direto na categoria-mãe (sem subcategoria)";
+      function updateRaizOnlyBtn() {
+        raizOnlyBtn.classList.toggle("active", !!state.raizOnly);
+        raizOnlyBtn.innerHTML = '<i class="ti ti-sitemap"></i><span>Categorias-Raiz</span>';
+      }
+      updateRaizOnlyBtn();
+      raizOnlyBtn.addEventListener("click", function () {
+        state.raizOnly = !state.raizOnly;
+        updateRaizOnlyBtn();
+        fetchData();
+      });
+      filterBarWrap.appendChild(raizOnlyBtn);
+
+      // "Sem Tag" (pedido do Georges) — opção pseudo-tag no topo da lista pra
+      // achar transações sem nenhuma tag; TRANSACOES_TAG_SEM_TAG_ID é um id
+      // sentinela que não existe na tabela tags do D1, tratado à parte em
+      // transacoesQueryString() (vira tagsNone=1) e no worker (NOT IN
+      // transaction_tags), nunca mandado junto de tags= real.
       var tagsFilterDef = {
         label: "🔖 Tags", multi: true, searchable: true,
-        options: meta.tags.map(function (t) { return { label: t.name, pageId: t.id, icon: "ti-tags", color: t.color || "" }; }),
+        options: [{ label: "Sem Tag", pageId: TRANSACOES_TAG_SEM_TAG_ID, icon: "ti-tag-off", color: "" }]
+          .concat(meta.tags.map(function (t) { return { label: t.name, pageId: t.id, icon: "ti-tags", color: t.color || "" }; })),
       };
       filterBarWrap.appendChild(buildIconDropdown(tagsFilterDef, function (opts) {
         state.tags = opts.map(function (o) { return o.pageId; });
@@ -11937,7 +11978,7 @@
         state.start = defaultRange.start; state.end = defaultRange.end;
         state.accounts = []; state.categories = [];
         state.tags = []; state.tipo = []; state.valorMin = ""; state.valorMax = "";
-        state.ignoredMode = "exclude"; state.search = "";
+        state.ignoredMode = "exclude"; state.search = ""; state.raizOnly = false;
         searchInput.value = "";
         searchInput.dispatchEvent(new Event("input", { bubbles: true }));
         buildFilterBar();
