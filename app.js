@@ -12366,7 +12366,12 @@
     }
 
     var meta = { tags: [] };
-    var state = { periodPreset: "30d", start: "", end: "", tags: [] };
+    // rankingCategoria: filtro LOCAL (não recarrega do servidor) do card
+    // "Maiores Transações" — pedido do Georges: "eu queria criar, por ex,
+    // as maiores transações por categoria Compras". Guardado no state
+    // (não numa variável solta) pra sobreviver a um refetch por mudança de
+    // período/tag global sem resetar sozinho.
+    var state = { periodPreset: "30d", start: "", end: "", tags: [], rankingCategoria: "" };
     var defaultRange = transacoesResolvePeriodPreset(state.periodPreset);
     state.start = defaultRange.start;
     state.end = defaultRange.end;
@@ -12879,15 +12884,56 @@
       heatmapBox.appendChild(heatmapRow);
       outrasSection.appendChild(heatmapBox);
 
-      // ranking Maiores Transações (top-10)
+      // ranking Maiores Transações (top-10) — com filtro LOCAL por
+      // categoria-raiz (pedido do Georges: "maiores transações por
+      // categoria Compras"). É um recorte client-side só desse card, não
+      // recarrega do servidor nem mexe nos filtros globais da página.
       var rankingBox = document.createElement("div");
       rankingBox.className = "financeiro-bi-chart-box";
       rankingBox.style.marginTop = "16px";
-      rankingBox.appendChild(Object.assign(document.createElement("p"), { className: "financeiro-bi-chart-title", textContent: "🏆 Maiores Transações" }));
-      var topTx = financeiroBITopTransacoes(items, 10);
-      if (!topTx.length) {
-        rankingBox.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sem transações no período." }));
-      } else {
+      var rankingHeader = document.createElement("div");
+      rankingHeader.className = "financeiro-bi-ranking-header";
+      rankingHeader.appendChild(Object.assign(document.createElement("p"), { className: "financeiro-bi-chart-title", textContent: "🏆 Maiores Transações" }));
+
+      var rankingRootsSet = {};
+      items.forEach(function (it) {
+        var root = it.flow_type === "entrada" ? "Receita" : transacoesCategoriaRaiz(it.category_name).root;
+        rankingRootsSet[root] = (TRANSACOES_RAIZ_ICON[root] || "📦") + " " + root;
+      });
+      var rankingRoots = Object.keys(rankingRootsSet).sort();
+
+      var rankingSelect = document.createElement("select");
+      rankingSelect.className = "filter-trigger financeiro-bi-ranking-select";
+      var allOpt = document.createElement("option");
+      allOpt.value = ""; allOpt.textContent = "📊 Todas as categorias";
+      rankingSelect.appendChild(allOpt);
+      rankingRoots.forEach(function (root) {
+        var opt = document.createElement("option");
+        opt.value = root; opt.textContent = rankingRootsSet[root];
+        rankingSelect.appendChild(opt);
+      });
+      rankingSelect.value = rankingRoots.indexOf(state.rankingCategoria) !== -1 ? state.rankingCategoria : "";
+      if (rankingSelect.value !== state.rankingCategoria) state.rankingCategoria = rankingSelect.value; // categoria salva sumiu do período atual
+      rankingSelect.addEventListener("change", function () {
+        state.rankingCategoria = rankingSelect.value;
+        renderRankingTable();
+      });
+      rankingHeader.appendChild(rankingSelect);
+      rankingBox.appendChild(rankingHeader);
+
+      var rankingBody = document.createElement("div");
+      rankingBox.appendChild(rankingBody);
+
+      function renderRankingTable() {
+        rankingBody.innerHTML = "";
+        var scopedItems = state.rankingCategoria
+          ? items.filter(function (it) { return (it.flow_type === "entrada" ? "Receita" : transacoesCategoriaRaiz(it.category_name).root) === state.rankingCategoria; })
+          : items;
+        var topTx = financeiroBITopTransacoes(scopedItems, 10);
+        if (!topTx.length) {
+          rankingBody.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sem transações" + (state.rankingCategoria ? " nessa categoria" : "") + " no período." }));
+          return;
+        }
         var rankTable = document.createElement("table");
         rankTable.className = "financeiro-bi-table";
         var rankThead = document.createElement("thead");
@@ -12912,12 +12958,13 @@
           rankTbody.appendChild(tr);
         });
         rankTable.appendChild(rankTbody);
-        rankingBox.appendChild(rankTable);
-        rankingBox.appendChild(Object.assign(document.createElement("p"), {
+        rankingBody.appendChild(rankTable);
+        rankingBody.appendChild(Object.assign(document.createElement("p"), {
           className: "financeiro-bi-table-note",
           textContent: "🧩 = compra parcelada — valor e data reconstruídos a partir do padrão \"PARC X/Y\" na descrição do lançamento (aproximado).",
         }));
       }
+      renderRankingTable();
       outrasSection.appendChild(rankingBox);
     }
 

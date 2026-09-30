@@ -6154,6 +6154,23 @@ html, body {
   color: #8a8780;
   margin: 8px 2px 0;
 }
+.financeiro-bi-ranking-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.financeiro-bi-ranking-header .financeiro-bi-chart-title {
+  margin: 0;
+}
+.financeiro-bi-ranking-select {
+  max-width: 220px;
+}
+@media (max-width: 640px) {
+  .financeiro-bi-ranking-select { max-width: 100%; width: 100%; }
+}
 @media (max-width: 640px) {
   .financeiro-bi-entradas-row { grid-template-columns: 110px 1fr auto; font-size: 12px; }
   .financeiro-bi-canvas-wrap { height: 260px; }
