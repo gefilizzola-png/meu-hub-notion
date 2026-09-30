@@ -5935,9 +5935,10 @@ html, body {
   margin-bottom: 12px;
 }
 .financeiro-bi-charts-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
+  align-items: flex-start;
 }
 .financeiro-bi-chart-box {
   background: #fff;
@@ -5945,6 +5946,17 @@ html, body {
   border-radius: 14px;
   padding: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  flex: 1 1 340px;
+  min-width: 280px;
+  box-sizing: border-box;
+}
+/* Entradas por Categoria (pedido do Georges: "não precisa deixar tão
+   largo... colocar outros do lado") — base menor e teto de largura, fica
+   ao lado dos 2 gráficos de Saídas em tela larga e quebra pra baixo sozinha
+   em tela estreita, sem forçar scroll horizontal. */
+.financeiro-bi-entradas-box {
+  flex: 1 1 260px;
+  max-width: 360px;
 }
 .financeiro-bi-chart-title {
   font-size: 13px;
@@ -5959,9 +5971,6 @@ html, body {
 .financeiro-bi-canvas-wrap.financeiro-bi-canvas-wide {
   height: 340px;
 }
-.financeiro-bi-entradas-box {
-  margin-top: 16px;
-}
 .financeiro-bi-entradas-list {
   display: flex;
   flex-direction: column;
@@ -5969,7 +5978,7 @@ html, body {
 }
 .financeiro-bi-entradas-row {
   display: grid;
-  grid-template-columns: 160px 1fr auto;
+  grid-template-columns: minmax(0, 110px) 1fr auto;
   align-items: center;
   gap: 10px;
   font-size: 13px;

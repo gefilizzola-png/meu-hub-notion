@@ -11986,17 +11986,30 @@
   // funcional. Não vai me entregar um gráfico de Excel 1995" — por isso
   // Chart.js (carregado só aqui, lazy, via CDN) em vez de tabela/ASCII, com
   // paleta própria, cantos arredondados e tooltip formatado em R$.
-  var FINANCEIRO_BI_CHARTJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js";
+  // 2 CDNs em cascata (pedido implícito — cdnjs sozinho falhou no
+  // ambiente do Georges, "Erro ao carregar gráficos: Falha ao carregar
+  // Chart.js"; jsdelivr como 2ª tentativa antes de desistir de vez).
+  var FINANCEIRO_BI_CHARTJS_URLS = [
+    "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js",
+  ];
   var financeiroBIChartJsPromise = null;
+  function loadChartJsFrom(urls, idx) {
+    if (idx >= urls.length) return Promise.reject(new Error("Falha ao carregar Chart.js (todas as fontes indisponíveis)"));
+    return new Promise(function (resolve, reject) {
+      var script = document.createElement("script");
+      script.src = urls[idx];
+      script.onload = function () { resolve(window.Chart); };
+      script.onerror = function () { document.head.removeChild(script); reject(); };
+      document.head.appendChild(script);
+    }).catch(function () { return loadChartJsFrom(urls, idx + 1); });
+  }
   function loadChartJs() {
     if (window.Chart) return Promise.resolve(window.Chart);
     if (financeiroBIChartJsPromise) return financeiroBIChartJsPromise;
-    financeiroBIChartJsPromise = new Promise(function (resolve, reject) {
-      var script = document.createElement("script");
-      script.src = FINANCEIRO_BI_CHARTJS_URL;
-      script.onload = function () { resolve(window.Chart); };
-      script.onerror = function () { reject(new Error("Falha ao carregar Chart.js")); };
-      document.head.appendChild(script);
+    financeiroBIChartJsPromise = loadChartJsFrom(FINANCEIRO_BI_CHARTJS_URLS, 0).catch(function (err) {
+      financeiroBIChartJsPromise = null; // permite tentar de novo numa próxima renderização
+      throw err;
     });
     return financeiroBIChartJsPromise;
   }
@@ -12351,11 +12364,14 @@
 
       chartsRow.appendChild(geralBox);
       chartsRow.appendChild(indivBox);
-      categoriesSection.appendChild(chartsRow);
 
       // Entradas por categoria — card simples separado (pedido do Georges:
       // "mostrar só Saídas aqui... reservar Entradas pra um card
-      // separado", já que Entradas tem poucas categorias).
+      // separado", já que Entradas tem poucas categorias). Fica na MESMA
+      // fileira que os 2 gráficos de Saídas em tela larga (mais estreito,
+      // ver .financeiro-bi-entradas-box no CSS), e quebra pra baixo sozinho
+      // em tela pequena — pedido: "não precisa deixar tão largo... colocar
+      // outros do lado, mas cuidando pra exibir corretamente em tela maior".
       var entradasBox = document.createElement("div");
       entradasBox.className = "financeiro-bi-chart-box financeiro-bi-entradas-box";
       var entradasTitle = document.createElement("p");
@@ -12394,7 +12410,8 @@
         });
         entradasBox.appendChild(list);
       }
-      categoriesSection.appendChild(entradasBox);
+      chartsRow.appendChild(entradasBox);
+      categoriesSection.appendChild(chartsRow);
 
       loadChartJs().then(function () {
         renderHorizontalBarChart("financeiroBICatGeralChart", financeiroBIAggregateSaidasRaiz(items), catSaidasMode, 0);
