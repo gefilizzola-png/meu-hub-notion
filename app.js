@@ -12115,6 +12115,105 @@
     return (meses[idx] || mk) + "/" + parts[0].slice(2);
   }
 
+  // ---------------- BI Financeiro — rodada 2 (drill-down + outras análises) ----------------
+  // Subcategorias (folha) de UMA categoria-raiz específica, só Saídas —
+  // alimenta tanto os 3 mini-gráficos fixos (top-3 raízes) quanto o painel
+  // de detalhe sob demanda quando o Georges clica numa barra de raiz.
+  function financeiroBIAggregateSubcategorias(items, rootName) {
+    var map = {};
+    items.forEach(function (it) {
+      if (it.flow_type !== "saida") return;
+      var raiz = transacoesCategoriaRaiz(it.category_name);
+      if (raiz.root !== rootName) return;
+      var key = it.category_name || "Sem categoria";
+      if (!map[key]) map[key] = { label: key, icon: transacoesCategoriaIcon(key), valor: 0, qtde: 0 };
+      map[key].valor += Math.abs(it.amount || 0);
+      map[key].qtde += 1;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.valor - a.valor; });
+  }
+
+  // Transações (não agregadas) de uma categoria FOLHA específica — usada no
+  // painel de detalhe quando o clique foi numa barra individual (sem mais
+  // hierarquia abaixo pra abrir, então mostramos as transações em si).
+  function financeiroBITransacoesDaCategoria(items, leafName) {
+    return items.filter(function (it) { return it.flow_type === "saida" && (it.category_name || "Sem categoria") === leafName; })
+      .sort(function (a, b) { return Math.abs(b.amount || 0) - Math.abs(a.amount || 0); });
+  }
+
+  function financeiroBIAggregateByAccount(items) {
+    var map = {};
+    items.forEach(function (it) {
+      if (it.flow_type !== "saida") return;
+      var key = it.account_name || "Sem conta";
+      if (!map[key]) map[key] = { label: key, valor: 0, qtde: 0 };
+      map[key].valor += Math.abs(it.amount || 0);
+      map[key].qtde += 1;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.valor - a.valor; });
+  }
+
+  function financeiroBIAggregateByTag(items) {
+    var map = {};
+    items.forEach(function (it) {
+      if (it.flow_type !== "saida") return;
+      var tags = it.tags && it.tags.length ? it.tags : [{ name: "Sem tag" }];
+      tags.forEach(function (t) {
+        var key = t.name || "Sem tag";
+        if (!map[key]) map[key] = { label: key, valor: 0, qtde: 0 };
+        map[key].valor += Math.abs(it.amount || 0);
+        map[key].qtde += 1;
+      });
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.valor - a.valor; });
+  }
+
+  // heatmap por dia da semana — 0=domingo ... 6=sábado (mesmo índice do
+  // getUTCDay nativo), só Saídas, dentro do período filtrado.
+  var FINANCEIRO_BI_WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  function financeiroBIAggregateByWeekday(items) {
+    var totals = [0, 0, 0, 0, 0, 0, 0], counts = [0, 0, 0, 0, 0, 0, 0];
+    items.forEach(function (it) {
+      if (it.flow_type !== "saida" || !it.date) return;
+      var d = new Date(it.date + "T00:00:00Z");
+      var idx = d.getUTCDay();
+      totals[idx] += Math.abs(it.amount || 0);
+      counts[idx] += 1;
+    });
+    return FINANCEIRO_BI_WEEKDAY_LABELS.map(function (label, i) { return { label: label, valor: totals[i], qtde: counts[i] }; });
+  }
+
+  function financeiroBITopTransacoes(items, n) {
+    return items.slice().sort(function (a, b) { return Math.abs(b.amount || 0) - Math.abs(a.amount || 0); }).slice(0, n || 10);
+  }
+
+  // alerta automático — compara Saídas por categoria-raiz do período atual
+  // vs o período anterior equivalente (mesmos prevItems já buscados pra
+  // comparação dos KPIs) e aponta a que mais subiu e a que mais desceu em
+  // valor absoluto (R$), não em %, pra não destacar categorias minúsculas
+  // que dobraram de R$5 pra R$10.
+  function financeiroBICategoryDeltaAlert(currItems, prevItems) {
+    if (!prevItems || !prevItems.length) return null;
+    var cur = financeiroBIAggregateSaidasRaiz(currItems);
+    var prev = financeiroBIAggregateSaidasRaiz(prevItems);
+    var prevMap = {};
+    prev.forEach(function (r) { prevMap[r.label] = r.valor; });
+    var curMap = {};
+    cur.forEach(function (r) { curMap[r.label] = r.valor; });
+    var allKeys = Object.keys(curMap).concat(Object.keys(prevMap).filter(function (k) { return !(k in curMap); }));
+    var deltas = allKeys.map(function (k) {
+      var icon = (transacoesCategoriaRaiz.length, TRANSACOES_RAIZ_ICON[k]) || "📦";
+      return { label: k, icon: icon, delta: (curMap[k] || 0) - (prevMap[k] || 0), cur: curMap[k] || 0, prev: prevMap[k] || 0 };
+    });
+    if (!deltas.length) return null;
+    var maiorAlta = deltas.slice().sort(function (a, b) { return b.delta - a.delta; })[0];
+    var maiorBaixa = deltas.slice().sort(function (a, b) { return a.delta - b.delta; })[0];
+    return {
+      alta: maiorAlta && maiorAlta.delta > 0 ? maiorAlta : null,
+      baixa: maiorBaixa && maiorBaixa.delta < 0 ? maiorBaixa : null,
+    };
+  }
+
   function renderFinanceiroBIPage(container, page) {
     var wrap = document.createElement("div");
     wrap.className = "financeiro-bi-block";
@@ -12152,10 +12251,29 @@
     categoriesSection.style.display = "none";
     wrap.appendChild(categoriesSection);
 
+    var drillDownSection = document.createElement("div");
+    drillDownSection.className = "financeiro-bi-section";
+    drillDownSection.style.display = "none";
+    wrap.appendChild(drillDownSection);
+
+    // painel de detalhe sob demanda (clique numa barra, geral ou individual)
+    // — fica FORA de drillDownSection pra sobreviver aos re-renders da
+    // seção (toggle Valor/Quantidade, refetch por filtro), sempre visível
+    // logo abaixo dos 3 gráficos fixos quando aberto.
+    var detailPanelBox = document.createElement("div");
+    detailPanelBox.className = "financeiro-bi-detail-panel";
+    detailPanelBox.style.display = "none";
+    wrap.appendChild(detailPanelBox);
+
     var monthlySection = document.createElement("div");
     monthlySection.className = "financeiro-bi-section";
     monthlySection.style.display = "none";
     wrap.appendChild(monthlySection);
+
+    var outrasSection = document.createElement("div");
+    outrasSection.className = "financeiro-bi-section";
+    outrasSection.style.display = "none";
+    wrap.appendChild(outrasSection);
 
     function transacoesHandleLocked() {
       transacoesClearUnlock();
@@ -12242,7 +12360,7 @@
       });
     }
 
-    function renderHorizontalBarChart(canvasId, rows, mode, colorOffset) {
+    function renderHorizontalBarChart(canvasId, rows, mode, colorOffset, onBarClick) {
       destroyChart(canvasId);
       var canvasEl = document.getElementById(canvasId);
       if (!canvasEl) return;
@@ -12257,6 +12375,17 @@
           indexAxis: "y",
           responsive: true,
           maintainAspectRatio: false,
+          // pedido do Georges (drill-down): clicar em qualquer barra — geral
+          // ou individual, mesmo fora do top-3 fixo — abre o painel de
+          // detalhe sob demanda.
+          onClick: onBarClick ? function (evt, elements) {
+            if (!elements || !elements.length) return;
+            var row = sorted[elements[0].index];
+            if (row) onBarClick(row.label);
+          } : undefined,
+          onHover: onBarClick ? function (evt, elements) {
+            evt.native.target.style.cursor = elements && elements.length ? "pointer" : "default";
+          } : undefined,
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -12414,8 +12543,8 @@
       categoriesSection.appendChild(chartsRow);
 
       loadChartJs().then(function () {
-        renderHorizontalBarChart("financeiroBICatGeralChart", financeiroBIAggregateSaidasRaiz(items), catSaidasMode, 0);
-        renderHorizontalBarChart("financeiroBICatIndividualChart", financeiroBIAggregateSaidasIndividual(items), catSaidasMode, 3);
+        renderHorizontalBarChart("financeiroBICatGeralChart", financeiroBIAggregateSaidasRaiz(items), catSaidasMode, 0, function (rootLabel) { openDetailPanel("root", rootLabel, items); });
+        renderHorizontalBarChart("financeiroBICatIndividualChart", financeiroBIAggregateSaidasIndividual(items), catSaidasMode, 3, function (leafLabel) { openDetailPanel("leaf", leafLabel, items); });
       }).catch(function (err) {
         categoriesSection.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Erro ao carregar gráficos: " + err.message }));
       });
@@ -12441,6 +12570,259 @@
       });
     }
 
+    // painel de detalhe sob demanda — abre com o clique em QUALQUER barra
+    // (raiz ou individual, mesmo fora do top-3 fixo), pedido do Georges:
+    // "Sim, manter os dois" (fixos + sob demanda). kind "root" mostra as
+    // subcategorias daquela raiz (outro gráfico); kind "leaf" não tem mais
+    // hierarquia abaixo, então mostra as próprias transações.
+    function openDetailPanel(kind, label, items) {
+      detailPanelBox.innerHTML = "";
+      detailPanelBox.style.display = "block";
+      var header = document.createElement("div");
+      header.className = "financeiro-bi-detail-header";
+      var icon = kind === "root" ? (TRANSACOES_RAIZ_ICON[label] || "📦") : transacoesCategoriaIcon(label);
+      var titleEl = document.createElement("h4");
+      titleEl.className = "financeiro-bi-subtitle";
+      titleEl.textContent = icon + " " + label + (kind === "root" ? " — subcategorias" : " — transações");
+      var closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "financeiro-bi-detail-close";
+      closeBtn.innerHTML = '<i class="ti ti-x"></i>';
+      closeBtn.addEventListener("click", function () {
+        destroyChart("financeiroBIDetailChart");
+        detailPanelBox.style.display = "none";
+        detailPanelBox.innerHTML = "";
+      });
+      header.appendChild(titleEl);
+      header.appendChild(closeBtn);
+      detailPanelBox.appendChild(header);
+
+      if (kind === "root") {
+        var subRows = financeiroBIAggregateSubcategorias(items, label);
+        if (!subRows.length) {
+          detailPanelBox.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sem subcategorias no período." }));
+        } else {
+          var canvasWrap = document.createElement("div");
+          canvasWrap.className = "financeiro-bi-canvas-wrap";
+          var canvasEl = document.createElement("canvas");
+          canvasEl.id = "financeiroBIDetailChart";
+          canvasWrap.appendChild(canvasEl);
+          detailPanelBox.appendChild(canvasWrap);
+          loadChartJs().then(function () {
+            renderHorizontalBarChart("financeiroBIDetailChart", subRows, "valor", 6, function (leafLabel) { openDetailPanel("leaf", leafLabel, items); });
+          });
+        }
+      } else {
+        var txs = financeiroBITransacoesDaCategoria(items, label).slice(0, 20);
+        if (!txs.length) {
+          detailPanelBox.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sem transações no período." }));
+        } else {
+          var table = document.createElement("table");
+          table.className = "financeiro-bi-table";
+          var thead = document.createElement("thead");
+          thead.innerHTML = "<tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Valor</th></tr>";
+          table.appendChild(thead);
+          var tbody = document.createElement("tbody");
+          txs.forEach(function (it) {
+            var tr = document.createElement("tr");
+            tr.innerHTML = "<td>" + transacoesFmtDateBR(it.date) + "</td><td>" + (it.description || "—") + "</td><td>" + (it.account_name || "—") + "</td><td class=\"financeiro-bi-table-valor\">" + transacoesFmtMoney(Math.abs(it.amount || 0)) + "</td>";
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          detailPanelBox.appendChild(table);
+        }
+      }
+      detailPanelBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function renderDrillDownSection(items) {
+      drillDownSection.innerHTML = "";
+      drillDownSection.style.display = "block";
+      var secTitle = document.createElement("h4");
+      secTitle.className = "financeiro-bi-subtitle";
+      secTitle.textContent = "🔍 Drill-down — Top 3 Categorias";
+      drillDownSection.appendChild(secTitle);
+
+      var top3 = financeiroBIAggregateSaidasRaiz(items).sort(function (a, b) { return b.valor - a.valor; }).slice(0, 3);
+      if (!top3.length) {
+        drillDownSection.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sem categorias de Saída no período." }));
+        return;
+      }
+      var row = document.createElement("div");
+      row.className = "financeiro-bi-charts-row";
+      var canvasIds = [];
+      top3.forEach(function (rootRow, i) {
+        var box = document.createElement("div");
+        box.className = "financeiro-bi-chart-box";
+        var boxTitle = document.createElement("p");
+        boxTitle.className = "financeiro-bi-chart-title";
+        boxTitle.textContent = rootRow.icon + " " + rootRow.label;
+        var canvasWrap = document.createElement("div");
+        canvasWrap.className = "financeiro-bi-canvas-wrap";
+        var canvasEl = document.createElement("canvas");
+        var canvasId = "financeiroBIDrill" + i;
+        canvasEl.id = canvasId;
+        canvasIds.push({ id: canvasId, root: rootRow.label });
+        canvasWrap.appendChild(canvasEl);
+        box.appendChild(boxTitle);
+        box.appendChild(canvasWrap);
+        row.appendChild(box);
+      });
+      drillDownSection.appendChild(row);
+
+      loadChartJs().then(function () {
+        canvasIds.forEach(function (c, i) {
+          var subRows = financeiroBIAggregateSubcategorias(items, c.root);
+          renderHorizontalBarChart(c.id, subRows, "valor", i * 3, function (leafLabel) { openDetailPanel("leaf", leafLabel, items); });
+        });
+      }).catch(function (err) {
+        drillDownSection.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Erro ao carregar gráficos: " + err.message }));
+      });
+    }
+
+    function renderDoughnutChart(canvasId, rows) {
+      destroyChart(canvasId);
+      var canvasEl = document.getElementById(canvasId);
+      if (!canvasEl) return;
+      var sorted = rows.slice().sort(function (a, b) { return b.valor - a.valor; }).slice(0, 8);
+      var labels = sorted.map(function (r) { return r.label; });
+      var data = sorted.map(function (r) { return r.valor; });
+      var colors = sorted.map(function (r, i) { return FINANCEIRO_BI_PALETTE[i % FINANCEIRO_BI_PALETTE.length]; });
+      charts[canvasId] = new window.Chart(canvasEl.getContext("2d"), {
+        type: "doughnut",
+        data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 2, borderColor: "#fff" }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "62%",
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
+            tooltip: { callbacks: { label: function (ctx) { return ctx.label + ": " + transacoesFmtMoney(ctx.parsed); } } },
+          },
+        },
+      });
+    }
+
+    function renderOutrasAnalisesSection(items, prevItems) {
+      outrasSection.innerHTML = "";
+      outrasSection.style.display = "block";
+      var secTitle = document.createElement("h4");
+      secTitle.className = "financeiro-bi-subtitle";
+      secTitle.textContent = "📚 Outras Análises";
+      outrasSection.appendChild(secTitle);
+
+      // alerta automático de categoria em alta/baixa
+      var alertInfo = financeiroBICategoryDeltaAlert(items, prevItems);
+      if (alertInfo && (alertInfo.alta || alertInfo.baixa)) {
+        var alertBox = document.createElement("div");
+        alertBox.className = "financeiro-bi-alert-box";
+        if (alertInfo.alta) {
+          var altaP = document.createElement("p");
+          altaP.className = "financeiro-bi-alert-line financeiro-bi-alert-up";
+          altaP.textContent = "🔺 " + alertInfo.alta.icon + " " + alertInfo.alta.label + " subiu " + transacoesFmtMoney(alertInfo.alta.delta) + " vs período anterior";
+          alertBox.appendChild(altaP);
+        }
+        if (alertInfo.baixa) {
+          var baixaP = document.createElement("p");
+          baixaP.className = "financeiro-bi-alert-line financeiro-bi-alert-down";
+          baixaP.textContent = "🔻 " + alertInfo.baixa.icon + " " + alertInfo.baixa.label + " caiu " + transacoesFmtMoney(Math.abs(alertInfo.baixa.delta)) + " vs período anterior";
+          alertBox.appendChild(baixaP);
+        }
+        outrasSection.appendChild(alertBox);
+      }
+
+      // Conta (donut) + Tag (lista de barras) lado a lado
+      var contaTagRow = document.createElement("div");
+      contaTagRow.className = "financeiro-bi-charts-row";
+
+      var contaBox = document.createElement("div");
+      contaBox.className = "financeiro-bi-chart-box";
+      contaBox.appendChild(Object.assign(document.createElement("p"), { className: "financeiro-bi-chart-title", textContent: "🏦 Distribuição por Conta" }));
+      var contaCanvasWrap = document.createElement("div");
+      contaCanvasWrap.className = "financeiro-bi-canvas-wrap";
+      var contaCanvas = document.createElement("canvas");
+      contaCanvas.id = "financeiroBIContaChart";
+      contaCanvasWrap.appendChild(contaCanvas);
+      contaBox.appendChild(contaCanvasWrap);
+      contaTagRow.appendChild(contaBox);
+
+      var tagBox = document.createElement("div");
+      tagBox.className = "financeiro-bi-chart-box financeiro-bi-entradas-box";
+      tagBox.appendChild(Object.assign(document.createElement("p"), { className: "financeiro-bi-chart-title", textContent: "🔖 Distribuição por Tag" }));
+      var tagRows = financeiroBIAggregateByTag(items);
+      if (!tagRows.length) {
+        tagBox.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sem tags no período." }));
+      } else {
+        var tagList = document.createElement("div");
+        tagList.className = "financeiro-bi-entradas-list";
+        var tagMax = tagRows[0].valor || 1;
+        tagRows.slice(0, 10).forEach(function (r) {
+          var row2 = document.createElement("div");
+          row2.className = "financeiro-bi-entradas-row";
+          row2.innerHTML =
+            "<span class=\"financeiro-bi-entradas-label\">🔖 " + r.label + "</span>" +
+            "<div class=\"financeiro-bi-entradas-barwrap\"><div class=\"financeiro-bi-entradas-bar financeiro-bi-entradas-bar-tag\" style=\"width:" + Math.max(4, (r.valor / tagMax) * 100) + "%\"></div></div>" +
+            "<span class=\"financeiro-bi-entradas-value financeiro-bi-entradas-value-tag\">" + transacoesFmtMoney(r.valor) + "</span>";
+          tagList.appendChild(row2);
+        });
+        tagBox.appendChild(tagList);
+      }
+      contaTagRow.appendChild(tagBox);
+      outrasSection.appendChild(contaTagRow);
+
+      loadChartJs().then(function () {
+        renderDoughnutChart("financeiroBIContaChart", financeiroBIAggregateByAccount(items));
+      }).catch(function () {});
+
+      // heatmap por dia da semana
+      var heatmapBox = document.createElement("div");
+      heatmapBox.className = "financeiro-bi-chart-box";
+      heatmapBox.style.marginTop = "16px";
+      heatmapBox.appendChild(Object.assign(document.createElement("p"), { className: "financeiro-bi-chart-title", textContent: "🗓️ Gasto por Dia da Semana" }));
+      var weekdayRows = financeiroBIAggregateByWeekday(items);
+      var weekdayMax = Math.max.apply(null, weekdayRows.map(function (r) { return r.valor; })) || 1;
+      var heatmapRow = document.createElement("div");
+      heatmapRow.className = "financeiro-bi-heatmap-row";
+      weekdayRows.forEach(function (r) {
+        var cell = document.createElement("div");
+        cell.className = "financeiro-bi-heatmap-cell";
+        var intensity = r.valor / weekdayMax;
+        cell.style.background = "rgba(239, 68, 68, " + (0.08 + intensity * 0.72).toFixed(2) + ")";
+        cell.innerHTML = "<span class=\"financeiro-bi-heatmap-day\">" + r.label + "</span><span class=\"financeiro-bi-heatmap-value\">" + transacoesFmtMoney(r.valor) + "</span>";
+        heatmapRow.appendChild(cell);
+      });
+      heatmapBox.appendChild(heatmapRow);
+      outrasSection.appendChild(heatmapBox);
+
+      // ranking Maiores Transações (top-10)
+      var rankingBox = document.createElement("div");
+      rankingBox.className = "financeiro-bi-chart-box";
+      rankingBox.style.marginTop = "16px";
+      rankingBox.appendChild(Object.assign(document.createElement("p"), { className: "financeiro-bi-chart-title", textContent: "🏆 Maiores Transações" }));
+      var topTx = financeiroBITopTransacoes(items, 10);
+      if (!topTx.length) {
+        rankingBox.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sem transações no período." }));
+      } else {
+        var rankTable = document.createElement("table");
+        rankTable.className = "financeiro-bi-table";
+        var rankThead = document.createElement("thead");
+        rankThead.innerHTML = "<tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th></tr>";
+        rankTable.appendChild(rankThead);
+        var rankTbody = document.createElement("tbody");
+        topTx.forEach(function (it) {
+          var tr = document.createElement("tr");
+          var tipoTag = it.flow_type === "entrada"
+            ? "<span class=\"financeiro-bi-flow-tag financeiro-bi-flow-entrada\">Entrada</span>"
+            : "<span class=\"financeiro-bi-flow-tag financeiro-bi-flow-saida\">Saída</span>";
+          tr.innerHTML = "<td>" + transacoesFmtDateBR(it.date) + "</td><td>" + (it.description || "—") + "</td><td>" + transacoesCategoriaIcon(it.category_name) + " " + (it.category_name || "—") + "</td><td>" + tipoTag + "</td><td class=\"financeiro-bi-table-valor\">" + transacoesFmtMoney(Math.abs(it.amount || 0)) + "</td>";
+          rankTbody.appendChild(tr);
+        });
+        rankTable.appendChild(rankTbody);
+        rankingBox.appendChild(rankTable);
+      }
+      outrasSection.appendChild(rankingBox);
+    }
+
     function fetchData() {
       statusEl.style.display = "block";
       statusEl.textContent = "Carregando…";
@@ -12458,12 +12840,20 @@
         if (result.status === 423) { transacoesHandleLocked(); return; }
         if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar transações");
         lastItems = result.data.items || [];
+        var prevItems = prevResult && prevResult.ok ? (prevResult.data.items || []) : [];
         statusEl.style.display = "none";
+        // fecha o painel de detalhe sob demanda ao refazer a busca (filtro
+        // novo invalida o que estava aberto).
+        destroyChart("financeiroBIDetailChart");
+        detailPanelBox.style.display = "none";
+        detailPanelBox.innerHTML = "";
         var kpis = financeiroBIComputeKpis(lastItems);
-        var prevKpis = prevResult && prevResult.ok ? financeiroBIComputeKpis(prevResult.data.items || []) : null;
+        var prevKpis = prevResult && prevResult.ok ? financeiroBIComputeKpis(prevItems) : null;
         renderKpis(kpis, prevKpis);
         renderCategoriesSection(lastItems);
+        renderDrillDownSection(lastItems);
         renderMonthlySection(lastItems);
+        renderOutrasAnalisesSection(lastItems, prevItems);
       }).catch(function (err) {
         statusEl.style.display = "block";
         statusEl.textContent = "Erro ao buscar dados: " + err.message;
