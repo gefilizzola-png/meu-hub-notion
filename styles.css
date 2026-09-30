@@ -6178,3 +6178,87 @@ html, body {
   .financeiro-bi-table { font-size: 12px; }
   .financeiro-bi-table th, .financeiro-bi-table td { padding: 6px 6px; }
 }
+
+/* "Grupos de Categorias Personalizados" (pedido do Georges: agrupar
+   categorias/subcategorias à sua escolha — ex: Streaming+IA+Música — pra
+   ver evolução mensal e descrições que compõem o gasto). */
+.financeiro-bi-grupo-hint {
+  font-size: 12.5px;
+  color: #8a8780;
+  margin: -4px 0 12px;
+  max-width: 640px;
+}
+.financeiro-bi-grupo-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.financeiro-bi-grupo-detail {
+  background: #fff;
+  border: 0.5px solid #e5e4e0;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.financeiro-bi-grupo-summary {
+  font-size: 14px;
+  font-weight: 600;
+  color: #262624;
+  margin: 0 0 14px;
+}
+.financeiro-bi-grupo-editor {
+  background: #fbfaf8;
+  border: 0.5px solid #e5e4e0;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.financeiro-bi-grupo-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 0.5px solid #e5e4e0;
+}
+.financeiro-bi-grupo-editor-row:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.financeiro-bi-grupo-name-input {
+  flex: 1 1 220px;
+  min-width: 180px;
+  padding: 8px 10px;
+  border: 0.5px solid #d8d6d0;
+  border-radius: 8px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.financeiro-bi-grupo-del-btn {
+  border: none;
+  background: transparent;
+  color: #c0392b;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1;
+}
+.financeiro-bi-grupo-del-btn:hover {
+  background: rgba(192, 57, 43, 0.08);
+}
+.financeiro-bi-grupo-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.financeiro-bi-grupo-save-btn {
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .financeiro-bi-grupo-editor-row { flex-direction: column; align-items: stretch; }
+  .financeiro-bi-grupo-name-input { min-width: 0; }
+}

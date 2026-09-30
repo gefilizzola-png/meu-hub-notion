@@ -12209,6 +12209,54 @@
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.valor - a.valor; });
   }
 
+  // ---------------- BI Financeiro — Grupos de Categorias Personalizados ----------------
+  // Filtra as transações (já buscadas pra todo o período/tags do BI) pras
+  // que pertencem ao grupo escolhido pelo Georges — comparação por
+  // category_id (id real do D1), não por nome (nome pode se repetir entre
+  // reorganizações no Visor, id não). Só Saídas: a ideia é "quanto estou
+  // gastando com isso", entrada não entra na conta.
+  function financeiroBIItemsDoGrupo(items, grupo) {
+    if (!grupo || !grupo.categoryIds || !grupo.categoryIds.length) return [];
+    var idSet = {};
+    grupo.categoryIds.forEach(function (id) { idSet[String(id)] = true; });
+    return items.filter(function (it) {
+      return it.flow_type === "saida" && idSet[String(it.category_id)];
+    });
+  }
+
+  // evolução mensal SÓ de saídas (o grupo é sempre sobre gasto) — mesmo
+  // formato de mês (YYYY-MM) e mesmo financeiroBIMonthLabel() de
+  // financeiroBIAggregateMonthly, mas sem entrada/saldo acumulado (não fazem
+  // sentido pra um recorte de categorias).
+  function financeiroBIAggregateMonthlySaidas(items) {
+    var map = {};
+    items.forEach(function (it) {
+      var mk = String(it.date || "").slice(0, 7);
+      if (!mk) return;
+      if (!map[mk]) map[mk] = { month: mk, valor: 0 };
+      map[mk].valor += Math.abs(it.amount || 0);
+    });
+    return Object.keys(map).sort().map(function (mk) { return map[mk]; });
+  }
+
+  // agrupa por DESCRIÇÃO exata do lançamento (sem tentar extrair nome de
+  // estabelecimento — pedido explícito do Georges: "não precisa extrair. Só
+  // traga o nome completo que eu identifico do que se trata"). Soma valor e
+  // conta ocorrências, guarda 1ª/última data — serve pra responder "quais
+  // são os serviços contratados" olhando a lista ordenada por gasto.
+  function financeiroBIAggregateByDescription(items) {
+    var map = {};
+    items.forEach(function (it) {
+      var key = it.description || "(sem descrição)";
+      if (!map[key]) map[key] = { description: key, valor: 0, qtde: 0, minDate: it.date, maxDate: it.date };
+      map[key].valor += Math.abs(it.amount || 0);
+      map[key].qtde += 1;
+      if (it.date < map[key].minDate) map[key].minDate = it.date;
+      if (it.date > map[key].maxDate) map[key].maxDate = it.date;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.valor - a.valor; });
+  }
+
   // heatmap por dia da semana — 0=domingo ... 6=sábado (mesmo índice do
   // getUTCDay nativo), só Saídas, dentro do período filtrado.
   var FINANCEIRO_BI_WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -12401,6 +12449,22 @@
     outrasSection.style.display = "none";
     wrap.appendChild(outrasSection);
 
+    // "Grupos de Categorias Personalizados" (pedido do Georges: "quero, por
+    // ex, trazer as despesas de categorias/subcategorias relacionadas com
+    // streaming, serviços digitais, IA, etc., pra ver quanto estou gastando
+    // por mês com isso"). Diferente da raiz fixa TRANSACOES_RAIZ_ICON (que
+    // já teria "Serviços digitais" cobrindo parte disso), aqui o Georges
+    // escolhe LIVREMENTE qualquer combinação de categorias/subcategorias e
+    // salva com um nome — CRUD próprio no worker.js (/financeiro-categoria-
+    // grupos, ver handleFinanceiroCategoriaGruposGet/Update), mesmo padrão
+    // de "Visualizações" em Prioridades (lista salva na KV, editor self-
+    // serve). Fica DEPOIS de "Outras Análises": é uma ferramenta de
+    // exploração ad-hoc, não um relatório fixo do topo.
+    var gruposSection = document.createElement("div");
+    gruposSection.className = "financeiro-bi-section";
+    gruposSection.style.display = "none";
+    wrap.appendChild(gruposSection);
+
     function transacoesHandleLocked() {
       transacoesClearUnlock();
       renderTransacoesLockScreen(wrap, function (token) { renderFinanceiroBIUnlocked(wrap, token); }, "📊 Relatórios — Financeiro");
@@ -12419,6 +12483,9 @@
     var lastItems = [];
     var charts = {}; // canvasId -> Chart.js instance (destruída antes de remontar)
     var catSaidasMode = "valor"; // "valor" | "qtde" — toggle dos 2 gráficos de categoria
+    var categoriaGrupos = []; // [{ id, name, categoryIds: [...] }] — carregado do Worker
+    var activeGrupoId = null; // qual grupo está "ligado" (mostrando gráfico+tabela) agora
+    var gruposEditMode = false; // editor de grupos aberto/fechado
 
     function bqs(extraStart, extraEnd) {
       var qs = [];
@@ -13009,6 +13076,245 @@
       outrasSection.appendChild(rankingBox);
     }
 
+    // ---------------- Grupos de Categorias Personalizados ----------------
+    // saveCategoriaGrupos: manda a lista INTEIRA pro worker.js (PUT
+    // substitui tudo de uma vez, mesmo padrão de /folder-shortcuts) e
+    // atualiza o estado local com o que voltou já sanitizado.
+    function saveCategoriaGrupos(list) {
+      return authFetch(cfg.templateWorkerUrl + "/financeiro-categoria-grupos?unlock=" + encodeURIComponent(unlockToken), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grupos: list }),
+      }).then(function (res) { return res.json(); }).then(function (data) {
+        categoriaGrupos = data.grupos || [];
+        return categoriaGrupos;
+      });
+    }
+
+    function renderGrupoDetail(grupo) {
+      var box = document.createElement("div");
+      box.className = "financeiro-bi-grupo-detail";
+
+      var items = financeiroBIItemsDoGrupo(lastItems, grupo);
+      var total = items.reduce(function (sum, it) { return sum + Math.abs(it.amount || 0); }, 0);
+
+      var summary = document.createElement("p");
+      summary.className = "financeiro-bi-grupo-summary";
+      summary.textContent = "💸 Total do período: " + transacoesFmtMoney(total) + " (" + items.length + " transações)";
+      box.appendChild(summary);
+
+      if (!items.length) {
+        box.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sem transações desse grupo no período filtrado." }));
+        gruposSection.appendChild(box);
+        return;
+      }
+
+      var canvasWrap = document.createElement("div");
+      canvasWrap.className = "financeiro-bi-canvas-wrap financeiro-bi-canvas-wide";
+      var canvasEl = document.createElement("canvas");
+      canvasEl.id = "financeiroBIGrupoChart";
+      canvasWrap.appendChild(canvasEl);
+      box.appendChild(canvasWrap);
+
+      var descRows = financeiroBIAggregateByDescription(items);
+      var tableTitle = document.createElement("p");
+      tableTitle.className = "financeiro-bi-chart-title";
+      tableTitle.textContent = "Descrições que compõem o gasto (" + descRows.length + ")";
+      box.appendChild(tableTitle);
+
+      var table = document.createElement("table");
+      table.className = "financeiro-bi-table";
+      var thead = document.createElement("thead");
+      thead.innerHTML = "<tr><th>Descrição</th><th>Valor total</th><th>Qtde</th><th>1ª ocorrência</th><th>Última</th></tr>";
+      table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      descRows.forEach(function (r) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + r.description + "</td>" +
+          "<td class=\"financeiro-bi-table-valor\">" + transacoesFmtMoney(r.valor) + "</td>" +
+          "<td>" + r.qtde + "</td>" +
+          "<td>" + transacoesFmtDateBR(r.minDate) + "</td>" +
+          "<td>" + transacoesFmtDateBR(r.maxDate) + "</td>";
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      box.appendChild(table);
+      gruposSection.appendChild(box);
+
+      loadChartJs().then(function () {
+        destroyChart("financeiroBIGrupoChart");
+        var monthly = financeiroBIAggregateMonthlySaidas(items);
+        var canvas = document.getElementById("financeiroBIGrupoChart");
+        if (!canvas) return;
+        charts.financeiroBIGrupoChart = new window.Chart(canvas.getContext("2d"), {
+          type: "bar",
+          data: {
+            labels: monthly.map(function (r) { return financeiroBIMonthLabel(r.month); }),
+            datasets: [{ label: "Gasto mensal", data: monthly.map(function (r) { return r.valor; }), backgroundColor: FINANCEIRO_BI_SAIDA_COLOR, borderRadius: 5 }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: function (ctx) { return "Gasto: " + transacoesFmtMoney(ctx.parsed.y); } } },
+            },
+            scales: {
+              x: { grid: { display: false } },
+              y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } },
+            },
+          },
+        });
+      });
+    }
+
+    // editor self-serve (criar/editar/excluir grupos) — mesmo padrão de
+    // "Visualizações" em Prioridades: draftGrupos é uma cópia de trabalho,
+    // só vira definitivo ao clicar "Salvar" (evita PUT a cada tecla digitada).
+    var draftGrupos = null;
+
+    function renderGruposEditor() {
+      var editorBox = document.createElement("div");
+      editorBox.className = "financeiro-bi-grupo-editor";
+
+      draftGrupos.forEach(function (g, idx) {
+        var row = document.createElement("div");
+        row.className = "financeiro-bi-grupo-editor-row";
+
+        var nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.placeholder = "Nome do grupo (ex: Streaming & IA)";
+        nameInput.value = g.name || "";
+        nameInput.className = "financeiro-bi-grupo-name-input";
+        nameInput.addEventListener("input", function () { g.name = nameInput.value; });
+        row.appendChild(nameInput);
+
+        var catDef = {
+          label: "🏷️ Categorias", multi: true, searchable: true, default: g.categoryIds,
+          options: meta.categories.map(function (c) { return { label: c.name, pageId: c.id, icon: "ti-tag", color: "" }; }),
+        };
+        row.appendChild(buildIconDropdown(catDef, function (opts) {
+          g.categoryIds = opts.map(function (o) { return o.pageId; });
+        }));
+
+        var delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "financeiro-bi-grupo-del-btn";
+        delBtn.innerHTML = '<i class="ti ti-trash"></i>';
+        delBtn.title = "Excluir grupo";
+        delBtn.addEventListener("click", function () {
+          draftGrupos.splice(idx, 1);
+          renderGruposCategoriasSection();
+        });
+        row.appendChild(delBtn);
+
+        editorBox.appendChild(row);
+      });
+
+      var addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "filter-trigger";
+      addBtn.innerHTML = '<i class="ti ti-plus"></i><span>Adicionar grupo</span>';
+      addBtn.addEventListener("click", function () {
+        draftGrupos.push({ id: null, name: "", categoryIds: [] });
+        renderGruposCategoriasSection();
+      });
+      editorBox.appendChild(addBtn);
+
+      var actionsRow = document.createElement("div");
+      actionsRow.className = "financeiro-bi-grupo-editor-actions";
+      var saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "filter-trigger financeiro-bi-grupo-save-btn";
+      saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i><span>Salvar grupos</span>';
+      saveBtn.addEventListener("click", function () {
+        saveBtn.disabled = true;
+        saveCategoriaGrupos(draftGrupos).then(function () {
+          gruposEditMode = false;
+          draftGrupos = null;
+          renderGruposCategoriasSection();
+        }).catch(function (err) {
+          saveBtn.disabled = false;
+          alert("Erro ao salvar grupos: " + err.message);
+        });
+      });
+      var cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "filter-trigger";
+      cancelBtn.textContent = "Cancelar";
+      cancelBtn.addEventListener("click", function () {
+        gruposEditMode = false;
+        draftGrupos = null;
+        renderGruposCategoriasSection();
+      });
+      actionsRow.appendChild(saveBtn);
+      actionsRow.appendChild(cancelBtn);
+      editorBox.appendChild(actionsRow);
+
+      gruposSection.appendChild(editorBox);
+    }
+
+    function renderGruposCategoriasSection() {
+      gruposSection.innerHTML = "";
+      gruposSection.style.display = "block";
+
+      var secTitle = document.createElement("h4");
+      secTitle.className = "financeiro-bi-subtitle";
+      secTitle.textContent = "🎯 Grupos de Categorias Personalizados";
+      gruposSection.appendChild(secTitle);
+
+      var hint = document.createElement("p");
+      hint.className = "financeiro-bi-grupo-hint";
+      hint.textContent = "Junte categorias/subcategorias à sua escolha (ex: Streaming + Inteligência Artificial + Música) pra ver gasto mensal e quais descrições compõem o total, dentro do período filtrado acima.";
+      gruposSection.appendChild(hint);
+
+      var pillsRow = document.createElement("div");
+      pillsRow.className = "financeiro-bi-grupo-pills";
+      categoriaGrupos.forEach(function (g) {
+        var pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "filter-trigger" + (activeGrupoId === g.id ? " active" : "");
+        pill.textContent = g.name;
+        pill.addEventListener("click", function () {
+          activeGrupoId = activeGrupoId === g.id ? null : g.id;
+          renderGruposCategoriasSection();
+        });
+        pillsRow.appendChild(pill);
+      });
+      var editToggleBtn = document.createElement("button");
+      editToggleBtn.type = "button";
+      editToggleBtn.className = "filter-trigger" + (gruposEditMode ? " active" : "");
+      editToggleBtn.innerHTML = '<i class="ti ti-pencil"></i><span>Editar grupos</span>';
+      editToggleBtn.addEventListener("click", function () {
+        gruposEditMode = !gruposEditMode;
+        if (gruposEditMode) {
+          draftGrupos = categoriaGrupos.map(function (g) { return { id: g.id, name: g.name, categoryIds: g.categoryIds.slice() }; });
+          activeGrupoId = null;
+        } else {
+          draftGrupos = null;
+        }
+        renderGruposCategoriasSection();
+      });
+      pillsRow.appendChild(editToggleBtn);
+      gruposSection.appendChild(pillsRow);
+
+      if (gruposEditMode) {
+        if (!draftGrupos) draftGrupos = categoriaGrupos.map(function (g) { return { id: g.id, name: g.name, categoryIds: g.categoryIds.slice() }; });
+        renderGruposEditor();
+        return;
+      }
+
+      if (!categoriaGrupos.length) {
+        gruposSection.appendChild(Object.assign(document.createElement("p"), { className: "empty", textContent: "Nenhum grupo criado ainda — clique em \"Editar grupos\" pra criar o primeiro." }));
+        return;
+      }
+
+      if (activeGrupoId) {
+        var activeGrupo = categoriaGrupos.filter(function (g) { return g.id === activeGrupoId; })[0];
+        if (activeGrupo) renderGrupoDetail(activeGrupo);
+      }
+    }
+
     function fetchData() {
       statusEl.style.display = "block";
       statusEl.textContent = "Carregando…";
@@ -13040,6 +13346,7 @@
         renderDrillDownSection(lastItems);
         renderMonthlySection(lastItems);
         renderOutrasAnalisesSection(lastItems, prevItems);
+        renderGruposCategoriasSection();
       }).catch(function (err) {
         statusEl.style.display = "block";
         statusEl.textContent = "Erro ao buscar dados: " + err.message;
@@ -13124,12 +13431,15 @@
     Promise.all([
       authFetch(cfg.templateWorkerUrl + "/transacoes-filtros?unlock=" + encodeURIComponent(unlockToken))
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); }),
+      authFetch(cfg.templateWorkerUrl + "/financeiro-categoria-grupos?unlock=" + encodeURIComponent(unlockToken))
+        .then(function (res) { return res.json(); }).catch(function () { return { grupos: [] }; }),
     ]).then(function (results) {
       var metaResult = results[0];
       if (metaResult.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
       if (metaResult.status === 423) { transacoesHandleLocked(); return; }
       if (!metaResult.ok) throw new Error((metaResult.data && metaResult.data.error) || "Falha ao buscar filtros");
       meta = metaResult.data || meta;
+      categoriaGrupos = (results[1] && results[1].grupos) || [];
       buildFilterBar();
       return fetchData();
     }).catch(function (err) {
