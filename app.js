@@ -12183,8 +12183,93 @@
     return FINANCEIRO_BI_WEEKDAY_LABELS.map(function (label, i) { return { label: label, valor: totals[i], qtde: counts[i] }; });
   }
 
+  // Reconstrução de compra parcelada (pedido do Georges) — o Meu Hub não
+  // tem vínculo transação↔plano de parcelamento vindo da API do Visor
+  // (investigado na rodada 2, #705), MAS a description de cada parcela
+  // lançada pela maquininha JÁ TRAZ o padrão "PARC 07/10" embutido (achado
+  // ao inspecionar o D1 direto: ~330 das 4268 Saídas trazem esse padrão).
+  // Isso permite reconstruir a compra original sem tocar a arquitetura
+  // (tudo client-side, só com o que já vem de /transacoes):
+  //   - "07/10" = parcela atual / total de parcelas.
+  //   - data da compra original ≈ data desta parcela MENOS (atual-1) meses,
+  //     mantendo o dia do mês (lançamento é quase sempre no mesmo dia todo
+  //     mês, conforme o Georges observou).
+  //   - valor total ≈ valor da parcela × total de parcelas — usa a parcela
+  //     de índice >1 quando disponível (a 1ª às vezes varia um pouco por
+  //     arredondamento/desconto, ex.: ADIDAS 1/10 = 136,06 vs demais =
+  //     135,99), senão usa a única parcela disponível no período.
+  function transacoesParseParcela(description) {
+    var m = String(description || "").match(/^(.*?)\s*PARC\s*(\d{1,2})\s*\/\s*(\d{1,2})\b/i);
+    if (!m) return null;
+    var merchant = m[1].replace(/\s+/g, " ").trim().toUpperCase();
+    var atual = parseInt(m[2], 10), total = parseInt(m[3], 10);
+    if (!merchant || !atual || !total || atual > total) return null;
+    return { merchant: merchant, atual: atual, total: total };
+  }
+
+  // subtrai N meses de uma data ISO (YYYY-MM-DD), mantendo o dia do mês e
+  // fazendo clamp pro último dia válido quando o mês de destino é mais
+  // curto (ex.: 31/03 menos 1 mês -> 28/02, não "03/03" por overflow nativo
+  // do Date do JS).
+  function financeiroBISubtractMonths(dateISO, n) {
+    var parts = String(dateISO).split("-").map(Number);
+    var y = parts[0], m = parts[1], d = parts[2];
+    var totalMonths = y * 12 + (m - 1) - n;
+    var newY = Math.floor(totalMonths / 12);
+    var newM = totalMonths - newY * 12;
+    var daysInMonth = new Date(Date.UTC(newY, newM + 1, 0)).getUTCDate();
+    var newD = Math.min(d, daysInMonth);
+    var mm = String(newM + 1).padStart(2, "0");
+    var dd = String(newD).padStart(2, "0");
+    return newY + "-" + mm + "-" + dd;
+  }
+
+  // agrupa as Saídas que batem o padrão PARC por conta+comerciante+total de
+  // parcelas — todas as parcelas daquela MESMA compra que aparecerem no
+  // período viram 1 linha só reconstruída; o que não bate o padrão passa
+  // direto (others).
+  function financeiroBIAggregateInstallmentGroups(items) {
+    var groups = {}, others = [];
+    items.forEach(function (it) {
+      var info = it.flow_type === "saida" ? transacoesParseParcela(it.description) : null;
+      if (!info) { others.push(it); return; }
+      var key = (it.account_name || "") + "|" + info.merchant + "|" + info.total;
+      if (!groups[key]) groups[key] = { merchant: info.merchant, total: info.total, account_name: it.account_name, category_name: it.category_name, tags: it.tags, parcelas: [] };
+      groups[key].parcelas.push({ atual: info.atual, amount: Math.abs(it.amount || 0), date: it.date });
+    });
+    var grouped = Object.keys(groups).map(function (k) {
+      var g = groups[k];
+      var canon = g.parcelas.filter(function (p) { return p.atual > 1; })[0] || g.parcelas[0];
+      var maisRecente = g.parcelas.slice().sort(function (a, b) { return b.atual - a.atual; })[0];
+      return {
+        isParcelado: true,
+        merchant: g.merchant,
+        account_name: g.account_name,
+        category_name: g.category_name,
+        tags: g.tags,
+        parcelaAtual: maisRecente.atual,
+        totalParcelas: g.total,
+        valorParcela: canon.amount,
+        valor: canon.amount * g.total,
+        date: financeiroBISubtractMonths(maisRecente.date, maisRecente.atual - 1),
+        dataUltimaParcela: maisRecente.date,
+        qtdeParcelasNoPeriodo: g.parcelas.length,
+      };
+    });
+    return { grouped: grouped, others: others };
+  }
+
   function financeiroBITopTransacoes(items, n) {
-    return items.slice().sort(function (a, b) { return Math.abs(b.amount || 0) - Math.abs(a.amount || 0); }).slice(0, n || 10);
+    var res = financeiroBIAggregateInstallmentGroups(items);
+    var combined = res.others.map(function (it) {
+      return { isParcelado: false, date: it.date, description: it.description, category_name: it.category_name, account_name: it.account_name, flow_type: it.flow_type, valor: Math.abs(it.amount || 0) };
+    }).concat(res.grouped.map(function (g) {
+      return {
+        isParcelado: true, date: g.date, description: g.merchant, category_name: g.category_name, account_name: g.account_name,
+        flow_type: "saida", valor: g.valor, valorParcela: g.valorParcela, parcelaAtual: g.parcelaAtual, totalParcelas: g.totalParcelas, dataUltimaParcela: g.dataUltimaParcela,
+      };
+    }));
+    return combined.slice().sort(function (a, b) { return b.valor - a.valor; }).slice(0, n || 10);
   }
 
   // alerta automático — compara Saídas por categoria-raiz do período atual
@@ -12814,11 +12899,24 @@
           var tipoTag = it.flow_type === "entrada"
             ? "<span class=\"financeiro-bi-flow-tag financeiro-bi-flow-entrada\">Entrada</span>"
             : "<span class=\"financeiro-bi-flow-tag financeiro-bi-flow-saida\">Saída</span>";
-          tr.innerHTML = "<td>" + transacoesFmtDateBR(it.date) + "</td><td>" + (it.description || "—") + "</td><td>" + transacoesCategoriaIcon(it.category_name) + " " + (it.category_name || "—") + "</td><td>" + tipoTag + "</td><td class=\"financeiro-bi-table-valor\">" + transacoesFmtMoney(Math.abs(it.amount || 0)) + "</td>";
+          // compra parcelada reconstruída (ver financeiroBIAggregateInstallmentGroups)
+          // — mostra o valor CHEIO da compra (não só a parcela isolada) com
+          // um selo 🧩 e a data estimada da compra original, não da parcela.
+          var descCell = it.description || "—";
+          var valorSub = "";
+          if (it.isParcelado) {
+            descCell = (it.description || "—") + ' <span class="financeiro-bi-parcela-badge" title="Compra reconstruída a partir da parcela ' + it.parcelaAtual + '/' + it.totalParcelas + ' lançada em ' + transacoesFmtDateBR(it.dataUltimaParcela) + '">🧩 ' + it.totalParcelas + "x</span>";
+            valorSub = '<div class="financeiro-bi-table-sub">≈ ' + transacoesFmtMoney(it.valorParcela) + "/mês · data estimada da compra</div>";
+          }
+          tr.innerHTML = "<td>" + transacoesFmtDateBR(it.date) + "</td><td>" + descCell + "</td><td>" + transacoesCategoriaIcon(it.category_name) + " " + (it.category_name || "—") + "</td><td>" + tipoTag + "</td><td class=\"financeiro-bi-table-valor\">" + transacoesFmtMoney(it.valor) + valorSub + "</td>";
           rankTbody.appendChild(tr);
         });
         rankTable.appendChild(rankTbody);
         rankingBox.appendChild(rankTable);
+        rankingBox.appendChild(Object.assign(document.createElement("p"), {
+          className: "financeiro-bi-table-note",
+          textContent: "🧩 = compra parcelada — valor e data reconstruídos a partir do padrão \"PARC X/Y\" na descrição do lançamento (aproximado).",
+        }));
       }
       outrasSection.appendChild(rankingBox);
     }
@@ -12882,16 +12980,42 @@
         opt.textContent = "📅 " + p.label;
         periodSelect.appendChild(opt);
       });
+      periodWrap.appendChild(periodSelect);
+      filterBarWrap.appendChild(periodWrap);
+
+      // intervalo de datas personalizado (pedido do Georges: "faltou filtro
+      // por período personalizado (dt inicial e final)") — mesmo padrão de
+      // Transações: 2 campos <input type=date> lado a lado com o preset;
+      // editar manualmente desconecta do preset (periodPreset vira null).
+      var dateWrap = document.createElement("div");
+      dateWrap.className = "filter-dropdown";
+      dateWrap.style.display = "flex";
+      dateWrap.style.gap = "4px";
+      dateWrap.style.alignItems = "center";
+      var dateWrapLabel = document.createElement("span");
+      dateWrapLabel.textContent = "📆";
+      dateWrapLabel.title = "Intervalo de datas (manual)";
+      dateWrapLabel.style.fontSize = "13px";
+      var startInput = document.createElement("input");
+      startInput.type = "date"; startInput.value = state.start; startInput.className = "filter-trigger";
+      var endInput = document.createElement("input");
+      endInput.type = "date"; endInput.value = state.end; endInput.className = "filter-trigger";
+      startInput.addEventListener("change", function () { state.start = startInput.value; state.periodPreset = null; fetchData(); });
+      endInput.addEventListener("change", function () { state.end = endInput.value; state.periodPreset = null; fetchData(); });
       periodSelect.value = state.periodPreset || "30d";
       periodSelect.addEventListener("change", function () {
         state.periodPreset = periodSelect.value;
         var range = transacoesResolvePeriodPreset(periodSelect.value);
         state.start = range.start;
         state.end = range.end;
+        startInput.value = state.start;
+        endInput.value = state.end;
         fetchData();
       });
-      periodWrap.appendChild(periodSelect);
-      filterBarWrap.appendChild(periodWrap);
+      dateWrap.appendChild(dateWrapLabel);
+      dateWrap.appendChild(startInput);
+      dateWrap.appendChild(endInput);
+      filterBarWrap.appendChild(dateWrap);
 
       var clearBtn = document.createElement("button");
       clearBtn.type = "button";
