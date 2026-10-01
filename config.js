@@ -1608,7 +1608,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-01 01:10",
+  appVersion: "2026-10-01 01:20",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3010,13 +3010,16 @@ const APP_CONFIG = {
     // app.js (mesmo padrão de "page.priorities" — tudo que a página
     // precisa vem pendurado aqui, o app.js só lê "page.*" de forma
     // genérica).
+    // ordem alfabética por label (pedido do Georges — regra permanente:
+    // toda página nova que entrar numa pasta entra na posição alfabética
+    // certa, não no final da lista).
     financeiro: {
       title: "Financeiro",
       items: [
         { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
-        { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
-        { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
         { label: "Empréstimos", type: "page", target: "financeiro_emprestimos", icon: "cash" },
+        { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
+        { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
         // "Viagens" (pedido do Georges — nova pasta no Notion, mesmo caminho
         // reproduzido aqui: Financeiro->Viagens->Passagens).
         { label: "Viagens", type: "page", target: "financeiro_viagens", icon: "plane-departure" }

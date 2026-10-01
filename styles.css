@@ -6600,18 +6600,32 @@ html, body {
    colunas estão de fato visíveis. Regra permanente agora (ver
    instrucoes.md): toda coluna de conteúdo curto/fixo (código, data, selo)
    ganha "width:1%" + "white-space:nowrap" pra encolher pro tamanho do
-   próprio conteúdo, e exatamente 1 coluna de texto livre (aqui, Trecho)
-   fica SEM largura pra absorver o espaço sobrando — nunca deixar 2+
-   colunas "livres" ao mesmo tempo, senão o problema volta). */
-.passagens-th-objetivo,
+   próprio conteúdo, e exatamente 1 coluna de texto livre fica SEM largura
+   pra absorver o espaço sobrando — nunca deixar 2+ colunas "livres" ao
+   mesmo tempo, senão o problema volta.
+   2ª rodada (bug novo reportado): "Objetivo" tinha entrado nessa lista por
+   engano — é texto livre de verdade ("Aniversário - Pai", tamanho
+   variável), não conteúdo curto/fixo, e isso forçava a coluna a encolher e
+   o texto a quebrar linha ("Aniversário" / "- Pai"), desalinhando a tabela
+   inteira. Trocado: "Objetivo" virou a única coluna livre (sem width,
+   ellipsis+title em vez de quebrar — ver buildBodyCell no app.js) e
+   "Trecho" (chips curtos, já nowrap) entrou na lista de largura fixa no
+   lugar. */
 .passagens-th-localizador,
 .passagens-th-companhia,
+.passagens-th-trecho,
 .passagens-th-data,
 .passagens-th-embarque,
 .passagens-th-voo,
 .passagens-th-duracao,
 .passagens-th-taxa,
 .passagens-th-valor { width: 1%; white-space: nowrap; }
+.passagens-col-objetivo {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Passagens — recolher/expandir colunas (pedido do Georges, rodada 2: "usar
    aquela metodologia... como fizemos em Lista de Prioridades"): cada

@@ -11372,17 +11372,29 @@
     });
     searchSectionPassagens.body.appendChild(withSearchClear(searchInput));
 
-    filterSectionPassagens.body.appendChild(tipoDropdownWrap);
-    filterSectionPassagens.body.appendChild(companhiaDropdownWrap);
-    filterSectionPassagens.body.appendChild(origemDropdownWrap);
-    filterSectionPassagens.body.appendChild(destinoDropdownWrap);
-    filterSectionPassagens.body.appendChild(objetivoDropdownWrap);
-    filterSectionPassagens.body.appendChild(passageirosDropdownWrap);
-    filterSectionPassagens.body.appendChild(dataFilterWrap);
+    // Visual "jogado de qualquer jeito" reportado pelo Georges: os 7
+    // widgets (6 dropdowns + filtro de data) estavam sendo colocados direto
+    // no corpo da seção "Filtrar" (bloco, 1 por linha, ocupando a largura
+    // inteira cada um) — "priorities-subsection-body" não é flex por si só.
+    // Correção: reaproveita ".legislacoes-filterbar" (mesmo flex-wrap
+    // compacto já usado em Legislações) pra agrupar os 7 numa fileira só,
+    // que quebra linha de forma organizada em telas estreitas, em vez de
+    // empilhar cada um sozinho.
+    var filterBarWrapPassagens = document.createElement("div");
+    filterBarWrapPassagens.className = "legislacoes-filterbar";
+    filterBarWrapPassagens.appendChild(tipoDropdownWrap);
+    filterBarWrapPassagens.appendChild(companhiaDropdownWrap);
+    filterBarWrapPassagens.appendChild(origemDropdownWrap);
+    filterBarWrapPassagens.appendChild(destinoDropdownWrap);
+    filterBarWrapPassagens.appendChild(objetivoDropdownWrap);
+    filterBarWrapPassagens.appendChild(passageirosDropdownWrap);
+    filterBarWrapPassagens.appendChild(dataFilterWrap);
+    filterSectionPassagens.body.appendChild(filterBarWrapPassagens);
 
     // "Limpar filtros" (regra permanente, ver instrucoes.md). Não toca no
     // botão de ciclo Próximas/Todas/Passadas (é modo de visualização, mesmo
-    // critério de Provas/Legislações).
+    // critério de Provas/Legislações). Fica numa linha própria, abaixo da
+    // fileira de filtros (mesmo lugar visual de ".legislacoes-clear-btn").
     var clearFiltersBtn = document.createElement("button");
     clearFiltersBtn.type = "button";
     clearFiltersBtn.className = "search-clear-btn";
@@ -11466,7 +11478,14 @@
       cell.className = "passagens-col-" + key;
       switch (key) {
         case "objetivo":
+          // única coluna de texto livre da tabela agora (ver styles.css —
+          // bug reportado pelo Georges: Objetivo estava com width:1% igual
+          // coluna curta, e como é texto variável ("Aniversário - Pai"),
+          // isso forçava quebra de linha feia e desalinhava a tabela
+          // inteira). Ellipsis + title (texto completo no hover) em vez de
+          // deixar quebrar.
           cell.textContent = it.objetivo || "—";
+          if (it.objetivo) cell.title = it.objetivo;
           break;
         case "localizador":
           cell.textContent = it.localizador || "—";
