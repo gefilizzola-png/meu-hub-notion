@@ -433,6 +433,16 @@ var PROVAS_VITOR_TEMPLATE_ID = "3e404814-86dd-8085-8030-fd8171cf85c4";
 // notas do Vitor por trimestre (ver pages.notas_vitor mais abaixo). Só
 // leitura — sem template de criação, o Georges cadastra direto no Notion.
 var NOTAS_VITOR_DATABASE_ID = "d709cacdf3a14817b621baea9dbb80b1";
+// "Passagens" — nova base do Notion em Financeiro->Viagens->Passagens
+// (pedido do Georges: "Crie o mesmo caminho no Meu Hub... pensando num
+// leiaute legal de exibição, pesquisa e controle"). database_id sem hífen
+// (mesmo padrão de NOTAS_VITOR_DATABASE_ID acima), convertido do data
+// source real "collection://3eb04814-86dd-80ec-9a4a-000b34532907". Sem
+// template_id confirmado (nenhum default_page_template configurado nessa
+// base) — sem "Criar no Notion" por enquanto, mesmo critério de Notas (o
+// Georges cadastra direto no Notion). Ver pages.financeiro_viagens_passagens
+// mais abaixo / renderPassagensPage no app.js.
+var PASSAGENS_DATABASE_ID = "3eb0481486dd80ec9a4a000b34532907";
 
 // "Tags" de família da página de Aniversários (botões de filtro rápido,
 // pedido do Georges) — a "tag" principal de cada pessoa vem AUTOMÁTICO do
@@ -1192,6 +1202,29 @@ var NOTIFICATION_SOURCES = [
       { id: "imediata", amount: 0, unit: "hours", label: "Imediata" }
     ]
   },
+  // Passagens (pedido do Georges — "já crie tbm a Notificação para
+  // Passagens para eu definir os dias de antecedência"). Fonte 100% Notion
+  // (kind "notion", o padrão — nada de especial aqui), igual a Reuniões/
+  // Provas/Aniversários: baseFilters vazio (não precisa restringir nada,
+  // base pequena e só do Georges) + dateProperty "Data da Ida" (avisa pela
+  // DATA DE IDA da viagem, não pela volta ou pela compra). O Georges
+  // configura os dias de antecedência que quiser direto na Central de
+  // Notificações (editor de gestão) — defaultLeadTimes abaixo é só o seed
+  // inicial, igual toda outra fonte.
+  {
+    id: "passagens",
+    label: "Passagens",
+    // mesmo emoji da divisória/página de Passagens.
+    icon: "🧳",
+    database_id: PASSAGENS_DATABASE_ID,
+    baseFilters: [],
+    dateProperty: "Data da Ida",
+    target: { type: "page", target: "financeiro_viagens_passagens" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "3d", amount: 3, unit: "days", label: "3 dias antes" }
+    ]
+  },
   // Aniversários (pedido do Georges). "📚 Página de Origem" = "Pessoal -
   // Aniversários" — mesmo valor usado no bloco "🎂 Aniversários" de Início.
   // SEM exclusão de Andamento de propósito (diferente de todas as outras
@@ -1553,7 +1586,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-30 22:53",
+  appVersion: "2026-09-30 23:43",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2961,8 +2994,48 @@ const APP_CONFIG = {
         { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
         { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
         { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
-        { label: "Empréstimos", type: "page", target: "financeiro_emprestimos", icon: "cash" }
+        { label: "Empréstimos", type: "page", target: "financeiro_emprestimos", icon: "cash" },
+        // "Viagens" (pedido do Georges — nova pasta no Notion, mesmo caminho
+        // reproduzido aqui: Financeiro->Viagens->Passagens).
+        { label: "Viagens", type: "page", target: "financeiro_viagens", icon: "plane-departure" }
       ]
+    },
+
+    // "Viagens" — pasta simples (pedido do Georges: "Crie o mesmo caminho
+    // no meu Hub: Financeiro -> Viagens -> Passagens"), mesmo espírito de
+    // "financeiro" acima: só uma página de pastas com 1 item por enquanto
+    // (abre espaço pra outras bases de Viagens no futuro, ex. Hospedagens).
+    financeiro_viagens: {
+      title: "Viagens",
+      items: [
+        { label: "Passagens", type: "page", target: "financeiro_viagens_passagens", icon: "ticket" }
+      ]
+    },
+
+    // "page.passagens" (pedido do Georges: "crie uma página para exibir as
+    // passagens, vendo o schema no Notion e pensando num leiaute legal de
+    // exibição, pesquisa e controle") — tabela sortable com busca
+    // acento-insensível + botão x, filtros multi-select (Tipo de
+    // Transporte/Companhia/Origem/Destino/Objetivo/Passageiros) e filtro de
+    // data (Data da Ida), botão cíclico Próximas/Todas/Passadas (mesma
+    // metodologia de Provas/Supermercado), botão "Limpar filtros", clique na
+    // linha abre a passagem no Notion. Só leitura — sem "Criar no Notion"
+    // (ver comentário de PASSAGENS_DATABASE_ID acima). Ver
+    // renderPassagensPage no app.js.
+    financeiro_viagens_passagens: {
+      title: "Passagens",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir",
+          items: [
+            { label: "Passagens", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3eb0481486dd80b69f47de69c680b1dd?v=3eb0481486dd804cbcc7000cae3b15b6&source=copy_link" }
+          ]
+        }
+      ],
+      passagens: {
+        database_id: PASSAGENS_DATABASE_ID
+      }
     },
 
     financeiro_contas_mensais: {
