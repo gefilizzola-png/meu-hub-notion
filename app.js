@@ -18302,12 +18302,32 @@
   // channels/repeatWhilePending PRÓPRIOS, default []/false quando a leadTime
   // (seja ela salva na KV ou vinda do defaultLeadTimes do config.js) ainda
   // não tem nada configurado.
-  function normalizeNotifLeadTime(lt) {
+  // Regenera o texto de "label" de uma antecedência quando ele ficou
+  // desatualizado em relação à fonte (bug real: Georges mudou Empréstimos
+  // pra notifyAfterEvent:true numa rodada anterior, config.js->defaultLeadTimes
+  // foi ajustado pra "depois", mas a leadTime JÁ SALVA na KV continuava com o
+  // texto antigo "1 dia antes" — resolvedNotifSources sempre prioriza o que
+  // está salvo, então o texto nunca se auto-corrigia). O label é sempre
+  // gerado automaticamente (nunca digitado pelo Georges), então é seguro
+  // recalcular sempre que a fonte for "depois do evento" e o texto salvo
+  // ainda disser "antes" — mesma lógica de sufixo usada em addNotifLeadTime.
+  function notifLeadTimeLabelFor(lt, source) {
+    var label = lt.label;
+    if (source && source.notifyAfterEvent && typeof label === "string" && label.indexOf("antes") !== -1 && lt.amount) {
+      var sufixo = lt.unit === "hours"
+        ? (lt.amount === 1 ? "hora depois" : "horas depois")
+        : (lt.amount === 1 ? "dia depois" : "dias depois");
+      label = lt.amount + " " + sufixo;
+    }
+    return label;
+  }
+
+  function normalizeNotifLeadTime(lt, source) {
     return {
       id: lt.id,
       amount: lt.amount,
       unit: lt.unit,
-      label: lt.label,
+      label: notifLeadTimeLabelFor(lt, source),
       channels: Array.isArray(lt.channels) ? lt.channels : [],
       repeatWhilePending: !!lt.repeatWhilePending,
       // "Notificação Inteligente" (pedido do Georges: "Eu que ter opção de
@@ -18323,7 +18343,7 @@
     return sortedNotifSourceDefs().map(function (source) {
       var s = savedSettings && savedSettings[source.id];
       var rawLeadTimes = (s && Array.isArray(s.leadTimes) && s.leadTimes.length) ? s.leadTimes : source.defaultLeadTimes;
-      var leadTimes = (rawLeadTimes || []).map(normalizeNotifLeadTime);
+      var leadTimes = (rawLeadTimes || []).map(function (lt) { return normalizeNotifLeadTime(lt, source); });
       return {
         id: source.id,
         label: source.label,
