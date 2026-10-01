@@ -1172,8 +1172,15 @@
     trigger.type = "button";
     trigger.className = "filter-trigger";
 
+    // "filterDef.icon" (opcional, pedido do Georges: "ícones ou emojis
+    // correspondentes para cada tipo de filtro... visual mais legal, mais
+    // moderno") — classe ti-* que substitui o ícone genérico de funil
+    // quando nenhuma opção está marcada (ou quando a opção marcada não tem
+    // ícone próprio). Opcional pra não quebrar nenhum filtro existente que
+    // já conta com o ícone genérico.
+    var defaultIcon = filterDef.icon || "ti-filter";
     var triggerIcon = document.createElement("i");
-    triggerIcon.className = "ti ti-filter";
+    triggerIcon.className = "ti " + defaultIcon;
     var triggerLabel = document.createElement("span");
     triggerLabel.textContent = filterDef.label + ": Todos";
     var chevron = document.createElement("i");
@@ -1201,15 +1208,15 @@
     // (não dá pra mostrar um ícone/cor só quando são de status diferentes).
     function updateTriggerUI() {
       if (!selected.length) {
-        triggerIcon.className = "ti ti-filter";
+        triggerIcon.className = "ti " + defaultIcon;
         triggerIcon.style.color = "";
         triggerLabel.textContent = filterDef.label + ": Todos";
       } else if (selected.length === 1) {
-        triggerIcon.className = "ti " + selected[0].icon;
+        triggerIcon.className = "ti " + (selected[0].icon || defaultIcon);
         triggerIcon.style.color = selected[0].color || "";
         triggerLabel.textContent = filterDef.label + ": " + selected[0].label;
       } else {
-        triggerIcon.className = "ti ti-filter";
+        triggerIcon.className = "ti " + defaultIcon;
         triggerIcon.style.color = "";
         triggerLabel.textContent = filterDef.label + ": " + selected.length + " selecionados" + (mode === "and" ? " (E)" : "");
       }
@@ -11002,6 +11009,55 @@
     if (!origem && !destino) return "—";
     return (origem || "?") + " → " + (destino || "?");
   }
+  // Selo colorido por companhia aérea (pedido do Georges: "deixar com
+  // visual mais bonito na tabela"). Em vez de baixar os logos oficiais
+  // (artwork protegido por marca registrada — não dá pra reproduzir), usa
+  // o mesmo código IATA de 2 letras que já aparece no bilhete/cartão de
+  // embarque de cada uma, num selo coloridо na cor de identidade da
+  // companhia — visual reconhecível sem copiar o logo de ninguém. Cia nova
+  // que ainda não está no mapa ganha um selo cinza com as iniciais mesmo.
+  var PASSAGENS_COMPANHIA_BADGE = {
+    "Gol Linhas Aéreas": { code: "G3", bg: "#f58220" },
+    "Azul Linhas Aéreas": { code: "AD", bg: "#0032a0" },
+    "Latam Airlines Brasil": { code: "LA", bg: "#7c1f3e" },
+    "LATAM Airlines Brasil": { code: "LA", bg: "#7c1f3e" },
+    "Latam": { code: "LA", bg: "#7c1f3e" }
+  };
+  function passagensCompanhiaBadge(companhia) {
+    if (!companhia) return null;
+    if (PASSAGENS_COMPANHIA_BADGE[companhia]) return PASSAGENS_COMPANHIA_BADGE[companhia];
+    var words = companhia.split(" ").filter(Boolean);
+    var code = ((words[0] || "").slice(0, 2) || "??").toUpperCase();
+    return { code: code, bg: "#8a8a82" };
+  }
+  // "HH:MM" da parte de hora de um ISO de data/hora do Notion (volta null
+  // se o campo só tem data, sem hora marcada ainda — ex: Embarque (Ida)
+  // antes do check-in, pedido do Georges: "a hora prevista de embarque,
+  // que vai aparecer depois do checkin").
+  function passagensFmtHora(iso) {
+    if (!iso) return null;
+    var s = String(iso);
+    var tIdx = s.indexOf("T");
+    if (tIdx === -1) return null;
+    var hhmm = s.slice(tIdx + 1, tIdx + 6);
+    return /^\d{2}:\d{2}$/.test(hhmm) ? hhmm : null;
+  }
+  // célula de data que também mostra a hora (linha pequena embaixo,
+  // reaproveitando ".provas-subtle") quando o campo tiver horário —
+  // Embarque (Ida)/(Volta) e Chegada (Ida)/(Volta).
+  function passagensAppendDateHora(cell, iso) {
+    if (!iso) { cell.textContent = "—"; return; }
+    var top = document.createElement("div");
+    top.textContent = transacoesFmtDateBR(iso);
+    cell.appendChild(top);
+    var hora = passagensFmtHora(iso);
+    if (hora) {
+      var sub = document.createElement("div");
+      sub.className = "provas-subtle";
+      sub.textContent = hora;
+      cell.appendChild(sub);
+    }
+  }
   // dias até a Data da Ida (hoje = 0) — mesma lógica de provasDiasAte,
   // reaproveitada direto (função pura, sem nada específico de Provas).
   function passagensDiasAte(dataISO) { return provasDiasAte(dataISO); }
@@ -11119,6 +11175,10 @@
       return true;
     }
 
+    // chaves de data/hora que podem ser ordenadas por comparação direta de
+    // string ISO (funciona mesmo com hora incluída) — inclui as 4 colunas
+    // novas de Embarque/Chegada e a Data da Compra.
+    var PASSAGENS_DATE_SORT_KEYS = ["dataIda", "dataVolta", "dataCompra", "embarqueIda", "embarqueVolta", "chegadaIda", "chegadaVolta"];
     function sortPassagens(list) {
       var arr = list.slice();
       var key = state.sortKey, dir = state.sortDir;
@@ -11126,8 +11186,8 @@
         var av, bv;
         if (key === "nome") { av = a.nome || ""; bv = b.nome || ""; }
         else if (key === "companhia") { av = a.companhia || ""; bv = b.companhia || ""; }
-        else if (key === "dataVolta") { av = a.dataVolta || "9999-99-99"; bv = b.dataVolta || "9999-99-99"; }
         else if (key === "taxaEmbarque") { av = (a.taxaEmbarque === null ? -Infinity : a.taxaEmbarque); bv = (b.taxaEmbarque === null ? -Infinity : b.taxaEmbarque); }
+        else if (PASSAGENS_DATE_SORT_KEYS.indexOf(key) !== -1) { av = a[key] || "9999-99-99"; bv = b[key] || "9999-99-99"; }
         else { av = a.dataIda || "9999-99-99"; bv = b.dataIda || "9999-99-99"; }
         if (typeof av === "number") return dir * (av - bv);
         return dir * String(av).localeCompare(String(bv), "pt-BR");
@@ -11172,34 +11232,39 @@
     // marcado dentro do closure), chamado na 1ª montagem e no "Limpar
     // filtros" (ver clearFiltersBtn abaixo).
     function buildFiltersBar() {
+      // "icon" por filtro (pedido do Georges: "ícones ou emojis
+      // correspondentes para cada tipo de filtro... visual mais legal, mais
+      // moderno") — mesma família Tabler já usada no resto do app, não
+      // emoji solto, pra ficar visualmente consistente com o resto da
+      // página (ver filterDef.icon em buildIconDropdown).
       tipoDropdownWrap.innerHTML = "";
       tipoDropdownWrap.appendChild(buildIconDropdown(
-        { property: "Tipo de Transporte", type: "select", label: "Tipo", options: buildSimpleOptionsFrom("tipo") },
+        { property: "Tipo de Transporte", type: "select", label: "Tipo", icon: "ti-plane", options: buildSimpleOptionsFrom("tipo") },
         function (opts) { state.tipoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
       ));
       companhiaDropdownWrap.innerHTML = "";
       companhiaDropdownWrap.appendChild(buildIconDropdown(
-        { property: "Companhia", type: "select", label: "Companhia", options: buildSimpleOptionsFrom("companhia") },
+        { property: "Companhia", type: "select", label: "Companhia", icon: "ti-building", options: buildSimpleOptionsFrom("companhia") },
         function (opts) { state.companhiaSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
       ));
       origemDropdownWrap.innerHTML = "";
       origemDropdownWrap.appendChild(buildIconDropdown(
-        { property: "Origem", type: "select", label: "Origem", options: buildSimpleOptionsFrom("origem") },
+        { property: "Origem", type: "select", label: "Origem", icon: "ti-plane-departure", options: buildSimpleOptionsFrom("origem") },
         function (opts) { state.origemSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
       ));
       destinoDropdownWrap.innerHTML = "";
       destinoDropdownWrap.appendChild(buildIconDropdown(
-        { property: "Destino", type: "select", label: "Destino", options: buildSimpleOptionsFrom("destino") },
+        { property: "Destino", type: "select", label: "Destino", icon: "ti-plane-arrival", options: buildSimpleOptionsFrom("destino") },
         function (opts) { state.destinoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
       ));
       objetivoDropdownWrap.innerHTML = "";
       objetivoDropdownWrap.appendChild(buildIconDropdown(
-        { property: "Objetivo", type: "select", label: "Objetivo", options: buildSimpleOptionsFrom("objetivo") },
+        { property: "Objetivo", type: "select", label: "Objetivo", icon: "ti-target-arrow", options: buildSimpleOptionsFrom("objetivo") },
         function (opts) { state.objetivoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
       ));
       passageirosDropdownWrap.innerHTML = "";
       passageirosDropdownWrap.appendChild(buildIconDropdown(
-        { property: "Passageiros (Nome)", type: "select", label: "Passageiros", searchable: true, options: buildPassageirosOptions() },
+        { property: "Passageiros (Nome)", type: "select", label: "Passageiros", icon: "ti-users", searchable: true, options: buildPassageirosOptions() },
         function (opts) { state.passageirosSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
       ));
       dataFilterWrap.innerHTML = "";
@@ -11267,22 +11332,156 @@
     controls.appendChild(clearFiltersBtn);
 
     wrap.appendChild(controls);
+
+    // ---- Recolher/expandir colunas (pedido do Georges, mesma metodologia
+    // de Lista de Prioridades: "hide-<key>" na tabela + "passagens-col-
+    // <key>" em cada th/td — ver updateColumnVisibility/getEffectiveVisible
+    // Columns em renderPrioritiesTable). Aqui não depende do tamanho da
+    // tela: a lista de colunas sempre-visíveis é fixa (pedido explícito do
+    // Georges), só o botão "Mostrar todas as colunas" revela o resto.
+    var COLS = [
+      { key: "objetivo", label: "Objetivo", cls: "passagens-th-objetivo" },
+      { key: "localizador", label: "Localizador", cls: "passagens-th-localizador" },
+      { key: "companhia", label: "Cia. Aérea", cls: "passagens-th-companhia", sortKey: "companhia" },
+      { key: "trecho", label: "Trecho", cls: "passagens-th-trecho" },
+      { key: "dataIda", label: "Data da Ida", cls: "passagens-th-data", sortKey: "dataIda" },
+      { key: "embarqueIda", label: "Embarque (Ida)", cls: "passagens-th-embarque", sortKey: "embarqueIda" },
+      { key: "dataVolta", label: "Data da Volta", cls: "passagens-th-data", sortKey: "dataVolta" },
+      { key: "embarqueVolta", label: "Embarque (Volta)", cls: "passagens-th-embarque", sortKey: "embarqueVolta" },
+      // ocultas por padrão (pedido do Georges) — reveladas só pelo botão
+      // "Mostrar todas as colunas".
+      { key: "nome", label: "Nome", cls: "passagens-th-nome", sortKey: "nome" },
+      { key: "tipo", label: "Tipo", cls: "passagens-th-tipo" },
+      { key: "voo", label: "Vôo", cls: "passagens-th-voo" },
+      { key: "chegadaIda", label: "Chegada (Ida)", cls: "passagens-th-embarque", sortKey: "chegadaIda" },
+      { key: "duracaoIda", label: "Duração (Ida)", cls: "passagens-th-duracao" },
+      { key: "chegadaVolta", label: "Chegada (Volta)", cls: "passagens-th-embarque", sortKey: "chegadaVolta" },
+      { key: "duracaoVolta", label: "Duração (Volta)", cls: "passagens-th-duracao" },
+      { key: "passageiros", label: "Passageiros", cls: "passagens-th-passageiros" },
+      { key: "dataCompra", label: "Data da Compra", cls: "passagens-th-data", sortKey: "dataCompra" },
+      { key: "formaPagamento", label: "Forma de Pagamento", cls: "passagens-th-pagamento" },
+      { key: "valorBilhetes", label: "Valor Bilhetes", cls: "passagens-th-valor" },
+      { key: "taxaEmbarque", label: "Taxa de Embarque", cls: "passagens-th-taxa", sortKey: "taxaEmbarque" },
+      { key: "formaPagamentoReal", label: "Forma Pagamento (Real)", cls: "passagens-th-pagamento" }
+    ];
+    var allColumnKeys = COLS.map(function (c) { return c.key; });
+    var defaultHiddenKeys = [
+      "nome", "tipo", "voo", "chegadaIda", "duracaoIda", "chegadaVolta", "duracaoVolta",
+      "passageiros", "dataCompra", "formaPagamento", "valorBilhetes", "taxaEmbarque", "formaPagamentoReal"
+    ];
+    var columnsExpanded = false;
+
+    var columnsToolbar = document.createElement("div");
+    columnsToolbar.className = "priorities-columns-toolbar";
+    var columnsToggleBtn = document.createElement("button");
+    columnsToggleBtn.type = "button";
+    columnsToggleBtn.className = "priorities-columns-toggle-btn";
+    function updateColumnsToggleBtnLabel() {
+      columnsToggleBtn.innerHTML = columnsExpanded
+        ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
+        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+' + defaultHiddenKeys.length + ')';
+    }
+    columnsToggleBtn.addEventListener("click", function () {
+      columnsExpanded = !columnsExpanded;
+      updateColumnsToggleBtnLabel();
+      renderTable();
+    });
+    updateColumnsToggleBtnLabel();
+    columnsToolbar.appendChild(columnsToggleBtn);
+    wrap.appendChild(columnsToolbar);
+
     wrap.appendChild(body);
 
-    var COLS = [
-      { label: "Nome", cls: "passagens-th-nome", sortKey: "nome" },
-      { label: "Tipo", cls: "passagens-th-tipo" },
-      { label: "Companhia", cls: "passagens-th-companhia", sortKey: "companhia" },
-      { label: "Trecho", cls: "passagens-th-trecho" },
-      { label: "Data da Ida", cls: "passagens-th-data", sortKey: "dataIda" },
-      { label: "Data da Volta", cls: "passagens-th-data", sortKey: "dataVolta" },
-      { label: "Vôo / Localizador", cls: "passagens-th-voo" },
-      { label: "Passageiros", cls: "passagens-th-passageiros" },
-      { label: "Forma de Pagamento", cls: "passagens-th-pagamento" },
-      { label: "Valor Bilhetes", cls: "passagens-th-valor" },
-      { label: "Taxa de Embarque", cls: "passagens-th-taxa", sortKey: "taxaEmbarque" },
-      { label: "Objetivo", cls: "passagens-th-objetivo" }
-    ];
+    function buildBodyCell(it, key) {
+      var cell = document.createElement("td");
+      cell.className = "passagens-col-" + key;
+      switch (key) {
+        case "objetivo":
+          cell.textContent = it.objetivo || "—";
+          break;
+        case "localizador":
+          cell.textContent = it.localizador || "—";
+          break;
+        case "companhia":
+          if (it.companhia) {
+            var badge = passagensCompanhiaBadge(it.companhia);
+            var badgeEl = document.createElement("span");
+            badgeEl.className = "passagens-airline-badge";
+            badgeEl.style.background = badge.bg;
+            badgeEl.textContent = badge.code;
+            cell.appendChild(badgeEl);
+            var nameSpan = document.createElement("span");
+            nameSpan.textContent = it.companhia;
+            cell.appendChild(nameSpan);
+          } else {
+            cell.textContent = "—";
+          }
+          break;
+        case "trecho":
+          cell.textContent = passagensTrecho(it.origem, it.destino);
+          break;
+        case "dataIda":
+          var idaInner = document.createElement("div");
+          idaInner.textContent = transacoesFmtDateBR(it.dataIda);
+          cell.appendChild(idaInner);
+          if (it.dataIda && it.diasAte !== null) {
+            var idaSub = document.createElement("div");
+            idaSub.className = "provas-subtle";
+            idaSub.textContent = provasRelativoLabel(it.diasAte);
+            cell.appendChild(idaSub);
+          }
+          break;
+        case "dataVolta":
+          cell.textContent = transacoesFmtDateBR(it.dataVolta);
+          break;
+        case "embarqueIda":
+          passagensAppendDateHora(cell, it.embarqueIda);
+          break;
+        case "embarqueVolta":
+          passagensAppendDateHora(cell, it.embarqueVolta);
+          break;
+        case "chegadaIda":
+          passagensAppendDateHora(cell, it.chegadaIda);
+          break;
+        case "chegadaVolta":
+          passagensAppendDateHora(cell, it.chegadaVolta);
+          break;
+        case "dataCompra":
+          cell.textContent = transacoesFmtDateBR(it.dataCompra);
+          break;
+        case "nome":
+          cell.textContent = it.nome;
+          break;
+        case "tipo":
+          cell.textContent = it.tipo ? (passagensTipoIcon(it.tipo) + " " + it.tipo) : "—";
+          break;
+        case "voo":
+          cell.textContent = it.voo || "—";
+          break;
+        case "duracaoIda":
+          cell.textContent = it.duracaoIda || "—";
+          break;
+        case "duracaoVolta":
+          cell.textContent = it.duracaoVolta || "—";
+          break;
+        case "passageiros":
+          cell.textContent = (it.passageirosNomes && it.passageirosNomes.length) ? it.passageirosNomes.join(", ") : "—";
+          break;
+        case "formaPagamento":
+          cell.textContent = (it.formaPagamento && it.formaPagamento.length) ? it.formaPagamento.join(", ") : "—";
+          break;
+        case "valorBilhetes":
+          cell.textContent = it.valorBilhetes || "—";
+          break;
+        case "taxaEmbarque":
+          cell.textContent = (it.taxaEmbarque !== null) ? transacoesFmtMoney(it.taxaEmbarque) : "—";
+          break;
+        case "formaPagamentoReal":
+          cell.textContent = it.formaPagamentoReal || "—";
+          break;
+      }
+      return cell;
+    }
 
     function renderTable() {
       body.innerHTML = "";
@@ -11299,13 +11498,18 @@
       count.textContent = filtered.length + (filtered.length === 1 ? " passagem" : " passagens");
       body.appendChild(count);
 
+      var visible = columnsExpanded ? allColumnKeys.slice() : allColumnKeys.filter(function (k) { return defaultHiddenKeys.indexOf(k) === -1; });
+
       var table = document.createElement("table");
       table.className = "financeiro-table passagens-table";
+      allColumnKeys.forEach(function (key) {
+        table.classList.toggle("hide-" + key, visible.indexOf(key) === -1);
+      });
       var thead = document.createElement("thead");
       var headRow = document.createElement("tr");
       COLS.forEach(function (col) {
         var th = document.createElement("th");
-        th.className = "financeiro-th " + col.cls + (col.sortKey ? " financeiro-th-sortable" : "");
+        th.className = "financeiro-th passagens-col-" + col.key + " " + col.cls + (col.sortKey ? " financeiro-th-sortable" : "");
         var thLabel = document.createElement("span");
         thLabel.className = "financeiro-th-label";
         thLabel.textContent = col.label;
@@ -11341,64 +11545,7 @@
           row.title = "Abrir no Notion";
           row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
         }
-
-        var nomeCell = document.createElement("td");
-        nomeCell.textContent = it.nome;
-        row.appendChild(nomeCell);
-
-        var tipoCell = document.createElement("td");
-        tipoCell.textContent = it.tipo ? (passagensTipoIcon(it.tipo) + " " + it.tipo) : "—";
-        row.appendChild(tipoCell);
-
-        var companhiaCell = document.createElement("td");
-        companhiaCell.textContent = it.companhia || "—";
-        row.appendChild(companhiaCell);
-
-        var trechoCell = document.createElement("td");
-        trechoCell.textContent = passagensTrecho(it.origem, it.destino);
-        row.appendChild(trechoCell);
-
-        var idaCell = document.createElement("td");
-        var idaInner = document.createElement("div");
-        idaInner.textContent = transacoesFmtDateBR(it.dataIda);
-        idaCell.appendChild(idaInner);
-        if (it.dataIda && it.diasAte !== null) {
-          var idaSub = document.createElement("div");
-          idaSub.className = "provas-subtle";
-          idaSub.textContent = provasRelativoLabel(it.diasAte);
-          idaCell.appendChild(idaSub);
-        }
-        row.appendChild(idaCell);
-
-        var voltaCell = document.createElement("td");
-        voltaCell.textContent = transacoesFmtDateBR(it.dataVolta);
-        row.appendChild(voltaCell);
-
-        var vooCell = document.createElement("td");
-        var vooBits = [it.voo, it.localizador].filter(Boolean);
-        vooCell.textContent = vooBits.length ? vooBits.join(" · ") : "—";
-        row.appendChild(vooCell);
-
-        var passageirosCell = document.createElement("td");
-        passageirosCell.textContent = (it.passageirosNomes && it.passageirosNomes.length) ? it.passageirosNomes.join(", ") : "—";
-        row.appendChild(passageirosCell);
-
-        var pagamentoCell = document.createElement("td");
-        pagamentoCell.textContent = (it.formaPagamento && it.formaPagamento.length) ? it.formaPagamento.join(", ") : "—";
-        row.appendChild(pagamentoCell);
-
-        var valorCell = document.createElement("td");
-        valorCell.textContent = it.valorBilhetes || "—";
-        row.appendChild(valorCell);
-
-        var taxaCell = document.createElement("td");
-        taxaCell.textContent = (it.taxaEmbarque !== null) ? transacoesFmtMoney(it.taxaEmbarque) : "—";
-        row.appendChild(taxaCell);
-
-        var objetivoCell = document.createElement("td");
-        objetivoCell.textContent = it.objetivo || "—";
-        row.appendChild(objetivoCell);
-
+        COLS.forEach(function (col) { row.appendChild(buildBodyCell(it, col.key)); });
         tbody.appendChild(row);
       });
       table.appendChild(tbody);

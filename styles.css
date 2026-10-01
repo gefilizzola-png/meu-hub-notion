@@ -6486,6 +6486,55 @@ html, body {
   align-items: center;
 }
 
+/* Passagens — recolher/expandir colunas (pedido do Georges, rodada 2: "usar
+   aquela metodologia... como fizemos em Lista de Prioridades"): cada
+   coluna oculta por padrão ganha "hide-<key>" na própria tabela (ver
+   renderPassagensPage no app.js) e cada th/td daquela coluna carrega
+   "passagens-col-<key>" — a combinação esconde a coluna inteira sem mexer
+   no DOM/nas colunas vizinhas. O botão em si reaproveita ".priorities-
+   columns-toolbar"/".priorities-columns-toggle-btn" (mesmo visual neutro
+   já usado em Lista de Prioridades, sem precisar de CSS novo pra ele). */
+.passagens-table.hide-nome .passagens-col-nome,
+.passagens-table.hide-tipo .passagens-col-tipo,
+.passagens-table.hide-voo .passagens-col-voo,
+.passagens-table.hide-chegadaIda .passagens-col-chegadaIda,
+.passagens-table.hide-duracaoIda .passagens-col-duracaoIda,
+.passagens-table.hide-chegadaVolta .passagens-col-chegadaVolta,
+.passagens-table.hide-duracaoVolta .passagens-col-duracaoVolta,
+.passagens-table.hide-passageiros .passagens-col-passageiros,
+.passagens-table.hide-dataCompra .passagens-col-dataCompra,
+.passagens-table.hide-formaPagamento .passagens-col-formaPagamento,
+.passagens-table.hide-valorBilhetes .passagens-col-valorBilhetes,
+.passagens-table.hide-taxaEmbarque .passagens-col-taxaEmbarque,
+.passagens-table.hide-formaPagamentoReal .passagens-col-formaPagamentoReal {
+  display: none;
+}
+
+/* selo da companhia aérea (pedido do Georges: "deixar com visual mais
+   bonito na tabela") — círculo colorido com o código IATA de 2 letras (G3/
+   AD/LA), cor vem inline por companhia (ver passagensCompanhiaBadge no
+   app.js). Não reproduz o logo oficial de nenhuma companhia (artwork
+   protegido por marca registrada) — só a cor de identidade + o código que
+   já aparece no cartão de embarque de cada uma. */
+.passagens-col-companhia {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.passagens-airline-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 18px;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 640px) {
   .emprestimos-add-input,
   .emprestimos-add-select { flex-basis: 100%; }
