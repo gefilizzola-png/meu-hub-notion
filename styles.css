@@ -6486,6 +6486,28 @@ html, body {
   align-items: center;
 }
 
+/* Passagens — larguras explícitas por coluna (BUG reportado pelo Georges,
+   mesma causa já documentada em ".financeiro-th-vencimento" acima: sem
+   isso, o navegador redistribui o espaço sobrando de forma desigual linha
+   a linha quando a tabela mistura colunas de conteúdo curto/fixo com
+   colunas de texto livre — e fica pior ainda quando colunas são escondidas
+   via "hide-<key>", porque o cálculo de largura muda conforme quais
+   colunas estão de fato visíveis. Regra permanente agora (ver
+   instrucoes.md): toda coluna de conteúdo curto/fixo (código, data, selo)
+   ganha "width:1%" + "white-space:nowrap" pra encolher pro tamanho do
+   próprio conteúdo, e exatamente 1 coluna de texto livre (aqui, Trecho)
+   fica SEM largura pra absorver o espaço sobrando — nunca deixar 2+
+   colunas "livres" ao mesmo tempo, senão o problema volta). */
+.passagens-th-objetivo,
+.passagens-th-localizador,
+.passagens-th-companhia,
+.passagens-th-data,
+.passagens-th-embarque,
+.passagens-th-voo,
+.passagens-th-duracao,
+.passagens-th-taxa,
+.passagens-th-valor { width: 1%; white-space: nowrap; }
+
 /* Passagens — recolher/expandir colunas (pedido do Georges, rodada 2: "usar
    aquela metodologia... como fizemos em Lista de Prioridades"): cada
    coluna oculta por padrão ganha "hide-<key>" na própria tabela (ver
@@ -6534,6 +6556,21 @@ html, body {
   letter-spacing: 0.2px;
   flex-shrink: 0;
 }
+
+/* chips individuais (pedido do Georges, rodada 2: Trecho/Passageiros/Forma
+   de Pagamento deixam de ser texto concatenado) — reaproveita ".priorities-
+   chip" (mesma caixinha arredondada já usada em Prioridades) pra cada
+   valor, dentro de um wrap que PODE quebrar linha (diferente das colunas
+   de texto curto "nowrap" acima — célula com vários chips precisa de
+   altura variável). */
+.passagens-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.passagens-trecho-chips { flex-wrap: nowrap; }
+.passagens-trecho-arrow { font-size: 13px; color: #928f86; flex-shrink: 0; }
 
 @media (max-width: 640px) {
   .emprestimos-add-input,

@@ -3746,6 +3746,52 @@
   // (mesmas classes CSS "notes-subitem*", mesmo padrão de "putSubitems
   // substitui a lista inteira") já usado em Anotações Rápidas — daí não
   // precisar de CSS novo pra essa parte.
+  // Divisória recolhível genérica (nasce dentro de renderPrioritiesTable,
+  // promovida pra escopo global — pedido do Georges: "padrão daqui pra
+  // frente... abrir as páginas com a barra de pesquisa recolhida numa
+  // seção chamada PESQUISAR... e a mesma coisa para FILTRAR", reaproveitado
+  // em QUALQUER página nova/existente, não só Lista de Prioridades). Clicar
+  // no nome OU no botão de seta expande/recolhe; "startExpanded" deixa uma
+  // divisória específica já aberta (ex: a que guarda a tabela de verdade).
+  // Reaproveita as mesmas classes CSS ".priorities-subsection*" de sempre
+  // — o prefixo "priorities" ficou de quando essa divisória só existia
+  // ali, mas a classe em si é só visual/genérica, sem lógica presa a
+  // Prioridades, então não precisa de CSS novo nem de renomear nada.
+  function buildCollapsibleSection(titleText, startExpanded) {
+    var collapsed = !startExpanded;
+    var sec = document.createElement("div");
+    sec.className = "priorities-subsection";
+    var header = document.createElement("div");
+    header.className = "priorities-subsection-header";
+    var toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.className = "query-collapse-btn priorities-subsection-collapse-btn";
+    toggleBtn.setAttribute("aria-label", "Recolher/expandir " + titleText);
+    var icon = document.createElement("i");
+    header.appendChild(toggleBtn);
+    toggleBtn.appendChild(icon);
+    var h = document.createElement("h4");
+    h.className = "priorities-subsection-title";
+    h.textContent = titleText;
+    h.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); });
+    header.appendChild(h);
+    var body = document.createElement("div");
+    body.className = "priorities-subsection-body";
+    function applyCollapsed() {
+      sec.classList.toggle("collapsed", collapsed);
+      icon.className = collapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
+    }
+    toggleBtn.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); });
+    applyCollapsed();
+    sec.appendChild(header);
+    sec.appendChild(body);
+    return {
+      section: sec, body: body,
+      collapse: function () { collapsed = true; applyCollapsed(); },
+      expand: function () { collapsed = false; applyCollapsed(); },
+    };
+  }
+
   function renderPrioritiesTable(container, page) {
     var fieldDefs = page.priorityFields || {};
     // "origem" entrou aqui (pedido do Georges — "transformar Origem em
@@ -4618,57 +4664,12 @@
     // PRÓXIMA vez que a página inteira remontar — ao navegar pra ela de
     // novo, ou depois de editar as opções de uma coluna (única ação que
     // remonta a página inteira no meio do caminho, por precisar reconstruir
-    // os <select>/dropdowns com a lista nova). Helper genérico (não usado
-    // por "Filtros rápidos", que
-    // já tinha o próprio mecanismo pronto de antes — ver qfSection acima,
-    // não mexido).
-    function buildCollapsibleSection(titleText, startExpanded) {
-      // "startExpanded" (pedido do Georges — a nova divisória "Itens" vem
-      // por último e é a que guarda a tabela de verdade, faz sentido já
-      // abrir com ela visível, diferente das outras 3 que continuam
-      // "recolhidas por padrão"). Sem o parâmetro (undefined/false), o
-      // padrão de sempre continua: nasce recolhida.
-      var collapsed = !startExpanded;
-      var sec = document.createElement("div");
-      sec.className = "priorities-subsection";
-      var header = document.createElement("div");
-      header.className = "priorities-subsection-header";
-      var toggleBtn = document.createElement("button");
-      toggleBtn.type = "button";
-      toggleBtn.className = "query-collapse-btn priorities-subsection-collapse-btn";
-      toggleBtn.setAttribute("aria-label", "Recolher/expandir " + titleText);
-      var icon = document.createElement("i");
-      header.appendChild(toggleBtn);
-      toggleBtn.appendChild(icon);
-      // clicar no PRÓPRIO NOME da divisória também expande/recolhe (pedido
-      // do Georges — antes só o botãozinho de seta funcionava). "cursor:
-      // pointer" (ver CSS) avisa que dá pra clicar ali também.
-      var h = document.createElement("h4");
-      h.className = "priorities-subsection-title";
-      h.textContent = titleText;
-      h.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); });
-      header.appendChild(h);
-      var body = document.createElement("div");
-      body.className = "priorities-subsection-body";
-      function applyCollapsed() {
-        sec.classList.toggle("collapsed", collapsed);
-        icon.className = collapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
-      }
-      toggleBtn.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); });
-      applyCollapsed();
-      sec.appendChild(header);
-      sec.appendChild(body);
-      // "collapse()"/"expand()" (pedido do Georges — ativar uma
-      // Visualização recolhe Programação/Criação/Filtros Gerais/Filtros
-      // Rápidos na hora e garante Itens expandida) — mesma variável
-      // "collapsed" de sempre, só exposta pra fora pra poder ser mudada
-      // por código em vez de só por clique do usuário.
-      return {
-        section: sec, body: body,
-        collapse: function () { collapsed = true; applyCollapsed(); },
-        expand: function () { collapsed = false; applyCollapsed(); },
-      };
-    }
+    // os <select>/dropdowns com a lista nova). "buildCollapsibleSection"
+    // (não usado por "Filtros rápidos", que já tinha o próprio mecanismo
+    // pronto de antes — ver qfSection acima, não mexido) foi promovida pra
+    // escopo global (ver antes de "function renderPrioritiesTable" no topo
+    // do arquivo) pra poder ser reaproveitada em outras páginas, então não
+    // é mais declarada aqui dentro.
     // ---- "Programação" (pedido do Georges): agenda de slots FIXOS do dia
     // (TCE 3h, DOI 1h, Ofícios/Processos 1h30 etc. — ver
     // PRIORIDADES_SCHEDULE_SLOTS no config.js, page.scheduleSlots aqui).
@@ -11062,6 +11063,61 @@
   // reaproveitada direto (função pura, sem nada específico de Provas).
   function passagensDiasAte(dataISO) { return provasDiasAte(dataISO); }
 
+  // Chips individuais em vez de texto concatenado (pedido do Georges:
+  // "fica um visual mais legal... permite visualizar melhor as informações
+  // individuais" — mesmo espírito do ".priorities-chip" já usado em
+  // Prioridades, reaproveitado aqui direto; só a cor por hash e a lista
+  // curta de 8 tons são próprias de Passagens porque colorForValue/
+  // CATEGORY_PALETTE vivem dentro do closure de renderPrioritiesTable, não
+  // em escopo global). Usado em Trecho (Origem/Destino) e, na tabela
+  // expandida, Passageiros e Forma de Pagamento.
+  var PASSAGENS_CHIP_PALETTE = [
+    { bg: "#eaf2fb", text: "#2b6cb0" },
+    { bg: "#f1edfb", text: "#6b46c1" },
+    { bg: "#eaf6ec", text: "#2f9e44" },
+    { bg: "#fdf1e7", text: "#c2540a" },
+    { bg: "#fbe9ef", text: "#c2255c" },
+    { bg: "#e6f7f2", text: "#0b8a68" },
+    { bg: "#fef3e0", text: "#b06a00" },
+    { bg: "#eeeefb", text: "#4646c2" }
+  ];
+  function passagensHashString(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+  function passagensChip(value) {
+    var c = PASSAGENS_CHIP_PALETTE[passagensHashString(String(value || "")) % PASSAGENS_CHIP_PALETTE.length];
+    var chip = document.createElement("span");
+    chip.className = "priorities-chip";
+    chip.style.background = c.bg;
+    chip.style.color = c.text;
+    chip.appendChild(document.createTextNode(value));
+    return chip;
+  }
+  // lista de chips genérica (Passageiros, Forma de Pagamento) — "—" quando
+  // vazio, senão 1 chip por valor dentro de um wrap que quebra linha.
+  function passagensAppendChipList(cell, values) {
+    if (!values || !values.length) { cell.textContent = "—"; return; }
+    var wrap = document.createElement("div");
+    wrap.className = "passagens-chip-list";
+    values.forEach(function (v) { wrap.appendChild(passagensChip(v)); });
+    cell.appendChild(wrap);
+  }
+  // Trecho vira 2 chips (Origem/Destino) com uma seta entre eles, em vez do
+  // texto "Origem → Destino" concatenado.
+  function passagensAppendTrechoChips(cell, origem, destino) {
+    if (!origem && !destino) { cell.textContent = "—"; return; }
+    var wrap = document.createElement("div");
+    wrap.className = "passagens-chip-list passagens-trecho-chips";
+    wrap.appendChild(origem ? passagensChip(origem) : document.createTextNode("?"));
+    var arrow = document.createElement("i");
+    arrow.className = "ti ti-arrow-right passagens-trecho-arrow";
+    wrap.appendChild(arrow);
+    wrap.appendChild(destino ? passagensChip(destino) : document.createTextNode("?"));
+    cell.appendChild(wrap);
+  }
+
   function passagensItemFromPage(p) {
     var extra = p.extra || {};
     function sel(key) { var v = extra[key]; return v ? v.name : null; }
@@ -11297,6 +11353,15 @@
     updateStatusCycleBtn();
     controls.appendChild(statusCycleBtn);
 
+    // Padrão novo (pedido do Georges — regra permanente, ver instrucoes.md):
+    // toda página abre com "Pesquisar" e "Filtrar" dentro de seções
+    // recolhíveis (buildCollapsibleSection, já promovida a escopo global),
+    // ambas nascendo RECOLHIDAS, pra deixar a página menos poluída. O botão
+    // de ciclo Próximas/Todas/Passadas fica fora (é modo de visualização,
+    // não busca/filtro).
+    var searchSectionPassagens = buildCollapsibleSection("Pesquisar");
+    var filterSectionPassagens = buildCollapsibleSection("Filtrar");
+
     var searchInput = document.createElement("input");
     searchInput.type = "text";
     searchInput.placeholder = "Buscar por nome, companhia, trecho, localizador…";
@@ -11305,14 +11370,15 @@
       state.search = searchInput.value.trim();
       applyState();
     });
-    controls.appendChild(withSearchClear(searchInput));
-    controls.appendChild(tipoDropdownWrap);
-    controls.appendChild(companhiaDropdownWrap);
-    controls.appendChild(origemDropdownWrap);
-    controls.appendChild(destinoDropdownWrap);
-    controls.appendChild(objetivoDropdownWrap);
-    controls.appendChild(passageirosDropdownWrap);
-    controls.appendChild(dataFilterWrap);
+    searchSectionPassagens.body.appendChild(withSearchClear(searchInput));
+
+    filterSectionPassagens.body.appendChild(tipoDropdownWrap);
+    filterSectionPassagens.body.appendChild(companhiaDropdownWrap);
+    filterSectionPassagens.body.appendChild(origemDropdownWrap);
+    filterSectionPassagens.body.appendChild(destinoDropdownWrap);
+    filterSectionPassagens.body.appendChild(objetivoDropdownWrap);
+    filterSectionPassagens.body.appendChild(passageirosDropdownWrap);
+    filterSectionPassagens.body.appendChild(dataFilterWrap);
 
     // "Limpar filtros" (regra permanente, ver instrucoes.md). Não toca no
     // botão de ciclo Próximas/Todas/Passadas (é modo de visualização, mesmo
@@ -11329,7 +11395,10 @@
       buildFiltersBar();
       applyState();
     });
-    controls.appendChild(clearFiltersBtn);
+    filterSectionPassagens.body.appendChild(clearFiltersBtn);
+
+    controls.appendChild(searchSectionPassagens.section);
+    controls.appendChild(filterSectionPassagens.section);
 
     wrap.appendChild(controls);
 
@@ -11418,7 +11487,7 @@
           }
           break;
         case "trecho":
-          cell.textContent = passagensTrecho(it.origem, it.destino);
+          passagensAppendTrechoChips(cell, it.origem, it.destino);
           break;
         case "dataIda":
           var idaInner = document.createElement("div");
@@ -11465,10 +11534,10 @@
           cell.textContent = it.duracaoVolta || "—";
           break;
         case "passageiros":
-          cell.textContent = (it.passageirosNomes && it.passageirosNomes.length) ? it.passageirosNomes.join(", ") : "—";
+          passagensAppendChipList(cell, it.passageirosNomes);
           break;
         case "formaPagamento":
-          cell.textContent = (it.formaPagamento && it.formaPagamento.length) ? it.formaPagamento.join(", ") : "—";
+          passagensAppendChipList(cell, it.formaPagamento);
           break;
         case "valorBilhetes":
           cell.textContent = it.valorBilhetes || "—";
