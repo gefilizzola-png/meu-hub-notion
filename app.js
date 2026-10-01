@@ -15749,8 +15749,28 @@
     }
     wrap.appendChild(tabsWrap);
 
-    // ---- busca (mesmo padrão global — normalize() acento-insensível +
-    // botão "x" — ver instrucoes.md regra 13). ----
+    // Visual "jogado de qualquer jeito" reportado pelo Georges (busca solta
+    // ocupando espaço sempre + formulário de criação enorme, sem labels, em
+    // 2 linhas largas) — correção em 2 frentes:
+    // 1) busca entra na seção recolhível "Pesquisar" (padrão novo, regra 15
+    //    em instrucoes.md), igual Passagens;
+    // 2) "Novo empréstimo" também vira seção recolhível (mesmo espírito de
+    //    "Criação" em Lista de Prioridades), nasce RECOLHIDA, com um grid
+    //    mais estreito e cada campo com label pequeno em cima (helper
+    //    buildEmprestimosField abaixo) em vez de inputs soltos só com
+    //    placeholder — resolve o "sem detalhe visual algum".
+    function buildEmprestimosField(labelText, inputEl, extraCls) {
+      var f = document.createElement("div");
+      f.className = "emprestimos-field" + (extraCls ? " " + extraCls : "");
+      var lbl = document.createElement("label");
+      lbl.className = "emprestimos-field-label";
+      lbl.textContent = labelText;
+      f.appendChild(lbl);
+      f.appendChild(inputEl);
+      return f;
+    }
+
+    var searchSectionEmp = buildCollapsibleSection("Pesquisar");
     var searchWrap = document.createElement("div");
     searchWrap.className = "emprestimos-search";
     var searchInput = document.createElement("input");
@@ -15758,7 +15778,8 @@
     searchInput.placeholder = "Pesquisar por pessoa ou objetivo…";
     searchInput.className = "emprestimos-search-input";
     searchWrap.appendChild(withSearchClear(searchInput));
-    wrap.appendChild(searchWrap);
+    searchSectionEmp.body.appendChild(searchWrap);
+    wrap.appendChild(searchSectionEmp.section);
     searchInput.addEventListener("input", function () { state.search = searchInput.value; renderList(); });
 
     // ---- "Limpar filtros" (mesmo padrão global — instrucoes.md regra 13)
@@ -15774,19 +15795,16 @@
     });
     searchWrap.appendChild(clearBtn);
 
-    // ---- formulário "novo empréstimo" ----
+    // ---- formulário "novo empréstimo" (dentro da seção recolhível) ----
+    var creationSectionEmp = buildCollapsibleSection("Novo Empréstimo");
     var addWrap = document.createElement("div");
     addWrap.className = "emprestimos-add";
-    var addTitle = document.createElement("div");
-    addTitle.className = "emprestimos-add-title";
-    addTitle.innerHTML = '<i class="ti ti-plus"></i> Novo empréstimo';
-    addWrap.appendChild(addTitle);
 
     var addPessoaInput = document.createElement("input");
     addPessoaInput.type = "text";
-    addPessoaInput.placeholder = "Pessoa…";
+    addPessoaInput.placeholder = "Ex: Rosana Almeida";
     addPessoaInput.className = "emprestimos-add-input";
-    addWrap.appendChild(addPessoaInput);
+    addWrap.appendChild(buildEmprestimosField("Pessoa", addPessoaInput));
 
     var addDirecaoSelect = document.createElement("select");
     addDirecaoSelect.className = "emprestimos-add-select";
@@ -15795,28 +15813,27 @@
       opt.value = o.value; opt.textContent = o.label;
       addDirecaoSelect.appendChild(opt);
     });
-    addWrap.appendChild(addDirecaoSelect);
+    addWrap.appendChild(buildEmprestimosField("Direção", addDirecaoSelect));
 
     var addValorInput = document.createElement("input");
     addValorInput.type = "number";
     addValorInput.min = "0";
     addValorInput.step = "0.01";
-    addValorInput.placeholder = "Valor (R$)…";
+    addValorInput.placeholder = "0,00";
     addValorInput.className = "emprestimos-add-input";
-    addWrap.appendChild(addValorInput);
+    addWrap.appendChild(buildEmprestimosField("Valor (R$)", addValorInput));
 
     var addDataInput = document.createElement("input");
     addDataInput.type = "date";
     addDataInput.value = new Date().toISOString().slice(0, 10);
     addDataInput.className = "emprestimos-add-input";
-    addDataInput.title = "Data do empréstimo";
-    addWrap.appendChild(addDataInput);
+    addWrap.appendChild(buildEmprestimosField("Data do empréstimo", addDataInput));
 
     var addObjetivoInput = document.createElement("input");
     addObjetivoInput.type = "text";
-    addObjetivoInput.placeholder = "Objetivo / motivo…";
-    addObjetivoInput.className = "emprestimos-add-input emprestimos-add-objetivo";
-    addWrap.appendChild(addObjetivoInput);
+    addObjetivoInput.placeholder = "Ex: Televisão";
+    addObjetivoInput.className = "emprestimos-add-input";
+    addWrap.appendChild(buildEmprestimosField("Objetivo / motivo", addObjetivoInput, "emprestimos-field-wide"));
 
     var addFormaSelect = document.createElement("select");
     addFormaSelect.className = "emprestimos-add-select";
@@ -15825,38 +15842,41 @@
       opt.value = o.value; opt.textContent = o.label;
       addFormaSelect.appendChild(opt);
     });
-    addWrap.appendChild(addFormaSelect);
+    addWrap.appendChild(buildEmprestimosField("Forma de pagamento", addFormaSelect));
 
     // campos condicionais (data única OU dia do mês) — trocam de acordo
     // com addFormaSelect, mesmo espírito de "formaPagamento" no schema.
     var addVencimentoInput = document.createElement("input");
     addVencimentoInput.type = "date";
     addVencimentoInput.className = "emprestimos-add-input";
-    addVencimentoInput.title = "Data de vencimento";
-    addWrap.appendChild(addVencimentoInput);
+    var addVencimentoField = buildEmprestimosField("Data de vencimento", addVencimentoInput);
+    addWrap.appendChild(addVencimentoField);
 
     var addDiaMensalInput = document.createElement("input");
     addDiaMensalInput.type = "number";
     addDiaMensalInput.min = "1";
     addDiaMensalInput.max = "31";
-    addDiaMensalInput.placeholder = "Dia do mês (1-31)…";
+    addDiaMensalInput.placeholder = "1 a 31";
     addDiaMensalInput.className = "emprestimos-add-input";
-    addWrap.appendChild(addDiaMensalInput);
+    var addDiaMensalField = buildEmprestimosField("Dia do mês", addDiaMensalInput);
+    addWrap.appendChild(addDiaMensalField);
 
     function refreshAddConditionalFields() {
       var forma = addFormaSelect.value;
-      addVencimentoInput.style.display = forma === "unico" ? "" : "none";
-      addDiaMensalInput.style.display = forma === "mensal" ? "" : "none";
+      addVencimentoField.style.display = forma === "unico" ? "" : "none";
+      addDiaMensalField.style.display = forma === "mensal" ? "" : "none";
     }
     addFormaSelect.addEventListener("change", refreshAddConditionalFields);
     refreshAddConditionalFields();
 
+    creationSectionEmp.body.appendChild(addWrap);
+
     var addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.className = "notes-add-btn";
-    addBtn.innerHTML = '<i class="ti ti-plus"></i> Criar';
-    addWrap.appendChild(addBtn);
-    wrap.appendChild(addWrap);
+    addBtn.className = "notes-add-btn emprestimos-add-btn";
+    addBtn.innerHTML = '<i class="ti ti-plus"></i> Criar empréstimo';
+    creationSectionEmp.body.appendChild(addBtn);
+    wrap.appendChild(creationSectionEmp.section);
 
     function addLoan() {
       var pessoa = addPessoaInput.value.trim();
@@ -15972,13 +15992,25 @@
     // NUNCA cadastra nada sozinho aqui (só o clique em "Incluir" chama
     // addPayment, a mesma rota de sempre).
     function buildFindPaymentsPanel(loan) {
+      // caixa com título (mesmo padrão visual de ".emprestimos-forma-editor"
+      // — pedido do Georges: "as caixas de informação com leiaute feio
+      // também", dar consistência entre as 3 caixas do card expandido).
       var wrap3 = document.createElement("div");
-      wrap3.className = "emprestimos-find-payments";
+      wrap3.className = "emprestimos-box emprestimos-find-payments";
+      var findLabel = document.createElement("div");
+      findLabel.className = "emprestimos-box-label";
+      findLabel.innerHTML = '<i class="ti ti-search"></i> Pesquisar Pagamentos';
+      wrap3.appendChild(findLabel);
 
+      // botão outline, não mais ".notes-add-btn" sólido esticando a largura
+      // toda (bug reportado pelo Georges — ".emprestimos-find-payments" é
+      // flex-column, e sem "align-self" o filho único esticava pra ocupar o
+      // container inteiro). Classe própria, mais discreta (ação secundária
+      // dentro do card, não um "Criar"/"Salvar" primário).
       var searchBtn = document.createElement("button");
       searchBtn.type = "button";
-      searchBtn.className = "notes-add-btn";
-      searchBtn.innerHTML = '<i class="ti ti-search"></i> Pesquisar Pagamentos';
+      searchBtn.className = "emprestimos-find-search-btn";
+      searchBtn.innerHTML = '<i class="ti ti-search"></i> Pesquisar';
       wrap3.appendChild(searchBtn);
 
       var resultsEl = document.createElement("div");
@@ -16055,12 +16087,20 @@
     }
 
     function buildPaymentsPanel(loan) {
+      // mesma caixa-com-título das outras 2 (ver buildFindPaymentsPanel/
+      // buildFormaPagamentoEditor) — pedido do Georges de consistência
+      // visual entre as caixas do card expandido.
       var panel = document.createElement("div");
-      panel.className = "emprestimos-payments-panel";
+      panel.className = "emprestimos-box emprestimos-payments-panel";
+
+      var pagamentos = Array.isArray(loan.pagamentos) ? loan.pagamentos : [];
+      var panelLabel = document.createElement("div");
+      panelLabel.className = "emprestimos-box-label";
+      panelLabel.innerHTML = '<i class="ti ti-receipt"></i> Pagamentos lançados' + (pagamentos.length ? " (" + pagamentos.length + ")" : "");
+      panel.appendChild(panelLabel);
 
       var listP = document.createElement("div");
       listP.className = "emprestimos-payments-list";
-      var pagamentos = Array.isArray(loan.pagamentos) ? loan.pagamentos : [];
       if (!pagamentos.length) {
         var emptyP = document.createElement("p");
         emptyP.className = "empty";
@@ -16068,11 +16108,26 @@
         listP.appendChild(emptyP);
       } else {
         pagamentos.slice().sort(function (a, b) { return (a.data || "").localeCompare(b.data || ""); }).forEach(function (p) {
+          // linha redesenhada (pedido do Georges: "caixas de informação com
+          // leiaute feio") — ícone de recibo + valor em destaque + data/nota
+          // como subtítulo, em vez de 1 linha de texto corrida.
           var row = document.createElement("div");
           row.className = "emprestimos-payment-row";
-          var txt = document.createElement("span");
-          txt.textContent = transacoesFmtDateBR(p.data) + " — " + transacoesFmtMoney(p.valor) + (p.nota ? " (" + p.nota + ")" : "");
-          row.appendChild(txt);
+          var icon = document.createElement("span");
+          icon.className = "emprestimos-payment-icon";
+          icon.innerHTML = '<i class="ti ti-circle-check"></i>';
+          row.appendChild(icon);
+          var info = document.createElement("div");
+          info.className = "emprestimos-payment-info";
+          var valLine = document.createElement("div");
+          valLine.className = "emprestimos-payment-valor";
+          valLine.textContent = transacoesFmtMoney(p.valor);
+          info.appendChild(valLine);
+          var subLine = document.createElement("div");
+          subLine.className = "emprestimos-payment-sub";
+          subLine.textContent = transacoesFmtDateBR(p.data) + (p.nota ? " · " + p.nota : "");
+          info.appendChild(subLine);
+          row.appendChild(info);
           var delP = document.createElement("button");
           delP.type = "button";
           delP.className = "emprestimos-payment-del";
@@ -16089,21 +16144,21 @@
       addPForm.className = "emprestimos-payment-add";
       var pValor = document.createElement("input");
       pValor.type = "number"; pValor.min = "0"; pValor.step = "0.01";
-      pValor.placeholder = "Valor pago (R$)…";
+      pValor.placeholder = "0,00";
       pValor.className = "emprestimos-add-input";
-      addPForm.appendChild(pValor);
+      addPForm.appendChild(buildEmprestimosField("Valor pago (R$)", pValor));
       var pData = document.createElement("input");
       pData.type = "date";
       pData.value = new Date().toISOString().slice(0, 10);
-      addPForm.appendChild(pData);
+      addPForm.appendChild(buildEmprestimosField("Data", pData));
       var pNota = document.createElement("input");
       pNota.type = "text";
-      pNota.placeholder = "Nota (opcional)…";
+      pNota.placeholder = "Opcional…";
       pNota.className = "emprestimos-add-input";
-      addPForm.appendChild(pNota);
+      addPForm.appendChild(buildEmprestimosField("Nota", pNota, "emprestimos-field-wide"));
       var pBtn = document.createElement("button");
       pBtn.type = "button";
-      pBtn.className = "notes-add-btn";
+      pBtn.className = "notes-add-btn emprestimos-add-btn";
       pBtn.innerHTML = '<i class="ti ti-plus"></i> Lançar pagamento';
       pBtn.addEventListener("click", function () {
         var v = Number(pValor.value);
@@ -16131,12 +16186,16 @@
     // do formulário de criação, só que editável a qualquer momento dentro
     // do card expandido.
     function buildFormaPagamentoEditor(loan) {
+      // mesma caixa-com-título das outras 2 caixas do card expandido (ver
+      // buildFindPaymentsPanel/buildPaymentsPanel) — antes era uma classe só
+      // sua (".emprestimos-forma-editor"), agora reaproveita ".emprestimos-
+      // box"/".emprestimos-box-label" pra ficar visualmente igual.
       var wrap2 = document.createElement("div");
-      wrap2.className = "emprestimos-forma-editor";
+      wrap2.className = "emprestimos-box emprestimos-forma-editor";
 
       var label = document.createElement("div");
-      label.className = "emprestimos-forma-editor-label";
-      label.textContent = "Forma de pagamento";
+      label.className = "emprestimos-box-label";
+      label.innerHTML = '<i class="ti ti-calendar-due"></i> Forma de pagamento';
       wrap2.appendChild(label);
 
       var row = document.createElement("div");
@@ -16176,7 +16235,7 @@
 
       var saveFormaBtn = document.createElement("button");
       saveFormaBtn.type = "button";
-      saveFormaBtn.className = "notes-add-btn";
+      saveFormaBtn.className = "notes-add-btn emprestimos-add-btn";
       saveFormaBtn.innerHTML = '<i class="ti ti-check"></i> Salvar';
       saveFormaBtn.addEventListener("click", function () {
         var patch = { formaPagamento: formaSelect.value };

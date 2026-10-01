@@ -6361,30 +6361,36 @@ html, body {
 }
 .emprestimos-clear-btn:hover { border-color: #4a90d9; color: #2c2c2a; }
 
-/* formulário "novo empréstimo" — mesma base de .remedios-add. */
+/* formulário "novo empréstimo" (rodada 2 — pedido do Georges: "numa
+   largura menor e usando 2 linhas [largas]... sem detalhe visual algum").
+   Trocado de flex-wrap (gerava 2 linhas desiguais, esticadas pela largura
+   toda do container) pra um grid de colunas estreitas e uniformes — cada
+   campo é um ".emprestimos-field" com label pequeno em cima (ver
+   buildEmprestimosField no app.js), dentro de uma seção recolhível
+   ("Novo Empréstimo", nasce recolhida — mesmo padrão de "Criação" em
+   Lista de Prioridades), então nem fica ocupando espaço quando fechada. */
 .emprestimos-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  max-width: 760px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  max-width: 620px;
   border: 0.5px solid #e2e0da;
   border-radius: 10px;
   padding: 12px;
   background: #faf9f6;
 }
-.emprestimos-add-title {
-  flex-basis: 100%;
-  font-size: 13px;
-  font-weight: 700;
-  color: #2c2c2a;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.emprestimos-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.emprestimos-field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #928f86;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
+.emprestimos-field-wide { grid-column: span 2; }
 .emprestimos-add-input,
 .emprestimos-add-select {
-  flex: 1 1 140px;
-  min-width: 120px;
+  width: 100%;
   padding: 8px 10px;
   border: 0.5px solid #d8d6d0;
   border-radius: 8px;
@@ -6394,7 +6400,11 @@ html, body {
 }
 .emprestimos-add-input:focus,
 .emprestimos-add-select:focus { outline: none; border-color: #4a90d9; }
-.emprestimos-add-objetivo { flex: 1.6 1 220px; }
+/* botão "Criar"/"Salvar"/"Lançar pagamento" dentro das caixas — antes
+   esticava pra largura toda do pai (".notes-add-btn" num container flex-
+   column sem align-self herda stretch); aqui fica do tamanho do próprio
+   texto, alinhado à esquerda. */
+.emprestimos-add-btn { align-self: flex-start; margin-top: 2px; }
 
 .emprestimos-list { display: flex; flex-direction: column; gap: 10px; }
 
@@ -6486,15 +6496,31 @@ html, body {
 .emprestimos-card-objetivo { font-size: 12.5px; color: #55554f; }
 .emprestimos-card-meta { font-size: 11.5px; color: #8a8a86; }
 
-/* editor de forma de pagamento (pedido do Georges — editável depois de
-   criado, não só na criação). Mesmo visual de .emprestimos-add. */
-.emprestimos-forma-editor {
+/* caixa genérica das 3 seções do card expandido (Forma de pagamento,
+   Pesquisar Pagamentos, Pagamentos lançados) — pedido do Georges: "as
+   caixas de informação com leiaute feio também", dar um visual consistente
+   (título com ícone + corpo) em vez de cada uma ter o próprio estilo solto. */
+.emprestimos-box {
   border: 0.5px solid #e2e0da;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: #fbfbfa;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.emprestimos-forma-editor-label { font-size: 11px; color: #8a8a86; margin-bottom: 6px; font-weight: 600; }
+.emprestimos-box-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #55554f;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.emprestimos-box-label .ti { font-size: 13px; color: #928f86; }
+
 .emprestimos-forma-editor-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .emprestimos-progress-wrap { display: flex; flex-direction: column; gap: 4px; }
@@ -6527,9 +6553,30 @@ html, body {
 .emprestimos-row-delete:hover { background: #fbeceb; }
 
 /* "Pesquisar Pagamentos" (pedido do Georges) — resultado da busca contra
-   Transações, com % de aproximação e botão de incluir por candidato. */
-.emprestimos-find-payments { display: flex; flex-direction: column; gap: 8px; }
+   Transações, com % de aproximação e botão de incluir por candidato.
+   Virou ".emprestimos-box" (ver acima) — aqui só o que é específico dela. */
 .emprestimos-find-payments-results { display: flex; flex-direction: column; gap: 6px; }
+/* botão "Pesquisar" — outline, discreto (ação secundária dentro de uma
+   caixa já identificada pelo título), "align-self: flex-start" pra não
+   esticar a largura toda do ".emprestimos-box" (flex-column — bug "botão
+   gigante" reportado pelo Georges). */
+.emprestimos-find-search-btn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0.5px solid #a9c7e8;
+  background: #fff;
+  color: #2a6bb0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.emprestimos-find-search-btn:hover { background: #eaf2fb; }
+.emprestimos-find-search-btn:disabled { opacity: 0.6; cursor: default; }
 .emprestimos-find-payment-row {
   display: flex;
   align-items: center;
@@ -6537,7 +6584,7 @@ html, body {
   gap: 10px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: #f7f6f2;
+  background: #fff;
   border: 0.5px solid #e2e0da;
   flex-wrap: wrap;
 }
@@ -6555,41 +6602,56 @@ html, body {
 .emprestimos-find-payment-score.mid { background: #fdf1e2; color: #b9770e; }
 .emprestimos-find-payment-score.high { background: #ebf7e8; color: #2f9e44; }
 
-/* painel de pagamentos — expande dentro do card ao clicar em "Pagamentos". */
-.emprestimos-payments-panel {
-  border-top: 0.5px dashed #d8d6d0;
-  padding-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.emprestimos-payments-list { display: flex; flex-direction: column; gap: 4px; }
+/* painel de pagamentos — virou ".emprestimos-box" também (ver acima). */
+.emprestimos-payments-list { display: flex; flex-direction: column; gap: 6px; }
+/* linha de pagamento redesenhada (pedido do Georges: "caixas de informação
+   com leiaute feio") — ícone circular + valor em destaque + data/nota como
+   subtítulo, em vez de 1 linha de texto corrida. */
 .emprestimos-payment-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12.5px;
-  color: #3a3a37;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: #f7f6f2;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 0.5px solid #e2e0da;
 }
+.emprestimos-payment-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #ebf7e8;
+  color: #2f9e44;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.emprestimos-payment-info { flex: 1 1 auto; min-width: 0; }
+.emprestimos-payment-valor { font-size: 13px; font-weight: 700; color: #2c2c2a; }
+.emprestimos-payment-sub { font-size: 11.5px; color: #8a8a86; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .emprestimos-payment-del {
+  flex-shrink: 0;
   border: none;
   background: transparent;
   color: #c0392b;
   cursor: pointer;
-  padding: 2px 6px;
-  font-size: 12px;
+  padding: 4px 8px;
+  font-size: 13px;
+  border-radius: 6px;
 }
-.emprestimos-payment-del:hover { background: #fbeceb; border-radius: 6px; }
+.emprestimos-payment-del:hover { background: #fbeceb; }
 .emprestimos-payment-add {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
+  align-items: flex-end;
+  border-top: 0.5px dashed #d8d6d0;
+  padding-top: 8px;
 }
+.emprestimos-payment-add .emprestimos-field { flex: 1 1 120px; }
+.emprestimos-payment-add .emprestimos-field-wide { flex: 2 1 180px; }
 
 /* Passagens — larguras explícitas por coluna (BUG reportado pelo Georges,
    mesma causa já documentada em ".financeiro-th-vencimento" acima: sem
