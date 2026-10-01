@@ -16994,6 +16994,55 @@
     }).catch(function () { return []; });
   }
 
+  // Transações — Valor Mínimo (kind "transacoes_valor_minimo" — pedido do
+  // Georges: "notifique quando tiver alguma compra num valor acima de X...
+  // considerando o valor TOTAL da compra, mesmo parcelada"). 100% D1 via
+  // rota dedicada /transacoes-alertas (worker.js) — essa rota NÃO exige o
+  // PIN de Transações (decisão explícita do Georges, ver comentário grande
+  // em handleTransacoesAlertasGet no worker.js). Reaproveita a MESMA
+  // reconstrução de compra parcelada usada no ranking do BI Financeiro
+  // (financeiroBIAggregateInstallmentGroups/transacoesParseParcela, task
+  // #722) pra comparar o valor TOTAL (não a parcela) com source.minValor.
+  // "id" da compra parcelada usa account+comerciante+total de parcelas+data
+  // reconstruída (NÃO a parcela atual) — fica estável conforme novas
+  // parcelas da MESMA compra entram na janela de dias, então não cria
+  // notificação nova a cada mês.
+  function fetchTransacoesValorMinimoNotificationItems(source) {
+    var minValor = (typeof source.minValor === "number") ? source.minValor : 0;
+    return authFetch(cfg.templateWorkerUrl + "/transacoes-alertas?days=10").then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+      return res.ok ? res.json() : { items: [] };
+    }).then(function (data) {
+      var items = (data && data.items) || [];
+      var agg = financeiroBIAggregateInstallmentGroups(items);
+      var out = [];
+      agg.others.forEach(function (it) {
+        var valor = Math.abs(it.amount || 0);
+        if (valor < minValor) return;
+        var extraObj = {};
+        extraObj[source.dateProperty] = { start: it.date + "T12:00:00" };
+        out.push({
+          id: "txn:" + it.id,
+          title: "Compra acima de " + transacoesFmtMoney(minValor) + ": " + (it.description || "—") + " (" + transacoesFmtMoney(valor) + ")",
+          url: location.origin + location.pathname + "#financeiro_transacoes",
+          extra: extraObj
+        });
+      });
+      agg.grouped.forEach(function (g) {
+        if (g.valor < minValor) return;
+        var extraObj = {};
+        extraObj[source.dateProperty] = { start: g.date + "T12:00:00" };
+        out.push({
+          id: "txn_parc:" + (g.account_name || "") + "|" + g.merchant + "|" + g.totalParcelas + "|" + g.date,
+          title: "Compra acima de " + transacoesFmtMoney(minValor) + ": " + g.merchant + " — " + g.totalParcelas + "x (total " + transacoesFmtMoney(g.valor) + ")",
+          url: location.origin + location.pathname + "#financeiro_transacoes",
+          extra: extraObj
+        });
+      });
+      return out;
+    }).catch(function () { return []; });
+  }
+
   // ponto único chamado por computeNotifications — decide QUAL busca usar
   // conforme "source.kind" (default "notion", ver resolvedNotifSources
   // acima). Mantém buildNotificationsFromSource 100% agnóstico: ele só
@@ -17007,6 +17056,7 @@
     if (source.kind === "provas") return fetchProvasNotificationItems(source);
     if (source.kind === "backup") return fetchBackupNotificationItems(source);
     if (source.kind === "loans") return fetchLoansNotificationItems(source);
+    if (source.kind === "transacoes_valor_minimo") return fetchTransacoesValorMinimoNotificationItems(source);
     return fetchNotionNotificationSourceItems(source);
   }
 
@@ -17163,6 +17213,11 @@
   // por antecedência — não precisa do prefixo composto do map acima).
   var notifPinExpandedKeys = {};
 
+  // mesmo padrão de notifPinExpandedKeys acima, mas pro chip "💰 Valor
+  // mínimo" — só renderizado pra fonte "transacoes_valor_minimo" (ver
+  // renderNotifSettings abaixo).
+  var notifMinValorExpandedKeys = {};
+
   // recolhido por padrão (pedido do Georges: chips de categoria da LISTA
   // principal, não da tela de gestão, atrás de um botão "Filtrar por
   // Categorias") — só em memória, reseta a cada reload de verdade.
@@ -17239,12 +17294,17 @@
         // dessa fonte sempre aparecem no FIM da lista de Não lidas/Todas,
         // mesmo com prazo mais próximo que outra notificação). É por FONTE
         // inteira, não por antecedência — desligado por padrão.
-        pinToEnd: !!(s && s.pinToEnd)
+        pinToEnd: !!(s && s.pinToEnd),
         // "Notificação Inteligente" NÃO mora mais aqui (nível de fonte) —
         // pedido do Georges: "Eu que ter opção de Not Inteligente para
         // cada opção de notificação que eu criei", porque cada antecedência
         // da mesma fonte pode precisar de uma janela diferente. Agora vive
         // dentro de cada leadTime (ver normalizeNotifLeadTime acima).
+        // "Valor mínimo (R$)" — só usado pela fonte "transacoes_valor_minimo"
+        // (ver NOTIFICATION_SOURCES em config.js). 1 número POR FONTE, mesmo
+        // espírito de pinToEnd — cai no defaultMinValor da fonte até o
+        // Georges configurar o dele pela Central de Notificações.
+        minValor: (s && typeof s.minValor === "number") ? s.minValor : (source.defaultMinValor || 0)
       };
     });
   }
@@ -17871,9 +17931,10 @@
     notifState.sources.forEach(function (s) {
       // channels/repeatWhilePending/smartSchedule já vivem DENTRO de cada
       // leadTime (ver resolvedNotifSources/normalizeNotifLeadTime); pinToEnd
-      // é o único campo que continua em nível de FONTE (card inteiro, não
-      // por antecedência).
-      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd };
+      // e minValor continuam em nível de FONTE (card inteiro, não por
+      // antecedência) — minValor só é relevante pra "transacoes_valor_minimo",
+      // mas mandar sempre não tem custo (worker.js ignora pra outras fontes).
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd, minValor: s.minValor };
     });
     return out;
   }
@@ -17922,6 +17983,20 @@
     var s = findNotifSource(sourceId);
     if (!s || s.pinToEnd === on) return;
     s.pinToEnd = on;
+    applyNotifSettingsChange();
+  }
+
+  // "Valor mínimo (R$)" — só usado pela fonte "transacoes_valor_minimo"
+  // (pedido do Georges: notificar quando uma compra, parcelada ou não,
+  // exceder esse valor; ver fetchTransacoesValorMinimoNotificationItems).
+  // Mesmo espírito de setNotifSourcePinToEnd acima: 1 número POR FONTE.
+  function setNotifSourceMinValor(sourceId, value) {
+    var s = findNotifSource(sourceId);
+    if (!s) return;
+    var n = Number(value);
+    var normalized = (!isNaN(n) && n >= 0) ? n : 0;
+    if (s.minValor === normalized) return;
+    s.minValor = normalized;
     applyNotifSettingsChange();
   }
 
@@ -18385,7 +18460,64 @@
       pinChip.appendChild(pinChipLabel);
       pinChipRow.appendChild(pinChip);
       addPinRow.appendChild(pinChipRow);
+
+      // "Valor mínimo (R$)" — SÓ pra fonte "transacoes_valor_minimo" (pedido
+      // do Georges: notificar compras, parceladas ou não, acima de um valor
+      // configurável). Mesmo padrão de "clicar na pílula pra expandir" do
+      // "📌 Fixar ao final" acima — chip próprio, na mesma linha.
+      var minValorExpanded = false;
+      var minValorChipLabel = null;
+      if (s.kind === "transacoes_valor_minimo") {
+        minValorExpanded = !!notifMinValorExpandedKeys[s.id];
+        var minValorChipRow = document.createElement("div");
+        minValorChipRow.className = "notif-settings-leadtime-chip-row";
+        var minValorChip = document.createElement("span");
+        minValorChip.className = "notif-settings-leadtime-chip has-config" +
+          (minValorExpanded ? " active" : "");
+        minValorChipLabel = document.createElement("span");
+        minValorChipLabel.className = "notif-settings-leadtime-chip-label";
+        minValorChipLabel.textContent = "💰 Valor mínimo (" + transacoesFmtMoney(s.minValor || 0) + ")";
+        minValorChipLabel.title = "Clique pra ver/editar o valor mínimo pra notificar";
+        minValorChipLabel.addEventListener("click", function () {
+          notifMinValorExpandedKeys[s.id] = !notifMinValorExpandedKeys[s.id];
+          renderNotifSettings();
+        });
+        minValorChip.appendChild(minValorChipLabel);
+        minValorChipRow.appendChild(minValorChip);
+        addPinRow.appendChild(minValorChipRow);
+      }
+
       block.appendChild(addPinRow);
+
+      if (minValorExpanded) {
+        var minValorWrap = document.createElement("div");
+        minValorWrap.className = "notif-settings-channels";
+        var minValorRow = document.createElement("label");
+        minValorRow.className = "notif-settings-channel-row";
+        var minValorInput = document.createElement("input");
+        minValorInput.type = "number";
+        minValorInput.min = "0";
+        minValorInput.step = "0.01";
+        minValorInput.className = "notif-settings-add-amount";
+        minValorInput.value = (typeof s.minValor === "number") ? s.minValor : 0;
+        minValorInput.addEventListener("change", function () {
+          setNotifSourceMinValor(s.id, minValorInput.value);
+        });
+        minValorRow.appendChild(minValorInput);
+        var minValorText = document.createElement("span");
+        minValorText.className = "notif-settings-channel-text";
+        var minValorLabel = document.createElement("span");
+        minValorLabel.className = "notif-settings-channel-label";
+        minValorLabel.textContent = "Valor mínimo da compra (R$)";
+        minValorText.appendChild(minValorLabel);
+        var minValorHint = document.createElement("span");
+        minValorHint.className = "notif-settings-channel-hint";
+        minValorHint.textContent = "notifica quando uma compra (mesmo parcelada) passar desse valor TOTAL — considera o valor inteiro da compra, não da parcela";
+        minValorText.appendChild(minValorHint);
+        minValorRow.appendChild(minValorText);
+        minValorWrap.appendChild(minValorRow);
+        block.appendChild(minValorWrap);
+      }
 
       if (pinExpanded) {
         var pinWrap = document.createElement("div");

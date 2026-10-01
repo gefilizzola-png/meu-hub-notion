@@ -1149,6 +1149,49 @@ var NOTIFICATION_SOURCES = [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
   },
+  // Transações — Valor Mínimo (pedido do Georges — "quero que o sistema me
+  // notifique 1 vez quando tiver alguma compra num valor acima de X, mas
+  // considerando o valor TOTAL da compra, mesmo parcelada"). kind PRÓPRIO
+  // ("transacoes_valor_minimo"), 100% D1 via rota dedicada /transacoes-alertas
+  // (worker.js) — NÃO passa pelo PIN de Transações (requireTransacoesUnlock,
+  // token de 20min): decisão explícita do Georges (perguntei antes de
+  // implementar, ele escolheu "Bypassar o PIN só nesta notificação"), porque
+  // um token de 20min tornaria essa notificação quase inútil rodando em
+  // segundo plano. Ciente de que isso expõe comerciante/valor no título do
+  // aviso mesmo com Transações bloqueada. "minValor" é o único parâmetro
+  // configurável (número, R$) — 1 valor POR FONTE (mesmo espírito de
+  // pinToEnd), editável só nesta fonte na Central de Notificações (ver
+  // app.js renderNotifSettings). fetchTransacoesValorMinimoNotificationItems
+  // (app.js) reconstrói o valor TOTAL de compras parceladas reaproveitando
+  // financeiroBIAggregateInstallmentGroups/transacoesParseParcela (mesma
+  // metodologia de BI Financeiro, task #722) antes de comparar com minValor.
+  // "dateProperty: 'data_compra'" aqui, igual a financeiro/remedios/loans
+  // acima, NÃO é campo do Notion — é só a chave de "extra" que reaproveita
+  // buildNotificationsFromSource sem mudar nada nele.
+  {
+    id: "transacoes_valor_minimo",
+    label: "Transações — Valor Mínimo",
+    // mesmo emoji usado em "financeiro" (bloco "💰 Financeiro" / Contas
+    // Mensais) — Transações também é dinheiro saindo da conta.
+    icon: "💰",
+    kind: "transacoes_valor_minimo",
+    dateProperty: "data_compra",
+    target: { type: "page", target: "financeiro_transacoes" },
+    defaultEnabled: true,
+    // valor mínimo padrão (R$) até o Georges configurar o dele próprio pela
+    // Central de Notificações — ver minValor em resolvedNotifSources (app.js).
+    defaultMinValor: 1000,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente. Cada objeto de defaultLeadTimes abaixo pode
+    // opcionalmente já vir com channels/repeatWhilePending; sem isso, o
+    // app.js assume channels:[]/repeatWhilePending:false até o Georges
+    // configurar pela Central de Notificações (clique na própria pílula).
+    defaultLeadTimes: [
+      { id: "imediata", amount: 0, unit: "hours", label: "Imediata" }
+    ]
+  },
   // Aniversários (pedido do Georges). "📚 Página de Origem" = "Pessoal -
   // Aniversários" — mesmo valor usado no bloco "🎂 Aniversários" de Início.
   // SEM exclusão de Andamento de propósito (diferente de todas as outras
@@ -1510,7 +1553,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-30 22:14",
+  appVersion: "2026-09-30 22:53",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
