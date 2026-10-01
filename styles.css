@@ -5794,6 +5794,17 @@ html, body {
 }
 .folder-shortcut-group-editbtn:hover { color: #4a90d9; }
 .folder-shortcut-group-remove:hover { color: #d9534f; }
+/* botões ▲/▼ de reordenar grupo (pedido do Georges) — mesmo tamanho/cor dos
+   outros ícones do cabeçalho, "disabled" (1º/último grupo) só esmaece, sem
+   remover o espaço (evita grupos "pulando" de posição horizontal). */
+.folder-shortcut-group-movebtn {
+  color: #928f86;
+  font-size: 14px;
+  padding: 4px;
+  flex-shrink: 0;
+}
+.folder-shortcut-group-movebtn:hover { color: #4a90d9; }
+.folder-shortcut-group-movebtn.disabled { opacity: 0.3; pointer-events: none; }
 .folder-shortcut-group-links {
   display: none;
   flex-direction: column;
@@ -5867,6 +5878,23 @@ html, body {
   border-radius: 6px;
 }
 .folder-shortcut-link-remove:hover { color: #d9534f; background: #f7f7f5; }
+/* botões ▲/▼ de reordenar item dentro do grupo (pedido do Georges) — mesmo
+   tamanho/visual do botão "x" de remover link, só ao lado dele. */
+.folder-shortcut-link-move {
+  flex-shrink: 0;
+  width: 24px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: #928f86;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.folder-shortcut-link-move:hover { color: #4a90d9; background: #f7f7f5; }
 @media (max-width: 640px) {
   .folder-shortcut-group-links { padding-left: 14px; }
 }
@@ -6370,24 +6398,76 @@ html, body {
 
 .emprestimos-list { display: flex; flex-direction: column; gap: 10px; }
 
-/* card de empréstimo — tom por situação, mesma paleta de
-   .supermercado-status-btn.urgente/.remedios-row.low|zero. */
+/* card de empréstimo — redesenhado como LINHA compacta (pedido do Georges:
+   "diminua a altura e largura do card... está ocupando muito espaço"), em
+   vez do card alto de antes. O tom por situação (mesma paleta de
+   .supermercado-status-btn.urgente/.remedios-row.low|zero) agora é só uma
+   borda esquerda fina na linha, não o fundo do card inteiro (fundo cheio
+   em toda linha ficava pesado visualmente numa lista compacta). */
 .emprestimos-card {
   border: 0.5px solid #e2e0da;
   border-radius: 10px;
-  padding: 12px 14px;
   background: #fff;
+  overflow: hidden;
+}
+.emprestimos-card.atrasado { border-left: 3px solid #c92a2a; }
+.emprestimos-card.aberto { border-left: 3px solid #b9770e; }
+.emprestimos-card.pago { border-left: 3px solid #2f9e44; opacity: 0.85; }
+
+.emprestimos-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+.emprestimos-row:hover { background: #fafaf8; }
+.emprestimos-card.expanded .emprestimos-row { background: #f7f6f2; }
+.emprestimos-row-chevron { color: #928f86; font-size: 13px; flex-shrink: 0; margin-left: auto; }
+
+/* chips da linha (pedido do Georges: "Data - Nome - Objetivo - Situação -
+   Saldo... usando chips"). Reaproveita o visual de pílula do resto do app
+   (ver .priorities-chip/.passagens-chip-list), cada um com sua própria
+   paleta fixa em vez de hash — nome/data/objetivo são neutros, situação e
+   saldo seguem a cor da situação (mesma paleta de .emprestimos-badge de
+   antes), pra bater o olho mais rápido em quem está atrasado. */
+.emprestimos-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: #f1f0ec;
+  color: #55554f;
+}
+.emprestimos-chip-data { color: #6a6a66; }
+.emprestimos-chip-nome { font-weight: 700; color: #2c2c2a; background: #eaf2fb; }
+.emprestimos-chip-objetivo {
+  color: #55554f;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.emprestimos-chip-situacao { font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; font-size: 11px; }
+.emprestimos-chip-situacao.pago, .emprestimos-chip-saldo.pago { background: #ebf7e8; color: #2f9e44; }
+.emprestimos-chip-situacao.aberto, .emprestimos-chip-saldo.aberto { background: #fdf1e2; color: #b9770e; }
+.emprestimos-chip-situacao.atrasado, .emprestimos-chip-saldo.atrasado { background: #fbe4e2; color: #c92a2a; }
+.emprestimos-chip-saldo { font-weight: 700; }
+
+.emprestimos-detail {
+  border-top: 0.5px dashed #d8d6d0;
+  padding: 10px 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
-.emprestimos-card.atrasado { border-color: #eeb4ae; background: #fdecea; }
-.emprestimos-card.aberto { border-color: #f0dcb0; background: #fdf6ea; }
-.emprestimos-card.pago { border-color: #cfe4c8; background: #f8fbf6; opacity: 0.85; }
 
-.emprestimos-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.emprestimos-card-pessoa { font-size: 14.5px; font-weight: 700; color: #2c2c2a; }
-
+/* badge antigo (ainda usado em outros pontos? não — mantido só por
+   precaução de CSS externo cacheado; sem referência nova em app.js). */
 .emprestimos-badge {
   display: inline-flex;
   align-items: center;
@@ -6405,6 +6485,17 @@ html, body {
 
 .emprestimos-card-objetivo { font-size: 12.5px; color: #55554f; }
 .emprestimos-card-meta { font-size: 11.5px; color: #8a8a86; }
+
+/* editor de forma de pagamento (pedido do Georges — editável depois de
+   criado, não só na criação). Mesmo visual de .emprestimos-add. */
+.emprestimos-forma-editor {
+  border: 0.5px solid #e2e0da;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fbfbfa;
+}
+.emprestimos-forma-editor-label { font-size: 11px; color: #8a8a86; margin-bottom: 6px; font-weight: 600; }
+.emprestimos-forma-editor-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .emprestimos-progress-wrap { display: flex; flex-direction: column; gap: 4px; }
 .emprestimos-progress-bar {
@@ -6424,21 +6515,6 @@ html, body {
 .emprestimos-card.atrasado .emprestimos-progress-fill { background: #c92a2a; }
 .emprestimos-progress-label { font-size: 11px; color: #8a8a86; }
 
-.emprestimos-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.emprestimos-toggle-payments-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 0.5px solid #d8d6d0;
-  border-radius: 999px;
-  background: #fff;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #6a6a66;
-  cursor: pointer;
-}
-.emprestimos-toggle-payments-btn:hover { border-color: #4a90d9; color: #2c2c2a; }
 .emprestimos-row-delete {
   border: none;
   background: transparent;
@@ -6449,6 +6525,35 @@ html, body {
   font-size: 14px;
 }
 .emprestimos-row-delete:hover { background: #fbeceb; }
+
+/* "Pesquisar Pagamentos" (pedido do Georges) — resultado da busca contra
+   Transações, com % de aproximação e botão de incluir por candidato. */
+.emprestimos-find-payments { display: flex; flex-direction: column; gap: 8px; }
+.emprestimos-find-payments-results { display: flex; flex-direction: column; gap: 6px; }
+.emprestimos-find-payment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f7f6f2;
+  border: 0.5px solid #e2e0da;
+  flex-wrap: wrap;
+}
+.emprestimos-find-payment-info { font-size: 12.5px; color: #3a3a37; display: flex; flex-direction: column; gap: 3px; }
+.emprestimos-find-payment-score {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #e8e6e0;
+  color: #6a6a66;
+}
+.emprestimos-find-payment-score.mid { background: #fdf1e2; color: #b9770e; }
+.emprestimos-find-payment-score.high { background: #ebf7e8; color: #2f9e44; }
 
 /* painel de pagamentos — expande dentro do card ao clicar em "Pagamentos". */
 .emprestimos-payments-panel {
@@ -6575,6 +6680,6 @@ html, body {
 @media (max-width: 640px) {
   .emprestimos-add-input,
   .emprestimos-add-select { flex-basis: 100%; }
-  .emprestimos-card-head { flex-direction: column; align-items: flex-start; }
-  .emprestimos-card-actions { flex-wrap: wrap; }
+  .emprestimos-chip-objetivo { max-width: 120px; }
+  .emprestimos-row-chevron { margin-left: 0; }
 }

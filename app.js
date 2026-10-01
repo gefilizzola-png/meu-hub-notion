@@ -15943,6 +15943,98 @@
       });
     }
 
+    // "Pesquisar Pagamentos" (pedido do Georges: "criar um botão dentro de
+    // cada empréstimo para Pesquisar Pagamentos... se achar alguma
+    // transação que atenda estes requisitos, ter um botão para eu incluir
+    // como pagamento"). Chama a rota nova (GET /loans-find-payments, sem
+    // PIN — ver worker.js), mostra os candidatos com o % de aproximação
+    // contra o saldo pendente (pedido explícito: "buscar por aproximação
+    // superior a 95% ou outra que sugerir") e deixa o Georges decidir —
+    // NUNCA cadastra nada sozinho aqui (só o clique em "Incluir" chama
+    // addPayment, a mesma rota de sempre).
+    function buildFindPaymentsPanel(loan) {
+      var wrap3 = document.createElement("div");
+      wrap3.className = "emprestimos-find-payments";
+
+      var searchBtn = document.createElement("button");
+      searchBtn.type = "button";
+      searchBtn.className = "notes-add-btn";
+      searchBtn.innerHTML = '<i class="ti ti-search"></i> Pesquisar Pagamentos';
+      wrap3.appendChild(searchBtn);
+
+      var resultsEl = document.createElement("div");
+      resultsEl.className = "emprestimos-find-payments-results";
+      wrap3.appendChild(resultsEl);
+
+      searchBtn.addEventListener("click", function () {
+        searchBtn.disabled = true;
+        resultsEl.innerHTML = "";
+        var loadingP = document.createElement("p");
+        loadingP.className = "empty";
+        loadingP.textContent = "Pesquisando em Transações…";
+        resultsEl.appendChild(loadingP);
+        authFetch(cfg.templateWorkerUrl + "/loans-find-payments?id=" + encodeURIComponent(loan.id))
+          .then(handle401).then(function (res) { return res.json(); })
+          .then(function (data) {
+            resultsEl.innerHTML = "";
+            if (data && data.error) {
+              var errP = document.createElement("p");
+              errP.className = "priorities-quickfilter-editor-error";
+              errP.textContent = data.error;
+              resultsEl.appendChild(errP);
+              return;
+            }
+            var items = (data && data.items) || [];
+            if (!items.length) {
+              var emptyP2 = document.createElement("p");
+              emptyP2.className = "empty";
+              emptyP2.textContent = "Nenhuma transação correspondente encontrada.";
+              resultsEl.appendChild(emptyP2);
+              return;
+            }
+            items.forEach(function (cand) {
+              var row = document.createElement("div");
+              row.className = "emprestimos-find-payment-row";
+              var info = document.createElement("div");
+              info.className = "emprestimos-find-payment-info";
+              var pct = Math.round(cand.score * 100);
+              var scoreChip = document.createElement("span");
+              scoreChip.className = "emprestimos-find-payment-score" + (pct >= 95 ? " high" : pct >= 70 ? " mid" : "");
+              scoreChip.textContent = pct + "% de aproximação";
+              info.appendChild(scoreChip);
+              var descLine = document.createElement("div");
+              descLine.textContent = transacoesFmtDateBR(cand.date) + " — " + transacoesFmtMoney(cand.amount) + " — " + cand.description + (cand.accountName ? " (" + cand.accountName + ")" : "");
+              info.appendChild(descLine);
+              row.appendChild(info);
+              var includeBtn = document.createElement("button");
+              includeBtn.type = "button";
+              includeBtn.className = "notes-add-btn";
+              includeBtn.innerHTML = '<i class="ti ti-plus"></i> Incluir como pagamento';
+              includeBtn.addEventListener("click", function () {
+                includeBtn.disabled = true;
+                addPayment(loan.id, cand.amount, cand.date, "Transação: " + cand.description)
+                  .then(function (res) { return res.json(); })
+                  .then(function (data2) {
+                    if (data2 && data2.error) { alert(data2.error); return; }
+                    loadLoans();
+                  }).catch(function () {}).finally(function () { includeBtn.disabled = false; });
+              });
+              row.appendChild(includeBtn);
+              resultsEl.appendChild(row);
+            });
+          })
+          .catch(function () {
+            resultsEl.innerHTML = "";
+            var errP2 = document.createElement("p");
+            errP2.className = "priorities-quickfilter-editor-error";
+            errP2.textContent = "Erro ao pesquisar pagamentos. Tente de novo em instantes.";
+            resultsEl.appendChild(errP2);
+          }).finally(function () { searchBtn.disabled = false; });
+      });
+
+      return wrap3;
+    }
+
     function buildPaymentsPanel(loan) {
       var panel = document.createElement("div");
       panel.className = "emprestimos-payments-panel";
@@ -16010,82 +16102,165 @@
       return panel;
     }
 
+    // Editor de forma de pagamento (pedido do Georges: "hoje, se crio Sem
+    // data definida, depois não consigo editar a forma de pagamento...
+    // ideal seria ter formas dinâmicas... para que eu possa ir controlando
+    // e cobrando quando for o caso"). O Worker (handleLoansUpdate) já
+    // aceita troca de formaPagamento/dataVencimento/diaMensal num
+    // empréstimo existente — faltava só a UI. Reaproveita exatamente o
+    // mesmo padrão de addFormaSelect/addVencimentoInput/addDiaMensalInput
+    // do formulário de criação, só que editável a qualquer momento dentro
+    // do card expandido.
+    function buildFormaPagamentoEditor(loan) {
+      var wrap2 = document.createElement("div");
+      wrap2.className = "emprestimos-forma-editor";
+
+      var label = document.createElement("div");
+      label.className = "emprestimos-forma-editor-label";
+      label.textContent = "Forma de pagamento";
+      wrap2.appendChild(label);
+
+      var row = document.createElement("div");
+      row.className = "emprestimos-forma-editor-row";
+
+      var formaSelect = document.createElement("select");
+      formaSelect.className = "emprestimos-add-select";
+      formaOptions.forEach(function (o) {
+        var opt = document.createElement("option");
+        opt.value = o.value; opt.textContent = o.label;
+        if (o.value === loan.formaPagamento) opt.selected = true;
+        formaSelect.appendChild(opt);
+      });
+      row.appendChild(formaSelect);
+
+      var vencInput = document.createElement("input");
+      vencInput.type = "date";
+      vencInput.className = "emprestimos-add-input";
+      vencInput.value = loan.dataVencimento || "";
+      row.appendChild(vencInput);
+
+      var diaInput = document.createElement("input");
+      diaInput.type = "number";
+      diaInput.min = "1"; diaInput.max = "31";
+      diaInput.placeholder = "Dia do mês (1-31)…";
+      diaInput.className = "emprestimos-add-input";
+      diaInput.value = loan.diaMensal || "";
+      row.appendChild(diaInput);
+
+      function refreshConditional() {
+        var forma = formaSelect.value;
+        vencInput.style.display = forma === "unico" ? "" : "none";
+        diaInput.style.display = forma === "mensal" ? "" : "none";
+      }
+      formaSelect.addEventListener("change", refreshConditional);
+      refreshConditional();
+
+      var saveFormaBtn = document.createElement("button");
+      saveFormaBtn.type = "button";
+      saveFormaBtn.className = "notes-add-btn";
+      saveFormaBtn.innerHTML = '<i class="ti ti-check"></i> Salvar';
+      saveFormaBtn.addEventListener("click", function () {
+        var patch = { formaPagamento: formaSelect.value };
+        if (formaSelect.value === "unico") patch.dataVencimento = vencInput.value || null;
+        if (formaSelect.value === "mensal") patch.diaMensal = Number(diaInput.value) || 1;
+        saveFormaBtn.disabled = true;
+        updateLoan(loan.id, patch).then(function (res) { return res.json(); }).then(function (data) {
+          if (data && data.error) { alert(data.error); return; }
+          loadLoans();
+        }).catch(function () {}).finally(function () { saveFormaBtn.disabled = false; });
+      });
+      row.appendChild(saveFormaBtn);
+      wrap2.appendChild(row);
+
+      return wrap2;
+    }
+
+    // Card compacto em 1 linha (pedido do Georges: "diminua a altura e
+    // largura do card... está ocupando muito espaço... Data - Nome -
+    // Objetivo - Situação - Saldo, dando um visual mais bonito... usando
+    // chips"). Clicar na linha expande os detalhes (forma de pagamento
+    // editável + progresso + pagamentos), mesmo espírito de outras
+    // expansões pontuais do app (1 por vez — ver state.expandedId).
     function buildLoanCard(loan) {
       var situacao = loanSituacao(loan);
       var saldo = loanSaldoPendente(loan);
       var total = typeof loan.valor === "number" ? loan.valor : 0;
       var pctPago = total > 0 ? Math.min(100, Math.round(((total - saldo) / total) * 100)) : 100;
+      var expanded = state.expandedId === loan.id;
 
       var card = document.createElement("div");
-      card.className = "emprestimos-card " + situacao;
+      card.className = "emprestimos-card " + situacao + (expanded ? " expanded" : "");
 
-      var head = document.createElement("div");
-      head.className = "emprestimos-card-head";
-      var pessoaEl = document.createElement("span");
-      pessoaEl.className = "emprestimos-card-pessoa";
-      pessoaEl.textContent = loan.pessoa;
-      head.appendChild(pessoaEl);
-      var situacaoBadge = document.createElement("span");
-      situacaoBadge.className = "emprestimos-badge " + situacao;
-      situacaoBadge.innerHTML = '<i class="ti ' + loanSituacaoIcon(situacao) + '"></i> ' + loanSituacaoLabel(situacao);
-      head.appendChild(situacaoBadge);
-      card.appendChild(head);
-
-      if (loan.objetivo) {
-        var objetivoEl = document.createElement("div");
-        objetivoEl.className = "emprestimos-card-objetivo";
-        objetivoEl.textContent = loan.objetivo;
-        card.appendChild(objetivoEl);
-      }
-
-      var metaEl = document.createElement("div");
-      metaEl.className = "emprestimos-card-meta";
-      var vencimento = loanProximoVencimentoISO(loan);
-      var metaParts = [
-        "Emprestado em " + transacoesFmtDateBR(loan.data),
-        loanFormaPagamentoLabel(loan.formaPagamento, formaOptions)
-      ];
-      if (vencimento) metaParts.push("Próximo vencimento: " + transacoesFmtDateBR(vencimento));
-      metaEl.textContent = metaParts.join(" · ");
-      card.appendChild(metaEl);
-
-      var progressWrap = document.createElement("div");
-      progressWrap.className = "emprestimos-progress-wrap";
-      var progressBar = document.createElement("div");
-      progressBar.className = "emprestimos-progress-bar";
-      var progressFill = document.createElement("div");
-      progressFill.className = "emprestimos-progress-fill";
-      progressFill.style.width = pctPago + "%";
-      progressBar.appendChild(progressFill);
-      progressWrap.appendChild(progressBar);
-      var progressLabel = document.createElement("span");
-      progressLabel.className = "emprestimos-progress-label";
-      progressLabel.textContent = transacoesFmtMoney(total - saldo) + " de " + transacoesFmtMoney(total) + " (saldo: " + transacoesFmtMoney(saldo) + ")";
-      progressWrap.appendChild(progressLabel);
-      card.appendChild(progressWrap);
-
-      var actions = document.createElement("div");
-      actions.className = "emprestimos-card-actions";
-      var toggleBtn = document.createElement("button");
-      toggleBtn.type = "button";
-      toggleBtn.className = "emprestimos-toggle-payments-btn";
-      var expanded = state.expandedId === loan.id;
-      toggleBtn.innerHTML = '<i class="ti ' + (expanded ? "ti-chevron-up" : "ti-chevron-down") + '"></i> Pagamentos (' + (Array.isArray(loan.pagamentos) ? loan.pagamentos.length : 0) + ')';
-      toggleBtn.addEventListener("click", function () {
+      var row = document.createElement("div");
+      row.className = "emprestimos-row";
+      row.addEventListener("click", function () {
         state.expandedId = expanded ? null : loan.id;
         renderList();
       });
-      actions.appendChild(toggleBtn);
+
+      function chip(text, cls, icon) {
+        var c = document.createElement("span");
+        c.className = "emprestimos-chip " + (cls || "");
+        if (icon) c.innerHTML = '<i class="ti ' + icon + '"></i> ';
+        c.appendChild(document.createTextNode(text));
+        return c;
+      }
+
+      row.appendChild(chip(transacoesFmtDateBR(loan.data), "emprestimos-chip-data", "ti-calendar"));
+      row.appendChild(chip(loan.pessoa, "emprestimos-chip-nome"));
+      row.appendChild(chip(loan.objetivo || "—", "emprestimos-chip-objetivo"));
+      var situacaoChip = chip(loanSituacaoLabel(situacao), "emprestimos-chip-situacao " + situacao, loanSituacaoIcon(situacao));
+      row.appendChild(situacaoChip);
+      row.appendChild(chip(transacoesFmtMoney(saldo), "emprestimos-chip-saldo " + situacao));
+
+      var chevron = document.createElement("i");
+      chevron.className = "ti " + (expanded ? "ti-chevron-up" : "ti-chevron-down") + " emprestimos-row-chevron";
+      row.appendChild(chevron);
+
       var delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.className = "emprestimos-row-delete";
       delBtn.title = "Excluir empréstimo";
       delBtn.innerHTML = '<i class="ti ti-trash"></i>';
-      delBtn.addEventListener("click", function () { deleteLoan(loan.id); });
-      actions.appendChild(delBtn);
-      card.appendChild(actions);
+      delBtn.addEventListener("click", function (e) { e.stopPropagation(); deleteLoan(loan.id); });
+      row.appendChild(delBtn);
 
-      if (expanded) card.appendChild(buildPaymentsPanel(loan));
+      card.appendChild(row);
+
+      if (expanded) {
+        var detail = document.createElement("div");
+        detail.className = "emprestimos-detail";
+
+        var metaEl = document.createElement("div");
+        metaEl.className = "emprestimos-card-meta";
+        var vencimento = loanProximoVencimentoISO(loan);
+        var metaParts = ["Emprestado em " + transacoesFmtDateBR(loan.data)];
+        if (vencimento) metaParts.push("Próximo vencimento: " + transacoesFmtDateBR(vencimento));
+        metaEl.textContent = metaParts.join(" · ");
+        detail.appendChild(metaEl);
+
+        detail.appendChild(buildFormaPagamentoEditor(loan));
+
+        var progressWrap = document.createElement("div");
+        progressWrap.className = "emprestimos-progress-wrap";
+        var progressBar = document.createElement("div");
+        progressBar.className = "emprestimos-progress-bar";
+        var progressFill = document.createElement("div");
+        progressFill.className = "emprestimos-progress-fill";
+        progressFill.style.width = pctPago + "%";
+        progressBar.appendChild(progressFill);
+        progressWrap.appendChild(progressBar);
+        var progressLabel = document.createElement("span");
+        progressLabel.className = "emprestimos-progress-label";
+        progressLabel.textContent = transacoesFmtMoney(total - saldo) + " de " + transacoesFmtMoney(total) + " (saldo: " + transacoesFmtMoney(saldo) + ")";
+        progressWrap.appendChild(progressLabel);
+        detail.appendChild(progressWrap);
+
+        detail.appendChild(buildFindPaymentsPanel(loan));
+        detail.appendChild(buildPaymentsPanel(loan));
+
+        card.appendChild(detail);
+      }
 
       return card;
     }
@@ -16107,15 +16282,11 @@
         listEl.appendChild(empty);
         return;
       }
-      // pendentes primeiro (atrasado > aberto > pago), desempate por
-      // próximo vencimento (quem não tem data vai pro final).
-      var situacaoOrder = { atrasado: 0, aberto: 1, pago: 2 };
+      // ordem por data do empréstimo, do mais antigo pro mais novo (pedido
+      // explícito do Georges no redesign do card compacto — substitui a
+      // ordenação anterior por situação/vencimento).
       visible.slice().sort(function (a, b) {
-        var oa = situacaoOrder[loanSituacao(a)], ob = situacaoOrder[loanSituacao(b)];
-        if (oa !== ob) return oa - ob;
-        var va = loanProximoVencimentoISO(a) || "9999-99-99";
-        var vb = loanProximoVencimentoISO(b) || "9999-99-99";
-        return va.localeCompare(vb);
+        return (a.data || "9999-99-99").localeCompare(b.data || "9999-99-99");
       }).forEach(function (l) { listEl.appendChild(buildLoanCard(l)); });
     }
 
@@ -16487,6 +16658,35 @@
           linkRows = linkRows.filter(function (r) { return r.row !== row; });
         });
         row.appendChild(removeBtn);
+        // Reordenar itens (links) dentro do grupo (pedido do Georges —
+        // "permitir reordenar... os itens de cada grupo"): botões ▲/▼
+        // simples (sem drag-and-drop — mais confiável no celular), trocam
+        // de posição com o vizinho dentro de "linkRows"/DOM; quem persiste
+        // é o "Salvar" do grupo (mesmo fluxo de sempre).
+        var moveUpBtn = document.createElement("button");
+        moveUpBtn.type = "button";
+        moveUpBtn.className = "folder-shortcut-link-move";
+        moveUpBtn.innerHTML = '<i class="ti ti-chevron-up"></i>';
+        moveUpBtn.title = "Mover pra cima";
+        moveUpBtn.addEventListener("click", function () {
+          var i = linkRows.map(function (r) { return r.row; }).indexOf(row);
+          if (i <= 0) return;
+          linksWrap.insertBefore(row, linkRows[i - 1].row);
+          var tmp = linkRows[i]; linkRows[i] = linkRows[i - 1]; linkRows[i - 1] = tmp;
+        });
+        row.appendChild(moveUpBtn);
+        var moveDownBtn = document.createElement("button");
+        moveDownBtn.type = "button";
+        moveDownBtn.className = "folder-shortcut-link-move";
+        moveDownBtn.innerHTML = '<i class="ti ti-chevron-down"></i>';
+        moveDownBtn.title = "Mover pra baixo";
+        moveDownBtn.addEventListener("click", function () {
+          var i = linkRows.map(function (r) { return r.row; }).indexOf(row);
+          if (i === -1 || i >= linkRows.length - 1) return;
+          linksWrap.insertBefore(linkRows[i + 1].row, row);
+          var tmp = linkRows[i]; linkRows[i] = linkRows[i + 1]; linkRows[i + 1] = tmp;
+        });
+        row.appendChild(moveDownBtn);
         linksWrap.appendChild(row);
         linkRows.push({ row: row, select: select, id: link ? link.id : "" });
       }
@@ -16604,6 +16804,33 @@
         chevron.className = "ti ti-chevron-right folder-shortcut-group-chevron" + (expanded[group.id] ? " open" : "");
         head.appendChild(chevron);
         if (editMode) {
+          // Reordenar grupos (pedido do Georges — "permitir reordenar os
+          // grupos"): botões ▲/▼ trocam o grupo de posição com o vizinho
+          // na lista "data" e salvam direto (mesmo "save()" de sempre, já
+          // persiste no PUT /folder-shortcuts). Desabilitado visualmente
+          // no primeiro/último grupo (não tem vizinho pra trocar).
+          var moveUpIcon = document.createElement("i");
+          moveUpIcon.className = "ti ti-chevron-up folder-shortcut-group-movebtn" + (idx === 0 ? " disabled" : "");
+          moveUpIcon.title = "Mover grupo pra cima";
+          moveUpIcon.addEventListener("click", function (e) {
+            e.stopPropagation();
+            if (idx === 0) return;
+            var nextList = data.slice();
+            var tmp = nextList[idx]; nextList[idx] = nextList[idx - 1]; nextList[idx - 1] = tmp;
+            save(nextList);
+          });
+          head.appendChild(moveUpIcon);
+          var moveDownIcon = document.createElement("i");
+          moveDownIcon.className = "ti ti-chevron-down folder-shortcut-group-movebtn" + (idx === data.length - 1 ? " disabled" : "");
+          moveDownIcon.title = "Mover grupo pra baixo";
+          moveDownIcon.addEventListener("click", function (e) {
+            e.stopPropagation();
+            if (idx === data.length - 1) return;
+            var nextList = data.slice();
+            var tmp = nextList[idx]; nextList[idx] = nextList[idx + 1]; nextList[idx + 1] = tmp;
+            save(nextList);
+          });
+          head.appendChild(moveDownIcon);
           var editIcon = document.createElement("i");
           editIcon.className = "ti ti-pencil folder-shortcut-group-editbtn";
           editIcon.title = "Editar grupo";
@@ -17650,21 +17877,57 @@
       return res.ok ? res.json() : { items: [] };
     }).then(function (data) {
       var items = (data && data.items) || [];
-      var out = [];
-      items.forEach(function (loan) {
+      var hojeISO = new Date().toISOString().slice(0, 10);
+
+      // busca automática de pagamento (pedido do Georges: "seria legal que
+      // o próprio app rodasse essa busca de pagamentos antes de notificar
+      // a pendência"). Só vale a pena chamar a rota pra empréstimos cujo
+      // vencimento JÁ passou — os demais nem vão gerar notificação ainda
+      // (source.notifyAfterEvent exige eventTime <= now, ver
+      // buildNotificationsFromSource), então rodar a busca neles seria
+      // trabalho perdido. NUNCA cadastra nada sozinho aqui — só lê
+      // candidatos (mesma rota do botão "Pesquisar Pagamentos") pra decidir
+      // o TEXTO do aviso; quem confirma o pagamento é sempre o Georges,
+      // manualmente, na página.
+      var overdueLoans = items.filter(function (loan) {
         var vencimento = loanProximoVencimentoISO(loan);
-        if (!vencimento) return;
-        var extraObj = {};
-        extraObj[source.dateProperty] = { start: vencimento + "T12:00:00" };
-        var direcaoLabel = loan.direcao === "pagar" ? "pagar a" : "receber de";
-        out.push({
-          id: "loan:" + loan.id + ":" + vencimento,
-          title: "Empréstimo — " + direcaoLabel + " " + loan.pessoa + " (" + transacoesFmtMoney(loanSaldoPendente(loan)) + ")",
-          url: location.origin + location.pathname + "#financeiro_emprestimos",
-          extra: extraObj
-        });
+        return vencimento && vencimento <= hojeISO;
       });
-      return out;
+
+      return Promise.all(overdueLoans.map(function (loan) {
+        return authFetch(cfg.templateWorkerUrl + "/loans-find-payments?id=" + encodeURIComponent(loan.id))
+          .then(function (res) { return res.ok ? res.json() : { items: [] }; })
+          .then(function (findData) { return { loan: loan, candidates: (findData && findData.items) || [] }; })
+          .catch(function () { return { loan: loan, candidates: [] }; });
+      })).then(function (results) {
+        var out = [];
+        results.forEach(function (r) {
+          var loan = r.loan;
+          var vencimento = loanProximoVencimentoISO(loan);
+          if (!vencimento) return;
+          var extraObj = {};
+          extraObj[source.dateProperty] = { start: vencimento + "T12:00:00" };
+          var direcaoLabel = loan.direcao === "pagar" ? "pagar a" : "receber de";
+          var saldoTxt = transacoesFmtMoney(loanSaldoPendente(loan));
+          var title;
+          if (r.candidates.length) {
+            var best = r.candidates[0];
+            var pct = Math.round(best.score * 100);
+            title = "📌 Empréstimo — possível pagamento de " + loan.pessoa + " encontrado: " +
+              transacoesFmtMoney(best.amount) + " em " + transacoesFmtDateBR(best.date) +
+              " (" + pct + "% aproximação) — confira e confirme";
+          } else {
+            title = "⚠️ Empréstimo — " + direcaoLabel + " " + loan.pessoa + " (" + saldoTxt + ") — vencido, sem pagamento identificado";
+          }
+          out.push({
+            id: "loan:" + loan.id + ":" + vencimento,
+            title: title,
+            url: location.origin + location.pathname + "#financeiro_emprestimos",
+            extra: extraObj
+          });
+        });
+        return out;
+      });
     }).catch(function () { return []; });
   }
 
@@ -17770,6 +18033,38 @@
         eventTime = Date.UTC(dateParts[0], (dateParts[1] || 1) - 1, dateParts[2] || 1, 11, 0, 0);
       }
       if (isNaN(eventTime)) return;
+      // "notifyAfterEvent" (pedido do Georges, Empréstimos — "a Notificação
+      // não seria por antecedência, mas posterior à data prevista"): gatilho
+      // INVERTIDO — em vez de disparar X antes do evento e descartar depois
+      // de NOTIF_GRACE_MS (2 dias) de atraso, aqui o evento já estar no
+      // passado é o requisito, e "leadTimes" vira "X depois". Ignora o
+      // descarte por atraso de propósito (um empréstimo vencido há semanas
+      // sem pagamento identificado deve CONTINUAR avisando, não sumir da
+      // Central sozinho).
+      if (source.notifyAfterEvent) {
+        if (eventTime > now) return; // ainda não venceu, nada a checar
+        source.leadTimes.forEach(function (lt) {
+          var triggerTime = eventTime + leadTimeMs(lt);
+          if (now < triggerTime) return; // ainda não passou o atraso configurado
+          list.push({
+            id: source.id + "::" + lt.id + "::" + p.id,
+            sourceId: source.id,
+            itemId: p.id,
+            leadMs: leadTimeMs(lt),
+            leadTimeId: lt.id,
+            sourceLabel: source.label,
+            sourceIcon: p.icon || source.icon || "",
+            title: p.title,
+            url: p.url,
+            target: source.target,
+            eventTime: eventTime,
+            hasTime: hasTime,
+            leadLabel: lt.label,
+            overdue: true
+          });
+        });
+        return;
+      }
       if (eventTime < now - NOTIF_GRACE_MS) return;
       source.leadTimes.forEach(function (lt) {
         var triggerTime = eventTime - leadTimeMs(lt);
@@ -18742,7 +19037,13 @@
     if (!s || !amount || amount <= 0) return;
     var id = amount + (unit === "hours" ? "h" : "d");
     if (s.leadTimes.some(function (lt) { return lt.id === id; })) return; // já existe, ignora silenciosamente
-    var label = amount + " " + (unit === "hours" ? (amount === 1 ? "hora antes" : "horas antes") : (amount === 1 ? "dia antes" : "dias antes"));
+    // "notifyAfterEvent" (Empréstimos) inverte o sentido pra "depois" em vez
+    // de "antes" — só rótulo, o cálculo em si já é feito pelo flag em
+    // buildNotificationsFromSource.
+    var sufixo = s.notifyAfterEvent
+      ? (unit === "hours" ? (amount === 1 ? "hora depois" : "horas depois") : (amount === 1 ? "dia depois" : "dias depois"))
+      : (unit === "hours" ? (amount === 1 ? "hora antes" : "horas antes") : (amount === 1 ? "dia antes" : "dias antes"));
+    var label = amount + " " + sufixo;
     // channels:[]/repeatWhilePending:false/smartSchedule explícitos — SEM
     // isso o objeto fica com esses campos undefined, e renderNotifSettings
     // (que lê lt.channels.length pra decidir se a pílula tem "has-config")

@@ -1147,16 +1147,38 @@ var NOTIFICATION_SOURCES = [
     dateProperty: "vencimento",
     target: { type: "page", target: "financeiro_emprestimos" },
     defaultEnabled: true,
+    // "notifyAfterEvent" (pedido do Georges, rodada "Pesquisar Pagamentos":
+    // "para isso funcionar, especificamente em Empréstimos, a Notificação
+    // não seria por antecedência, mas posterior à data prevista... teria
+    // que esperar passar a data, para ver se a pessoa pagou ou não") — modo
+    // ESPECIAL, só usado por esta fonte: buildNotificationsFromSource
+    // (app.js) inverte o gatilho — em vez de "dispara ANTES do evento, N
+    // antecedências", dispara DEPOIS que o vencimento já passou, e as
+    // "leadTimes" abaixo passam a significar "quantos dias depois do
+    // vencimento" em vez de "antes". Também ignora o NOTIF_GRACE_MS de 2
+    // dias que descartaria o aviso rapidamente (aqui o vencimento FICAR no
+    // passado é o requisito, não o contrário) — ver comentário grande em
+    // buildNotificationsFromSource. fetchLoansNotificationItems (app.js) já
+    // roda a busca automática de pagamento (mesma rota do botão "Pesquisar
+    // Pagamentos", /loans-find-payments) pra todo empréstimo vencido antes
+    // de montar o título — pedido do Georges: "se possível, seria legal que
+    // o próprio app rodasse essa busca... antes de notificar a pendência".
+    // IMPORTANTE (decisão explícita, perguntei antes de implementar): NUNCA
+    // cadastra o pagamento sozinho — só avisa que achou um candidato e
+    // deixa o Georges confirmar manualmente na página (mesmo fluxo do botão
+    // "Pesquisar Pagamentos" → "Incluir como pagamento").
+    notifyAfterEvent: true,
     // canais extras (toast automático/piscar aba + som/notificação nativa) e
     // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
     // pedido do Georges pra poder configurar cada antecedência (leadTime)
-    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // separadamente (ex: "3 dias depois" com um canal, "logo no dia" com
     // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
     // vir com channels/repeatWhilePending; sem isso, o app.js assume
     // channels:[]/repeatWhilePending:false até o Georges configurar pela
     // Central de Notificações (clique na própria pílula da antecedência).
     defaultLeadTimes: [
-      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
+      { id: "0d", amount: 0, unit: "days", label: "No dia do vencimento" },
+      { id: "3d", amount: 3, unit: "days", label: "3 dias depois" }
     ]
   },
   // Transações — Valor Mínimo (pedido do Georges — "quero que o sistema me
@@ -1586,7 +1608,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-01 00:46",
+  appVersion: "2026-10-01 01:10",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
