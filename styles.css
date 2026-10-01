@@ -6262,3 +6262,233 @@ html, body {
   .financeiro-bi-grupo-editor-row { flex-direction: column; align-items: stretch; }
   .financeiro-bi-grupo-name-input { min-width: 0; }
 }
+
+/* ---------------- "page.emprestimos" — Empréstimos (pedido do Georges:
+   controlar empréstimos que fez/recebeu com gestão de pagamentos no app).
+   Reaproveita linguagem visual já existente: .financeiro-summary-pill
+   (resumo de totais), .remedios-add/.remedios-search (formulário+busca),
+   .supermercado-status-btn (paleta de cores por situação). */
+.emprestimos-wrap { display: flex; flex-direction: column; gap: 14px; }
+
+.emprestimos-summary { display: flex; flex-wrap: wrap; gap: 10px; }
+.emprestimos-summary-card {
+  flex: 1 1 160px;
+  border: 0.5px solid #e2e0da;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #faf9f6;
+}
+.emprestimos-summary-label { font-size: 11px; color: #8a8a86; margin-bottom: 2px; }
+.emprestimos-summary-value { font-size: 17px; font-weight: 700; }
+.emprestimos-summary-card.receber { border-color: #cfe4c8; background: #f3faf1; }
+.emprestimos-summary-card.receber .emprestimos-summary-value { color: #2f9e44; }
+.emprestimos-summary-card.pagar { border-color: #eeb4ae; background: #fdecea; }
+.emprestimos-summary-card.pagar .emprestimos-summary-value { color: #c92a2a; }
+
+/* 2 abas separadas "A Receber"/"A Pagar" (escolha explícita do Georges) —
+   mesmo espírito visual de .supermercado-view-btn. */
+.emprestimos-tabs { display: flex; gap: 8px; }
+.emprestimos-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 0.5px solid #d8d6d0;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a6a66;
+  cursor: pointer;
+}
+.emprestimos-tab-btn:hover { border-color: #4a90d9; }
+.emprestimos-tab-btn.active {
+  background: #2c2c2a;
+  color: #fff;
+  border-color: #2c2c2a;
+}
+
+.emprestimos-search { max-width: 640px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.emprestimos-search-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0.5px solid #d8d6d0;
+  border-radius: 8px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.emprestimos-search-input:focus { outline: none; border-color: #4a90d9; }
+.emprestimos-clear-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0.5px solid #d8d6d0;
+  border-radius: 999px;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #6a6a66;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.emprestimos-clear-btn:hover { border-color: #4a90d9; color: #2c2c2a; }
+
+/* formulário "novo empréstimo" — mesma base de .remedios-add. */
+.emprestimos-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 760px;
+  border: 0.5px solid #e2e0da;
+  border-radius: 10px;
+  padding: 12px;
+  background: #faf9f6;
+}
+.emprestimos-add-title {
+  flex-basis: 100%;
+  font-size: 13px;
+  font-weight: 700;
+  color: #2c2c2a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.emprestimos-add-input,
+.emprestimos-add-select {
+  flex: 1 1 140px;
+  min-width: 120px;
+  padding: 8px 10px;
+  border: 0.5px solid #d8d6d0;
+  border-radius: 8px;
+  font-size: 13px;
+  box-sizing: border-box;
+  background: #fff;
+}
+.emprestimos-add-input:focus,
+.emprestimos-add-select:focus { outline: none; border-color: #4a90d9; }
+.emprestimos-add-objetivo { flex: 1.6 1 220px; }
+
+.emprestimos-list { display: flex; flex-direction: column; gap: 10px; }
+
+/* card de empréstimo — tom por situação, mesma paleta de
+   .supermercado-status-btn.urgente/.remedios-row.low|zero. */
+.emprestimos-card {
+  border: 0.5px solid #e2e0da;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.emprestimos-card.atrasado { border-color: #eeb4ae; background: #fdecea; }
+.emprestimos-card.aberto { border-color: #f0dcb0; background: #fdf6ea; }
+.emprestimos-card.pago { border-color: #cfe4c8; background: #f8fbf6; opacity: 0.85; }
+
+.emprestimos-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.emprestimos-card-pessoa { font-size: 14.5px; font-weight: 700; color: #2c2c2a; }
+
+.emprestimos-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.emprestimos-badge.pago { background: #ebf7e8; color: #2f9e44; }
+.emprestimos-badge.aberto { background: #fdf1e2; color: #b9770e; }
+.emprestimos-badge.atrasado { background: #fbe4e2; color: #c92a2a; }
+
+.emprestimos-card-objetivo { font-size: 12.5px; color: #55554f; }
+.emprestimos-card-meta { font-size: 11.5px; color: #8a8a86; }
+
+.emprestimos-progress-wrap { display: flex; flex-direction: column; gap: 4px; }
+.emprestimos-progress-bar {
+  width: 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: #e8e6e0;
+  overflow: hidden;
+}
+.emprestimos-progress-fill {
+  height: 100%;
+  background: #4a90d9;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+.emprestimos-card.pago .emprestimos-progress-fill { background: #2f9e44; }
+.emprestimos-card.atrasado .emprestimos-progress-fill { background: #c92a2a; }
+.emprestimos-progress-label { font-size: 11px; color: #8a8a86; }
+
+.emprestimos-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.emprestimos-toggle-payments-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0.5px solid #d8d6d0;
+  border-radius: 999px;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6a6a66;
+  cursor: pointer;
+}
+.emprestimos-toggle-payments-btn:hover { border-color: #4a90d9; color: #2c2c2a; }
+.emprestimos-row-delete {
+  border: none;
+  background: transparent;
+  color: #c0392b;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.emprestimos-row-delete:hover { background: #fbeceb; }
+
+/* painel de pagamentos — expande dentro do card ao clicar em "Pagamentos". */
+.emprestimos-payments-panel {
+  border-top: 0.5px dashed #d8d6d0;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.emprestimos-payments-list { display: flex; flex-direction: column; gap: 4px; }
+.emprestimos-payment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #3a3a37;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f7f6f2;
+}
+.emprestimos-payment-del {
+  border: none;
+  background: transparent;
+  color: #c0392b;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.emprestimos-payment-del:hover { background: #fbeceb; border-radius: 6px; }
+.emprestimos-payment-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .emprestimos-add-input,
+  .emprestimos-add-select { flex-basis: 100%; }
+  .emprestimos-card-head { flex-direction: column; align-items: flex-start; }
+  .emprestimos-card-actions { flex-wrap: wrap; }
+}

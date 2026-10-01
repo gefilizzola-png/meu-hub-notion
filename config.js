@@ -685,6 +685,20 @@ var FINANCEIRO_ACCOUNT_KEYS = [
   { key: "marshall", label: "Vitor - Desenho - Marshall" }
 ];
 
+// "Forma de Pagamento" da página Empréstimos (Financeiro) — pedido do
+// Georges: as 3 opções abaixo (todas selecionadas na pergunta de
+// esclarecimento, nenhuma descartada). ESPELHA LOAN_FORMA_PAGAMENTO_VALUES
+// no worker.js (mesmos 3 "value") — só label/icon vivem aqui, o Worker só
+// valida contra a allowlist de values. "unico" guarda dataVencimento (1
+// data certa), "mensal" guarda diaMensal (dia fixo todo mês, 1-31),
+// "sem_data" não guarda nenhuma data (empréstimo sem prazo definido) — ver
+// renderEmprestimosPage/helpers de empréstimo no app.js.
+var LOAN_FORMA_PAGAMENTO_OPTIONS = [
+  { value: "unico", label: "Pagamento único (data específica)", icon: "calendar-event" },
+  { value: "mensal", label: "Mensal (dia fixo todo mês)", icon: "calendar-repeat" },
+  { value: "sem_data", label: "Sem data definida", icon: "calendar-off" }
+];
+
 // "page.sidePanel" (opcional) — painel retrátil do lado direito, só na
 // página Início por enquanto. Cada divisória é { title, items: [...] },
 // cada item é { type:"notion", url } (abre em aba nova, ícone do cubo
@@ -1102,6 +1116,39 @@ var NOTIFICATION_SOURCES = [
       { id: "agora", amount: 0, unit: "hours", label: "Assim que ficar baixo" }
     ]
   },
+  // Empréstimos (pedido do Georges — "Sim, quero ser avisado" sobre
+  // vencimentos). kind PRÓPRIO ("loans"), 100% KV, mesmo espírito de
+  // "remedios"/"supermercado" acima — NÃO existe database_id/baseFilters
+  // porque não é Notion. Cada empréstimo pode gerar 0, 1 (forma "unico",
+  // dataVencimento) ou N ocorrências recorrentes (forma "mensal",
+  // diaMensal — sempre a PRÓXIMA ocorrência ainda não paga) de aviso; "sem
+  // data" nunca entra na Central (não tem o que avisar). "dateProperty:
+  // 'vencimento'" aqui, igual a "financeiro"/"remedios" acima, NÃO é campo
+  // do Notion — é só a chave de "extra" que fetchLoansNotificationItems
+  // (app.js) usa pra reaproveitar buildNotificationsFromSource sem mudar
+  // nada nele. "Só valor principal" (sem juros) não afeta a notificação —
+  // ela avisa da DATA, não de valor.
+  {
+    id: "emprestimos",
+    label: "Empréstimos",
+    // mesmo ícone (ti-cash) usado no botão "Empréstimos" de Financeiro.
+    icon: "💵",
+    kind: "loans",
+    dateProperty: "vencimento",
+    target: { type: "page", target: "financeiro_emprestimos" },
+    defaultEnabled: true,
+    // canais extras (toast automático/piscar aba + som/notificação nativa) e
+    // "repetir enquanto pendente" NÃO ficam mais aqui, em nível de fonte —
+    // pedido do Georges pra poder configurar cada antecedência (leadTime)
+    // separadamente (ex: "3 dias antes" com um canal, "1 hora antes" com
+    // outro). Cada objeto de defaultLeadTimes abaixo pode opcionalmente já
+    // vir com channels/repeatWhilePending; sem isso, o app.js assume
+    // channels:[]/repeatWhilePending:false até o Georges configurar pela
+    // Central de Notificações (clique na própria pílula da antecedência).
+    defaultLeadTimes: [
+      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
+    ]
+  },
   // Aniversários (pedido do Georges). "📚 Página de Origem" = "Pessoal -
   // Aniversários" — mesmo valor usado no bloco "🎂 Aniversários" de Início.
   // SEM exclusão de Andamento de propósito (diferente de todas as outras
@@ -1463,7 +1510,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-09-30 01:30",
+  appVersion: "2026-09-30 22:14",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2870,7 +2917,8 @@ const APP_CONFIG = {
       items: [
         { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
         { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
-        { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" }
+        { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
+        { label: "Empréstimos", type: "page", target: "financeiro_emprestimos", icon: "cash" }
       ]
     },
 
@@ -2930,6 +2978,26 @@ const APP_CONFIG = {
           { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "meuhub" }
         ] }
       ],
+      items: []
+    },
+
+    // "page.emprestimos" — página Empréstimos (pedido do Georges: "controlar
+    // empréstimos que fiz e os pagamentos recebidos ou vice-versa"). 100%
+    // KV (GET/POST/PUT/DELETE /loans + /loans-payment no worker.js, prefixo
+    // "loan:") — decisão confirmada com o Georges de NÃO usar o Notion
+    // (quer gerir tudo, inclusive marcar pagamentos, direto no app; regra
+    // #1 do projeto: Notion só-leitura fora de botões "Criar no Notion").
+    // Sem baseFilters/database_id porque não é uma página Notion — mesmo
+    // espírito de "page.remedios"/"page.supermercado". 2 ABAS separadas "A
+    // Receber"/"A Pagar" — escolha explícita do Georges (eu tinha sugerido
+    // lista única com filtro, ele preferiu abas). Sem cálculo de
+    // juros/correção (só valor principal, pedido explícito). Situação
+    // (em aberto/pago/atrasado) e próximo vencimento são calculados 100%
+    // no app.js — ver renderEmprestimosPage/helpers de empréstimo.
+    financeiro_emprestimos: {
+      title: "Empréstimos",
+      emprestimos: true,
+      loanFormaPagamentoOptions: LOAN_FORMA_PAGAMENTO_OPTIONS,
       items: []
     },
 

@@ -14932,6 +14932,549 @@
     loadItems();
   }
 
+  // ---------------- "page.emprestimos" — Empréstimos (100% KV, nunca
+  // Notion) ----------------
+  // Pedido do Georges: "controlar empréstimos que fiz e os pagamentos
+  // recebidos ou vice-versa [...] cadastrar o empréstimo, com data, valor,
+  // pessoa e objetivo, com opção de incluir forma de pagamento (dia
+  // definido, mensal, etc), e depois eu vou incluindo manualmente os
+  // pagamentos (um mesmo empréstimo pode ser pago em várias parcelas)".
+  // Só valor principal (sem juros/correção, pedido explícito). 2 abas
+  // separadas "A Receber"/"A Pagar" (escolha explícita do Georges, ver
+  // comentário de page.emprestimos em config.js). Toda a lógica de
+  // saldo/situação/próximo vencimento vive AQUI (client-side) — o
+  // worker.js é CRUD puro (ver handleLoans* lá).
+
+  var LOAN_EPSILON = 0.005; // tolerância de arredondamento (centavos)
+
+  // saldo pendente = valor principal - soma de todos os pagamentos já
+  // lançados (nunca negativo — se o Georges lançar pagamento(s) a mais que
+  // o valor, trava em 0, não vira "crédito").
+  function loanSaldoPendente(loan) {
+    var total = typeof loan.valor === "number" ? loan.valor : 0;
+    var pagamentos = Array.isArray(loan.pagamentos) ? loan.pagamentos : [];
+    var pago = pagamentos.reduce(function (s, p) { return s + (typeof p.valor === "number" ? p.valor : 0); }, 0);
+    var saldo = total - pago;
+    if (saldo < 0) saldo = 0;
+    return Math.round(saldo * 100) / 100;
+  }
+
+  function loanIsPago(loan) { return loanSaldoPendente(loan) <= LOAN_EPSILON; }
+
+  function loanPad2(n) { return n < 10 ? "0" + n : "" + n; }
+  function loanDaysInMonth(y, mZeroBased) { return new Date(y, mZeroBased + 1, 0).getDate(); }
+
+  // próxima data a observar: "unico" é a própria dataVencimento cadastrada;
+  // "mensal" é SEMPRE recalculada a partir de hoje (dia fixo todo mês,
+  // clampado ao último dia do mês quando o mês não tem esse dia — ex:
+  // diaMensal=31 em fevereiro cai no dia 28/29); "sem_data" nunca tem
+  // vencimento (não há o que avisar). Empréstimo já pago (saldo <= 0)
+  // nunca tem "próximo vencimento", em nenhuma forma.
+  function loanProximoVencimentoISO(loan, hojeISO) {
+    if (loanIsPago(loan)) return null;
+    if (loan.formaPagamento === "unico") return loan.dataVencimento || null;
+    if (loan.formaPagamento === "mensal") {
+      hojeISO = hojeISO || new Date().toISOString().slice(0, 10);
+      var parts = String(hojeISO).slice(0, 10).split("-");
+      var y = Number(parts[0]), mZero = Number(parts[1]) - 1, d = Number(parts[2]);
+      var dia = Math.min(Math.max(1, loan.diaMensal || 1), 31);
+      var thisMonthDay = Math.min(dia, loanDaysInMonth(y, mZero));
+      var targetY = y, targetM = mZero;
+      if (d > thisMonthDay) {
+        targetM = mZero + 1;
+        if (targetM > 11) { targetM = 0; targetY = y + 1; }
+      }
+      var targetDay = Math.min(dia, loanDaysInMonth(targetY, targetM));
+      return targetY + "-" + loanPad2(targetM + 1) + "-" + loanPad2(targetDay);
+    }
+    return null;
+  }
+
+  // situação — "pago" (saldo zerado) vence qualquer outra coisa; "atrasado"
+  // só existe pra forma "unico" com dataVencimento já passada e saldo ainda
+  // pendente (forma "mensal" não tem um vencimento fixo "perdido" — ela só
+  // aponta pro PRÓXIMO dia do mês, sempre no futuro ou hoje; "sem_data"
+  // nunca atrasa, por definição, não tem prazo).
+  function loanSituacao(loan, hojeISO) {
+    if (loanIsPago(loan)) return "pago";
+    hojeISO = hojeISO || new Date().toISOString().slice(0, 10);
+    if (loan.formaPagamento === "unico" && loan.dataVencimento && loan.dataVencimento < hojeISO) return "atrasado";
+    return "aberto";
+  }
+  function loanSituacaoLabel(situacao) {
+    if (situacao === "pago") return "Pago";
+    if (situacao === "atrasado") return "Atrasado";
+    return "Em aberto";
+  }
+  function loanSituacaoIcon(situacao) {
+    if (situacao === "pago") return "ti-circle-check";
+    if (situacao === "atrasado") return "ti-alert-triangle";
+    return "ti-clock";
+  }
+
+  function loanFormaPagamentoLabel(forma, options) {
+    var opt = (options || []).filter(function (o) { return o.value === forma; })[0];
+    return opt ? opt.label : forma;
+  }
+
+  function renderEmprestimosPage(container, page) {
+    var formaOptions = page.loanFormaPagamentoOptions || [];
+
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando…";
+    container.appendChild(statusEl);
+
+    var wrap = document.createElement("div");
+    wrap.className = "emprestimos-wrap";
+    wrap.style.display = "none";
+    container.appendChild(wrap);
+
+    // resumo de totais (pedido implícito — "saldo líquido" ajuda a ver de
+    // cara quem deve mais pra quem), sempre visível independente da aba
+    // ativa.
+    var summaryEl = document.createElement("div");
+    summaryEl.className = "emprestimos-summary";
+    wrap.appendChild(summaryEl);
+
+    // ---- 2 abas separadas "A Receber"/"A Pagar" — escolha explícita do
+    // Georges (ver comentário de page.emprestimos em config.js), mesmo
+    // padrão de abas de renderSupermercadoPage acima. ----
+    var tabsWrap = document.createElement("div");
+    tabsWrap.className = "emprestimos-tabs";
+    var TABS = [
+      { id: "receber", label: "A Receber", icon: "ti-arrow-down-circle" },
+      { id: "pagar", label: "A Pagar", icon: "ti-arrow-up-circle" }
+    ];
+    var tabButtons = {};
+    TABS.forEach(function (t) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "emprestimos-tab-btn";
+      btn.innerHTML = '<i class="ti ' + t.icon + '"></i> ' + t.label;
+      btn.addEventListener("click", function () {
+        state.tab = t.id;
+        updateTabActive();
+        renderList();
+      });
+      tabButtons[t.id] = btn;
+      tabsWrap.appendChild(btn);
+    });
+    function updateTabActive() {
+      Object.keys(tabButtons).forEach(function (id) { tabButtons[id].classList.toggle("active", id === state.tab); });
+    }
+    wrap.appendChild(tabsWrap);
+
+    // ---- busca (mesmo padrão global — normalize() acento-insensível +
+    // botão "x" — ver instrucoes.md regra 13). ----
+    var searchWrap = document.createElement("div");
+    searchWrap.className = "emprestimos-search";
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Pesquisar por pessoa ou objetivo…";
+    searchInput.className = "emprestimos-search-input";
+    searchWrap.appendChild(withSearchClear(searchInput));
+    wrap.appendChild(searchWrap);
+    searchInput.addEventListener("input", function () { state.search = searchInput.value; renderList(); });
+
+    // ---- "Limpar filtros" (mesmo padrão global — instrucoes.md regra 13)
+    // — aqui só precisa limpar a busca (sem outros filtros na página). ----
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "emprestimos-clear-btn";
+    clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearBtn.addEventListener("click", function () {
+      state.search = "";
+      searchInput.value = "";
+      renderList();
+    });
+    searchWrap.appendChild(clearBtn);
+
+    // ---- formulário "novo empréstimo" ----
+    var addWrap = document.createElement("div");
+    addWrap.className = "emprestimos-add";
+    var addTitle = document.createElement("div");
+    addTitle.className = "emprestimos-add-title";
+    addTitle.innerHTML = '<i class="ti ti-plus"></i> Novo empréstimo';
+    addWrap.appendChild(addTitle);
+
+    var addPessoaInput = document.createElement("input");
+    addPessoaInput.type = "text";
+    addPessoaInput.placeholder = "Pessoa…";
+    addPessoaInput.className = "emprestimos-add-input";
+    addWrap.appendChild(addPessoaInput);
+
+    var addDirecaoSelect = document.createElement("select");
+    addDirecaoSelect.className = "emprestimos-add-select";
+    [{ value: "receber", label: "A Receber (empresquei)" }, { value: "pagar", label: "A Pagar (peguei)" }].forEach(function (o) {
+      var opt = document.createElement("option");
+      opt.value = o.value; opt.textContent = o.label;
+      addDirecaoSelect.appendChild(opt);
+    });
+    addWrap.appendChild(addDirecaoSelect);
+
+    var addValorInput = document.createElement("input");
+    addValorInput.type = "number";
+    addValorInput.min = "0";
+    addValorInput.step = "0.01";
+    addValorInput.placeholder = "Valor (R$)…";
+    addValorInput.className = "emprestimos-add-input";
+    addWrap.appendChild(addValorInput);
+
+    var addDataInput = document.createElement("input");
+    addDataInput.type = "date";
+    addDataInput.value = new Date().toISOString().slice(0, 10);
+    addDataInput.className = "emprestimos-add-input";
+    addDataInput.title = "Data do empréstimo";
+    addWrap.appendChild(addDataInput);
+
+    var addObjetivoInput = document.createElement("input");
+    addObjetivoInput.type = "text";
+    addObjetivoInput.placeholder = "Objetivo / motivo…";
+    addObjetivoInput.className = "emprestimos-add-input emprestimos-add-objetivo";
+    addWrap.appendChild(addObjetivoInput);
+
+    var addFormaSelect = document.createElement("select");
+    addFormaSelect.className = "emprestimos-add-select";
+    formaOptions.forEach(function (o) {
+      var opt = document.createElement("option");
+      opt.value = o.value; opt.textContent = o.label;
+      addFormaSelect.appendChild(opt);
+    });
+    addWrap.appendChild(addFormaSelect);
+
+    // campos condicionais (data única OU dia do mês) — trocam de acordo
+    // com addFormaSelect, mesmo espírito de "formaPagamento" no schema.
+    var addVencimentoInput = document.createElement("input");
+    addVencimentoInput.type = "date";
+    addVencimentoInput.className = "emprestimos-add-input";
+    addVencimentoInput.title = "Data de vencimento";
+    addWrap.appendChild(addVencimentoInput);
+
+    var addDiaMensalInput = document.createElement("input");
+    addDiaMensalInput.type = "number";
+    addDiaMensalInput.min = "1";
+    addDiaMensalInput.max = "31";
+    addDiaMensalInput.placeholder = "Dia do mês (1-31)…";
+    addDiaMensalInput.className = "emprestimos-add-input";
+    addWrap.appendChild(addDiaMensalInput);
+
+    function refreshAddConditionalFields() {
+      var forma = addFormaSelect.value;
+      addVencimentoInput.style.display = forma === "unico" ? "" : "none";
+      addDiaMensalInput.style.display = forma === "mensal" ? "" : "none";
+    }
+    addFormaSelect.addEventListener("change", refreshAddConditionalFields);
+    refreshAddConditionalFields();
+
+    var addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "notes-add-btn";
+    addBtn.innerHTML = '<i class="ti ti-plus"></i> Criar';
+    addWrap.appendChild(addBtn);
+    wrap.appendChild(addWrap);
+
+    function addLoan() {
+      var pessoa = addPessoaInput.value.trim();
+      if (!pessoa) return;
+      var payload = {
+        pessoa: pessoa,
+        direcao: addDirecaoSelect.value,
+        valor: Number(addValorInput.value) || 0,
+        data: addDataInput.value || new Date().toISOString().slice(0, 10),
+        objetivo: addObjetivoInput.value.trim(),
+        formaPagamento: addFormaSelect.value
+      };
+      if (payload.formaPagamento === "unico") payload.dataVencimento = addVencimentoInput.value || null;
+      if (payload.formaPagamento === "mensal") payload.diaMensal = Number(addDiaMensalInput.value) || 1;
+      addBtn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/loans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).then(handle401).then(function (res) { return res.json(); }).then(function (data) {
+        if (data && data.error) { alert(data.error); return; }
+        addPessoaInput.value = "";
+        addValorInput.value = "";
+        addObjetivoInput.value = "";
+        addVencimentoInput.value = "";
+        addDiaMensalInput.value = "";
+        loadLoans();
+      }).catch(function () {
+        statusEl.textContent = "Erro ao criar empréstimo.";
+        statusEl.style.display = "";
+      }).finally(function () { addBtn.disabled = false; });
+    }
+    addBtn.addEventListener("click", addLoan);
+
+    var listEl = document.createElement("div");
+    listEl.className = "emprestimos-list";
+    wrap.appendChild(listEl);
+
+    var routeTab = pendingRouteParams && pendingRouteParams.tab;
+    var state = {
+      loans: [],
+      loaded: false,
+      search: "",
+      tab: (routeTab === "receber" || routeTab === "pagar") ? routeTab : "receber",
+      // qual empréstimo está com o painel de pagamentos expandido (1 por
+      // vez, mesmo espírito de outras expansões pontuais do app).
+      expandedId: null
+    };
+    updateTabActive();
+
+    function updateLoan(id, patch) {
+      return authFetch(cfg.templateWorkerUrl + "/loans?id=" + encodeURIComponent(id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch)
+      }).then(handle401);
+    }
+
+    function deleteLoan(id) {
+      if (!confirm("Excluir este empréstimo (e todos os pagamentos lançados nele)?")) return;
+      authFetch(cfg.templateWorkerUrl + "/loans?id=" + encodeURIComponent(id), { method: "DELETE" })
+        .then(handle401).then(loadLoans).catch(function () {});
+    }
+
+    function addPayment(loanId, valor, data, nota) {
+      return authFetch(cfg.templateWorkerUrl + "/loans-payment?id=" + encodeURIComponent(loanId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ valor: valor, data: data, nota: nota })
+      }).then(handle401);
+    }
+
+    function deletePayment(loanId, paymentId) {
+      if (!confirm("Remover este pagamento?")) return;
+      authFetch(cfg.templateWorkerUrl + "/loans-payment?id=" + encodeURIComponent(loanId) + "&paymentId=" + encodeURIComponent(paymentId), { method: "DELETE" })
+        .then(handle401).then(loadLoans).catch(function () {});
+    }
+
+    function renderSummary() {
+      summaryEl.innerHTML = "";
+      var receberPendente = state.loans.filter(function (l) { return l.direcao === "receber"; })
+        .reduce(function (s, l) { return s + loanSaldoPendente(l); }, 0);
+      var pagarPendente = state.loans.filter(function (l) { return l.direcao === "pagar"; })
+        .reduce(function (s, l) { return s + loanSaldoPendente(l); }, 0);
+      var liquido = receberPendente - pagarPendente;
+      var cards = [
+        { label: "A Receber (pendente)", value: receberPendente, cls: "receber" },
+        { label: "A Pagar (pendente)", value: pagarPendente, cls: "pagar" },
+        { label: "Saldo Líquido", value: liquido, cls: liquido >= 0 ? "receber" : "pagar" }
+      ];
+      cards.forEach(function (c) {
+        var card = document.createElement("div");
+        card.className = "emprestimos-summary-card " + c.cls;
+        var lbl = document.createElement("div");
+        lbl.className = "emprestimos-summary-label";
+        lbl.textContent = c.label;
+        card.appendChild(lbl);
+        var val = document.createElement("div");
+        val.className = "emprestimos-summary-value";
+        val.textContent = transacoesFmtMoney(c.value);
+        card.appendChild(val);
+        summaryEl.appendChild(card);
+      });
+    }
+
+    function buildPaymentsPanel(loan) {
+      var panel = document.createElement("div");
+      panel.className = "emprestimos-payments-panel";
+
+      var listP = document.createElement("div");
+      listP.className = "emprestimos-payments-list";
+      var pagamentos = Array.isArray(loan.pagamentos) ? loan.pagamentos : [];
+      if (!pagamentos.length) {
+        var emptyP = document.createElement("p");
+        emptyP.className = "empty";
+        emptyP.textContent = "Nenhum pagamento lançado ainda.";
+        listP.appendChild(emptyP);
+      } else {
+        pagamentos.slice().sort(function (a, b) { return (a.data || "").localeCompare(b.data || ""); }).forEach(function (p) {
+          var row = document.createElement("div");
+          row.className = "emprestimos-payment-row";
+          var txt = document.createElement("span");
+          txt.textContent = transacoesFmtDateBR(p.data) + " — " + transacoesFmtMoney(p.valor) + (p.nota ? " (" + p.nota + ")" : "");
+          row.appendChild(txt);
+          var delP = document.createElement("button");
+          delP.type = "button";
+          delP.className = "emprestimos-payment-del";
+          delP.innerHTML = '<i class="ti ti-trash"></i>';
+          delP.title = "Remover pagamento";
+          delP.addEventListener("click", function () { deletePayment(loan.id, p.id); });
+          row.appendChild(delP);
+          listP.appendChild(row);
+        });
+      }
+      panel.appendChild(listP);
+
+      var addPForm = document.createElement("div");
+      addPForm.className = "emprestimos-payment-add";
+      var pValor = document.createElement("input");
+      pValor.type = "number"; pValor.min = "0"; pValor.step = "0.01";
+      pValor.placeholder = "Valor pago (R$)…";
+      pValor.className = "emprestimos-add-input";
+      addPForm.appendChild(pValor);
+      var pData = document.createElement("input");
+      pData.type = "date";
+      pData.value = new Date().toISOString().slice(0, 10);
+      addPForm.appendChild(pData);
+      var pNota = document.createElement("input");
+      pNota.type = "text";
+      pNota.placeholder = "Nota (opcional)…";
+      pNota.className = "emprestimos-add-input";
+      addPForm.appendChild(pNota);
+      var pBtn = document.createElement("button");
+      pBtn.type = "button";
+      pBtn.className = "notes-add-btn";
+      pBtn.innerHTML = '<i class="ti ti-plus"></i> Lançar pagamento';
+      pBtn.addEventListener("click", function () {
+        var v = Number(pValor.value);
+        if (!v || v <= 0) { alert("Informe um valor de pagamento maior que zero."); return; }
+        pBtn.disabled = true;
+        addPayment(loan.id, v, pData.value, pNota.value.trim()).then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data && data.error) { alert(data.error); return; }
+            loadLoans();
+          }).catch(function () {}).finally(function () { pBtn.disabled = false; });
+      });
+      addPForm.appendChild(pBtn);
+      panel.appendChild(addPForm);
+
+      return panel;
+    }
+
+    function buildLoanCard(loan) {
+      var situacao = loanSituacao(loan);
+      var saldo = loanSaldoPendente(loan);
+      var total = typeof loan.valor === "number" ? loan.valor : 0;
+      var pctPago = total > 0 ? Math.min(100, Math.round(((total - saldo) / total) * 100)) : 100;
+
+      var card = document.createElement("div");
+      card.className = "emprestimos-card " + situacao;
+
+      var head = document.createElement("div");
+      head.className = "emprestimos-card-head";
+      var pessoaEl = document.createElement("span");
+      pessoaEl.className = "emprestimos-card-pessoa";
+      pessoaEl.textContent = loan.pessoa;
+      head.appendChild(pessoaEl);
+      var situacaoBadge = document.createElement("span");
+      situacaoBadge.className = "emprestimos-badge " + situacao;
+      situacaoBadge.innerHTML = '<i class="ti ' + loanSituacaoIcon(situacao) + '"></i> ' + loanSituacaoLabel(situacao);
+      head.appendChild(situacaoBadge);
+      card.appendChild(head);
+
+      if (loan.objetivo) {
+        var objetivoEl = document.createElement("div");
+        objetivoEl.className = "emprestimos-card-objetivo";
+        objetivoEl.textContent = loan.objetivo;
+        card.appendChild(objetivoEl);
+      }
+
+      var metaEl = document.createElement("div");
+      metaEl.className = "emprestimos-card-meta";
+      var vencimento = loanProximoVencimentoISO(loan);
+      var metaParts = [
+        "Emprestado em " + transacoesFmtDateBR(loan.data),
+        loanFormaPagamentoLabel(loan.formaPagamento, formaOptions)
+      ];
+      if (vencimento) metaParts.push("Próximo vencimento: " + transacoesFmtDateBR(vencimento));
+      metaEl.textContent = metaParts.join(" · ");
+      card.appendChild(metaEl);
+
+      var progressWrap = document.createElement("div");
+      progressWrap.className = "emprestimos-progress-wrap";
+      var progressBar = document.createElement("div");
+      progressBar.className = "emprestimos-progress-bar";
+      var progressFill = document.createElement("div");
+      progressFill.className = "emprestimos-progress-fill";
+      progressFill.style.width = pctPago + "%";
+      progressBar.appendChild(progressFill);
+      progressWrap.appendChild(progressBar);
+      var progressLabel = document.createElement("span");
+      progressLabel.className = "emprestimos-progress-label";
+      progressLabel.textContent = transacoesFmtMoney(total - saldo) + " de " + transacoesFmtMoney(total) + " (saldo: " + transacoesFmtMoney(saldo) + ")";
+      progressWrap.appendChild(progressLabel);
+      card.appendChild(progressWrap);
+
+      var actions = document.createElement("div");
+      actions.className = "emprestimos-card-actions";
+      var toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "emprestimos-toggle-payments-btn";
+      var expanded = state.expandedId === loan.id;
+      toggleBtn.innerHTML = '<i class="ti ' + (expanded ? "ti-chevron-up" : "ti-chevron-down") + '"></i> Pagamentos (' + (Array.isArray(loan.pagamentos) ? loan.pagamentos.length : 0) + ')';
+      toggleBtn.addEventListener("click", function () {
+        state.expandedId = expanded ? null : loan.id;
+        renderList();
+      });
+      actions.appendChild(toggleBtn);
+      var delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "emprestimos-row-delete";
+      delBtn.title = "Excluir empréstimo";
+      delBtn.innerHTML = '<i class="ti ti-trash"></i>';
+      delBtn.addEventListener("click", function () { deleteLoan(loan.id); });
+      actions.appendChild(delBtn);
+      card.appendChild(actions);
+
+      if (expanded) card.appendChild(buildPaymentsPanel(loan));
+
+      return card;
+    }
+
+    function renderList() {
+      listEl.innerHTML = "";
+      renderSummary();
+      var q = normalize(state.search.trim());
+      var visible = state.loans.filter(function (l) { return l.direcao === state.tab; });
+      if (q) {
+        visible = visible.filter(function (l) {
+          return normalize(l.pessoa || "").indexOf(q) !== -1 || normalize(l.objetivo || "").indexOf(q) !== -1;
+        });
+      }
+      if (!visible.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = state.tab === "receber" ? "Nenhum empréstimo a receber cadastrado." : "Nenhum empréstimo a pagar cadastrado.";
+        listEl.appendChild(empty);
+        return;
+      }
+      // pendentes primeiro (atrasado > aberto > pago), desempate por
+      // próximo vencimento (quem não tem data vai pro final).
+      var situacaoOrder = { atrasado: 0, aberto: 1, pago: 2 };
+      visible.slice().sort(function (a, b) {
+        var oa = situacaoOrder[loanSituacao(a)], ob = situacaoOrder[loanSituacao(b)];
+        if (oa !== ob) return oa - ob;
+        var va = loanProximoVencimentoISO(a) || "9999-99-99";
+        var vb = loanProximoVencimentoISO(b) || "9999-99-99";
+        return va.localeCompare(vb);
+      }).forEach(function (l) { listEl.appendChild(buildLoanCard(l)); });
+    }
+
+    function loadLoans() {
+      authFetch(cfg.templateWorkerUrl + "/loans").then(handle401).then(function (res) { return res.json(); })
+        .then(function (data) {
+          state.loans = (data && data.items) || [];
+          state.loaded = true;
+          statusEl.style.display = "none";
+          wrap.style.display = "";
+          renderList();
+        }).catch(function () {
+          statusEl.textContent = "Erro ao carregar empréstimos.";
+        });
+    }
+
+    loadLoans();
+  }
+
   // ---------------- "page.backupPage" — Backup dos Dados (pedido do
   // Georges: "muitas informações não estão armazenadas no Notion, mas no
   // app, como Listas [...] como consigo exportar estes dados atualizados
@@ -15514,6 +16057,12 @@
     // "Remédios" (pedido do Georges) — mesmo padrão exclusivo acima.
     if (page.remedios) {
       renderRemediosPage(container, page);
+      return;
+    }
+
+    // "Empréstimos" (pedido do Georges) — mesmo padrão exclusivo acima.
+    if (page.emprestimos) {
+      renderEmprestimosPage(container, page);
       return;
     }
 
@@ -16410,6 +16959,41 @@
     }).catch(function () { return []; });
   }
 
+  // Empréstimos (kind "loans" — pedido do Georges: "Sim, quero ser
+  // avisado" sobre vencimentos de empréstimos). 100% KV (GET /loans), sem
+  // Notion — mesmo espírito de fetchRemediosNotificationItems acima: busca
+  // a lista inteira 1x e filtra/monta os itens sintéticos na mão. Só
+  // empréstimos com um "próximo vencimento" calculado (loanProximoVencimentoISO
+  // — forma "unico" ou "mensal", NÃO pago) entram; "sem_data" e já pagos
+  // nunca aparecem aqui (nada a avisar). "id" embute a data do vencimento
+  // (não só o id do empréstimo) — pro caso "mensal", cada NOVA ocorrência
+  // mensal vira um aviso novo (mesmo raciocínio do "dateKey" em
+  // fetchBackupNotificationItems acima), em vez de ficar preso pra sempre
+  // no mês em que foi marcado como lido.
+  function fetchLoansNotificationItems(source) {
+    return authFetch(cfg.templateWorkerUrl + "/loans").then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+      return res.ok ? res.json() : { items: [] };
+    }).then(function (data) {
+      var items = (data && data.items) || [];
+      var out = [];
+      items.forEach(function (loan) {
+        var vencimento = loanProximoVencimentoISO(loan);
+        if (!vencimento) return;
+        var extraObj = {};
+        extraObj[source.dateProperty] = { start: vencimento + "T12:00:00" };
+        var direcaoLabel = loan.direcao === "pagar" ? "pagar a" : "receber de";
+        out.push({
+          id: "loan:" + loan.id + ":" + vencimento,
+          title: "Empréstimo — " + direcaoLabel + " " + loan.pessoa + " (" + transacoesFmtMoney(loanSaldoPendente(loan)) + ")",
+          url: location.origin + location.pathname + "#financeiro_emprestimos",
+          extra: extraObj
+        });
+      });
+      return out;
+    }).catch(function () { return []; });
+  }
+
   // ponto único chamado por computeNotifications — decide QUAL busca usar
   // conforme "source.kind" (default "notion", ver resolvedNotifSources
   // acima). Mantém buildNotificationsFromSource 100% agnóstico: ele só
@@ -16422,6 +17006,7 @@
     if (source.kind === "remedios") return fetchRemediosNotificationItems(source);
     if (source.kind === "provas") return fetchProvasNotificationItems(source);
     if (source.kind === "backup") return fetchBackupNotificationItems(source);
+    if (source.kind === "loans") return fetchLoansNotificationItems(source);
     return fetchNotionNotificationSourceItems(source);
   }
 
