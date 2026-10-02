@@ -2084,15 +2084,55 @@ html, body {
 .notif-bell-btn:hover { background: #f4f4f2; color: #666; }
 .notif-bell-btn:active { background: #f0f0ee; }
 .notif-bell-btn[aria-expanded="true"] { color: #4a90d9; background: #eaf2fb; }
+/* pedido do Georges: 4 estados pro sino, nunca "sem sinal nenhum" —
+   "paused" (esperando a página atual carregar antes de buscar
+   notificação) e "loading" (busca rodando de verdade) deixam o ícone
+   apagado (opacidade reduzida); fora disso o sino fica na cor normal. A
+   bolinha (.notif-bell-badge, abaixo) é quem diferencia os 4 estados de
+   verdade — ver updateNotifBellBadge() em app.js. Evitamos depender de um
+   ícone "-filled" (ex: ti-bell-filled) por não ter garantia de que esse
+   glifo existe na fonte carregada — MESMO motivo já documentado em
+   makeStarSvg() no app.js pra estrela de favoritar. */
+.notif-bell-btn.notif-bell-state-paused i.ti-bell,
+.notif-bell-btn.notif-bell-state-loading i.ti-bell {
+  opacity: 0.4;
+}
+/* bolinha no canto do sino — SEMPRE visível (nunca "display:none"), só
+   troca de forma/cor conforme o estado. "paused"/"loading" não dependem
+   de nenhum glifo de ícone (mesmo motivo acima): são desenhadas 100% em
+   CSS puro (2 tracinhos brancos pro pausado; anel giratório pro
+   carregando). */
 .notif-bell-badge {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 8px;
-  height: 8px;
+  top: 4px;
+  right: 4px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: #e03131;
   border: 1.5px solid #fff;
+  box-sizing: border-box;
+}
+.notif-bell-badge-alert { background: #e03131; }
+.notif-bell-badge-clear { background: #2f9e44; }
+.notif-bell-badge-paused {
+  background: #9a9a93;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+.notif-bell-badge-paused::before,
+.notif-bell-badge-paused::after {
+  content: "";
+  width: 1px;
+  height: 4px;
+  background: #fff;
+}
+.notif-bell-badge-loading {
+  background: transparent;
+  border: 1.5px solid #4a90d9;
+  border-top-color: transparent;
+  animation: notifRefreshSpin 0.7s linear infinite;
 }
 
 .notif-backdrop {
@@ -2218,6 +2258,16 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* "coloque uma data que sempre traga a data da última atualização completa
+   das notificações" (pedido do Georges) — 1ª linha de #notifPanelList,
+   re-renderizada a cada renderNotifList() (ver notifLastUpdatedLabel() em
+   app.js); discreta, não é um card. */
+.notif-last-updated {
+  font-size: 10.5px;
+  color: #b3b3ac;
+  padding: 0 2px 2px;
+  margin-top: -2px;
 }
 /* filtro rápido por categoria (pedido do Georges) — fica dentro do próprio
    #notifPanelList, primeiro filho, renderizado de novo a cada

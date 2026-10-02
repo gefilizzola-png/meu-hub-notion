@@ -105,6 +105,17 @@
   // <token do Google>" (ver auth.js) em cima dos headers que já existirem.
   // O Worker confere esse token antes de fazer qualquer coisa no Notion;
   // sem ele (ou com ele expirado/errado), a resposta vem 401.
+  // contador de requisições em andamento (pedido do Georges: "sempre
+  // prioriza carregar os dados da página que estou ou que eu abrir... as
+  // notificações atualizem somente quando a página já tiver carregado o
+  // que precisava do Notion") — incrementado/decrementado em TODA chamada
+  // (página normal OU notificação, sem distinção: o que importa é dar pro
+  // boot() um jeito de saber "tem alguma busca rodando agora?" ANTES de
+  // decidir soltar refreshNotifications — ver waitForNetworkIdle() e o
+  // boot() mais abaixo). Depois que as notificações começam, elas também
+  // mexem nesse contador, mas isso não importa mais, porque o boot() já
+  // passou pelo portão nessa hora.
+  var pendingAuthFetchCount = 0;
   function authFetch(url, options) {
     options = options || {};
     var headers = {};
@@ -112,7 +123,43 @@
     var authHeader = (window.Auth && Auth.authHeader()) || {};
     Object.keys(authHeader).forEach(function (k) { headers[k] = authHeader[k]; });
     options.headers = headers;
-    return fetch(url, options);
+    pendingAuthFetchCount++;
+    return fetch(url, options).then(function (res) {
+      pendingAuthFetchCount--;
+      return res;
+    }, function (err) {
+      pendingAuthFetchCount--;
+      throw err;
+    });
+  }
+
+  // espera a rede "assentar" (nenhuma authFetch em andamento por
+  // "settleMs" seguidos — não basta chegar a 0 uma vez, porque uma página
+  // pode disparar uma 2ª leva de buscas logo depois da 1ª terminar, ex:
+  // Promise.all encadeados) antes de chamar "cb". "maxWaitMs" é uma rede de
+  // segurança: se a página não "sossegar" nesse tempo (ex: Painel do Dia
+  // com muita coisa pra buscar), chama "cb" mesmo assim — preferível
+  // atrasar um pouco as notificações a nunca rodar.
+  function waitForNetworkIdle(cb, opts) {
+    var settleMs = (opts && opts.settleMs) || 500;
+    var maxWaitMs = (opts && opts.maxWaitMs) || 15000;
+    var start = Date.now();
+    var settleTimer = null;
+    function check() {
+      if (pendingAuthFetchCount === 0) {
+        if (!settleTimer) {
+          settleTimer = setTimeout(function () {
+            settleTimer = null;
+            if (pendingAuthFetchCount === 0) cb(); else check();
+          }, settleMs);
+        }
+      } else {
+        if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+        if (Date.now() - start > maxWaitMs) { cb(); return; }
+        setTimeout(check, 200);
+      }
+    }
+    check();
   }
 
   // ---------------- opções de filtro carregadas ao vivo do Notion ----------------
@@ -11748,14 +11795,20 @@
     var columnsToggleBtn = document.createElement("button");
     columnsToggleBtn.type = "button";
     columnsToggleBtn.className = "priorities-columns-toggle-btn";
-    function updateColumnsToggleBtnLabel() {
+    // "hiddenExtraCount" agora é dinâmico (depende de quantas colunas
+    // extras COUBERAM na tela, não mais um número fixo) — ver
+    // autoFitPassagensColumns() abaixo. Chamado sem argumento só na
+    // montagem inicial do botão (antes do 1º renderTable), onde ainda não
+    // sabemos quantas vão caber de verdade.
+    function updateColumnsToggleBtnLabel(hiddenExtraCount) {
+      if (hiddenExtraCount === undefined) hiddenExtraCount = defaultHiddenKeys.length;
       columnsToggleBtn.innerHTML = columnsExpanded
         ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
-        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+' + defaultHiddenKeys.length + ')';
+        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas' + (hiddenExtraCount ? " (+" + hiddenExtraCount + ")" : "");
     }
     columnsToggleBtn.addEventListener("click", function () {
       columnsExpanded = !columnsExpanded;
-      updateColumnsToggleBtnLabel();
+      updateColumnsToggleBtnLabel(columnsExpanded ? 0 : undefined);
       renderTable();
     });
     updateColumnsToggleBtnLabel();
@@ -11763,6 +11816,66 @@
     wrap.appendChild(columnsToolbar);
 
     wrap.appendChild(body);
+
+    // ---- auto-fit de colunas por largura de tela (pedido do Georges: "no
+    // computador, com a tela larga... conseguimos uma dinâmica onde ele
+    // identifica o tamanho da tela e exibe colunas numa quantidade
+    // suficiente que permita a leitura... desde que não me force a rolar a
+    // barra de rolagem horizontal") — complementa (não substitui) o botão
+    // "Mostrar todas as colunas": por padrão (columnsExpanded=false), em
+    // vez de mostrar SÓ as 8 fixas, revela progressivamente as extras (na
+    // MESMA ordem de prioridade de "defaultHiddenKeys", a ordem que já
+    // definimos) até a próxima não caber mais sem estourar a largura
+    // visível. "Mostrar todas as colunas" continua forçando TUDO, sem
+    // medição nenhuma. Funciona porque o <table> SEMPRE tem todas as <th>/
+    // <td> no DOM (só escondidas via CSS "hide-<key>" — ver styles.css) e
+    // é "inline-table"/shrink-to-fit (ver "5ª rodada" em styles.css): a
+    // largura de uma coluna não muda conforme as outras aparecem/somem,
+    // então dá pra medir todo mundo visível de uma vez só e decidir quem
+    // fica de fora, sem precisar remontar linha por linha.
+    function passagensAvailableWidth() {
+      var contentEl = document.getElementById("content");
+      return (contentEl ? contentEl.clientWidth : window.innerWidth) - 8;
+    }
+    function autoFitPassagensColumns(table, allKeys, extraKeysInOrder) {
+      var alwaysKeys = allKeys.filter(function (k) { return extraKeysInOrder.indexOf(k) === -1; });
+      allKeys.forEach(function (key) { table.classList.remove("hide-" + key); });
+      var ths = table.querySelectorAll("thead th");
+      var widthByKey = {};
+      ths.forEach(function (th, i) {
+        var key = allKeys[i];
+        if (key) widthByKey[key] = th.getBoundingClientRect().width;
+      });
+      var available = passagensAvailableWidth();
+      var running = 0;
+      alwaysKeys.forEach(function (k) { running += widthByKey[k] || 0; });
+      var shown = alwaysKeys.slice();
+      for (var i = 0; i < extraKeysInOrder.length; i++) {
+        var w = widthByKey[extraKeysInOrder[i]] || 0;
+        if (running + w > available) break;
+        running += w;
+        shown.push(extraKeysInOrder[i]);
+      }
+      allKeys.forEach(function (key) { table.classList.toggle("hide-" + key, shown.indexOf(key) === -1); });
+      return extraKeysInOrder.length - (shown.length - alwaysKeys.length);
+    }
+    // reage a redimensionar a janela (ex: maximizar/restaurar, girar
+    // tablet) — debounced pra não remedir a cada pixel do arrasto. Some
+    // sozinho quando a página sai de tela (wrap não está mais no
+    // document), em vez de ficar acumulando listener a cada visita.
+    var passagensResizeTimer = null;
+    function handlePassagensResize() {
+      if (!document.body.contains(wrap)) { window.removeEventListener("resize", handlePassagensResize); return; }
+      if (columnsExpanded) return;
+      clearTimeout(passagensResizeTimer);
+      passagensResizeTimer = setTimeout(function () {
+        var liveTable = body.querySelector(".passagens-table");
+        if (!liveTable) return;
+        var hiddenExtraCount = autoFitPassagensColumns(liveTable, allColumnKeys, defaultHiddenKeys);
+        updateColumnsToggleBtnLabel(hiddenExtraCount);
+      }, 180);
+    }
+    window.addEventListener("resize", handlePassagensResize);
 
     function buildBodyCell(it, key) {
       var cell = document.createElement("td");
@@ -11895,13 +12008,12 @@
       count.textContent = filtered.length + (filtered.length === 1 ? " passagem" : " passagens");
       body.appendChild(count);
 
-      var visible = columnsExpanded ? allColumnKeys.slice() : allColumnKeys.filter(function (k) { return defaultHiddenKeys.indexOf(k) === -1; });
-
+      // começa com TUDO visível — autoFitPassagensColumns() (ou a força-
+      // tudo de columnsExpanded) decide o que fica escondido DEPOIS de
+      // medir, lá embaixo (ver comentário grande acima, perto de onde
+      // autoFitPassagensColumns é definida).
       var table = document.createElement("table");
       table.className = "financeiro-table passagens-table";
-      allColumnKeys.forEach(function (key) {
-        table.classList.toggle("hide-" + key, visible.indexOf(key) === -1);
-      });
       var thead = document.createElement("thead");
       var headRow = document.createElement("tr");
       COLS.forEach(function (col) {
@@ -11947,6 +12059,14 @@
       });
       table.appendChild(tbody);
       body.appendChild(table);
+
+      if (columnsExpanded) {
+        allColumnKeys.forEach(function (key) { table.classList.remove("hide-" + key); });
+        updateColumnsToggleBtnLabel(0);
+      } else {
+        var hiddenExtraCount = autoFitPassagensColumns(table, allColumnKeys, defaultHiddenKeys);
+        updateColumnsToggleBtnLabel(hiddenExtraCount);
+      }
     }
 
     function applyState() { renderTable(); }
@@ -18381,7 +18501,17 @@
   // como lido AO MENOS UMA VEZ, mesmo que "repeatWhilePending" já tenha
   // tirado ele de readIds de novo depois. Ver updateNotifBellBadge/
   // toggleNotifRead mais abaixo.
-  var notifState = { items: [], readIds: [], everReadIds: [], settings: null, sources: [], hiddenSourceIds: [], soloSourceId: null, mode: "unread", view: "list", loaded: false, loading: false };
+  // "waitingForPage" (pedido do Georges: "sempre prioriza carregar os
+  // dados da página que estou ou que eu abrir") — true enquanto
+  // scheduleNotifRefresh() está segurando uma busca de notificações (a 1ª
+  // do boot OU qualquer uma do ciclo de 5min) pra priorizar a página que
+  // tá carregando no momento (ver scheduleNotifRefresh/waitForNetworkIdle
+  // mais abaixo) — NÃO cancela uma busca que já estava rolando, só atrasa
+  // o INÍCIO de uma nova. "lastUpdatedAt" (pedido do Georges: "coloque uma
+  // data que sempre traga a data da última atualização completa") — só é
+  // carimbado quando refreshNotifications TERMINA com sucesso, não quando
+  // começa.
+  var notifState = { items: [], readIds: [], everReadIds: [], settings: null, sources: [], hiddenSourceIds: [], soloSourceId: null, mode: "unread", view: "list", loaded: false, loading: false, waitingForPage: false, lastUpdatedAt: null };
 
   function leadTimeMs(lt) {
     return lt.amount * (lt.unit === "hours" ? 3600000 : 86400000);
@@ -19278,22 +19408,51 @@
   // sino nas reaparições seguintes. "everReadIds" (persistente) é quem
   // decide isso: uma notificação só conta pro badge se estiver não-lida E
   // (não for repeatWhilePending OU nunca tiver sido lida antes).
-  function updateNotifBellBadge() {
-    var badge = document.getElementById("notifBellBadge");
-    if (!badge) return;
+  function notifHasUnread() {
     var readSet = {};
     notifState.readIds.forEach(function (id) { readSet[id] = true; });
     var everReadSet = {};
     notifState.everReadIds.forEach(function (id) { everReadSet[id] = true; });
     var sourceById = {};
     notifState.sources.forEach(function (s) { sourceById[s.id] = s; });
-    var unread = notifState.items.filter(function (n) {
+    return notifState.items.some(function (n) {
       if (readSet[n.id]) return false;
       var lt = findNotifLeadTime(sourceById[n.sourceId], n.leadTimeId);
       if (lt && lt.repeatWhilePending && everReadSet[n.id]) return false;
       return true;
-    }).length;
-    badge.style.display = unread ? "" : "none";
+    });
+  }
+
+  // pedido do Georges: o sino passa a ter 4 estados visuais (nunca fica
+  // "sem sinal nenhum" — sempre dá pra saber o que tá acontecendo só de
+  // olhar pro sino):
+  //   "paused"  — apagado (opacidade reduzida via CSS) + bolinha cinza com
+  //               2 tracinhos — esperando a página atual terminar de
+  //               carregar antes de buscar notificação (ver
+  //               scheduleNotifRefresh/notifState.waitingForPage).
+  //   "loading" — apagado + bolinha azul girando — a busca de notificação
+  //               em si está rodando agora (notifState.loading).
+  //   "idle" com pendência    — normal (cor cheia) + bolinha VERMELHA.
+  //   "idle" sem pendência    — normal (cor cheia) + bolinha VERDE (antes
+  //               a bolinha simplesmente desaparecia quando não tinha
+  //               nada pendente; agora ela sempre existe, só troca de
+  //               cor/forma conforme o estado).
+  // Chamada em toda transição de notifState.loading/waitingForPage, e
+  // depois de qualquer mudança nos itens/leitura (mesmos pontos de
+  // chamada de antes, só o nome da função ficou — o corpo é que mudou).
+  function updateNotifBellBadge() {
+    var bellBtn = document.getElementById("notifBellBtn");
+    var badge = document.getElementById("notifBellBadge");
+    if (!bellBtn || !badge) return;
+    var state = notifState.loading ? "loading" : (notifState.waitingForPage ? "paused" : "idle");
+    bellBtn.classList.remove("notif-bell-state-loading", "notif-bell-state-paused", "notif-bell-state-idle");
+    bellBtn.classList.add("notif-bell-state-" + state);
+    badge.style.display = "";
+    badge.className = "notif-bell-badge notif-bell-badge-" + (
+      state === "loading" ? "loading" :
+      state === "paused" ? "paused" :
+      (notifHasUnread() ? "alert" : "clear")
+    );
   }
 
   // MESMO padrão já usado em formatDateRangeExtra (busca acima): campo do
@@ -19481,6 +19640,11 @@
   function refreshNotifications() {
     if (notifState.loading) return Promise.resolve();
     notifState.loading = true;
+    // "waitingForPage" só fazia sentido ENQUANTO esperava — a partir daqui
+    // a busca já começou de verdade, então sai do estado "paused" e entra
+    // no "loading" (ver updateNotifBellBadge).
+    notifState.waitingForPage = false;
+    updateNotifBellBadge();
     return fetchNotifSettings().then(function (savedSettings) {
       notifState.settings = savedSettings;
       notifState.sources = resolvedNotifSources(savedSettings);
@@ -19492,11 +19656,45 @@
       notifState.everReadIds = applied.everReadIds;
       notifState.loaded = true;
       notifState.loading = false;
+      // só carimba "última atualização completa" quando a busca termina
+      // com sucesso (pedido do Georges) — nunca no início, nem em erro.
+      notifState.lastUpdatedAt = new Date();
       updateNotifBellBadge();
       processNotifTriggers(notifState.items);
       if (notifState.view === "settings") renderNotifSettings(); else renderNotifList();
     }).catch(function () {
       notifState.loading = false;
+      updateNotifBellBadge();
+    });
+  }
+
+  // pedido do Georges: "sempre prioriza carregar os dados da página que
+  // estou ou que eu abrir... de modo que as notificações atualizem
+  // somente quando a página que eu estiver já tiver carregado o que
+  // precisava do Notion" — isso vale pra QUALQUER atualização de
+  // notificação (1ª do boot, ciclo de 5min), não só a inicial. Em vez de
+  // chamar refreshNotifications() direto, passa por aqui: entra em
+  // "paused" (sino apagado + bolinha cinza) e só solta a busca de verdade
+  // quando a rede ficar ociosa (nenhum authFetch em andamento — inclui os
+  // fetches de QUALQUER página que o usuário tenha aberto nesse meio-
+  // tempo, já que o contador é global). Se o usuário trocar de página
+  // bem na hora em que a espera ia liberar, o contador volta a subir e a
+  // espera continua — a notificação só entra depois que a página mais
+  // recente também tiver assentado. LIMITAÇÃO conhecida: isso só atrasa o
+  // INÍCIO de uma busca nova — não existe (ainda) um jeito de abortar uma
+  // busca de notificação que já estava em andamento quando o usuário
+  // navegou (exigiria AbortController em cada fonte individual); nesse
+  // caso ela só termina em segundo plano, sem travar a página nova.
+  function scheduleNotifRefresh() {
+    if (notifState.loading || notifState.waitingForPage) return;
+    notifState.waitingForPage = true;
+    updateNotifBellBadge();
+    waitForNetworkIdle(function () {
+      // se enquanto esperava o usuário já tiver aberto o painel e pedido
+      // um refresh manual (botão da Central), refreshNotifications() já
+      // vai estar com loading=true e vai simplesmente devolver — sem
+      // duplicar a busca.
+      refreshNotifications();
     });
   }
 
@@ -19824,12 +20022,13 @@
     if (notifState.view === "settings") renderNotifSettings();
     saveNotifSettings();
     notifState.loading = true;
+    updateNotifBellBadge();
     computeNotifications(notifState.sources).then(function (items) {
       notifState.items = items;
       notifState.loading = false;
       updateNotifBellBadge();
       if (notifState.view === "list") renderNotifList();
-    }).catch(function () { notifState.loading = false; });
+    }).catch(function () { notifState.loading = false; updateNotifBellBadge(); });
   }
 
   function findNotifSource(sourceId) {
@@ -20453,10 +20652,25 @@
     notifState.soloSourceId = sourceId;
   }
 
+  // pedido do Georges: "dentro da aba lateral das Notificações, coloque uma
+  // data que sempre traga a data da última atualização completa das
+  // notificações" — só é carimbada em refreshNotifications() quando a
+  // busca termina com SUCESSO (nunca no início nem em erro), então esse
+  // texto reflete sempre o último dado de verdade que o painel está
+  // mostrando, mesmo que uma busca mais recente tenha falhado.
+  function notifLastUpdatedLabel() {
+    if (!notifState.lastUpdatedAt) return notifState.waitingForPage ? "aguardando a página carregar…" : "ainda não atualizado";
+    return "atualizado às " + notifDateFmtTimeSP.format(notifState.lastUpdatedAt) + " de " + notifDateFmtDateSP.format(notifState.lastUpdatedAt);
+  }
+
   function renderNotifList() {
     var listEl = document.getElementById("notifPanelList");
     if (!listEl) return;
     listEl.innerHTML = "";
+    var lastUpdatedEl = document.createElement("div");
+    lastUpdatedEl.className = "notif-last-updated";
+    lastUpdatedEl.textContent = notifLastUpdatedLabel();
+    listEl.appendChild(lastUpdatedEl);
     if (!notifState.loaded) {
       var loading = document.createElement("p");
       loading.className = "empty";
@@ -21104,12 +21318,16 @@
     buildIndex();
     collectSearchInputs();
 
-    // Central de Notificações — 1ª busca assim que loga (não trava o boot,
-    // roda em paralelo com o resto), + atualiza sozinha a cada 5min (fica
-    // ligado numa aba aberta o dia todo sem precisar recarregar a página
-    // pra descobrir um aviso novo que entrou na janela de antecedência).
-    refreshNotifications();
-    setInterval(refreshNotifications, 5 * 60 * 1000);
+    // Central de Notificações — pedido do Georges: "sempre prioriza carregar
+    // os dados da página que estou ou que eu abrir... de modo que as
+    // notificações atualizem somente quando a página que eu estiver já
+    // tiver carregado o que precisava do Notion" — vale pra 1ª busca do
+    // boot E pra cada ciclo de 5min (ver scheduleNotifRefresh() acima, perto
+    // de refreshNotifications). Rede trava por no máx. 15s (maxWaitMs) — se
+    // a página demorar muito, a notificação busca de qualquer forma, não
+    // fica esperando pra sempre.
+    scheduleNotifRefresh();
+    setInterval(scheduleNotifRefresh, 5 * 60 * 1000);
 
     // service worker mínimo (canal "Notificação nativa" — ver sw.js: exigido
     // pelo Chrome no Android pra chamar showNotification, no desktop nem
