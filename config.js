@@ -1657,7 +1657,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-02 19:44",
+  appVersion: "2026-10-02 20:26",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2757,6 +2757,21 @@ const APP_CONFIG = {
       remedios: true
     },
 
+    // "Ponto Eletrônico" (pedido do Georges — Pessoal->Profissional->PMF):
+    // registro MANUAL, dia a dia, das marcações que ele bate no sistema
+    // próprio da PMF (sem API nenhuma, 100% digitado aqui) — número
+    // variável de pares entrada/saída por dia (ele pode bater até ~8x no
+    // mesmo dia fazendo pequenos turnos), carga horária (6h/8h) escolhida
+    // por competência/mês (hoje 8h, "ampliação de jornada" temporária, mas
+    // deve voltar pra 6h em breve), cálculo de horas trabalhadas/saldo por
+    // dia e saldo acumulado do mês. Fins de semana/feriados contam 1:1
+    // (sem multiplicador — "não tem intuito financeiro, é só pra ajustar o
+    // ponto mesmo"). Ver renderPontoEletronicoPage no app.js.
+    ponto_eletronico: {
+      title: "Ponto Eletrônico",
+      pontoEletronico: true
+    },
+
     criar_paginas: {
       title: "Criar páginas",
       items: [
@@ -3086,6 +3101,12 @@ const APP_CONFIG = {
         // Supermercados para Categorias->Pessoal->Listas"). Saiu de
         // "entrada.items" (pasta "Pastas", raiz do menu) pra morar aqui.
         { label: "Listas", type: "page", target: "cat_pessoal_listas", icon: "list" },
+        // "Profissional" (pedido do Georges — "Pessoal -> Profissional ->
+        // PMF -> Ponto Eletrônico": páginas relativas às questões
+        // FUNCIONAIS/pessoais dele na PMF, por isso mora dentro de
+        // Pessoal e não dentro da categoria "Profissional" de topo, que é
+        // outra coisa) — ordem alfabética entre Listas e Saúde.
+        { label: "Profissional", type: "page", target: "cat_pessoal_profissional", icon: "ti-briefcase" },
         // "Saúde" (pedido do Georges — "Categoria -> Pessoal -> Saúde ->
         // Exames e Consultas") — ordem alfabética entre Listas e Vitor
         // (regra permanente de pastas, ver comentário de "financeiro"
@@ -3107,6 +3128,21 @@ const APP_CONFIG = {
       title: "Saúde",
       items: [
         { label: "Exames e Consultas", type: "page", target: "consultas_exames", icon: "ti-stethoscope" }
+      ]
+    },
+
+    // "Profissional" dentro de Pessoal (pedido do Georges) — pasta simples
+    // com 1 item por enquanto (PMF), mesmo espírito de cat_pessoal_vitor.
+    cat_pessoal_profissional: {
+      title: "Profissional",
+      items: [
+        { label: "PMF", type: "page", target: "cat_pessoal_profissional_pmf", icon: "ti-briefcase" }
+      ]
+    },
+    cat_pessoal_profissional_pmf: {
+      title: "PMF",
+      items: [
+        { label: "Ponto Eletrônico", type: "page", target: "ponto_eletronico", icon: "ti-clock" }
       ]
     },
 

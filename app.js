@@ -16530,6 +16530,444 @@
     loadItems();
   }
 
+  // ---------------- "page.pontoEletronico" — Ponto Eletrônico (Pessoal->
+  // Profissional->PMF), 100% KV, nunca Notion ----------------
+  // Pedido do Georges: controle MANUAL do ponto eletrônico da PMF (o Meu
+  // Hub não tem nenhum acesso à API do sistema de ponto da prefeitura).
+  // Cada dia do mês (inclusive fins de semana) pode ter um número VARIÁVEL
+  // de pares entrada/saída — "em alguns dias, eu posso bater o ponto umas
+  // 8 vezes, caso vá fazendo pequenos turnos" — por isso NÃO é um layout
+  // fixo de 4 pares de colunas como o sistema da PMF usa; é uma lista por
+  // dia, podendo crescer/encolher livremente (botão "+ par"/"remover").
+  // Carga horária (6h/8h) é escolhida por COMPETÊNCIA/mês (PUT /ponto-mes)
+  // porque o Georges está temporariamente em 8h (ampliação de jornada) e
+  // deve voltar pra 6h — meses passados não devem mudar quando ele alterar
+  // a carga do mês atual. Fins de semana/feriados contam HORA SIMPLES
+  // (1 pra 1, sem meta) — pedido explícito: "quando eu trabalhar nos finais
+  // de semana ou feriados [...] pode considerar como hora simples (1 para
+  // 1), pois nao tem intuito financeiro" — por isso o "esperado" (minutos)
+  // é 0 nesses dias, e todo minuto trabalhado vira saldo positivo direto,
+  // sem multiplicador. A comparação com os prints do sistema da PMF (quais
+  // dias estão ok/pendentes/precisam de ajuste) é um tema EXPLICITAMENTE
+  // deixado pra uma conversa futura separada — esta rodada é só o
+  // formulário manual de entrada de dados.
+
+  var PONTO_HORA_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  var PONTO_WEEKDAY_NAMES = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+  var PONTO_WEEKDAY_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+  function pontoPad2(n) { return n < 10 ? "0" + n : "" + n; }
+  function pontoDaysInMonth(y, mZeroBased) { return new Date(y, mZeroBased + 1, 0).getDate(); }
+
+  // minutos desde 00:00 a partir de "HH:MM" — null se inválido.
+  function pontoHoraToMin(hhmm) {
+    if (!PONTO_HORA_REGEX.test(hhmm || "")) return null;
+    var parts = hhmm.split(":");
+    return Number(parts[0]) * 60 + Number(parts[1]);
+  }
+
+  // minutos trabalhados num dia, somando só os pares COMPLETOS
+  // (entrada+saída válidas) — um par com saída ausente/null (ainda em
+  // aberto ou "sem par"/ímpar, no vocabulário da PMF) não entra na soma.
+  // Se a saída vier antes da entrada (turno que viraria a noite — não
+  // esperado no uso real, mas por segurança), o par é ignorado também.
+  function pontoDiaTrabalhadasMin(pairs) {
+    var arr = Array.isArray(pairs) ? pairs : [];
+    var total = 0;
+    arr.forEach(function (p) {
+      var e = pontoHoraToMin(p && p.entrada);
+      var s = pontoHoraToMin(p && p.saida);
+      if (e == null || s == null) return;
+      if (s <= e) return;
+      total += (s - e);
+    });
+    return total;
+  }
+
+  // true se existe algum par com entrada válida mas sem saída válida —
+  // espelha o badge "⚠ Ímpar" / "batida ímpar · parcial" do sistema da PMF.
+  function pontoDiaImpar(pairs) {
+    var arr = Array.isArray(pairs) ? pairs : [];
+    return arr.some(function (p) {
+      var e = pontoHoraToMin(p && p.entrada);
+      var s = pontoHoraToMin(p && p.saida);
+      return e != null && s == null;
+    });
+  }
+
+  // "esperado" (minutos) — cargaHoraria*60 em dia de semana sem feriado;
+  // 0 em fim de semana OU feriado (hora simples 1-pra-1, ver comentário da
+  // seção acima). weekday: 0=domingo..6=sábado (Date#getDay()).
+  function pontoDiaEsperadoMin(weekday, feriado, cargaHorariaHoras) {
+    if (feriado) return 0;
+    if (weekday === 0 || weekday === 6) return 0;
+    var carga = (cargaHorariaHoras === 6 || cargaHorariaHoras === 8) ? cargaHorariaHoras : 8;
+    return carga * 60;
+  }
+
+  function pontoDiaSaldoMin(trabalhadasMin, esperadoMin) {
+    return trabalhadasMin - esperadoMin;
+  }
+
+  // "+1h23" / "-0h40" / "0h00" — mesmo espírito do "Saldo" do sistema da
+  // PMF (pode ser negativo).
+  function pontoFormatSaldoMin(min) {
+    var sign = min < 0 ? "-" : (min > 0 ? "+" : "");
+    var abs = Math.abs(min);
+    var h = Math.floor(abs / 60), m = abs % 60;
+    return sign + h + "h" + pontoPad2(m);
+  }
+
+  function pontoFormatMin(min) {
+    var abs = Math.abs(min || 0);
+    var h = Math.floor(abs / 60), m = abs % 60;
+    return h + "h" + pontoPad2(m);
+  }
+
+  // "YYYY-MM-DD" a partir de ano/mês(0-based)/dia — mesmo padrão de chave
+  // usado em todo o resto do app (Financeiro, Passagens etc.).
+  function pontoDateISO(y, mZeroBased, d) {
+    return y + "-" + pontoPad2(mZeroBased + 1) + "-" + pontoPad2(d);
+  }
+
+  function renderPontoEletronicoPage(container, page) {
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+
+    var state = { month: financeiroCurrentMonth(), days: {}, cargaHoraria: 8, loaded: false };
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando…";
+    container.appendChild(statusEl);
+
+    var wrap = document.createElement("div");
+    wrap.className = "ponto-wrap";
+    wrap.style.display = "none";
+    container.appendChild(wrap);
+
+    // ---- navegação de mês (mesmo padrão visual de Financeiro — classes
+    // financeiro-month-* reaproveitadas, são só CSS genérico de navegação
+    // por mês, sem nada específico de dinheiro). ----
+    var nav = document.createElement("div");
+    nav.className = "financeiro-month-nav";
+    var prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "financeiro-month-btn";
+    prevBtn.title = "Mês anterior";
+    prevBtn.innerHTML = '<i class="ti ti-chevron-left"></i>';
+    prevBtn.addEventListener("click", function () { changeMonth(financeiroShiftMonth(state.month, -1)); });
+    nav.appendChild(prevBtn);
+    var monthLabel = document.createElement("span");
+    monthLabel.className = "financeiro-month-label";
+    nav.appendChild(monthLabel);
+    var nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "financeiro-month-btn";
+    nextBtn.title = "Próximo mês";
+    nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
+    nextBtn.addEventListener("click", function () { changeMonth(financeiroShiftMonth(state.month, 1)); });
+    nav.appendChild(nextBtn);
+    wrap.appendChild(nav);
+
+    // ---- carga horária da competência (6h x 8h — pedido do Georges:
+    // "estou fazendo ampliação de jornada... mas como em breve devo
+    // voltar pra 6h, para cada competência/mês, a página deve me permitir
+    // escolher") — PUT /ponto-mes, não afeta meses já passados. ----
+    var cargaRow = document.createElement("div");
+    cargaRow.className = "ponto-carga-row";
+    var cargaLabel = document.createElement("span");
+    cargaLabel.className = "ponto-carga-label";
+    cargaLabel.textContent = "Carga horária desta competência:";
+    cargaRow.appendChild(cargaLabel);
+    var carga6Btn = document.createElement("button");
+    carga6Btn.type = "button";
+    carga6Btn.className = "ponto-carga-btn";
+    carga6Btn.textContent = "6h";
+    var carga8Btn = document.createElement("button");
+    carga8Btn.type = "button";
+    carga8Btn.className = "ponto-carga-btn";
+    carga8Btn.textContent = "8h";
+    function updateCargaBtns() {
+      carga6Btn.classList.toggle("active", state.cargaHoraria === 6);
+      carga8Btn.classList.toggle("active", state.cargaHoraria === 8);
+    }
+    carga6Btn.addEventListener("click", function () { saveMesConfig(6); });
+    carga8Btn.addEventListener("click", function () { saveMesConfig(8); });
+    cargaRow.appendChild(carga6Btn);
+    cargaRow.appendChild(carga8Btn);
+    wrap.appendChild(cargaRow);
+
+    // ---- resumo do mês (saldo acumulado — só soma dias com algum
+    // registro salvo; dias ainda não preenchidos ficam fora da conta, pra
+    // não virar um "déficit" artificial de dias que o Georges simplesmente
+    // ainda não lançou). ----
+    var summaryRow = document.createElement("div");
+    summaryRow.className = "ponto-summary-row";
+    var summarySaldoEl = document.createElement("span");
+    summarySaldoEl.className = "ponto-summary-saldo";
+    summaryRow.appendChild(summarySaldoEl);
+    wrap.appendChild(summaryRow);
+
+    var tableEl = document.createElement("div");
+    tableEl.className = "ponto-table";
+    wrap.appendChild(tableEl);
+
+    function changeMonth(newMonth) {
+      state.month = newMonth;
+      loadMonth();
+    }
+
+    function saveMesConfig(carga) {
+      carga6Btn.disabled = true; carga8Btn.disabled = true;
+      authFetch(cfg.templateWorkerUrl + "/ponto-mes?month=" + encodeURIComponent(state.month), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cargaHoraria: carga })
+      }).then(handle401).then(function () {
+        state.cargaHoraria = carga;
+        renderTable();
+      }).catch(function () {
+        statusEl.textContent = "Erro ao salvar carga horária.";
+        statusEl.style.display = "";
+      }).finally(function () { carga6Btn.disabled = false; carga8Btn.disabled = false; });
+    }
+
+    // salva um dia (pairs+feriado) — se vier vazio (sem pares e sem
+    // feriado), o worker.js apaga a chave da KV em vez de guardar "nada"
+    // (ver handlePontoDiaUpdate). Devolve a promise pra quem chamou poder
+    // reagir (ex: recolorir a célula só depois de confirmar salvo).
+    function saveDia(dateStr, pairs, feriado) {
+      return authFetch(cfg.templateWorkerUrl + "/ponto-dia?date=" + encodeURIComponent(dateStr), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairs: pairs, feriado: feriado })
+      }).then(handle401).then(function (res) { return res.json(); }).then(function (data) {
+        if (data.deleted) { delete state.days[dateStr]; }
+        else if (data.item) { state.days[dateStr] = data.item; }
+      });
+    }
+
+    function loadMonth() {
+      wrap.style.display = "none";
+      statusEl.style.display = "";
+      statusEl.textContent = "Carregando…";
+      authFetch(cfg.templateWorkerUrl + "/ponto?month=" + encodeURIComponent(state.month))
+        .then(handle401).then(function (res) { return res.json(); }).then(function (data) {
+          state.days = {};
+          (data.days || []).forEach(function (d) { if (d && d.date) state.days[d.date] = d; });
+          state.cargaHoraria = (data.cargaHoraria === 6 || data.cargaHoraria === 8) ? data.cargaHoraria : 8;
+          state.loaded = true;
+          statusEl.style.display = "none";
+          wrap.style.display = "";
+          renderTable();
+        }).catch(function () {
+          statusEl.textContent = "Erro ao carregar Ponto Eletrônico.";
+          statusEl.style.display = "";
+        });
+    }
+
+    // constrói a linha editável de pares entrada/saída de um dia — número
+    // VARIÁVEL de pares (pedido do Georges: "em alguns dias, eu posso
+    // bater o ponto umas 8 vezes"), cada par com botão de remover + botão
+    // "+ par" ao final. Toda edição recalcula a linha (trabalhadas/saldo)
+    // na hora e salva (debounce leve, só pra não disparar 1 PUT por
+    // tecla — o "commit" real é o próprio valor já validado do <input
+    // type="time">, que só dispara "change" quando o usuário termina de
+    // escolher o horário).
+    function buildPairsEditor(dateStr, dayData, onLocalChange) {
+      var pairsWrap = document.createElement("div");
+      pairsWrap.className = "ponto-pairs";
+      var pairs = (dayData.pairs || []).map(function (p) { return { entrada: p.entrada || "", saida: p.saida || "" }; });
+
+      function currentCleanPairs() {
+        var out = [];
+        pairs.forEach(function (p) {
+          if (!PONTO_HORA_REGEX.test(p.entrada || "")) return;
+          out.push({ entrada: p.entrada, saida: PONTO_HORA_REGEX.test(p.saida || "") ? p.saida : null });
+        });
+        return out;
+      }
+
+      var feriadoChecked = !!dayData.feriado;
+
+      function persist() {
+        var clean = currentCleanPairs();
+        saveDia(dateStr, clean, feriadoChecked).then(function () {
+          onLocalChange();
+        }).catch(function () {
+          statusEl.textContent = "Erro ao salvar " + dateStr + ".";
+          statusEl.style.display = "";
+        });
+      }
+
+      function renderPairs() {
+        pairsWrap.innerHTML = "";
+        pairs.forEach(function (p, idx) {
+          var row = document.createElement("div");
+          row.className = "ponto-pair";
+          var eIn = document.createElement("input");
+          eIn.type = "time";
+          eIn.className = "ponto-pair-input";
+          eIn.value = p.entrada || "";
+          eIn.addEventListener("change", function () { p.entrada = eIn.value || ""; persist(); });
+          row.appendChild(eIn);
+          var sep = document.createElement("span");
+          sep.className = "ponto-pair-sep";
+          sep.textContent = "–";
+          row.appendChild(sep);
+          var sOut = document.createElement("input");
+          sOut.type = "time";
+          sOut.className = "ponto-pair-input";
+          sOut.value = p.saida || "";
+          sOut.addEventListener("change", function () { p.saida = sOut.value || ""; persist(); });
+          row.appendChild(sOut);
+          var rmBtn = document.createElement("button");
+          rmBtn.type = "button";
+          rmBtn.className = "ponto-pair-remove-btn";
+          rmBtn.innerHTML = '<i class="ti ti-x"></i>';
+          rmBtn.title = "Remover este horário";
+          rmBtn.addEventListener("click", function () {
+            pairs.splice(idx, 1);
+            renderPairs();
+            persist();
+          });
+          row.appendChild(rmBtn);
+          pairsWrap.appendChild(row);
+        });
+        var addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "ponto-pair-add-btn";
+        addBtn.innerHTML = '<i class="ti ti-plus"></i> Horário';
+        addBtn.addEventListener("click", function () {
+          pairs.push({ entrada: "", saida: "" });
+          renderPairs();
+        });
+        pairsWrap.appendChild(addBtn);
+      }
+      renderPairs();
+
+      return {
+        el: pairsWrap,
+        getCleanPairs: currentCleanPairs,
+        setFeriado: function (v) { feriadoChecked = v; persist(); }
+      };
+    }
+
+    function renderTable() {
+      monthLabel.textContent = financeiroMonthLabel(state.month);
+      updateCargaBtns();
+      tableEl.innerHTML = "";
+
+      var parts = state.month.split("-").map(Number);
+      var year = parts[0], monthIdx0 = parts[1] - 1;
+      var totalDays = pontoDaysInMonth(year, monthIdx0);
+      var saldoAcumuladoMin = 0;
+      var temAlgumRegistro = false;
+
+      for (var day = 1; day <= totalDays; day++) {
+        var dateStr = pontoDateISO(year, monthIdx0, day);
+        var dayData = state.days[dateStr] || { date: dateStr, pairs: [], feriado: false };
+        var weekday = new Date(year, monthIdx0, day).getDay();
+        var isWeekend = weekday === 0 || weekday === 6;
+
+        var rowEl = document.createElement("div");
+        rowEl.className = "ponto-row" + (isWeekend ? " ponto-row-weekend" : "") + (dayData.feriado ? " ponto-row-feriado" : "");
+
+        var dateCell = document.createElement("div");
+        dateCell.className = "ponto-cell ponto-cell-date";
+        dateCell.innerHTML = '<span class="ponto-weekday">' + PONTO_WEEKDAY_SHORT[weekday] + '</span><span class="ponto-day">' + pontoPad2(day) + "/" + pontoPad2(monthIdx0 + 1) + "</span>";
+        rowEl.appendChild(dateCell);
+
+        var feriadoCell = document.createElement("div");
+        feriadoCell.className = "ponto-cell ponto-cell-feriado";
+        var feriadoLabel = document.createElement("label");
+        feriadoLabel.className = "ponto-feriado-label";
+        var feriadoCheck = document.createElement("input");
+        feriadoCheck.type = "checkbox";
+        feriadoCheck.checked = !!dayData.feriado;
+        feriadoLabel.appendChild(feriadoCheck);
+        feriadoLabel.appendChild(document.createTextNode(" Feriado"));
+        feriadoCell.appendChild(feriadoLabel);
+        rowEl.appendChild(feriadoCell);
+
+        var pairsCell = document.createElement("div");
+        pairsCell.className = "ponto-cell ponto-cell-pairs";
+        rowEl.appendChild(pairsCell);
+
+        var trabalhadasCell = document.createElement("div");
+        trabalhadasCell.className = "ponto-cell ponto-cell-trabalhadas";
+        rowEl.appendChild(trabalhadasCell);
+
+        var saldoCell = document.createElement("div");
+        saldoCell.className = "ponto-cell ponto-cell-saldo";
+        rowEl.appendChild(saldoCell);
+
+        function updateCalcCells(pairsEditorApi, feriadoNow) {
+          var cleanPairs = pairsEditorApi.getCleanPairs();
+          var hasRecord = cleanPairs.length > 0 || feriadoNow;
+          var trabalhadasMin = pontoDiaTrabalhadasMin(cleanPairs);
+          var esperadoMin = pontoDiaEsperadoMin(weekday, feriadoNow, state.cargaHoraria);
+          var saldoMin = pontoDiaSaldoMin(trabalhadasMin, esperadoMin);
+          var impar = pontoDiaImpar(cleanPairs);
+          trabalhadasCell.innerHTML = hasRecord
+            ? pontoFormatMin(trabalhadasMin) + (impar ? ' <span class="ponto-impar-badge" title="Tem horário sem par (sem saída registrada)">⚠ Ímpar</span>' : "")
+            : "—";
+          saldoCell.textContent = hasRecord ? pontoFormatSaldoMin(saldoMin) : "—";
+          saldoCell.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
+          if (hasRecord && saldoMin > 0) saldoCell.classList.add("ponto-saldo-positivo");
+          if (hasRecord && saldoMin < 0) saldoCell.classList.add("ponto-saldo-negativo");
+          return hasRecord ? saldoMin : 0;
+        }
+
+        var pairsApi = buildPairsEditor(dateStr, dayData, function () {
+          var s = updateCalcCells(pairsApi, feriadoCheck.checked);
+          renderSummaryOnly();
+        });
+        pairsCell.appendChild(pairsApi.el);
+
+        feriadoCheck.addEventListener("change", function () {
+          rowEl.classList.toggle("ponto-row-feriado", feriadoCheck.checked);
+          pairsApi.setFeriado(feriadoCheck.checked);
+          updateCalcCells(pairsApi, feriadoCheck.checked);
+          renderSummaryOnly();
+        });
+
+        var rowSaldoMin = updateCalcCells(pairsApi, dayData.feriado);
+        var rowHasRecord = (dayData.pairs && dayData.pairs.length) || dayData.feriado;
+        if (rowHasRecord) { temAlgumRegistro = true; saldoAcumuladoMin += rowSaldoMin; }
+
+        tableEl.appendChild(rowEl);
+      }
+
+      function renderSummaryOnly() {
+        // recalcula o saldo acumulado inteiro a partir do estado atual de
+        // cada linha seria mais correto, mas como cada edição já chama
+        // updateCalcCells + persist individualmente, o jeito simples e
+        // robusto é só reler as células já calculadas na tela.
+        var total = 0, any = false;
+        Array.prototype.forEach.call(tableEl.querySelectorAll(".ponto-cell-saldo"), function (cell) {
+          var txt = cell.textContent;
+          if (txt === "—") return;
+          any = true;
+          var sign = txt.indexOf("-") === 0 ? -1 : 1;
+          var m = txt.replace(/^[+-]/, "").match(/^(\d+)h(\d\d)$/);
+          if (!m) return;
+          total += sign * (Number(m[1]) * 60 + Number(m[2]));
+        });
+        summarySaldoEl.textContent = any ? ("Saldo acumulado no mês: " + pontoFormatSaldoMin(total)) : "Saldo acumulado no mês: —";
+        summarySaldoEl.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
+        if (any && total > 0) summarySaldoEl.classList.add("ponto-saldo-positivo");
+        if (any && total < 0) summarySaldoEl.classList.add("ponto-saldo-negativo");
+      }
+      renderSummaryOnly();
+    }
+
+    loadMonth();
+  }
+
   // ---------------- "page.emprestimos" — Empréstimos (100% KV, nunca
   // Notion) ----------------
   // Pedido do Georges: "controlar empréstimos que fiz e os pagamentos
@@ -17941,6 +18379,11 @@
     // "Remédios" (pedido do Georges) — mesmo padrão exclusivo acima.
     if (page.remedios) {
       renderRemediosPage(container, page);
+      return;
+    }
+
+    if (page.pontoEletronico) {
+      renderPontoEletronicoPage(container, page);
       return;
     }
 

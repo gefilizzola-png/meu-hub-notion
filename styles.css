@@ -7040,3 +7040,193 @@ html, body {
   .emprestimos-chip-objetivo { max-width: 120px; }
   .emprestimos-row-chevron { margin-left: 0; }
 }
+
+/* ---- Ponto Eletrônico (Pessoal->Profissional->PMF) ---- */
+.ponto-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ponto-carga-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ponto-carga-label {
+  font-size: 13px;
+  color: #6b6a63;
+}
+.ponto-carga-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 0.5px solid #eeede9;
+  background: #fff;
+  color: #55554f;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ponto-carga-btn:hover { background: #f7f6f2; }
+.ponto-carga-btn.active {
+  background: #4a90d9;
+  border-color: #4a90d9;
+  color: #fff;
+}
+.ponto-summary-row {
+  display: flex;
+  align-items: center;
+}
+.ponto-summary-saldo {
+  font-size: 14px;
+  font-weight: 700;
+  color: #55554f;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f7f6f2;
+  border: 0.5px solid #eeede9;
+}
+.ponto-summary-saldo.ponto-saldo-positivo { color: #2f8a4b; background: #eef8ef; border-color: #d7efdb; }
+.ponto-summary-saldo.ponto-saldo-negativo { color: #c0392b; background: #fdeeec; border-color: #f6d4cf; }
+
+.ponto-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ponto-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 0.5px solid #eeede9;
+  background: #fff;
+  flex-wrap: wrap;
+}
+.ponto-row-weekend { background: #fbfaf7; }
+.ponto-row-feriado { background: #fff8ea; border-color: #f3e3b8; }
+
+.ponto-cell { display: flex; flex-direction: column; }
+.ponto-cell-date {
+  min-width: 56px;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 1px;
+}
+.ponto-weekday {
+  font-size: 11px;
+  color: #9a988e;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.ponto-day {
+  font-size: 14px;
+  font-weight: 700;
+  color: #3a3a35;
+}
+.ponto-cell-feriado {
+  min-width: 90px;
+  flex-shrink: 0;
+  justify-content: center;
+}
+.ponto-feriado-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #6b6a63;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ponto-feriado-label input { cursor: pointer; }
+
+.ponto-cell-pairs {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+.ponto-pairs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ponto-pair {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #f7f6f2;
+  border-radius: 8px;
+  padding: 3px 5px;
+}
+.ponto-pair-input {
+  border: 0.5px solid #eeede9;
+  border-radius: 6px;
+  padding: 3px 4px;
+  font-size: 13px;
+  width: 92px;
+  background: #fff;
+  color: #3a3a35;
+}
+.ponto-pair-sep { color: #9a988e; font-size: 12px; }
+.ponto-pair-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #9a988e;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ponto-pair-remove-btn:hover { background: #fdeeec; color: #c0392b; }
+.ponto-pair-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 0.5px dashed #d8d6cd;
+  background: transparent;
+  color: #6b6a63;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ponto-pair-add-btn:hover { background: #f7f6f2; color: #4a90d9; border-color: #4a90d9; }
+
+.ponto-cell-trabalhadas,
+.ponto-cell-saldo {
+  min-width: 90px;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: flex-end;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3a3a35;
+  text-align: right;
+  white-space: nowrap;
+}
+.ponto-cell-saldo.ponto-saldo-positivo { color: #2f8a4b; }
+.ponto-cell-saldo.ponto-saldo-negativo { color: #c0392b; }
+.ponto-impar-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #b8860b;
+  background: #fff3d6;
+  border-radius: 5px;
+  padding: 1px 5px;
+  margin-left: 3px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .ponto-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .ponto-cell-feriado { justify-content: flex-start; }
+  .ponto-cell-trabalhadas,
+  .ponto-cell-saldo { align-items: flex-start; text-align: left; }
+}
