@@ -6718,9 +6718,19 @@ html, body {
    AD/LA), cor vem inline por companhia (ver passagensCompanhiaBadge no
    app.js). Não reproduz o logo oficial de nenhuma companhia (artwork
    protegido por marca registrada) — só a cor de identidade + o código que
-   já aparece no cartão de embarque de cada uma. */
-.passagens-col-companhia {
-  display: flex;
+   já aparece no cartão de embarque de cada uma.
+   BUG real (Georges reportou 2x "leiaute bagunçado"/"fora de prumo", com
+   foto mostrando um buraco enorme no cabeçalho entre Cia. Aérea e Trecho):
+   essa regra tinha "display:flex" apontando DIRETO pro <td> (classe
+   "passagens-col-companhia" é posta no próprio td em buildBodyCell). Um
+   <td> com display:flex deixa de ser tratado como célula normal pelo
+   algoritmo de largura de colunas da tabela (table-layout:auto) — o
+   navegador perde a referência de largura mínima/máxima daquela coluna e
+   "estoura" espaço nas colunas vizinhas. Fix: o flex agora vive só no
+   wrapper INTERNO ".passagens-companhia-inline" (um <span>, ver app.js),
+   o <td> em si fica como célula normal de novo. */
+.passagens-companhia-inline {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
@@ -6752,6 +6762,40 @@ html, body {
 }
 .passagens-trecho-chips { flex-wrap: nowrap; }
 .passagens-trecho-arrow { font-size: 13px; color: #928f86; flex-shrink: 0; }
+
+/* Saúde / Exames e Consultas (pedido do Georges — "lógica parecida com
+   Passagens, com colunas recolhidas") — mesma regra permanente de largura
+   de coluna (instrucoes.md): "Nome" é a ÚNICA coluna de texto livre (sem
+   width, ellipsis+title em vez de quebrar), todas as demais — incluindo as
+   2 de chips múltiplos (Parte do Corpo/Profissional, mesmo critério já
+   usado em "Trecho" de Passagens) — ganham width:1%+nowrap. */
+.saude-th-tipo-evento,
+.saude-th-data,
+.saude-th-situacao,
+.saude-th-local,
+.saude-th-tipo-consulta,
+.saude-th-especialidade,
+.saude-th-parte-corpo,
+.saude-th-profissional,
+.saude-th-valor,
+.saude-th-nfps { width: 1%; white-space: nowrap; }
+.saude-col-nome {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Saúde — recolher/expandir colunas (mesma metodologia de Passagens/
+   Prioridades: "hide-<key>" na tabela + "saude-col-<key>" em cada th/td). */
+.saude-table.hide-tipoConsulta .saude-col-tipoConsulta,
+.saude-table.hide-especialidade .saude-col-especialidade,
+.saude-table.hide-parteCorpo .saude-col-parteCorpo,
+.saude-table.hide-profissional .saude-col-profissional,
+.saude-table.hide-valor .saude-col-valor,
+.saude-table.hide-nfps .saude-col-nfps {
+  display: none;
+}
 
 @media (max-width: 640px) {
   .emprestimos-add-input,

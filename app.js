@@ -11492,15 +11492,25 @@
           break;
         case "companhia":
           if (it.companhia) {
+            // BUG real (reportado pelo Georges 2x — "leiaute bagunçado"):
+            // o <td> em si tinha "display:flex" (.passagens-col-companhia no
+            // styles.css), o que quebra o algoritmo de largura de colunas da
+            // tabela em layout auto — o navegador para de tratar essa célula
+            // como uma célula normal pro cálculo de largura, e o "buraco"
+            // sobrando aparece nas colunas vizinhas. Fix: o flex vai num
+            // wrapper INTERNO (span), o <td> continua um table-cell normal.
+            var companhiaInline = document.createElement("span");
+            companhiaInline.className = "passagens-companhia-inline";
             var badge = passagensCompanhiaBadge(it.companhia);
             var badgeEl = document.createElement("span");
             badgeEl.className = "passagens-airline-badge";
             badgeEl.style.background = badge.bg;
             badgeEl.textContent = badge.code;
-            cell.appendChild(badgeEl);
+            companhiaInline.appendChild(badgeEl);
             var nameSpan = document.createElement("span");
             nameSpan.textContent = it.companhia;
-            cell.appendChild(nameSpan);
+            companhiaInline.appendChild(nameSpan);
+            cell.appendChild(companhiaInline);
           } else {
             cell.textContent = "—";
           }
@@ -11660,6 +11670,427 @@
       applyState();
     }).catch(function (err) {
       statusEl.textContent = "Erro ao buscar passagens: " + err.message;
+    });
+  }
+
+  // ---------------- "page.consultasExames" — Saúde / Exames e Consultas (Pessoal->Saúde, 100% leitura) ----------------
+  // Pedido do Georges: "lógica parecida com a página Passagens, com colunas
+  // recolhidas". Schema real da base Notion (ver SAUDE_DATABASE_ID em
+  // config.js): Nome (title), Tipo de Evento (select: Consulta/Exame/
+  // Procedimento), Tipo de Consulta (select), Data da Consulta (date),
+  // Situação (select), Especialidade (select), Parte do Corpo (multi_
+  // select), Local (select), Profissional (multi_select), Valor (number,
+  // formato "real"), NFPS (number).
+  var SAUDE_TIPO_EVENTO_ICON = { "Consulta": "🩺", "Exame": "🔬", "Procedimento": "💉" };
+  function saudeTipoEventoIcon(tipo) { return SAUDE_TIPO_EVENTO_ICON[tipo] || "🏥"; }
+  // dias até a Data da Consulta (hoje = 0) — mesma lógica de provasDiasAte,
+  // reaproveitada direto (função pura, sem nada específico de Saúde).
+  function saudeDiasAte(dataISO) { return provasDiasAte(dataISO); }
+
+  function saudeItemFromPage(p) {
+    var extra = p.extra || {};
+    function sel(key) { var v = extra[key]; return v ? v.name : null; }
+    function multi(key) { return (extra[key] || []).map(function (o) { return o.name; }); }
+    function dateStart(key) { var v = extra[key]; return (v && v.start) ? v.start : null; }
+    var dataConsultaISO = dateStart("Data da Consulta");
+    return {
+      id: p.id,
+      url: p.url,
+      nome: p.title || "(sem título)",
+      tipoEvento: sel("Tipo de Evento"),
+      tipoConsulta: sel("Tipo de Consulta"),
+      situacao: sel("Situação"),
+      especialidade: sel("Especialidade"),
+      local: sel("Local"),
+      parteCorpo: multi("Parte do Corpo"),
+      profissional: multi("Profissional"),
+      dataConsulta: dataConsultaISO,
+      valor: (typeof extra["Valor"] === "number") ? extra["Valor"] : null,
+      nfps: (typeof extra["NFPS"] === "number") ? extra["NFPS"] : null,
+      diasAte: saudeDiasAte(dataConsultaISO)
+    };
+  }
+  var SAUDE_EXTRA_FIELDS = [
+    "Tipo de Evento", "Tipo de Consulta", "Situação", "Especialidade", "Local",
+    "Parte do Corpo", "Profissional", "Data da Consulta", "Valor", "NFPS"
+  ];
+
+  function renderSaudePage(container, page) {
+    var scfg = page.consultasExames || {};
+    var databaseId = scfg.database_id;
+
+    var wrap = document.createElement("div");
+    wrap.className = "passagens-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "🏥 Exames e Consultas";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando consultas e exames…";
+    wrap.appendChild(statusEl);
+
+    if (!databaseId) {
+      statusEl.textContent = "Configuração incompleta: falta database_id em page.consultasExames.";
+      return;
+    }
+
+    var allSaude = [];
+    var state = {
+      search: "", sortKey: "dataConsulta", sortDir: 1,
+      tipoEventoSelected: [], situacaoSelected: [], especialidadeSelected: [], localSelected: [],
+      dataFilter: null,
+      // "Próximas/Todas/Passadas" — mesma metodologia de Passagens/Provas
+      // (botão único de ciclo). Abre em "pending" (próximas) por padrão.
+      statusCycle: "pending"
+    };
+
+    var body = document.createElement("div");
+
+    function matchesFilters(it) {
+      if (state.search) {
+        var s = normalize(state.search);
+        var hay = normalize([
+          it.nome, it.tipoConsulta, it.especialidade, it.local
+        ].concat(it.parteCorpo || []).concat(it.profissional || []).filter(Boolean).join(" "));
+        if (hay.indexOf(s) === -1) return false;
+      }
+      if (state.tipoEventoSelected.length && state.tipoEventoSelected.indexOf(it.tipoEvento) === -1) return false;
+      if (state.situacaoSelected.length && state.situacaoSelected.indexOf(it.situacao) === -1) return false;
+      if (state.especialidadeSelected.length && state.especialidadeSelected.indexOf(it.especialidade) === -1) return false;
+      if (state.localSelected.length && state.localSelected.indexOf(it.local) === -1) return false;
+      if (state.statusCycle === "pending") {
+        if (it.diasAte !== null && it.diasAte < 0) return false;
+      } else if (state.statusCycle === "past") {
+        if (it.diasAte === null || it.diasAte >= 0) return false;
+      }
+      if (state.dataFilter) {
+        var df = state.dataFilter;
+        if (!it.dataConsulta) return false;
+        if (df.from && df.to) { if (it.dataConsulta < df.from || it.dataConsulta > df.to) return false; }
+        else if (df.from) { if (it.dataConsulta !== df.from) return false; }
+        else if (df.to) { if (it.dataConsulta !== df.to) return false; }
+      }
+      return true;
+    }
+
+    function sortSaude(list) {
+      var arr = list.slice();
+      var key = state.sortKey, dir = state.sortDir;
+      arr.sort(function (a, b) {
+        var av, bv;
+        if (key === "nome") { av = a.nome || ""; bv = b.nome || ""; }
+        else if (key === "valor") { av = (a.valor === null ? -Infinity : a.valor); bv = (b.valor === null ? -Infinity : b.valor); }
+        else if (key === "nfps") { av = (a.nfps === null ? -Infinity : a.nfps); bv = (b.nfps === null ? -Infinity : b.nfps); }
+        else { av = a.dataConsulta || "9999-99-99"; bv = b.dataConsulta || "9999-99-99"; }
+        if (typeof av === "number") return dir * (av - bv);
+        return dir * String(av).localeCompare(String(bv), "pt-BR");
+      });
+      return arr;
+    }
+
+    function buildSimpleOptionsFrom(key) {
+      var seen = {}, out = [];
+      allSaude.forEach(function (it) {
+        var v = it[key];
+        if (!v || seen[v]) return;
+        seen[v] = true;
+        out.push({ label: v, pageId: v });
+      });
+      out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+      return out;
+    }
+
+    var tipoEventoDropdownWrap = document.createElement("div");
+    var situacaoDropdownWrap = document.createElement("div");
+    var especialidadeDropdownWrap = document.createElement("div");
+    var localDropdownWrap = document.createElement("div");
+    var dataFilterWrap = document.createElement("div");
+
+    function buildFiltersBar() {
+      tipoEventoDropdownWrap.innerHTML = "";
+      tipoEventoDropdownWrap.appendChild(buildIconDropdown(
+        { property: "Tipo de Evento", type: "select", label: "Tipo de Evento", icon: "ti-stethoscope", options: buildSimpleOptionsFrom("tipoEvento") },
+        function (opts) { state.tipoEventoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      ));
+      situacaoDropdownWrap.innerHTML = "";
+      situacaoDropdownWrap.appendChild(buildIconDropdown(
+        { property: "Situação", type: "select", label: "Situação", icon: "ti-circle-check", options: buildSimpleOptionsFrom("situacao") },
+        function (opts) { state.situacaoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      ));
+      especialidadeDropdownWrap.innerHTML = "";
+      especialidadeDropdownWrap.appendChild(buildIconDropdown(
+        { property: "Especialidade", type: "select", label: "Especialidade", icon: "ti-medical-cross", options: buildSimpleOptionsFrom("especialidade") },
+        function (opts) { state.especialidadeSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      ));
+      localDropdownWrap.innerHTML = "";
+      localDropdownWrap.appendChild(buildIconDropdown(
+        { property: "Local", type: "select", label: "Local", icon: "ti-map-pin", options: buildSimpleOptionsFrom("local") },
+        function (opts) { state.localSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      ));
+      dataFilterWrap.innerHTML = "";
+      dataFilterWrap.appendChild(buildLocalDateRangeFilter(
+        { label: "Data da Consulta" },
+        function (val) { state.dataFilter = val; applyState(); }
+      ));
+    }
+
+    var controls = document.createElement("div");
+    controls.className = "legislacoes-controls";
+
+    var SAUDE_STATUS_CYCLE = ["pending", "all", "past"];
+    var SAUDE_STATUS_LABEL = { pending: "Próximas", all: "Todas", past: "Passadas" };
+    var SAUDE_STATUS_ICON = { pending: "ti-calendar-event", all: "ti-list", past: "ti-history" };
+    var statusCycleBtn = document.createElement("button");
+    statusCycleBtn.type = "button";
+    statusCycleBtn.className = "provas-status-cycle-btn";
+    function updateStatusCycleBtn() {
+      statusCycleBtn.className = "provas-status-cycle-btn provas-status-cycle-" + state.statusCycle;
+      statusCycleBtn.innerHTML = '<i class="ti ' + SAUDE_STATUS_ICON[state.statusCycle] + '"></i> ' + SAUDE_STATUS_LABEL[state.statusCycle];
+      statusCycleBtn.title = "Clique para alternar (Próximas → Todas → Passadas)";
+    }
+    statusCycleBtn.addEventListener("click", function () {
+      var idx = SAUDE_STATUS_CYCLE.indexOf(state.statusCycle);
+      state.statusCycle = SAUDE_STATUS_CYCLE[(idx + 1) % SAUDE_STATUS_CYCLE.length];
+      updateStatusCycleBtn();
+      applyState();
+    });
+    updateStatusCycleBtn();
+    controls.appendChild(statusCycleBtn);
+
+    // Mesmo padrão novo de Passagens (regra permanente, ver instrucoes.md):
+    // "Pesquisar" e "Filtrar" dentro de seções recolhíveis, ambas nascendo
+    // recolhidas.
+    var searchSectionSaude = buildCollapsibleSection("Pesquisar");
+    var filterSectionSaude = buildCollapsibleSection("Filtrar");
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Buscar por nome, especialidade, local, profissional…";
+    searchInput.className = "aniversarios-search-input";
+    searchInput.addEventListener("input", function () {
+      state.search = searchInput.value.trim();
+      applyState();
+    });
+    searchSectionSaude.body.appendChild(withSearchClear(searchInput));
+
+    var filterBarWrapSaude = document.createElement("div");
+    filterBarWrapSaude.className = "legislacoes-filterbar";
+    filterBarWrapSaude.appendChild(tipoEventoDropdownWrap);
+    filterBarWrapSaude.appendChild(situacaoDropdownWrap);
+    filterBarWrapSaude.appendChild(especialidadeDropdownWrap);
+    filterBarWrapSaude.appendChild(localDropdownWrap);
+    filterBarWrapSaude.appendChild(dataFilterWrap);
+    filterSectionSaude.body.appendChild(filterBarWrapSaude);
+
+    var clearFiltersBtn = document.createElement("button");
+    clearFiltersBtn.type = "button";
+    clearFiltersBtn.className = "search-clear-btn";
+    clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearFiltersBtn.addEventListener("click", function () {
+      state.search = ""; searchInput.value = "";
+      state.tipoEventoSelected = []; state.situacaoSelected = [];
+      state.especialidadeSelected = []; state.localSelected = [];
+      state.dataFilter = null;
+      buildFiltersBar();
+      applyState();
+    });
+    filterSectionSaude.body.appendChild(clearFiltersBtn);
+
+    controls.appendChild(searchSectionSaude.section);
+    controls.appendChild(filterSectionSaude.section);
+
+    wrap.appendChild(controls);
+
+    // Colunas padrão visíveis (pedido do Georges): Nome, Tipo de Evento,
+    // Data da Consulta, Situação, Local — as demais (Tipo de Consulta,
+    // Especialidade, Parte do Corpo, Profissional, Valor, NFPS) ficam
+    // ocultas até clicar "Mostrar todas as colunas" (mesma metodologia de
+    // Passagens). "Nome" é a única coluna de texto livre (ver regra
+    // permanente de largura em instrucoes.md) — as demais são curtas/badge.
+    var COLS = [
+      { key: "nome", label: "Nome", cls: "saude-th-nome", sortKey: "nome" },
+      { key: "tipoEvento", label: "Tipo de Evento", cls: "saude-th-tipo-evento" },
+      { key: "dataConsulta", label: "Data da Consulta", cls: "saude-th-data", sortKey: "dataConsulta" },
+      { key: "situacao", label: "Situação", cls: "saude-th-situacao" },
+      { key: "local", label: "Local", cls: "saude-th-local" },
+      // ocultas por padrão — reveladas só pelo botão "Mostrar todas as colunas".
+      { key: "tipoConsulta", label: "Tipo de Consulta", cls: "saude-th-tipo-consulta" },
+      { key: "especialidade", label: "Especialidade", cls: "saude-th-especialidade" },
+      { key: "parteCorpo", label: "Parte do Corpo", cls: "saude-th-parte-corpo" },
+      { key: "profissional", label: "Profissional", cls: "saude-th-profissional" },
+      { key: "valor", label: "Valor", cls: "saude-th-valor", sortKey: "valor" },
+      { key: "nfps", label: "NFPS", cls: "saude-th-nfps", sortKey: "nfps" }
+    ];
+    var allColumnKeys = COLS.map(function (c) { return c.key; });
+    var defaultHiddenKeys = ["tipoConsulta", "especialidade", "parteCorpo", "profissional", "valor", "nfps"];
+    var columnsExpanded = false;
+
+    var columnsToolbar = document.createElement("div");
+    columnsToolbar.className = "priorities-columns-toolbar";
+    var columnsToggleBtn = document.createElement("button");
+    columnsToggleBtn.type = "button";
+    columnsToggleBtn.className = "priorities-columns-toggle-btn";
+    function updateColumnsToggleBtnLabel() {
+      columnsToggleBtn.innerHTML = columnsExpanded
+        ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
+        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+' + defaultHiddenKeys.length + ')';
+    }
+    columnsToggleBtn.addEventListener("click", function () {
+      columnsExpanded = !columnsExpanded;
+      updateColumnsToggleBtnLabel();
+      renderTable();
+    });
+    updateColumnsToggleBtnLabel();
+    columnsToolbar.appendChild(columnsToggleBtn);
+    wrap.appendChild(columnsToolbar);
+
+    wrap.appendChild(body);
+
+    function buildBodyCell(it, key) {
+      var cell = document.createElement("td");
+      cell.className = "saude-col-" + key;
+      switch (key) {
+        case "nome":
+          cell.textContent = it.nome || "—";
+          if (it.nome) cell.title = it.nome;
+          break;
+        case "tipoEvento":
+          if (it.tipoEvento) {
+            cell.appendChild(passagensChip(saudeTipoEventoIcon(it.tipoEvento) + " " + it.tipoEvento));
+          } else {
+            cell.textContent = "—";
+          }
+          break;
+        case "dataConsulta":
+          var dataInner = document.createElement("div");
+          dataInner.textContent = transacoesFmtDateBR(it.dataConsulta);
+          cell.appendChild(dataInner);
+          if (it.dataConsulta && it.diasAte !== null) {
+            var dataSub = document.createElement("div");
+            dataSub.className = "provas-subtle";
+            dataSub.textContent = provasRelativoLabel(it.diasAte);
+            cell.appendChild(dataSub);
+          }
+          break;
+        case "situacao":
+          if (it.situacao) { cell.appendChild(passagensChip(it.situacao)); } else { cell.textContent = "—"; }
+          break;
+        case "local":
+          cell.textContent = it.local || "—";
+          break;
+        case "tipoConsulta":
+          cell.textContent = it.tipoConsulta || "—";
+          break;
+        case "especialidade":
+          cell.textContent = it.especialidade || "—";
+          break;
+        case "parteCorpo":
+          passagensAppendChipList(cell, it.parteCorpo);
+          break;
+        case "profissional":
+          passagensAppendChipList(cell, it.profissional);
+          break;
+        case "valor":
+          cell.textContent = (it.valor !== null) ? transacoesFmtMoney(it.valor) : "—";
+          break;
+        case "nfps":
+          cell.textContent = (it.nfps !== null) ? String(it.nfps) : "—";
+          break;
+      }
+      return cell;
+    }
+
+    function renderTable() {
+      body.innerHTML = "";
+      var filtered = sortSaude(allSaude.filter(matchesFilters));
+      if (!filtered.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhuma consulta/exame bate com os filtros.";
+        body.appendChild(empty);
+        return;
+      }
+      var count = document.createElement("p");
+      count.className = "aniversarios-count";
+      count.textContent = filtered.length + (filtered.length === 1 ? " item" : " itens");
+      body.appendChild(count);
+
+      var visible = columnsExpanded ? allColumnKeys.slice() : allColumnKeys.filter(function (k) { return defaultHiddenKeys.indexOf(k) === -1; });
+
+      var table = document.createElement("table");
+      table.className = "financeiro-table saude-table";
+      allColumnKeys.forEach(function (key) {
+        table.classList.toggle("hide-" + key, visible.indexOf(key) === -1);
+      });
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      COLS.forEach(function (col) {
+        var th = document.createElement("th");
+        th.className = "financeiro-th saude-col-" + col.key + " " + col.cls + (col.sortKey ? " financeiro-th-sortable" : "");
+        var thLabel = document.createElement("span");
+        thLabel.className = "financeiro-th-label";
+        thLabel.textContent = col.label;
+        th.appendChild(thLabel);
+        if (col.sortKey) {
+          var arrow = document.createElement("span");
+          arrow.className = "financeiro-th-arrow";
+          if (state.sortKey === col.sortKey) {
+            th.classList.add("active");
+            arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+          }
+          th.appendChild(arrow);
+          th.title = "Clique para classificar por " + col.label;
+          th.addEventListener("click", function () {
+            if (state.sortKey === col.sortKey) { state.sortDir = state.sortDir * -1; }
+            else { state.sortKey = col.sortKey; state.sortDir = 1; }
+            renderTable();
+          });
+        }
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      filtered.forEach(function (it) {
+        var row = document.createElement("tr");
+        row.className = "financeiro-row saude-row" + (it.diasAte !== null && it.diasAte >= 0 && it.diasAte <= 2 ? " provas-row-soon" : "");
+        if (it.url) {
+          row.classList.add("provas-row-clickable");
+          row.title = "Abrir no Notion";
+          row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
+        }
+        COLS.forEach(function (col) { row.appendChild(buildBodyCell(it, col.key)); });
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      body.appendChild(table);
+    }
+
+    function applyState() { renderTable(); }
+
+    var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
+      "&filters=" + encodeURIComponent(JSON.stringify([{ property: "Nome", type: "title", condition: "is_not_empty", value: true }])) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Data da Consulta", direction: "ascending" }])) +
+      "&extra=" + encodeURIComponent(JSON.stringify(SAUDE_EXTRA_FIELDS));
+
+    authFetch(queryUrl).then(handle401Generic).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar consultas e exames");
+      var pages = (result.data && result.data.pages) || [];
+      allSaude = pages.map(saudeItemFromPage);
+
+      buildFiltersBar();
+
+      statusEl.style.display = "none";
+      applyState();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao buscar consultas e exames: " + err.message;
     });
   }
 

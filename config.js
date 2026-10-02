@@ -443,6 +443,16 @@ var NOTAS_VITOR_DATABASE_ID = "d709cacdf3a14817b621baea9dbb80b1";
 // Georges cadastra direto no Notion). Ver pages.financeiro_viagens_passagens
 // mais abaixo / renderPassagensPage no app.js.
 var PASSAGENS_DATABASE_ID = "3eb0481486dd80ec9a4a000b34532907";
+// "Consultas e Exames" — nova base do Notion em Pessoal->Saúde->Exames e
+// Consultas (pedido do Georges: "lógica parecida com a página Passagens",
+// colunas recolhidas + notificação com antecedência + divisória própria no
+// Painel do Dia). database_id sem hífen (mesmo padrão de PASSAGENS_DATABASE_ID
+// acima), convertido do data source real
+// "collection://3ec04814-86dd-80a8-a36e-000b656082a4". Sem template_id
+// confirmado ainda — sem "Criar no Notion" por enquanto, mesmo critério de
+// Passagens (o Georges cadastra direto no Notion). Ver pages.consultas_exames
+// mais abaixo / renderSaudePage no app.js.
+var SAUDE_DATABASE_ID = "3ec0481486dd803c8997fbe2c2ad26dd";
 
 // "Tags" de família da página de Aniversários (botões de filtro rápido,
 // pedido do Georges) — a "tag" principal de cada pessoa vem AUTOMÁTICO do
@@ -666,6 +676,13 @@ var TITLELINKS_TAREFAS = [
 var TITLELINKS_ANIVERSARIOS = [
   { type: "notion", url: "https://app.notion.com/p/georges-filizzola/1f60481486dd8074b921f730febc7fd1?v=1f60481486dd807f9ac2000cb1578dc8&source=copy_link", title: "Abrir Aniversários no Notion" },
   { type: "page", target: "pmf_cad_aniversarios", title: "Abrir Aniversários no app" }
+];
+// Atalhos ao lado do título "🏥 Saúde" nas 3 abas de Início — mesmo padrão
+// de TITLELINKS_ANIVERSARIOS etc. acima (abre no Notion ou navega pra
+// página consultas_exames dentro do app).
+var TITLELINKS_SAUDE = [
+  { type: "notion", url: "https://app.notion.com/p/georges-filizzola/3ec0481486dd803c8997fbe2c2ad26dd?v=3ec0481486dd80739b78000c4297e9d9&source=copy_link", title: "Abrir Saúde no Notion" },
+  { type: "page", target: "consultas_exames", title: "Abrir Saúde no app" }
 ];
 
 // "key"/"label" das 14 contas de "Financeiro → Contas Mensais" — ESPELHA
@@ -1247,6 +1264,28 @@ var NOTIFICATION_SOURCES = [
       { id: "3d", amount: 3, unit: "days", label: "3 dias antes" }
     ]
   },
+  // Saúde / Consultas e Exames (pedido do Georges — "já crie na Central de
+  // Notificações a possibilidade de agendar notificação com antecedência
+  // com base na Data da Consulta"). Fonte 100% Notion (kind "notion", o
+  // padrão — nada de especial aqui), mesmo espírito de Passagens: baseFilters
+  // vazio (base pequena, só do Georges/família) + dateProperty "Data da
+  // Consulta". O Georges configura os dias de antecedência que quiser direto
+  // na Central de Notificações (editor de gestão) — defaultLeadTimes abaixo
+  // é só o seed inicial, igual toda outra fonte.
+  {
+    id: "saude",
+    label: "Consultas e Exames",
+    // mesmo emoji da divisória de Saúde no Painel do Dia.
+    icon: "🏥",
+    database_id: SAUDE_DATABASE_ID,
+    baseFilters: [],
+    dateProperty: "Data da Consulta",
+    target: { type: "page", target: "consultas_exames" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
+    ]
+  },
   // Aniversários (pedido do Georges). "📚 Página de Origem" = "Pessoal -
   // Aniversários" — mesmo valor usado no bloco "🎂 Aniversários" de Início.
   // SEM exclusão de Andamento de propósito (diferente de todas as outras
@@ -1608,7 +1647,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-01 01:34",
+  appVersion: "2026-10-02 00:28",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1927,6 +1966,29 @@ const APP_CONFIG = {
           weatherDay: 0,
           financeiroRange: "today",
           dynamicQueries: [
+            // "🏥 Saúde" (pedido do Georges — nova divisória no Painel do Dia,
+            // mesmo padrão das demais: recolhida se vazio, filtro, etc). Ao
+            // contrário de "Financeiro" (KV, por isso precisou de função
+            // própria renderFinanceiroDueSoonBlock), a base de Saúde é uma
+            // database Notion normal (SAUDE_DATABASE_ID) — então basta um
+            // dynamicQueries comum com database_id próprio (mesmo truque já
+            // usado por Reuniões/Tarefas/Aniversários acima, só que essas
+            // apontam pra Central e esta aponta direto pra SAUDE_DATABASE_ID).
+            {
+              title: "🏥 Saúde",
+              collapsible: true,
+              titleLinks: TITLELINKS_SAUDE,
+              bg: "#e0f7fa",
+              database_id: SAUDE_DATABASE_ID,
+              baseFilters: [
+                { property: "Data da Consulta", type: "date", condition: "equals", value: "today" }
+              ],
+              sorts: [{ property: "Data da Consulta", direction: "ascending" }],
+              cardFields: [
+                { property: "Tipo de Evento", type: "select" },
+                { property: "Situação", type: "select" }
+              ]
+            },
             {
               title: "📅 Reuniões",
               collapsible: true,
@@ -2055,6 +2117,21 @@ const APP_CONFIG = {
           financeiroRange: "tomorrow",
           dynamicQueries: [
             {
+              title: "🏥 Saúde",
+              collapsible: true,
+              titleLinks: TITLELINKS_SAUDE,
+              bg: "#e0f7fa",
+              database_id: SAUDE_DATABASE_ID,
+              baseFilters: [
+                { property: "Data da Consulta", type: "date", condition: "equals", value: "tomorrow" }
+              ],
+              sorts: [{ property: "Data da Consulta", direction: "ascending" }],
+              cardFields: [
+                { property: "Tipo de Evento", type: "select" },
+                { property: "Situação", type: "select" }
+              ]
+            },
+            {
               title: "📅 Reuniões",
               collapsible: true,
               titleLinks: TITLELINKS_REUNIOES,
@@ -2176,6 +2253,22 @@ const APP_CONFIG = {
           weatherDay: 0,
           financeiroRange: "next7",
           dynamicQueries: [
+            {
+              title: "🏥 Saúde",
+              collapsible: true,
+              titleLinks: TITLELINKS_SAUDE,
+              bg: "#e0f7fa",
+              database_id: SAUDE_DATABASE_ID,
+              baseFilters: [
+                { property: "Data da Consulta", type: "date", condition: "on_or_after", value: "today" },
+                { property: "Data da Consulta", type: "date", condition: "before", value: "next_7_days" }
+              ],
+              sorts: [{ property: "Data da Consulta", direction: "ascending" }],
+              cardFields: [
+                { property: "Tipo de Evento", type: "select" },
+                { property: "Situação", type: "select" }
+              ]
+            },
             {
               title: "📅 Reuniões",
               collapsible: true,
@@ -2875,12 +2968,27 @@ const APP_CONFIG = {
         // Supermercados para Categorias->Pessoal->Listas"). Saiu de
         // "entrada.items" (pasta "Pastas", raiz do menu) pra morar aqui.
         { label: "Listas", type: "page", target: "cat_pessoal_listas", icon: "list" },
+        // "Saúde" (pedido do Georges — "Categoria -> Pessoal -> Saúde ->
+        // Exames e Consultas") — ordem alfabética entre Listas e Vitor
+        // (regra permanente de pastas, ver comentário de "financeiro"
+        // mais abaixo).
+        { label: "Saúde", type: "page", target: "cat_pessoal_saude", icon: "ti-stethoscope" },
         // "Vitor" (pedido do Georges — "Categoria -> Pessoal -> Vitor ->
         // Estudos -> Ensino Fundamental -> 3º ano -> NSF (T34) -> Provas")
         // — árvore de pastas simples reproduzindo literalmente esse
         // caminho, cada nível uma página só com 1 item (mesmo padrão de
         // cat_pessoal_listas acima), até chegar na página real de Provas.
         { label: "Vitor", type: "page", target: "cat_pessoal_vitor", icon: "ti-user" }
+      ]
+    },
+
+    // "Saúde" (pedido do Georges — consultas/exames/procedimentos dele e da
+    // família) — mesmo espírito de cat_pessoal_listas: pasta simples com 1
+    // item por enquanto, abre espaço pra outras bases de Saúde no futuro.
+    cat_pessoal_saude: {
+      title: "Saúde",
+      items: [
+        { label: "Exames e Consultas", type: "page", target: "consultas_exames", icon: "ti-stethoscope" }
       ]
     },
 
@@ -3060,6 +3168,32 @@ const APP_CONFIG = {
       ],
       passagens: {
         database_id: PASSAGENS_DATABASE_ID
+      }
+    },
+
+    // "page.consultasExames" (pedido do Georges: "Vamos criar uma página
+    // para exibir consultas, exames e procedimentos... lógica parecida com
+    // a página Passagens, com colunas recolhidas") — mesma metodologia:
+    // tabela sortable com busca acento-insensível + botão x, filtros
+    // multi-select (Tipo de Evento/Tipo de Consulta/Situação/Especialidade/
+    // Local), botão cíclico Próximas/Todas/Passadas (por Data da Consulta),
+    // botão "Limpar filtros", clique na linha abre a página no Notion. Só
+    // leitura — sem "Criar no Notion" ainda (nenhum template_id confirmado
+    // nessa base, mesmo critério de Passagens). Ver renderSaudePage no
+    // app.js.
+    consultas_exames: {
+      title: "Exames e Consultas",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir",
+          items: [
+            { label: "Consultas e Exames", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3ec0481486dd803c8997fbe2c2ad26dd?v=3ec0481486dd80739b78000c4297e9d9&source=copy_link" }
+          ]
+        }
+      ],
+      consultasExames: {
+        database_id: SAUDE_DATABASE_ID
       }
     },
 
