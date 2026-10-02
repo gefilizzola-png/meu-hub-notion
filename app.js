@@ -16700,6 +16700,32 @@
     cargaRow.appendChild(carga8Btn);
     wrap.appendChild(cargaRow);
 
+    // ---- "Importar mês (colar dados)" — seção recolhida por padrão, só
+    // pra alimentar vários dias de uma vez colando o JSON (ver
+    // importarMes acima). Fica escondida no uso do dia a dia (o normal é
+    // editar célula por célula). ----
+    var importSection = buildCollapsibleSection("Importar mês (colar dados)", false);
+    importSection.section.classList.add("ponto-import-section");
+    var importHint = document.createElement("p");
+    importHint.className = "ponto-import-hint";
+    importHint.textContent = "Cole aqui o JSON com os dias do mês (formato {month, cargaHoraria, days:[...]}) e clique em Importar. Útil pra lançar um mês inteiro de uma vez a partir do que aparece no sistema da PMF.";
+    importSection.body.appendChild(importHint);
+    var importTextarea = document.createElement("textarea");
+    importTextarea.className = "ponto-import-textarea";
+    importTextarea.rows = 6;
+    importTextarea.placeholder = '{"month":"2026-09","cargaHoraria":8,"days":[{"date":"2026-09-01","pairs":[{"entrada":"10:37","saida":"13:27"}],"feriado":false,"pendenteAprovacao":false}]}';
+    importSection.body.appendChild(importTextarea);
+    var importBtn = document.createElement("button");
+    importBtn.type = "button";
+    importBtn.className = "ponto-import-btn";
+    importBtn.innerHTML = '<i class="ti ti-upload"></i> Importar';
+    importBtn.addEventListener("click", function () { importarMes(importTextarea.value); });
+    importSection.body.appendChild(importBtn);
+    var importStatusEl = document.createElement("span");
+    importStatusEl.className = "ponto-import-status";
+    importSection.body.appendChild(importStatusEl);
+    wrap.appendChild(importSection.section);
+
     // ---- resumo do mês (saldo acumulado — só soma dias com algum
     // registro salvo; dias ainda não preenchidos ficam fora da conta, pra
     // não virar um "déficit" artificial de dias que o Georges simplesmente
@@ -16735,19 +16761,74 @@
       }).finally(function () { carga6Btn.disabled = false; carga8Btn.disabled = false; });
     }
 
-    // salva um dia (pairs+feriado) — se vier vazio (sem pares e sem
-    // feriado), o worker.js apaga a chave da KV em vez de guardar "nada"
-    // (ver handlePontoDiaUpdate). Devolve a promise pra quem chamou poder
-    // reagir (ex: recolorir a célula só depois de confirmar salvo).
-    function saveDia(dateStr, pairs, feriado) {
+    // salva um dia (pairs+feriado+pendenteAprovacao) — se vier vazio (sem
+    // pares, sem feriado e sem pendenteAprovacao), o worker.js apaga a
+    // chave da KV em vez de guardar "nada" (ver handlePontoDiaUpdate).
+    // Devolve a promise pra quem chamou poder reagir (ex: recolorir a
+    // célula só depois de confirmar salvo).
+    function saveDia(dateStr, pairs, feriado, pendenteAprovacao) {
       return authFetch(cfg.templateWorkerUrl + "/ponto-dia?date=" + encodeURIComponent(dateStr), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pairs: pairs, feriado: feriado })
+        body: JSON.stringify({ pairs: pairs, feriado: feriado, pendenteAprovacao: !!pendenteAprovacao })
       }).then(handle401).then(function (res) { return res.json(); }).then(function (data) {
         if (data.deleted) { delete state.days[dateStr]; }
         else if (data.item) { state.days[dateStr] = data.item; }
       });
+    }
+
+    // ---- "Importar mês (colar dados)" — pedido do Georges: alimentar o
+    // mês inteiro de uma vez a partir do que ele vê nas 2 telas do sistema
+    // da PMF (dias com marcações + quais têm ajuste/esquecimento
+    // "Aguardando Parecer"), em vez de digitar dia por dia. Formato colado
+    // (JSON): {"month":"YYYY-MM","cargaHoraria":6|8,"days":[{"date":
+    // "YYYY-MM-DD","pairs":[{"entrada":"HH:MM","saida":"HH:MM"}],
+    // "feriado":bool,"pendenteAprovacao":bool}, ...]}. Salva dia por dia em
+    // sequência (não em paralelo, pra não sobrecarregar o Worker com 30
+    // PUTs simultâneos) e, se o mês importado for o que está em tela,
+    // recarrega a tabela no final.
+    function importarMes(raw) {
+      var parsed;
+      try { parsed = JSON.parse(raw); } catch (e) {
+        importStatusEl.textContent = "JSON inválido — confira a formatação.";
+        importStatusEl.className = "ponto-import-status ponto-import-status-erro";
+        return;
+      }
+      if (!parsed || !Array.isArray(parsed.days) || !parsed.days.length) {
+        importStatusEl.textContent = "JSON sem \"days\" (lista de dias) — nada pra importar.";
+        importStatusEl.className = "ponto-import-status ponto-import-status-erro";
+        return;
+      }
+      importBtn.disabled = true;
+      importStatusEl.className = "ponto-import-status";
+      var total = parsed.days.length, done = 0, erros = 0;
+      function next(i) {
+        if (i >= parsed.days.length) {
+          var mesConfigDone = function () {
+            importBtn.disabled = false;
+            importStatusEl.textContent = "Importado: " + done + "/" + total + " dia(s)" + (erros ? " (" + erros + " erro(s))" : "") + ".";
+            importStatusEl.className = "ponto-import-status" + (erros ? " ponto-import-status-erro" : " ponto-import-status-ok");
+            if (parsed.month === state.month) loadMonth();
+          };
+          if (parsed.month && (parsed.cargaHoraria === 6 || parsed.cargaHoraria === 8)) {
+            authFetch(cfg.templateWorkerUrl + "/ponto-mes?month=" + encodeURIComponent(parsed.month), {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cargaHoraria: parsed.cargaHoraria })
+            }).then(handle401).then(mesConfigDone).catch(mesConfigDone);
+          } else {
+            mesConfigDone();
+          }
+          return;
+        }
+        var d = parsed.days[i] || {};
+        importStatusEl.textContent = "Importando " + (i + 1) + "/" + total + " (" + (d.date || "?") + ")…";
+        saveDia(d.date, Array.isArray(d.pairs) ? d.pairs : [], !!d.feriado, !!d.pendenteAprovacao)
+          .then(function () { done++; })
+          .catch(function () { erros++; })
+          .finally(function () { next(i + 1); });
+      }
+      next(0);
     }
 
     function loadMonth() {
@@ -16792,10 +16873,11 @@
       }
 
       var feriadoChecked = !!dayData.feriado;
+      var pendenteChecked = !!dayData.pendenteAprovacao;
 
       function persist() {
         var clean = currentCleanPairs();
-        saveDia(dateStr, clean, feriadoChecked).then(function () {
+        saveDia(dateStr, clean, feriadoChecked, pendenteChecked).then(function () {
           onLocalChange();
         }).catch(function () {
           statusEl.textContent = "Erro ao salvar " + dateStr + ".";
@@ -16852,7 +16934,8 @@
       return {
         el: pairsWrap,
         getCleanPairs: currentCleanPairs,
-        setFeriado: function (v) { feriadoChecked = v; persist(); }
+        setFeriado: function (v) { feriadoChecked = v; persist(); },
+        setPendente: function (v) { pendenteChecked = v; persist(); }
       };
     }
 
@@ -16879,6 +16962,13 @@
         var dateCell = document.createElement("div");
         dateCell.className = "ponto-cell ponto-cell-date";
         dateCell.innerHTML = '<span class="ponto-weekday">' + PONTO_WEEKDAY_SHORT[weekday] + '</span><span class="ponto-day">' + pontoPad2(day) + "/" + pontoPad2(monthIdx0 + 1) + "</span>";
+        if (dayData.pendenteAprovacao) {
+          var pendenteBadge = document.createElement("span");
+          pendenteBadge.className = "ponto-pendente-badge";
+          pendenteBadge.title = "Tem ajuste/esquecimento aguardando aprovação da chefia (ver Aprovação de Abonos na PMF)";
+          pendenteBadge.textContent = "⏳ Aguarda aprovação";
+          dateCell.appendChild(pendenteBadge);
+        }
         rowEl.appendChild(dateCell);
 
         var feriadoCell = document.createElement("div");
@@ -16891,6 +16981,18 @@
         feriadoLabel.appendChild(feriadoCheck);
         feriadoLabel.appendChild(document.createTextNode(" Feriado"));
         feriadoCell.appendChild(feriadoLabel);
+        // "pendenteAprovacao" (pedido do Georges): marca manual de que
+        // aquele dia tem um ajuste/esquecimento "Aguardando Parecer" na
+        // tela de Aprovação de Abonos da PMF — não afeta cálculo nenhum,
+        // só mostra um aviso (ver badge ⏳ abaixo).
+        var pendenteLabel = document.createElement("label");
+        pendenteLabel.className = "ponto-pendente-label";
+        var pendenteCheck = document.createElement("input");
+        pendenteCheck.type = "checkbox";
+        pendenteCheck.checked = !!dayData.pendenteAprovacao;
+        pendenteLabel.appendChild(pendenteCheck);
+        pendenteLabel.appendChild(document.createTextNode(" Aguarda aprovação"));
+        feriadoCell.appendChild(pendenteLabel);
         rowEl.appendChild(feriadoCell);
 
         var pairsCell = document.createElement("div");
@@ -16933,6 +17035,20 @@
           pairsApi.setFeriado(feriadoCheck.checked);
           updateCalcCells(pairsApi, feriadoCheck.checked);
           renderSummaryOnly();
+        });
+
+        pendenteCheck.addEventListener("change", function () {
+          pairsApi.setPendente(pendenteCheck.checked);
+          var existingBadge = dateCell.querySelector(".ponto-pendente-badge");
+          if (pendenteCheck.checked && !existingBadge) {
+            var badge = document.createElement("span");
+            badge.className = "ponto-pendente-badge";
+            badge.title = "Tem ajuste/esquecimento aguardando aprovação da chefia (ver Aprovação de Abonos na PMF)";
+            badge.textContent = "⏳ Aguarda aprovação";
+            dateCell.appendChild(badge);
+          } else if (!pendenteCheck.checked && existingBadge) {
+            existingBadge.remove();
+          }
         });
 
         var rowSaldoMin = updateCalcCells(pairsApi, dayData.feriado);
