@@ -12,7 +12,16 @@
 <link rel="icon" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.44.0/tabler-icons.min.css">
-<link rel="stylesheet" href="styles.css">
+<!-- "?v=" em styles.css/auth.js/config.js/app.js (pedido indireto do
+     Georges — bug real: "se dou apenas F5, Saúde continua no topo. Se dou
+     Ctrl+F5, ela vai para baixo") — SEM query string, o navegador podia
+     servir uma cópia antiga de app.js/config.js do cache no F5 normal,
+     rodando lógica/ordem VELHA (daí o comportamento inconsistente entre
+     F5 e Ctrl+F5). Bump este número a cada deploy (mesmo timestamp do
+     appVersion em config.js) pra forçar buscar os arquivos novos sempre
+     que mudar algo — sem isso, SÓ Ctrl+F5 garantia pegar a versão certa.
+     Ver CACHE_BUST_VERSION. -->
+<link rel="stylesheet" href="styles.css?v=202610021323">
 </head>
 <body>
 <!-- tela de login — escondida por padrão via CSS (#loginGate), auth.js
@@ -151,8 +160,8 @@
 <div class="search-results" id="searchResults"></div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="auth.js"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script src="auth.js?v=202610021323"></script>
+<script src="config.js?v=202610021323"></script>
+<script src="app.js?v=202610021323"></script>
 </body>
 </html>

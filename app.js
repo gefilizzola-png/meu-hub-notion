@@ -2479,24 +2479,36 @@
             return;
           }
           if (displayLimit) pages = pages.slice(0, displayLimit);
+          // "qDef.relatoriaCheck" (opcional — só a divisória "⚖️ Sessões" do
+          // Painel do Dia usa, ver config.js/instrucoes.md) — pedido do
+          // Georges: destacar quando ele for RELATOR de algum processo
+          // pautado na sessão. Não existe campo estruturado pra isso (só
+          // texto livre na pauta, dentro do corpo da página) — a checagem
+          // roda à parte, 1 chamada por sessão exibida, e só pinta o card
+          // DEPOIS que a resposta chega, sem travar a renderização da
+          // lista. Enfileirada com espaçamento (300ms) em vez de todas em
+          // paralelo de uma vez — bug real reportado pelo Georges ("Erro ao
+          // buscar: You have been rate limited"): cada sessão exibida já
+          // dispara várias chamadas recursivas de /blocks/children por
+          // dentro dessa rota (ver fetchBlockChildrenText no worker.js), e
+          // isso tudo em paralelo, somado ao resto das queries do Painel do
+          // Dia, estourava o limite de taxa do Notion — sobretudo no
+          // Ctrl+F5, quando nada vem de cache e tudo dispara de verdade de
+          // uma vez só.
+          var relatoriaQueue = [];
           pages.forEach(function (p) {
             var sub = buildCardSub(qDef.cardFields, p.extra);
             var el = buildItemEl({ label: p.title, type: "notion", url: p.url, sub: sub }, 100);
             resultsWrap.appendChild(el);
-            // "qDef.relatoriaCheck" (opcional — só a divisória "⚖️ Sessões" do
-            // Painel do Dia usa, ver config.js/instrucoes.md) — pedido do
-            // Georges: destacar quando ele for RELATOR de algum processo
-            // pautado na sessão. Não existe campo estruturado pra isso (só
-            // texto livre na pauta, dentro do corpo da página) — a checagem
-            // roda à parte, 1 chamada por sessão exibida (nunca em massa, só
-            // o que já está na tela), e só pinta o card DEPOIS que a
-            // resposta chega, sem travar a renderização da lista.
-            if (qDef.relatoriaCheck && p.id) {
-              authFetch(cfg.templateWorkerUrl + "/sessao-relatoria?pageId=" + encodeURIComponent(p.id))
+            if (qDef.relatoriaCheck && p.id) relatoriaQueue.push({ p: p, el: el });
+          });
+          relatoriaQueue.forEach(function (item, idx) {
+            setTimeout(function () {
+              authFetch(cfg.templateWorkerUrl + "/sessao-relatoria?pageId=" + encodeURIComponent(item.p.id))
                 .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (data) { if (data && data.isRelator) markItemAsRelator(el); })
+                .then(function (data) { if (data && data.isRelator) markItemAsRelator(item.el); })
                 .catch(function () {});
-            }
+            }, idx * 300);
           });
         })
         .catch(function (err) {
