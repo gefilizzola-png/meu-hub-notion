@@ -6786,8 +6786,32 @@ html, body {
    mais pra onde esse bug voltar. Se um dia a tabela toda for mais
    estreita que o espaço disponível, fica com uma folga à direita — bem
    melhor que uma coluna gigante vazia. */
+/* 5ª rodada (bug REPETIU de novo, mesmo com "width:auto" da 4ª rodada e
+   confirmado que essa regra estava mesmo publicada no site ao vivo —
+   verificado direto pelo navegador, não só pelo arquivo local): a causa
+   raiz da 4ª rodada estava incompleta. "width:auto" não faz uma <table>
+   normal (display:table, não flutuante) encolher pro tamanho do conteúdo
+   — pela spec CSS2.1 (§17.5.2.2), uma tabela width:auto em fluxo normal
+   (não float, não inline) usa o MAIOR valor entre a largura mínima de
+   conteúdo e a largura do container inteiro, ou seja ela PREENCHE o
+   espaço disponível igual width:100% faria. Só tabela flutuante ou
+   inline-level encolhe pro conteúdo de verdade ("shrink-to-fit"). Como a
+   tabela continuava preenchendo o container inteiro, o algoritmo de
+   table-layout:auto continuava tendo sobra de espaço pra distribuir — e
+   continuava jogando tudo na única coluna sem width declarado
+   (Objetivo). Fix real: "display:inline-table" faz a tabela virar
+   shrink-to-fit de verdade (mesmo comportamento de largura de um
+   inline-block/float), então ela só fica tão larga quanto o conteúdo
+   pede — a sobra de espaço no algoritmo auto-layout desaparece porque não
+   tem mais sobra nenhuma. O max-width:100% evita estourar o container em
+   tela estreita (a barra de rolagem horizontal do wrapper continua
+   cobrindo esse caso). Isso é intencional e já estava previsto no
+   comentário da 4ª rodada: a tabela pode ficar com uma folga vazia à
+   direita em tela larga — bem melhor que uma coluna gigante vazia. */
 .passagens-table {
+  display: inline-table;
   width: auto;
+  max-width: 100%;
   min-width: 640px;
 }
 .passagens-th-localizador,
