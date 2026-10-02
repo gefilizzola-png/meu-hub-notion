@@ -1006,6 +1006,40 @@
   }
 
   // ---------------- single button/link element for one item ----------------
+  // Destaca um card já renderizado como "sua relatoria" (ver qDef.relatoriaCheck
+  // em renderDynamicQueryBlockReady / GET /sessao-relatoria no worker.js) —
+  // chamada de forma assíncrona, DEPOIS do card já estar na tela, então não
+  // reconstrói nada: só soma uma classe visual + 1 badge na linha de sub
+  // (criando a linha se o card não tinha "sub" nenhum, ex: sem cardFields).
+  function markItemAsRelator(el) {
+    el.classList.add("item-relator-highlight");
+    var left = el.querySelector(".item-left");
+    if (!left) return;
+    var subRow = left.querySelector(".item-sub");
+    if (!subRow) {
+      // o card não tinha badges (sub) — precisa promover o label solto pra
+      // dentro de ".item-text" antes de poder ter uma linha de sub embaixo.
+      var label = left.querySelector(".item-label");
+      if (label && label.parentNode === left) {
+        var textCol = document.createElement("span");
+        textCol.className = "item-text";
+        left.insertBefore(textCol, label);
+        textCol.appendChild(label);
+        left.appendChild(textCol);
+      }
+      var textColFinal = left.querySelector(".item-text") || left;
+      subRow = document.createElement("span");
+      subRow.className = "item-sub";
+      textColFinal.appendChild(subRow);
+      el.classList.add("has-sub");
+    }
+    var badge = document.createElement("span");
+    badge.className = "item-sub-badge item-relator-badge";
+    badge.textContent = "⚖️ Sua relatoria";
+    badge.title = "Você aparece como Conselheiro Relator nesta pauta de julgamento";
+    subRow.insertBefore(badge, subRow.firstChild);
+  }
+
   function buildItemEl(item, idx) {
     var el;
     if (item.type === "notion") {
@@ -2186,13 +2220,28 @@
       var collapseIcon = document.createElement("i");
       collapseIcon.className = "ti ti-chevron-down";
       collapseBtn.appendChild(collapseIcon);
-      collapseBtn.addEventListener("click", function () {
+      // pedido do Georges: clicar no NOME da divisória (não só acertar a
+      // setinha no canto) também expande/recolhe — mesma lógica já usada
+      // em buildCollapsibleSection (Pesquisar/Filtrar) e nas 3 divisórias
+      // de Prioridades. toggleCollapse() fica numa função só, chamada
+      // tanto pelo botão quanto pelo clique no texto do título.
+      function toggleCollapse() {
         var willCollapse = !section.classList.contains("collapsed");
         section.classList.toggle("collapsed", willCollapse);
         collapseIcon.className = willCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
-      });
+      }
+      collapseBtn.addEventListener("click", toggleCollapse);
+      titleText.className = "query-title-clickable";
+      titleText.addEventListener("click", toggleCollapse);
       titleActionsWrap().appendChild(collapseBtn);
     }
+    // "qDef.reorder" (opcional — só setado por renderBody() em renderTabs,
+    // ver mecanismo de reordenar divisórias/ GET/PUT /inicio-block-order no
+    // worker.js) — botões ▲/▼ ao lado do título, mesmo padrão visual dos
+    // botões de reordenar de Pastas (ver appendReorderButtons, escopo
+    // global). Nas demais páginas que usam renderDynamicQueryBlock (fora de
+    // Painel do Dia) "qDef.reorder" nunca é setado, então isso não aparece.
+    if (qDef.reorder) appendReorderButtons(titleActionsWrap(), qDef.reorder);
     section.appendChild(title);
 
     // tudo que vem depois do título (busca por nome/filtros/resultados)
@@ -2432,7 +2481,22 @@
           if (displayLimit) pages = pages.slice(0, displayLimit);
           pages.forEach(function (p) {
             var sub = buildCardSub(qDef.cardFields, p.extra);
-            resultsWrap.appendChild(buildItemEl({ label: p.title, type: "notion", url: p.url, sub: sub }, 100));
+            var el = buildItemEl({ label: p.title, type: "notion", url: p.url, sub: sub }, 100);
+            resultsWrap.appendChild(el);
+            // "qDef.relatoriaCheck" (opcional — só a divisória "⚖️ Sessões" do
+            // Painel do Dia usa, ver config.js/instrucoes.md) — pedido do
+            // Georges: destacar quando ele for RELATOR de algum processo
+            // pautado na sessão. Não existe campo estruturado pra isso (só
+            // texto livre na pauta, dentro do corpo da página) — a checagem
+            // roda à parte, 1 chamada por sessão exibida (nunca em massa, só
+            // o que já está na tela), e só pinta o card DEPOIS que a
+            // resposta chega, sem travar a renderização da lista.
+            if (qDef.relatoriaCheck && p.id) {
+              authFetch(cfg.templateWorkerUrl + "/sessao-relatoria?pageId=" + encodeURIComponent(p.id))
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) { if (data && data.isRelator) markItemAsRelator(el); })
+                .catch(function () {});
+            }
           });
         })
         .catch(function (err) {
@@ -2885,11 +2949,20 @@
     // sobram ficam FORA daqui: uma antes da barra de abas (logo abaixo,
     // ver dividerBeforeTabs) e outras já cuidadas por renderContent (antes
     // de Pesquisar e antes de Anotações rápidas).
+    // "Mecanismo de reordenar divisórias" (pedido do Georges — ver
+    // appendReorderButtons/resolveInicioBlockOrder/saveInicioBlockOrder,
+    // escopo global, e GET/PUT /inicio-block-order no worker.js). Cada
+    // bloco desta aba (dynamicQueries + Financeiro, quando existir) ganha
+    // um id estável (qDef.id, vindo de config.js — "financeiro" é fixo
+    // pro bloco de Financeiro); renderBody() aplica a ordem salva (se
+    // houver) sobre a lista natural, e monta pra cada bloco um "reorderOpts"
+    // (desabilita ▲ no 1º, ▼ no último) que, ao clicar, troca esse bloco
+    // de posição com o vizinho, salva no Worker e remonta tudo.
     function renderBody() {
       body.innerHTML = "";
       var tab = page.tabs[activeIdx];
-      (tab.dynamicQueries || []).forEach(function (qDef) {
-        renderDynamicQueryBlock(qDef, pageId, body);
+      var blocks = (tab.dynamicQueries || []).map(function (qDef) {
+        return { id: qDef.id || qDef.title, qDef: qDef };
       });
       // "tab.financeiroRange" (opcional — só nas 3 abas de Início) —
       // divisória "Financeiro" (mesmo leiaute das outras 5 acima: emoji +
@@ -2897,9 +2970,40 @@
       // ativa (pedido do Georges: Hoje mostra só o que vence hoje, Amanhã
       // só amanhã, Próximos 7 dias a janela toda) — antes ficava fora das
       // abas (page.financeiroDueSoon), por isso nunca reagia ao clique.
-      if (tab.financeiroRange) {
-        renderFinanceiroDueSoonBlock(body, page, tab.financeiroRange);
+      if (tab.financeiroRange) blocks.push({ id: "financeiro" });
+
+      var naturalIds = blocks.map(function (b) { return b.id; });
+      var orderedIds = resolveInicioBlockOrder(naturalIds);
+
+      function moveBlock(id, direction) {
+        var order = resolveInicioBlockOrder(naturalIds);
+        var idx = order.indexOf(id);
+        if (idx === -1) return;
+        var swapIdx = idx + direction;
+        if (swapIdx < 0 || swapIdx >= order.length) return;
+        var tmp = order[idx];
+        order[idx] = order[swapIdx];
+        order[swapIdx] = tmp;
+        saveInicioBlockOrder(order);
+        renderBody();
       }
+
+      orderedIds.forEach(function (id, idx) {
+        var block = blocks.filter(function (b) { return b.id === id; })[0];
+        if (!block) return;
+        var reorderOpts = {
+          disableUp: idx === 0,
+          disableDown: idx === orderedIds.length - 1,
+          onMoveUp: function () { moveBlock(id, -1); },
+          onMoveDown: function () { moveBlock(id, 1); }
+        };
+        if (id === "financeiro") {
+          renderFinanceiroDueSoonBlock(body, page, tab.financeiroRange, reorderOpts);
+        } else {
+          block.qDef.reorder = reorderOpts;
+          renderDynamicQueryBlock(block.qDef, pageId, body);
+        }
+      });
     }
 
     page.tabs.forEach(function (tab, idx) {
@@ -3757,6 +3861,90 @@
   // — o prefixo "priorities" ficou de quando essa divisória só existia
   // ali, mas a classe em si é só visual/genérica, sem lógica presa a
   // Prioridades, então não precisa de CSS novo nem de renomear nada.
+  // Botões ▲/▼ pra reordenar divisórias (pedido do Georges — mecanismo de
+  // reordenar divisórias/estruturas do Painel do Dia, ver GET/PUT
+  // /inicio-block-order no worker.js e renderBody() dentro de renderTabs,
+  // mais abaixo). Mesmo padrão visual/de desabilitar nas pontas já usado em
+  // Pastas (ver renderFolderShortcuts — moveUpBtn/moveDownBtn), só que
+  // escopo global pra ser chamado tanto por renderDynamicQueryBlockReady
+  // quanto por renderFinanceiroDueSoonBlock. "opts" = { disableUp,
+  // disableDown, onMoveUp, onMoveDown } — quem monta "opts" é renderBody(),
+  // que sabe a posição de cada divisória na ordem atual.
+  function appendReorderButtons(wrapEl, opts) {
+    var upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.className = "query-reorder-btn" + (opts.disableUp ? " disabled" : "");
+    upBtn.setAttribute("aria-label", "Mover divisória pra cima");
+    upBtn.title = "Mover pra cima";
+    upBtn.innerHTML = '<i class="ti ti-chevron-up"></i>';
+    if (opts.disableUp) {
+      upBtn.disabled = true;
+    } else {
+      upBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        opts.onMoveUp();
+      });
+    }
+    wrapEl.appendChild(upBtn);
+
+    var downBtn = document.createElement("button");
+    downBtn.type = "button";
+    downBtn.className = "query-reorder-btn" + (opts.disableDown ? " disabled" : "");
+    downBtn.setAttribute("aria-label", "Mover divisória pra baixo");
+    downBtn.title = "Mover pra baixo";
+    downBtn.innerHTML = '<i class="ti ti-chevron-down"></i>';
+    if (opts.disableDown) {
+      downBtn.disabled = true;
+    } else {
+      downBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        opts.onMoveDown();
+      });
+    }
+    wrapEl.appendChild(downBtn);
+  }
+
+  // "Ordem das divisórias do Painel do Dia" (pedido do Georges — ver item
+  // 19 do worker.js, GET/PUT /inicio-block-order). Cache simples em memória:
+  // buscado 1x no boot() (ver Promise.all ali), nunca durante o render — se
+  // a busca falhar/404, fica "null" e renderBody() cai na ordem natural
+  // (array de dynamicQueries da aba + Financeiro por último), exatamente
+  // como já era antes deste mecanismo existir.
+  var inicioBlockOrderCache = null;
+
+  async function fetchInicioBlockOrder() {
+    try {
+      var res = await authFetch(cfg.templateWorkerUrl + "/inicio-block-order");
+      var data = res.ok ? await res.json() : null;
+      inicioBlockOrderCache = (data && Array.isArray(data.order)) ? data.order : null;
+    } catch (e) {
+      inicioBlockOrderCache = null;
+    }
+  }
+
+  async function saveInicioBlockOrder(order) {
+    inicioBlockOrderCache = order;
+    try {
+      await authFetch(cfg.templateWorkerUrl + "/inicio-block-order", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: order })
+      });
+    } catch (e) {}
+  }
+
+  // Aplica a ordem salva (se houver) sobre a lista NATURAL de ids de uma
+  // aba (ver renderBody dentro de renderTabs) — ids da ordem salva que não
+  // existem mais nessa aba são ignorados; ids da aba que faltam na ordem
+  // salva (ex: uma divisória nova que o Georges acabou de ganhar, como
+  // Saúde) entram no FIM, na ordem natural — nunca desaparecem.
+  function resolveInicioBlockOrder(naturalIds) {
+    if (!inicioBlockOrderCache || !inicioBlockOrderCache.length) return naturalIds.slice();
+    var ordered = inicioBlockOrderCache.filter(function (id) { return naturalIds.indexOf(id) !== -1; });
+    naturalIds.forEach(function (id) { if (ordered.indexOf(id) === -1) ordered.push(id); });
+    return ordered;
+  }
+
   function buildCollapsibleSection(titleText, startExpanded) {
     var collapsed = !startExpanded;
     var sec = document.createElement("div");
@@ -8387,7 +8575,7 @@
   // (item.type "notion" + item.url). Só leitura (GET /financeiro-contas +
   // GET /financeiro-paid, podendo ser 2 meses quando a faixa "next7" vira
   // o mês) — nunca escreve nada.
-  function renderFinanceiroDueSoonBlock(container, page, rangeMode) {
+  function renderFinanceiroDueSoonBlock(container, page, rangeMode, reorderOpts) {
     var section = document.createElement("div");
     section.className = "query-block query-block-collapsible";
     section.style.background = "#e6f5f2";
@@ -8426,12 +8614,22 @@
     var collapseIcon = document.createElement("i");
     collapseIcon.className = "ti ti-chevron-down";
     collapseBtn.appendChild(collapseIcon);
-    collapseBtn.addEventListener("click", function () {
+    // pedido do Georges: clicar no nome "💰 Financeiro" também expande/
+    // recolhe, igual às demais divisórias de Painel do Dia (ver
+    // renderDynamicQueryBlockReady — mesmo padrão).
+    function toggleCollapse() {
       var willCollapse = !section.classList.contains("collapsed");
       section.classList.toggle("collapsed", willCollapse);
       collapseIcon.className = willCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
-    });
+    }
+    collapseBtn.addEventListener("click", toggleCollapse);
+    titleText.className = "query-title-clickable";
+    titleText.addEventListener("click", toggleCollapse);
     titleActions.appendChild(collapseBtn);
+    // "reorderOpts" (opcional — ver mecanismo de reordenar divisórias em
+    // renderBody() dentro de renderTabs) — mesmos botões ▲/▼ das demais
+    // divisórias (ver appendReorderButtons, escopo global).
+    if (reorderOpts) appendReorderButtons(titleActions, reorderOpts);
     title.appendChild(titleActions);
     section.appendChild(title);
 
@@ -8468,15 +8666,54 @@
     months[rangeEnd.slice(0, 7)] = true;
     var monthKeys = Object.keys(months);
 
-    Promise.all(monthKeys.map(function (m) {
-      return authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(m)).then(function (r) { return r.json(); });
-    })).then(function (results) {
+    // "kindFilter" (pedido do Georges — "Empréstimo conseguir ser colocado
+    // dentro de Financeiro, ai tenho um botão (chip) dentro da divisória
+    // Financeiro para filtrar o que é Empréstimos ou Contas Mensais?") —
+    // os 2 chips nascem os dois ATIVOS (mostra tudo misturado, como já era
+    // antes de Empréstimos entrar aqui); clicar em 1 chip isola/tira ele da
+    // lista, sem precisar buscar de novo (filtro 100% client-side sobre
+    // "res.due" já combinado).
+    var kindFilter = { conta: true, emprestimo: true };
+
+    Promise.all([
+      Promise.all(monthKeys.map(function (m) {
+        return authFetch(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(m)).then(function (r) { return r.json(); });
+      })),
+      authFetch(cfg.templateWorkerUrl + "/loans").then(function (r) { return r.ok ? r.json() : { items: [] }; }).catch(function () { return { items: [] }; })
+    ]).then(function (combined) {
+      var contasResults = combined[0];
+      var loansResult = combined[1];
       var allItems = [];
-      results.forEach(function (r) { allItems = allItems.concat((r && r.items) || []); });
+      contasResults.forEach(function (r) { allItems = allItems.concat((r && r.items) || []); });
       var due = allItems.filter(function (it) {
         var v = it.vencimento && it.vencimento.start;
         return v && v >= rangeStart && v <= rangeEnd;
-      });
+      }).map(function (it) { it.kind = "conta"; return it; });
+
+      // Empréstimos (pedido do Georges) — mesma faixa de datas, usando o
+      // "próximo vencimento" calculado (ver loanProximoVencimentoISO,
+      // escopo global, mesma lógica da página Empréstimos). Empréstimo
+      // "sem_data" ou já pago nunca entra aqui (loanProximoVencimentoISO
+      // devolve null pros dois casos). Vira um item no MESMO formato dos
+      // de Contas Mensais (accountLabel/vencimento/url) pra reaproveitar
+      // renderFinanceiroDueSoonBody sem precisar de um 2º leiaute — valor
+      // mostrado é o SALDO PENDENTE (não o valor total original).
+      var loanItems = ((loansResult && loansResult.items) || []).map(function (loan) {
+        var venc = loanProximoVencimentoISO(loan, todayStr);
+        if (!venc || venc < rangeStart || venc > rangeEnd) return null;
+        return {
+          id: "loan:" + loan.id,
+          kind: "emprestimo",
+          accountLabel: loan.pessoa + " — " + (loan.direcao === "receber" ? "a receber" : "a pagar"),
+          vencimento: { start: venc },
+          valorPago: loanSaldoPendente(loan),
+          url: loan.notionUrl || null,
+          target: "emprestimos"
+        };
+      }).filter(Boolean);
+
+      due = due.concat(loanItems);
+
       return Promise.all(monthKeys.map(function (m) {
         return authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(m)).then(function (r) { return r.json(); });
       })).then(function (paidResults) {
@@ -8488,8 +8725,34 @@
         return { due: due, overrides: overrides };
       });
     }).then(function (res) {
-      body.innerHTML = "";
-      renderFinanceiroDueSoonBody(body, res.due, res.overrides, emptyMsg);
+      function renderNow() {
+        body.innerHTML = "";
+        var visible = res.due.filter(function (it) { return kindFilter[it.kind]; });
+        renderFinanceiroDueSoonBody(body, visible, res.overrides, emptyMsg);
+      }
+      renderNow();
+      // chips "Contas Mensais"/"Empréstimos" SÓ aparecem quando há pelo
+      // menos 1 empréstimo na faixa — nas demais vezes fica exatamente
+      // como antes (sem poluir a divisória com um filtro que não tem o
+      // que filtrar).
+      if (res.due.some(function (it) { return it.kind === "emprestimo"; })) {
+        var chipsWrap = document.createElement("div");
+        chipsWrap.className = "financeiro-kind-chips";
+        [{ key: "conta", label: "Contas Mensais" }, { key: "emprestimo", label: "Empréstimos" }].forEach(function (k) {
+          var chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "financeiro-kind-chip" + (kindFilter[k.key] ? " active" : "");
+          chip.textContent = k.label;
+          chip.addEventListener("click", function () {
+            kindFilter[k.key] = !kindFilter[k.key];
+            chip.classList.toggle("active", kindFilter[k.key]);
+            renderNow();
+            body.insertBefore(chipsWrap, body.firstChild);
+          });
+          chipsWrap.appendChild(chip);
+        });
+        body.insertBefore(chipsWrap, body.firstChild);
+      }
       var shouldCollapse = res.due.length === 0;
       section.classList.toggle("collapsed", shouldCollapse);
       collapseIcon.className = shouldCollapse ? "ti ti-chevron-right" : "ti ti-chevron-down";
@@ -8526,6 +8789,22 @@
     var itemsWrap = document.createElement("div");
     itemsWrap.className = "group-items";
     items.forEach(function (it, idx) {
+      // item de empréstimo (ver loanItems em renderFinanceiroDueSoonBlock) —
+      // não passa por financeiro-paid/financeiroDisplayValue (isso é só pro
+      // modelo de Contas Mensais); valor já vem pronto em "valorPago" (saldo
+      // pendente do empréstimo) e abre a página Empréstimos do app quando
+      // não tem link do Notion cadastrado.
+      if (it.kind === "emprestimo") {
+        var subLoan = [
+          { text: financeiroFormatDate(it.vencimento.start) },
+          { text: financeiroFormatBRL(it.valorPago) },
+          { text: "Empréstimo", color: "#7048e8" },
+        ];
+        itemsWrap.appendChild(buildItemEl(it.url
+          ? { label: it.accountLabel, type: "notion", url: it.url, sub: subLoan }
+          : { label: it.accountLabel, type: "page", target: it.target || "emprestimos", sub: subLoan }, 100 + idx));
+        return;
+      }
       var info = financeiroPaidInfo(it, overrides);
       var sub = [
         { text: financeiroFormatDate(it.vencimento.start) },
@@ -11548,7 +11827,15 @@
           cell.textContent = transacoesFmtDateBR(it.dataCompra);
           break;
         case "nome":
-          cell.textContent = it.nome;
+          // 2ª coluna de texto livre da tabela (só aparece com "Mostrar
+          // todas as colunas") — mesmo tratamento ellipsis+title de
+          // Objetivo, ver styles.css (".passagens-th-objetivo"/"-th-nome"
+          // ganham width:% explícito em vez de ficar sem largura nenhuma,
+          // pra nunca ter 2 colunas "livres de verdade" disputando 100% do
+          // espaço sobrando ao mesmo tempo — bug novo reportado pelo
+          // Georges: "Objetivo ficou com largura gigante").
+          cell.textContent = it.nome || "—";
+          if (it.nome) cell.title = it.nome;
           break;
         case "tipo":
           cell.textContent = it.tipo ? (passagensTipoIcon(it.tipo) + " " + it.tipo) : "—";
@@ -11680,12 +11967,67 @@
   // Procedimento), Tipo de Consulta (select), Data da Consulta (date),
   // Situação (select), Especialidade (select), Parte do Corpo (multi_
   // select), Local (select), Profissional (multi_select), Valor (number,
-  // formato "real"), NFPS (number).
+  // formato "real"), NFPS (number), Tratamento (select — propriedade NOVA,
+  // o Georges adicionou depois na base Notion).
   var SAUDE_TIPO_EVENTO_ICON = { "Consulta": "🩺", "Exame": "🔬", "Procedimento": "💉" };
   function saudeTipoEventoIcon(tipo) { return SAUDE_TIPO_EVENTO_ICON[tipo] || "🏥"; }
   // dias até a Data da Consulta (hoje = 0) — mesma lógica de provasDiasAte,
   // reaproveitada direto (função pura, sem nada específico de Saúde).
   function saudeDiasAte(dataISO) { return provasDiasAte(dataISO); }
+  // "Nome do Profissional" (pedido do Georges: "antes do '(', pois não
+  // preciso do CRO/CRM") — o campo Profissional no Notion vem formatado
+  // tipo "Dr. Fulano (CRM 12345)"; essa função tira o "(...)" e o espaço
+  // antes dele, mantendo só o nome. Campo "Profissional" cru (com
+  // CRO/CRM) continua disponível à parte, só fica oculto por padrão.
+  function saudeNomeProfissional(raw) {
+    if (!raw) return raw;
+    return raw.replace(/\s*\(.*$/, "").trim() || raw;
+  }
+  // Botão de mapa no "Local" (pedido do Georges: "clicar e jogar direto no
+  // Waze ou Maps"). Sem API paga de geocoding/endereço — usa o deep-link de
+  // BUSCA do Google Maps (maps.google.com/?q=<nome>), que o próprio app de
+  // Maps (ou o navegador, se não tiver o app instalado) resolve pelo NOME
+  // do local, igual uma busca manual. Clicar no pino abre o app; o botão de
+  // copiar deixa o nome pronto pra colar em qualquer outro app (Waze
+  // inclusive). stopPropagation() nos 2 botões pra não disparar o clique da
+  // linha inteira (que abre a página no Notion).
+  function saudeAppendLocalCell(cell, local) {
+    if (!local) { cell.textContent = "—"; return; }
+    var wrap = document.createElement("span");
+    wrap.className = "saude-local-inline";
+    var textSpan = document.createElement("span");
+    textSpan.textContent = local;
+    wrap.appendChild(textSpan);
+
+    var mapsBtn = document.createElement("a");
+    mapsBtn.className = "saude-local-btn";
+    mapsBtn.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(local);
+    mapsBtn.target = "_blank";
+    mapsBtn.rel = "noopener";
+    mapsBtn.title = "Abrir no Maps";
+    mapsBtn.innerHTML = '<i class="ti ti-map-pin"></i>';
+    mapsBtn.addEventListener("click", function (e) { e.stopPropagation(); });
+    wrap.appendChild(mapsBtn);
+
+    var copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "saude-local-btn";
+    copyBtn.title = "Copiar nome do local";
+    copyBtn.innerHTML = '<i class="ti ti-copy"></i>';
+    copyBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(local).then(function () {
+          copyBtn.innerHTML = '<i class="ti ti-check"></i>';
+          setTimeout(function () { copyBtn.innerHTML = '<i class="ti ti-copy"></i>'; }, 1200);
+        }).catch(function () {});
+      }
+    });
+    wrap.appendChild(copyBtn);
+
+    cell.appendChild(wrap);
+  }
 
   function saudeItemFromPage(p) {
     var extra = p.extra || {};
@@ -11693,17 +12035,20 @@
     function multi(key) { return (extra[key] || []).map(function (o) { return o.name; }); }
     function dateStart(key) { var v = extra[key]; return (v && v.start) ? v.start : null; }
     var dataConsultaISO = dateStart("Data da Consulta");
+    var profissionalRaw = multi("Profissional");
     return {
       id: p.id,
       url: p.url,
       nome: p.title || "(sem título)",
       tipoEvento: sel("Tipo de Evento"),
       tipoConsulta: sel("Tipo de Consulta"),
+      tratamento: sel("Tratamento"),
       situacao: sel("Situação"),
       especialidade: sel("Especialidade"),
       local: sel("Local"),
       parteCorpo: multi("Parte do Corpo"),
-      profissional: multi("Profissional"),
+      profissional: profissionalRaw,
+      profissionalNome: profissionalRaw.map(saudeNomeProfissional),
       dataConsulta: dataConsultaISO,
       valor: (typeof extra["Valor"] === "number") ? extra["Valor"] : null,
       nfps: (typeof extra["NFPS"] === "number") ? extra["NFPS"] : null,
@@ -11711,7 +12056,7 @@
     };
   }
   var SAUDE_EXTRA_FIELDS = [
-    "Tipo de Evento", "Tipo de Consulta", "Situação", "Especialidade", "Local",
+    "Tipo de Evento", "Tipo de Consulta", "Tratamento", "Situação", "Especialidade", "Local",
     "Parte do Corpo", "Profissional", "Data da Consulta", "Valor", "NFPS"
   ];
 
@@ -11905,20 +12250,25 @@
 
     wrap.appendChild(controls);
 
-    // Colunas padrão visíveis (pedido do Georges): Nome, Tipo de Evento,
-    // Data da Consulta, Situação, Local — as demais (Tipo de Consulta,
-    // Especialidade, Parte do Corpo, Profissional, Valor, NFPS) ficam
-    // ocultas até clicar "Mostrar todas as colunas" (mesma metodologia de
-    // Passagens). "Nome" é a única coluna de texto livre (ver regra
-    // permanente de largura em instrucoes.md) — as demais são curtas/badge.
+    // Colunas padrão visíveis (pedido do Georges, 2ª rodada): Tipo de
+    // Evento, Tipo de Consulta, Data da Consulta, Tratamento, Nome do
+    // Profissional (só o nome, sem CRO/CRM) e Local — as demais (Nome,
+    // Situação, Especialidade, Parte do Corpo, Profissional cru c/ CRO/CRM,
+    // Valor, NFPS) ficam ocultas até clicar "Mostrar todas as colunas"
+    // (mesma metodologia de Passagens). "Nome" (quando revelado) é a única
+    // coluna de texto livre de verdade (ver regra permanente de largura em
+    // instrucoes.md) — as demais são curtas/badge, inclusive os 2 campos de
+    // chips múltiplos (Parte do Corpo/Profissional/Profissional Nome).
     var COLS = [
-      { key: "nome", label: "Nome", cls: "saude-th-nome", sortKey: "nome" },
       { key: "tipoEvento", label: "Tipo de Evento", cls: "saude-th-tipo-evento" },
+      { key: "tipoConsulta", label: "Tipo de Consulta", cls: "saude-th-tipo-consulta" },
       { key: "dataConsulta", label: "Data da Consulta", cls: "saude-th-data", sortKey: "dataConsulta" },
-      { key: "situacao", label: "Situação", cls: "saude-th-situacao" },
+      { key: "tratamento", label: "Tratamento", cls: "saude-th-tratamento" },
+      { key: "profissionalNome", label: "Nome do Profissional", cls: "saude-th-profissional-nome" },
       { key: "local", label: "Local", cls: "saude-th-local" },
       // ocultas por padrão — reveladas só pelo botão "Mostrar todas as colunas".
-      { key: "tipoConsulta", label: "Tipo de Consulta", cls: "saude-th-tipo-consulta" },
+      { key: "nome", label: "Nome", cls: "saude-th-nome", sortKey: "nome" },
+      { key: "situacao", label: "Situação", cls: "saude-th-situacao" },
       { key: "especialidade", label: "Especialidade", cls: "saude-th-especialidade" },
       { key: "parteCorpo", label: "Parte do Corpo", cls: "saude-th-parte-corpo" },
       { key: "profissional", label: "Profissional", cls: "saude-th-profissional" },
@@ -11926,7 +12276,7 @@
       { key: "nfps", label: "NFPS", cls: "saude-th-nfps", sortKey: "nfps" }
     ];
     var allColumnKeys = COLS.map(function (c) { return c.key; });
-    var defaultHiddenKeys = ["tipoConsulta", "especialidade", "parteCorpo", "profissional", "valor", "nfps"];
+    var defaultHiddenKeys = ["nome", "situacao", "especialidade", "parteCorpo", "profissional", "valor", "nfps"];
     var columnsExpanded = false;
 
     var columnsToolbar = document.createElement("div");
@@ -11980,10 +12330,13 @@
           if (it.situacao) { cell.appendChild(passagensChip(it.situacao)); } else { cell.textContent = "—"; }
           break;
         case "local":
-          cell.textContent = it.local || "—";
+          saudeAppendLocalCell(cell, it.local);
           break;
         case "tipoConsulta":
           cell.textContent = it.tipoConsulta || "—";
+          break;
+        case "tratamento":
+          if (it.tratamento) { cell.appendChild(passagensChip(it.tratamento)); } else { cell.textContent = "—"; }
           break;
         case "especialidade":
           cell.textContent = it.especialidade || "—";
@@ -11993,6 +12346,9 @@
           break;
         case "profissional":
           passagensAppendChipList(cell, it.profissional);
+          break;
+        case "profissionalNome":
+          passagensAppendChipList(cell, it.profissionalNome);
           break;
         case "valor":
           cell.textContent = (it.valor !== null) ? transacoesFmtMoney(it.valor) : "—";
@@ -20762,17 +21118,22 @@
     // ter marcado ela como home). Falha de rede/401 aqui NUNCA trava o
     // boot — só cai de volta no "homePage"/"startPage" fixo do config.js,
     // como sempre foi.
-    authFetch(cfg.templateWorkerUrl + "/home-page")
+    var homePagePromise = authFetch(cfg.templateWorkerUrl + "/home-page")
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
         if (data && data.homePage && cfg.pages[data.homePage]) homePageId = data.homePage;
       })
-      .catch(function () {})
-      .finally(function () {
-        var initial = location.hash.replace("#", "") || homePageId;
-        history.replaceState({ pageId: initial }, "", "#" + initial);
-        render(initial, false);
-      });
+      .catch(function () {});
+
+    // busca a ordem salva das divisórias do Painel do Dia (ver
+    // fetchInicioBlockOrder, escopo global) EM PARALELO com "home-page" —
+    // precisa estar pronta ANTES do 1º render() pra renderBody() (dentro de
+    // renderTabs) já aplicar a ordem certa de cara, sem "pular" depois.
+    Promise.all([homePagePromise, fetchInicioBlockOrder()]).finally(function () {
+      var initial = location.hash.replace("#", "") || homePageId;
+      history.replaceState({ pageId: initial }, "", "#" + initial);
+      render(initial, false);
+    });
   }
 
   if (window.Auth) {

@@ -822,6 +822,17 @@ html, body {
   margin-left: 8px;
   color: #d6d6d2;
 }
+/* Alerta de relatoria TAT/JART (divisória ⚖️ Sessões, Painel do Dia) —
+   pedido do Georges: destacar quando ele for Conselheiro Relator de algum
+   processo pautado na sessão (ver markItemAsRelator em app.js). */
+.item-relator-highlight {
+  background: #fff4e6;
+  border-left: 3px solid #d9480f;
+}
+.item-relator-badge {
+  color: #d9480f;
+  font-weight: 600;
+}
 /* badge "stacked" (ex: 2 tags de "📖 Contrato" em Contratos) — cada uma na
    sua PRÓPRIA linha (não continua ao lado da anterior nem entra na fila de
    "·" separando badges), com o texto INTEIRO sempre visível (sem cortar
@@ -937,6 +948,50 @@ html, body {
 /* wrapper único pra titleLinks (Notion/app) + botão de recolher, juntos
    no lado direito do título — ver comentário em renderDynamicQueryBlockReady. */
 .query-title-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+/* pedido do Georges: clicar no NOME da divisória (não só na setinha no
+   canto) expande/recolhe — ver toggleCollapse em renderDynamicQueryBlockReady
+   e renderFinanceiroDueSoonBlock. */
+.query-title-clickable { cursor: pointer; }
+/* botões ▲/▼ pra reordenar divisórias do Painel do Dia (pedido do Georges —
+   ver appendReorderButtons, escopo global, e GET/PUT /inicio-block-order no
+   worker.js). Mesmo padrão visual do .query-collapse-btn ao lado; ".disabled"
+   (1º item sem ▲, último sem ▼) fica esmaecido e sem cursor de clique. */
+.query-reorder-btn {
+  flex-shrink: 0;
+  width: 18px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: #8a8a86;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.query-reorder-btn:hover { background: rgba(0,0,0,0.06); color: #57534e; }
+.query-reorder-btn .ti { font-size: 14px; }
+.query-reorder-btn.disabled { opacity: 0.3; cursor: default; }
+.query-reorder-btn.disabled:hover { background: none; color: #8a8a86; }
+/* chips "Contas Mensais"/"Empréstimos" dentro da divisória Financeiro do
+   Painel do Dia (pedido do Georges — ver renderFinanceiroDueSoonBlock) —
+   só aparecem quando a faixa tem pelo menos 1 empréstimo; clique isola/
+   devolve aquele tipo à lista (filtro client-side, sem nova busca). */
+.financeiro-kind-chips { display: flex; gap: 6px; margin-bottom: 10px; }
+.financeiro-kind-chip {
+  border: 1px solid #d8d4cc;
+  background: #fff;
+  color: #847f73;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.financeiro-kind-chip.active {
+  background: #2f2e2a;
+  color: #fff;
+  border-color: #2f2e2a;
+}
 /* título de exibição com "nameSearch" (ex: "Todas as legislações") usa
    ".content-section-title" (mesmo padrão de "groupsSectionTitle") — zera a
    margem de cima aqui dentro, já que o "padding" do .query-block já dá o
@@ -6672,7 +6727,23 @@ html, body {
    inteira. Trocado: "Objetivo" virou a única coluna livre (sem width,
    ellipsis+title em vez de quebrar — ver buildBodyCell no app.js) e
    "Trecho" (chips curtos, já nowrap) entrou na lista de largura fixa no
-   lugar. */
+   lugar.
+   3ª rodada (bug novo, oposto do anterior): "Objetivo ficou com largura
+   gigante e o resto espremido". Causa: coluna "livre" SEM nenhum width
+   (nem %) faz o algoritmo de table-layout:auto jogar NELA sozinha todo o
+   espaço sobrando da tabela (que é width:100%) — numa tela larga isso vira
+   uma célula enorme com um textinho curto boiando à esquerda (o
+   max-width:260px no <td> só limita onde o ellipsis corta o TEXTO, não
+   limita a largura real da CÉLULA/coluna). Além disso "Nome" (só visível
+   com "Mostrar todas as colunas") também não tinha width nenhum — ou seja,
+   quando expandido, viravam 2 colunas "livres" disputando o sobrando ao
+   mesmo tempo, o que a regra permanente (instrucoes.md) proíbe. Fix: as 2
+   colunas de texto livre (Objetivo/Nome) ganham um width EM PORCENTAGEM
+   (em vez de nenhum width) — isso faz o navegador considerar essa %% no
+   cálculo de distribuição do espaço sobrando (dividido entre as colunas
+   com %%, não jogado 100% numa só) — e todas as colunas curtas que ainda
+   não tinham width (Tipo/Passageiros/Forma de Pagamento) entraram na lista
+   de width:1%+nowrap, pra nenhuma delas virar "livre" por engano. */
 .passagens-th-localizador,
 .passagens-th-companhia,
 .passagens-th-trecho,
@@ -6681,8 +6752,14 @@ html, body {
 .passagens-th-voo,
 .passagens-th-duracao,
 .passagens-th-taxa,
-.passagens-th-valor { width: 1%; white-space: nowrap; }
-.passagens-col-objetivo {
+.passagens-th-valor,
+.passagens-th-tipo,
+.passagens-th-passageiros,
+.passagens-th-pagamento { width: 1%; white-space: nowrap; }
+.passagens-th-objetivo { width: 20%; }
+.passagens-th-nome { width: 16%; }
+.passagens-col-objetivo,
+.passagens-col-nome {
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6767,18 +6844,29 @@ html, body {
    Passagens, com colunas recolhidas") — mesma regra permanente de largura
    de coluna (instrucoes.md): "Nome" é a ÚNICA coluna de texto livre (sem
    width, ellipsis+title em vez de quebrar), todas as demais — incluindo as
-   2 de chips múltiplos (Parte do Corpo/Profissional, mesmo critério já
-   usado em "Trecho" de Passagens) — ganham width:1%+nowrap. */
+   de chips múltiplos (Parte do Corpo/Profissional/Nome do Profissional,
+   mesmo critério já usado em "Trecho" de Passagens) — ganham
+   width:1%+nowrap. Colunas padrão (2ª rodada, pedido do Georges): Tipo de
+   Evento/Tipo de Consulta/Data da Consulta/Tratamento/Nome do
+   Profissional/Local visíveis; Nome/Situação/Especialidade/Parte do
+   Corpo/Profissional(cru)/Valor/NFPS ocultas até "Mostrar todas colunas". */
 .saude-th-tipo-evento,
 .saude-th-data,
 .saude-th-situacao,
 .saude-th-local,
 .saude-th-tipo-consulta,
+.saude-th-tratamento,
 .saude-th-especialidade,
 .saude-th-parte-corpo,
 .saude-th-profissional,
+.saude-th-profissional-nome,
 .saude-th-valor,
 .saude-th-nfps { width: 1%; white-space: nowrap; }
+/* "Nome" ganha width EM PORCENTAGEM (não width:0/nenhum) — mesma correção
+   aplicada em Passagens (ver comentário grande acima, "3ª rodada"): sem
+   isso, numa tela larga, a única coluna sem width leva TODO o espaço
+   sobrando da tabela e vira uma célula enorme com texto curto boiando. */
+.saude-th-nome { width: 20%; }
 .saude-col-nome {
   max-width: 260px;
   overflow: hidden;
@@ -6788,13 +6876,44 @@ html, body {
 
 /* Saúde — recolher/expandir colunas (mesma metodologia de Passagens/
    Prioridades: "hide-<key>" na tabela + "saude-col-<key>" em cada th/td). */
-.saude-table.hide-tipoConsulta .saude-col-tipoConsulta,
+.saude-table.hide-nome .saude-col-nome,
+.saude-table.hide-situacao .saude-col-situacao,
 .saude-table.hide-especialidade .saude-col-especialidade,
 .saude-table.hide-parteCorpo .saude-col-parteCorpo,
 .saude-table.hide-profissional .saude-col-profissional,
 .saude-table.hide-valor .saude-col-valor,
 .saude-table.hide-nfps .saude-col-nfps {
   display: none;
+}
+
+/* Botão de mapa + copiar no "Local" (pedido do Georges — abrir Waze/Maps
+   direto a partir da tabela) — ver saudeAppendLocalCell no app.js. Botões
+   pequenos e discretos (mesma pegada visual dos ícones de ação já usados
+   em Prioridades/Notificações), só aparecem "destacados" no hover da
+   linha pra não poluir a tabela. */
+.saude-local-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.saude-local-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: #847f73;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.saude-local-btn:hover {
+  background: #eeede9;
+  color: #2f2e2a;
 }
 
 @media (max-width: 640px) {

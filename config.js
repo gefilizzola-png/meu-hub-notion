@@ -684,6 +684,16 @@ var TITLELINKS_SAUDE = [
   { type: "notion", url: "https://app.notion.com/p/georges-filizzola/3ec0481486dd803c8997fbe2c2ad26dd?v=3ec0481486dd80739b78000c4297e9d9&source=copy_link", title: "Abrir Saúde no Notion" },
   { type: "page", target: "consultas_exames", title: "Abrir Saúde no app" }
 ];
+// Atalho ao lado do título "✈️ Viagens" no Painel do Dia (pedido do
+// Georges — "uma única divisória que irá trazer Passagens e outras
+// páginas relacionadas a viagens que farei futuramente, como
+// Hospedagens"). Sem link direto pro Notion aqui (não achamos uma URL de
+// base/view pra "Viagens" em si — só pra Passagens, que já tem o próprio
+// botão dentro da página financeiro_viagens_passagens) — só a navegação
+// interna pra pasta de Viagens dentro do app.
+var TITLELINKS_VIAGENS = [
+  { type: "page", target: "financeiro_viagens", title: "Abrir Viagens no app" }
+];
 
 // "key"/"label" das 14 contas de "Financeiro → Contas Mensais" — ESPELHA
 // FINANCEIRO_CONTAS_MENSAIS no worker.js (mesmas 14 chaves/rótulos, sem o
@@ -1647,7 +1657,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-02 00:28",
+  appVersion: "2026-10-02 10:34",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1966,30 +1976,17 @@ const APP_CONFIG = {
           weatherDay: 0,
           financeiroRange: "today",
           dynamicQueries: [
-            // "🏥 Saúde" (pedido do Georges — nova divisória no Painel do Dia,
-            // mesmo padrão das demais: recolhida se vazio, filtro, etc). Ao
-            // contrário de "Financeiro" (KV, por isso precisou de função
-            // própria renderFinanceiroDueSoonBlock), a base de Saúde é uma
-            // database Notion normal (SAUDE_DATABASE_ID) — então basta um
-            // dynamicQueries comum com database_id próprio (mesmo truque já
-            // usado por Reuniões/Tarefas/Aniversários acima, só que essas
-            // apontam pra Central e esta aponta direto pra SAUDE_DATABASE_ID).
+            // "id" em cada bloco (pedido do Georges — mecanismo de reordenar
+            // divisórias, ver /inicio-block-order no worker.js) — identifica
+            // cada divisória de forma estável entre as 3 abas (mesmo id nas
+            // 3, só os filtros de data mudam) pra persistir a ordem salva
+            // independente do array aqui. Ordem PADRÃO (sem nada salvo
+            // ainda): Reuniões/Sessões/Tarefas/Aniversários/Outros eventos/
+            // Saúde/Financeiro — Saúde entra no FIM, não no topo (bug
+            // relatado pelo Georges numa rodada anterior: "Você colocou
+            // Saúde lá em cima").
             {
-              title: "🏥 Saúde",
-              collapsible: true,
-              titleLinks: TITLELINKS_SAUDE,
-              bg: "#e0f7fa",
-              database_id: SAUDE_DATABASE_ID,
-              baseFilters: [
-                { property: "Data da Consulta", type: "date", condition: "equals", value: "today" }
-              ],
-              sorts: [{ property: "Data da Consulta", direction: "ascending" }],
-              cardFields: [
-                { property: "Tipo de Evento", type: "select" },
-                { property: "Situação", type: "select" }
-              ]
-            },
-            {
+              id: "reunioes",
               title: "📅 Reuniões",
               collapsible: true,
               titleLinks: TITLELINKS_REUNIOES,
@@ -2007,8 +2004,17 @@ const APP_CONFIG = {
               ]
             },
             {
+              id: "sessoes",
               title: "⚖️ Sessões (TAT / JART / COMAT)",
               collapsible: true,
+              // "relatoriaCheck" (pedido do Georges — "não precisa de nova
+              // divisória pro TAT/JART, só um alerta quando tiver... um
+              // processo de minha relatoria"). Não existe campo estruturado
+              // Relator em nenhuma base; a checagem lê o texto da pauta de
+              // julgamento dentro da própria página da Sessão (worker.js:
+              // GET /sessao-relatoria) e destaca o card quando bate — ver
+              // markItemAsRelator em app.js.
+              relatoriaCheck: true,
               bg: "#fdf6e3",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -2031,6 +2037,7 @@ const APP_CONFIG = {
               ]
             },
             {
+              id: "tarefas",
               title: "✅ Tarefas",
               collapsible: true,
               titleLinks: TITLELINKS_TAREFAS,
@@ -2056,6 +2063,7 @@ const APP_CONFIG = {
               ]
             },
             {
+              id: "aniversarios",
               title: "🎂 Aniversários",
               collapsible: true,
               titleLinks: TITLELINKS_ANIVERSARIOS,
@@ -2082,6 +2090,7 @@ const APP_CONFIG = {
               ]
             },
             {
+              id: "outros_eventos",
               title: "🗓️ Outros eventos",
               collapsible: true,
               bg: "#f3eefc",
@@ -2107,6 +2116,54 @@ const APP_CONFIG = {
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
                 { property: "📚 Página de Origem", type: "select" }
               ]
+            },
+            // "🏥 Saúde" (pedido do Georges — divisória no Painel do Dia,
+            // mesmo padrão das demais: recolhida se vazio, filtro, etc). Ao
+            // contrário de "Financeiro" (KV, por isso precisou de função
+            // própria renderFinanceiroDueSoonBlock), a base de Saúde é uma
+            // database Notion normal (SAUDE_DATABASE_ID) — então basta um
+            // dynamicQueries comum com database_id próprio (mesmo truque já
+            // usado por Reuniões/Tarefas/Aniversários acima, só que essas
+            // apontam pra Central e esta aponta direto pra SAUDE_DATABASE_ID).
+            {
+              id: "saude",
+              title: "🏥 Saúde",
+              collapsible: true,
+              titleLinks: TITLELINKS_SAUDE,
+              bg: "#e0f7fa",
+              database_id: SAUDE_DATABASE_ID,
+              baseFilters: [
+                { property: "Data da Consulta", type: "date", condition: "equals", value: "today" }
+              ],
+              sorts: [{ property: "Data da Consulta", direction: "ascending" }],
+              cardFields: [
+                { property: "Tipo de Evento", type: "select" },
+                { property: "Situação", type: "select" }
+              ]
+            },
+            // "✈️ Viagens" (pedido do Georges — "uma única divisória que irá
+            // trazer Passagens e outras páginas relacionadas a viagens que
+            // farei futuramente, como Hospedagens"). Por ora só Passagens
+            // alimenta esta divisória (PASSAGENS_DATABASE_ID, filtro por
+            // "Data da Ida") — quando Hospedagens (ou outra base de viagem)
+            // existir, este bloco pode virar múltiplos dynamicQueries dentro
+            // do mesmo título, ou ganhar orPairs, sem mudar o conceito da
+            // divisória única.
+            {
+              id: "viagens",
+              title: "✈️ Viagens",
+              collapsible: true,
+              titleLinks: TITLELINKS_VIAGENS,
+              bg: "#e3f2fd",
+              database_id: PASSAGENS_DATABASE_ID,
+              baseFilters: [
+                { property: "Data da Ida", type: "date", condition: "equals", value: "today" }
+              ],
+              sorts: [{ property: "Data da Ida", direction: "ascending" }],
+              cardFields: [
+                { property: "Companhia", type: "select" },
+                { property: "Destino", type: "select" }
+              ]
             }
           ]
         },
@@ -2117,21 +2174,7 @@ const APP_CONFIG = {
           financeiroRange: "tomorrow",
           dynamicQueries: [
             {
-              title: "🏥 Saúde",
-              collapsible: true,
-              titleLinks: TITLELINKS_SAUDE,
-              bg: "#e0f7fa",
-              database_id: SAUDE_DATABASE_ID,
-              baseFilters: [
-                { property: "Data da Consulta", type: "date", condition: "equals", value: "tomorrow" }
-              ],
-              sorts: [{ property: "Data da Consulta", direction: "ascending" }],
-              cardFields: [
-                { property: "Tipo de Evento", type: "select" },
-                { property: "Situação", type: "select" }
-              ]
-            },
-            {
+              id: "reunioes",
               title: "📅 Reuniões",
               collapsible: true,
               titleLinks: TITLELINKS_REUNIOES,
@@ -2149,8 +2192,17 @@ const APP_CONFIG = {
               ]
             },
             {
+              id: "sessoes",
               title: "⚖️ Sessões (TAT / JART / COMAT)",
               collapsible: true,
+              // "relatoriaCheck" (pedido do Georges — "não precisa de nova
+              // divisória pro TAT/JART, só um alerta quando tiver... um
+              // processo de minha relatoria"). Não existe campo estruturado
+              // Relator em nenhuma base; a checagem lê o texto da pauta de
+              // julgamento dentro da própria página da Sessão (worker.js:
+              // GET /sessao-relatoria) e destaca o card quando bate — ver
+              // markItemAsRelator em app.js.
+              relatoriaCheck: true,
               bg: "#fdf6e3",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
               baseFilters: [
@@ -2173,6 +2225,7 @@ const APP_CONFIG = {
               ]
             },
             {
+              id: "tarefas",
               title: "✅ Tarefas",
               collapsible: true,
               titleLinks: TITLELINKS_TAREFAS,
@@ -2198,6 +2251,7 @@ const APP_CONFIG = {
               ]
             },
             {
+              id: "aniversarios",
               title: "🎂 Aniversários",
               collapsible: true,
               titleLinks: TITLELINKS_ANIVERSARIOS,
@@ -2219,6 +2273,7 @@ const APP_CONFIG = {
               ]
             },
             {
+              id: "outros_eventos",
               title: "🗓️ Outros eventos",
               collapsible: true,
               bg: "#f3eefc",
@@ -2244,6 +2299,38 @@ const APP_CONFIG = {
                 { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
                 { property: "📚 Página de Origem", type: "select" }
               ]
+            },
+            {
+              id: "saude",
+              title: "🏥 Saúde",
+              collapsible: true,
+              titleLinks: TITLELINKS_SAUDE,
+              bg: "#e0f7fa",
+              database_id: SAUDE_DATABASE_ID,
+              baseFilters: [
+                { property: "Data da Consulta", type: "date", condition: "equals", value: "tomorrow" }
+              ],
+              sorts: [{ property: "Data da Consulta", direction: "ascending" }],
+              cardFields: [
+                { property: "Tipo de Evento", type: "select" },
+                { property: "Situação", type: "select" }
+              ]
+            },
+            {
+              id: "viagens",
+              title: "✈️ Viagens",
+              collapsible: true,
+              titleLinks: TITLELINKS_VIAGENS,
+              bg: "#e3f2fd",
+              database_id: PASSAGENS_DATABASE_ID,
+              baseFilters: [
+                { property: "Data da Ida", type: "date", condition: "equals", value: "tomorrow" }
+              ],
+              sorts: [{ property: "Data da Ida", direction: "ascending" }],
+              cardFields: [
+                { property: "Companhia", type: "select" },
+                { property: "Destino", type: "select" }
+              ]
             }
           ]
         },
@@ -2254,6 +2341,141 @@ const APP_CONFIG = {
           financeiroRange: "next7",
           dynamicQueries: [
             {
+              id: "reunioes",
+              title: "📅 Reuniões",
+              collapsible: true,
+              titleLinks: TITLELINKS_REUNIOES,
+              bg: "#eaf2fb",
+              database_id: "2310481486dd80079202fe1eaf5e14c4",
+              baseFilters: [
+                { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
+                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
+                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
+              ],
+              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
+              cardFields: [
+                { property: "📅 Data/Prazo", type: "date" },
+                { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
+              ]
+            },
+            {
+              id: "sessoes",
+              title: "⚖️ Sessões (TAT / JART / COMAT)",
+              collapsible: true,
+              // "relatoriaCheck" (pedido do Georges — "não precisa de nova
+              // divisória pro TAT/JART, só um alerta quando tiver... um
+              // processo de minha relatoria"). Não existe campo estruturado
+              // Relator em nenhuma base; a checagem lê o texto da pauta de
+              // julgamento dentro da própria página da Sessão (worker.js:
+              // GET /sessao-relatoria) e destaca o card quando bate — ver
+              // markItemAsRelator em app.js.
+              relatoriaCheck: true,
+              bg: "#fdf6e3",
+              database_id: "2310481486dd80079202fe1eaf5e14c4",
+              baseFilters: [
+                {
+                  property: "📚 Página de Origem", type: "select",
+                  orPairs: [
+                    { condition: "equals", value: "PMF - TAT - Sessões" },
+                    { condition: "equals", value: "PMF - JART - Sessões" },
+                    { condition: "equals", value: "PMF - COMAT - Reuniões" }
+                  ]
+                },
+                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
+                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
+              ],
+              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
+              cardFields: [
+                { property: "📅 Data/Prazo", type: "date" },
+                { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+                { property: "📚 Página de Origem", type: "select" }
+              ]
+            },
+            {
+              id: "tarefas",
+              title: "✅ Tarefas",
+              collapsible: true,
+              titleLinks: TITLELINKS_TAREFAS,
+              bg: "#eaf7ed",
+              database_id: "2310481486dd80079202fe1eaf5e14c4",
+              baseFilters: [
+                {
+                  property: "📚 Página de Origem", type: "select",
+                  orPairs: [
+                    { condition: "equals", value: "PMF - Tarefas" },
+                    { condition: "equals", value: "PMF - Betha - Tarefas" },
+                    { condition: "equals", value: "Pessoal - Tarefas" }
+                  ]
+                },
+                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
+                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
+              ],
+              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
+              cardFields: [
+                { property: "📅 Data/Prazo", type: "date" },
+                { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+                { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
+                { property: "📚 Página de Origem", type: "select" }
+              ]
+            },
+            {
+              id: "aniversarios",
+              title: "🎂 Aniversários",
+              collapsible: true,
+              titleLinks: TITLELINKS_ANIVERSARIOS,
+              bg: "#fdf2f8",
+              database_id: "2310481486dd80079202fe1eaf5e14c4",
+              baseFilters: [
+                { property: "📚 Página de Origem", type: "select", condition: "equals", value: "Pessoal - Aniversários" },
+                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
+                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
+              ],
+              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              // Sem INICIO_ANDAMENTO_FILTER de propósito — ver comentário na
+              // aba "Hoje" acima.
+              cardFields: [
+                { property: "📅 Data/Prazo", type: "date" },
+                // "Grupo" via crossRelation — ver comentário na aba "Hoje".
+                {
+                  property: "Grupo", type: "select",
+                  crossRelation: { relationProperty: "🎉 Aniversários", targetProperty: "Grupo" }
+                }
+              ]
+            },
+            {
+              id: "outros_eventos",
+              title: "🗓️ Outros eventos",
+              collapsible: true,
+              bg: "#f3eefc",
+              database_id: "2310481486dd80079202fe1eaf5e14c4",
+              baseFilters: [
+                {
+                  property: "🖥 Formas", type: "relation",
+                  orPairs: [
+                    { condition: "contains", value: "24104814-86dd-8086-9dd7-d3541def817b" },
+                    { condition: "contains", value: "23a04814-86dd-808a-8515-edcd72b5ac49" }
+                  ]
+                },
+                { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - Reuniões" },
+                { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - TAT - Sessões" },
+                { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - JART - Sessões" },
+                { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - COMAT - Reuniões" },
+                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
+                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
+              ],
+              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
+              filters: [INICIO_ANDAMENTO_FILTER],
+              cardFields: [
+                { property: "📅 Data/Prazo", type: "date" },
+                { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
+                { property: "📚 Página de Origem", type: "select" }
+              ]
+            },
+            {
+              id: "saude",
               title: "🏥 Saúde",
               collapsible: true,
               titleLinks: TITLELINKS_SAUDE,
@@ -2270,124 +2492,20 @@ const APP_CONFIG = {
               ]
             },
             {
-              title: "📅 Reuniões",
+              id: "viagens",
+              title: "✈️ Viagens",
               collapsible: true,
-              titleLinks: TITLELINKS_REUNIOES,
-              bg: "#eaf2fb",
-              database_id: "2310481486dd80079202fe1eaf5e14c4",
+              titleLinks: TITLELINKS_VIAGENS,
+              bg: "#e3f2fd",
+              database_id: PASSAGENS_DATABASE_ID,
               baseFilters: [
-                { property: "📚 Página de Origem", type: "select", condition: "equals", value: "PMF - Reuniões" },
-                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
-                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
+                { property: "Data da Ida", type: "date", condition: "on_or_after", value: "today" },
+                { property: "Data da Ida", type: "date", condition: "before", value: "next_7_days" }
               ],
-              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-              filters: [INICIO_ANDAMENTO_FILTER],
+              sorts: [{ property: "Data da Ida", direction: "ascending" }],
               cardFields: [
-                { property: "📅 Data/Prazo", type: "date" },
-                { property: "🧲 Andamento", type: "relation", lookup: "andamento" }
-              ]
-            },
-            {
-              title: "⚖️ Sessões (TAT / JART / COMAT)",
-              collapsible: true,
-              bg: "#fdf6e3",
-              database_id: "2310481486dd80079202fe1eaf5e14c4",
-              baseFilters: [
-                {
-                  property: "📚 Página de Origem", type: "select",
-                  orPairs: [
-                    { condition: "equals", value: "PMF - TAT - Sessões" },
-                    { condition: "equals", value: "PMF - JART - Sessões" },
-                    { condition: "equals", value: "PMF - COMAT - Reuniões" }
-                  ]
-                },
-                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
-                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
-              ],
-              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-              filters: [INICIO_ANDAMENTO_FILTER],
-              cardFields: [
-                { property: "📅 Data/Prazo", type: "date" },
-                { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
-                { property: "📚 Página de Origem", type: "select" }
-              ]
-            },
-            {
-              title: "✅ Tarefas",
-              collapsible: true,
-              titleLinks: TITLELINKS_TAREFAS,
-              bg: "#eaf7ed",
-              database_id: "2310481486dd80079202fe1eaf5e14c4",
-              baseFilters: [
-                {
-                  property: "📚 Página de Origem", type: "select",
-                  orPairs: [
-                    { condition: "equals", value: "PMF - Tarefas" },
-                    { condition: "equals", value: "PMF - Betha - Tarefas" },
-                    { condition: "equals", value: "Pessoal - Tarefas" }
-                  ]
-                },
-                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
-                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
-              ],
-              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-              filters: [INICIO_ANDAMENTO_FILTER, PRIORIDADE_FILTER, ORIGEM_FILTER, FOCUS_FILTER, LIMIT_FILTER],
-              cardFields: [
-                { property: "📅 Data/Prazo", type: "date" },
-                { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
-                { property: " 🚩 Prioridade", type: "relation", lookup: "prioridade" },
-                { property: "📚 Página de Origem", type: "select" }
-              ]
-            },
-            {
-              title: "🎂 Aniversários",
-              collapsible: true,
-              titleLinks: TITLELINKS_ANIVERSARIOS,
-              bg: "#fdf2f8",
-              database_id: "2310481486dd80079202fe1eaf5e14c4",
-              baseFilters: [
-                { property: "📚 Página de Origem", type: "select", condition: "equals", value: "Pessoal - Aniversários" },
-                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
-                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
-              ],
-              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-              // Sem INICIO_ANDAMENTO_FILTER de propósito — ver comentário na
-              // aba "Hoje" acima.
-              cardFields: [
-                { property: "📅 Data/Prazo", type: "date" },
-                // "Grupo" via crossRelation — ver comentário na aba "Hoje".
-                {
-                  property: "Grupo", type: "select",
-                  crossRelation: { relationProperty: "🎉 Aniversários", targetProperty: "Grupo" }
-                }
-              ]
-            },
-            {
-              title: "🗓️ Outros eventos",
-              collapsible: true,
-              bg: "#f3eefc",
-              database_id: "2310481486dd80079202fe1eaf5e14c4",
-              baseFilters: [
-                {
-                  property: "🖥 Formas", type: "relation",
-                  orPairs: [
-                    { condition: "contains", value: "24104814-86dd-8086-9dd7-d3541def817b" },
-                    { condition: "contains", value: "23a04814-86dd-808a-8515-edcd72b5ac49" }
-                  ]
-                },
-                { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - Reuniões" },
-                { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - TAT - Sessões" },
-                { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - JART - Sessões" },
-                { property: "📚 Página de Origem", type: "select", condition: "does_not_equal", value: "PMF - COMAT - Reuniões" },
-                { property: "📅 Data/Prazo", type: "date", condition: "on_or_after", value: "today" },
-                { property: "📅 Data/Prazo", type: "date", condition: "before", value: "next_7_days" }
-              ],
-              sorts: [{ property: "📅 Data/Prazo", direction: "ascending" }],
-              filters: [INICIO_ANDAMENTO_FILTER],
-              cardFields: [
-                { property: "📅 Data/Prazo", type: "date" },
-                { property: "🧲 Andamento", type: "relation", lookup: "andamento" },
-                { property: "📚 Página de Origem", type: "select" }
+                { property: "Companhia", type: "select" },
+                { property: "Destino", type: "select" }
               ]
             }
           ]
