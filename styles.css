@@ -4521,6 +4521,25 @@ html, body {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* Quando um botão de ciclo (".provas-status-cycle-btn", 34px de altura —
+   ex: "Próximas Viagens" em Passagens) convive na mesma linha
+   ".legislacoes-controls" com as seções recolhíveis "Pesquisar"/"Filtrar"
+   (".priorities-subsection"), bug reportado pelo Georges: ficam
+   desalinhados — a seção carrega margin/padding/border pensados pra
+   quando ela empilha sozinha (coluna), não pra quando senta do lado de um
+   botão (linha). Zera essas sobras só NESSE contexto (não mexe no uso
+   normal empilhado de ".priorities-subsection" no resto do app) e dá a
+   mesma altura mínima do botão de ciclo ao cabeçalho da seção, pra
+   "Pesquisar"/"Filtrar" centralizarem na mesma faixa vertical. */
+.legislacoes-controls > .priorities-subsection {
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.legislacoes-controls > .priorities-subsection .priorities-subsection-header {
+  margin-bottom: 0;
+  min-height: 34px;
+}
 .legislacoes-clear-btn {
   font-size: 12px;
   padding: 5px 10px;
@@ -6743,7 +6762,34 @@ html, body {
    cálculo de distribuição do espaço sobrando (dividido entre as colunas
    com %%, não jogado 100% numa só) — e todas as colunas curtas que ainda
    não tinham width (Tipo/Passageiros/Forma de Pagamento) entraram na lista
-   de width:1%+nowrap, pra nenhuma delas virar "livre" por engano. */
+   de width:1%+nowrap, pra nenhuma delas virar "livre" por engano.
+   4ª rodada (bug REPETIU: "Objetivo continua gigante e o restante
+   espremido", mesmo já com width em %%) — causa raiz real, finalmente
+   identificada: ".passagens-table" herda "width:100%" de
+   ".financeiro-table" (ver mais acima no arquivo). Numa tela larga com
+   poucas linhas/colunas visíveis, isso OBRIGA a tabela a esticar até a
+   largura do container inteiro — e table-layout:auto (o padrão, sem
+   "table-layout:fixed" declarado em lugar nenhum) joga TODO o espaço
+   "sobrando" dessa esticada na coluna com o MAIOR %% declarado entre as
+   que têm %%, não distribui proporcional nem limita pelo %% pedido. Ou
+   seja: dar 20% pro Objetivo não limita o Objetivo a 20% — vira só "a
+   maior prioridade pra receber o sobrando", e o sobrando podia ser
+   bem mais que 20% da tabela. Trocar %% por outro %% (ou tirar o %%
+   de vez, como na 2ª rodada) não resolve, porque o problema não é QUAL
+   coluna é "livre" — é que existe sobra nenhuma pra distribuir. Fix
+   definitivo: ".passagens-table" (só essa, não mexe em
+   ".financeiro-table" nem em outra tabela que reaproveite a classe)
+   deixa de forçar width:100% — com "width:auto", a tabela ocupa só o
+   espaço que o conteúdo real pede (as colunas width:1%+nowrap encolhem
+   pro próprio conteúdo, Objetivo/Nome encolhem pro texto real, até o
+   max-width:260px+ellipsis abaixo). Sem sobra nenhuma forçada, não tem
+   mais pra onde esse bug voltar. Se um dia a tabela toda for mais
+   estreita que o espaço disponível, fica com uma folga à direita — bem
+   melhor que uma coluna gigante vazia. */
+.passagens-table {
+  width: auto;
+  min-width: 640px;
+}
 .passagens-th-localizador,
 .passagens-th-companhia,
 .passagens-th-trecho,
@@ -6756,8 +6802,6 @@ html, body {
 .passagens-th-tipo,
 .passagens-th-passageiros,
 .passagens-th-pagamento { width: 1%; white-space: nowrap; }
-.passagens-th-objetivo { width: 20%; }
-.passagens-th-nome { width: 16%; }
 .passagens-col-objetivo,
 .passagens-col-nome {
   max-width: 260px;
