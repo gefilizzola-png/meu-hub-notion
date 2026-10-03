@@ -16666,12 +16666,19 @@
     (days || []).forEach(function (d) {
       if (!d) return;
       var pairs = d.pairs || [];
-      var hasRecord = pairs.length > 0 || pontoNormalizeFeriado(d.feriado) !== "util";
+      // "creditoAjuste" (Horas Faltantes) soma direto em trabalhadas, igual
+      // ao cálculo por dia (ver updateCalcCells no app.js) — faltava aqui,
+      // fazendo o Resumo Anual mostrar um saldo menor que o do mês em tela
+      // sempre que havia crédito no mês (bug reportado pelo Georges: JUN
+      // mostrava +11h46 no grid contra +15h54 no saldo do mês — diferença
+      // de 4h08, exatamente o crédito de 29/06).
+      var creditoMin = (typeof d.creditoAjuste === "string" && d.creditoAjuste) ? (pontoHoraToMin(d.creditoAjuste) || 0) : 0;
+      var hasRecord = pairs.length > 0 || pontoNormalizeFeriado(d.feriado) !== "util" || !!d.pmfNota || !!creditoMin;
       if (!hasRecord) return;
       any = true;
       var parts = (d.date || "").split("-").map(Number);
       var weekday = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
-      var trabalhadasMin = pontoDiaTrabalhadasMin(pairs);
+      var trabalhadasMin = pontoDiaTrabalhadasMin(pairs) + creditoMin;
       var esperadoMin = pontoDiaEsperadoMin(weekday, d.feriado, cargaHorariaHoras);
       total += pontoDiaSaldoMin(trabalhadasMin, esperadoMin);
     });
@@ -16751,7 +16758,14 @@
       return res;
     }
 
-    var state = { month: financeiroCurrentMonth(), days: {}, cargaHoraria: 8, loaded: false };
+    // "manualEditMode" (pedido do Georges, rodada conferência de junho):
+    // "+ Nota PMF" e "+ Crédito (Horas Faltantes)" vinham sempre visíveis
+    // em toda linha, mesmo vazia — poluição, já que esses dados sempre vêm
+    // prontos do arquivo de importação. Agora ficam escondidos por padrão
+    // e só aparecem com esse modo ligado (botão "Editar manualmente" na
+    // mesma linha do "Importar mês"), pros casos raros de precisar
+    // corrigir algo na mão sem reimportar o dia inteiro.
+    var state = { month: financeiroCurrentMonth(), days: {}, cargaHoraria: 8, loaded: false, manualEditMode: false };
 
     var statusEl = document.createElement("p");
     statusEl.className = "empty";
@@ -16875,6 +16889,21 @@
     importToggleBtn.className = "ponto-import-toggle";
     importToggleBtn.innerHTML = '<i class="ti ti-upload"></i> Importar mês (colar dados)';
     topRow2Right.appendChild(importToggleBtn);
+
+    // "Editar manualmente" — liga/desliga manualEditMode (ver comentário
+    // acima, perto da declaração de "state"). Reaproveita a mesma classe
+    // visual do botão de importar (toggle "active" igual).
+    var manualEditToggleBtn = document.createElement("button");
+    manualEditToggleBtn.type = "button";
+    manualEditToggleBtn.className = "ponto-import-toggle";
+    manualEditToggleBtn.title = "Mostra os botões \"+ Nota PMF\" e \"+ Crédito (Horas Faltantes)\" em cada linha, pra lançar algo na mão sem precisar reimportar o dia";
+    manualEditToggleBtn.innerHTML = '<i class="ti ti-pencil"></i> Editar manualmente';
+    manualEditToggleBtn.addEventListener("click", function () {
+      state.manualEditMode = !state.manualEditMode;
+      manualEditToggleBtn.classList.toggle("active", state.manualEditMode);
+      renderTable();
+    });
+    topRow2Right.appendChild(manualEditToggleBtn);
     topRow2.appendChild(topRow2Right);
     wrap.appendChild(topRow2);
 
@@ -17566,6 +17595,11 @@
           creditoRow.innerHTML = "";
           if (creditoAjusteState == null) {
             creditoDetailsPanel.style.display = "none";
+            // só mostra o botão "+" com o modo "Editar manualmente" ligado
+            // (ver state.manualEditMode) — crédito normalmente vem pronto
+            // do arquivo de importação, então o botão ficava poluindo toda
+            // linha vazia (pedido do Georges, rodada conferência de junho).
+            if (!state.manualEditMode) return;
             var addCreditoBtn = document.createElement("button");
             addCreditoBtn.type = "button";
             addCreditoBtn.className = "ponto-pair-add-btn ponto-credito-add-btn";
@@ -17661,7 +17695,18 @@
       var saldoAcumuladoMin = 0;
       var temAlgumRegistro = false;
 
-      for (var day = 1; day <= totalDays; day++) {
+      // cada dia vira sua PRÓPRIA função/escopo (pedido do Georges: bug
+      // real — clicar no (i) de "Abono Aprovado" em 29/06 fazia aparecer
+      // uma pílula vazia em 30/06). Causa: antes isso tudo vivia direto no
+      // corpo do for (var ...), e "var" não cria uma ligação nova por
+      // volta do loop — TODAS as 30 iterações compartilhavam as MESMAS
+      // variáveis (rowEl, abonoDetailsPanel, pmfNotaPanel, pairsApi etc.).
+      // Os closures dos botões (i)/+ /remover de CADA dia ficavam todos
+      // lendo o valor que essas variáveis tinham DEPOIS do loop inteiro
+      // terminar — ou seja, sempre os elementos do ÚLTIMO dia do mês.
+      // Envolver o corpo numa function por dia (chamada no for abaixo) dá
+      // a cada dia seu próprio conjunto de variáveis, pra sempre.
+      function buildDayRow(day) {
         var dateStr = pontoDateISO(year, monthIdx0, day);
         var dayData = state.days[dateStr] || { date: dateStr, pairs: [], feriado: false };
         var weekday = new Date(year, monthIdx0, day).getDay();
@@ -17758,32 +17803,17 @@
         // saída) de QUALQUER par do dia está marcada como ajuste já
         // Aprovado. Não é mais um toggle manual de dia inteiro (editar
         // acontece por horário, dentro de cada par — ver buildPairsEditor)
-        // — aqui só agrega e mostra, com (i) listando os detalhes de cada
-        // ajuste aprovado distinto encontrado no dia (pode ser mais de 1,
-        // ex: abono de dia inteiro com 2 pares de 8h cobertos pelo mesmo
-        // ajuste, ou 2 ajustes diferentes no mesmo dia).
+        // — aqui só agrega e mostra o badge. NÃO tem (i) próprio (pedido do
+        // Georges, rodada conferência de junho): era um duplicado exato do
+        // (i) que já existe do lado de cada horário ajustado dentro do
+        // Turno — e vivia quebrado pelo mesmo motivo do bug de 30/06 (ver
+        // buildDayRow acima). Quem quiser o detalhe clica no (i) do próprio
+        // horário.
         var abonoBadgeEl = document.createElement("span");
         abonoBadgeEl.className = "ponto-abono-badge ponto-abono-badge-readonly";
         abonoBadgeEl.title = "Dia tem horário(s) incluído(s) por ajuste já Aprovado";
         abonoBadgeEl.style.display = "none";
         statusCell.appendChild(abonoBadgeEl);
-
-        var abonoDetailsBtn = document.createElement("button");
-        abonoDetailsBtn.type = "button";
-        abonoDetailsBtn.className = "ponto-pair-details-btn";
-        abonoDetailsBtn.innerHTML = '<i class="ti ti-info-circle"></i>';
-        abonoDetailsBtn.title = "Ver detalhes do(s) ajuste(s) aprovado(s) deste dia";
-        abonoDetailsBtn.style.display = "none";
-        statusCell.appendChild(abonoDetailsBtn);
-
-        var abonoDetailsPanel = document.createElement("div");
-        abonoDetailsPanel.className = "ponto-pair-details ponto-abono-details";
-        abonoDetailsPanel.style.display = "none";
-        statusCell.appendChild(abonoDetailsPanel);
-
-        abonoDetailsBtn.addEventListener("click", function () {
-          abonoDetailsPanel.style.display = abonoDetailsPanel.style.display === "none" ? "" : "none";
-        });
 
         // "pmfNota" (pedido do Georges, rodada CapturaPonto.py) — nota de
         // dia pros 2 casos em que o saldo que a PMF mostra diverge de
@@ -17907,7 +17937,11 @@
           var nota = pairsApi.getPmfNota();
           pmfNotaBadgeEl.style.display = nota ? "" : "none";
           pmfNotaBadgeEl.textContent = nota ? (nota.rotulo || "ℹ️ Nota PMF") : "";
-          pmfNotaAddBtn.style.display = nota ? "none" : "";
+          // "+ Nota PMF" só aparece com "Editar manualmente" ligado (ver
+          // state.manualEditMode) — mesmo motivo do "+ Crédito" acima, em
+          // renderCreditoRow: esse dado normalmente já vem pronto da
+          // importação, então o botão ficava poluindo toda linha vazia.
+          pmfNotaAddBtn.style.display = (!nota && state.manualEditMode) ? "" : "none";
           pmfNotaDetailsBtn.style.display = nota ? "" : "none";
           if (!nota) pmfNotaPanel.style.display = "none";
         }
@@ -17967,14 +18001,6 @@
           pendenteBadgeEl.style.display = pendente ? "" : "none";
           abonoBadgeEl.style.display = aprovadosInfos.length ? "" : "none";
           abonoBadgeEl.textContent = "✅ Abono Aprovado" + (aprovadosInfos.length > 1 ? " (" + aprovadosInfos.length + ")" : "");
-          abonoDetailsBtn.style.display = aprovadosInfos.length ? "" : "none";
-          if (aprovadosInfos.length && abonoDetailsPanel.style.display !== "none") {
-            abonoDetailsPanel.innerHTML = "";
-            aprovadosInfos.forEach(function (info, i) {
-              abonoDetailsPanel.appendChild(pontoBuildInfoBlock("Ajuste Aprovado " + (i + 1), function () { return info; }, function () {}, null, true));
-            });
-          }
-          if (!aprovadosInfos.length) abonoDetailsPanel.style.display = "none";
           refreshPmfNotaUI();
           saldoCell.textContent = hasRecord ? pontoFormatSaldoMin(saldoMin) : "—";
           saldoCell.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
@@ -18008,9 +18034,14 @@
 
         var rowSaldoMin = updateCalcCells(pairsApi, feriadoNow);
         var rowHasRecord = (dayData.pairs && dayData.pairs.length) || feriadoNow !== "util";
-        if (rowHasRecord) { temAlgumRegistro = true; saldoAcumuladoMin += rowSaldoMin; }
 
         tableEl.appendChild(rowEl);
+        return { hasRecord: rowHasRecord, saldoMin: rowSaldoMin };
+      }
+
+      for (var day = 1; day <= totalDays; day++) {
+        var dayResult = buildDayRow(day);
+        if (dayResult.hasRecord) { temAlgumRegistro = true; saldoAcumuladoMin += dayResult.saldoMin; }
       }
 
       function renderSummaryOnly() {
