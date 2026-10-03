@@ -8050,3 +8050,101 @@ html, body {
 .holerite-tipo-provento { background: #eaf6ec; color: #2f9e44; }
 .holerite-tipo-desconto { background: #fbe9ef; color: #c2255c; }
 .holerite-tipo-total { background: #eaf2fb; color: #2b6cb0; }
+
+/* ---------------- "page.holerite" (rodada 2 — ajustes pedidos pelo Georges) ---------------- */
+/* "Pesquisar"/"Filtrar" bagunçados ao expandir: Holerite reaproveitava
+   ".legislacoes-controls" (display:flex, pensado pra Legislações — que tem
+   um botão de ciclo na MESMA linha das 2 seções recolhíveis, por isso zera
+   margin/padding delas pra centralizar tudo numa faixa horizontal). Aqui
+   não tem 3º elemento nenhum dividindo espaço — as 2 seções precisam
+   empilhar normal (padrão ".priorities-subsection" do resto do app), não
+   brigar por uma linha só. ".holerite-controls" é só isso: coluna cheia. */
+.holerite-controls {
+  display: flex;
+  flex-direction: column;
+}
+/* Data de Pagamento como caixinha (mesmo padrão dos outros totais) — cor
+   neutra (não é bom/mau como Diferença). */
+.holerite-total-paydate { background: #f3f1ea; }
+/* resumo "criativo" combinando todas as matrículas/folhas visíveis —
+   mesmo card de grupo, com fundo em gradiente leve pra se destacar das
+   caixinhas "normais" de cada matrícula abaixo. */
+.holerite-aggregate-card {
+  background: linear-gradient(135deg, #fff8ec 0%, #fef3e2 100%);
+  border-color: #f0c987;
+}
+.holerite-aggregate-card .holerite-group-title { font-size: 15px; }
+/* Rubrica virou chip (igual Tipo) — só precisa de max-width+ellipsis
+   porque nome de rubrica pode ser longo (ex: "GRATIFICACAO DE TITULACAO
+   ACADEMICA"), diferente do chip de Tipo (3 palavras fixas). */
+.holerite-rubrica-chip {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+/* colunas da tabela de detalhe (ver HOLERITE_COLS no app.js) — mesma regra
+   permanente de largura (instrucoes.md): toda coluna curta/fixa ganha
+   width:1%+nowrap; aqui NENHUMA sobra como "texto livre" de verdade (Rubrica
+   já é chip, não texto solto), então a tabela usa display:inline-table
+   (shrink-to-fit, mesmo fix já aplicado em Passagens) em vez de width:100%
+   — sem isso, a última coluna sem width levava toda sobra de espaço e
+   "Rubrica ficava com um vazio enorme depois do texto" (bug reportado). */
+.holerite-table {
+  display: inline-table;
+  width: auto;
+  max-width: 100%;
+}
+.holerite-col-codigo,
+.holerite-col-rubrica,
+.holerite-col-tipo,
+.holerite-col-qtd,
+.holerite-col-valor,
+.holerite-col-valorBase,
+.holerite-col-parcela,
+.holerite-col-competencia,
+.holerite-col-matricula,
+.holerite-col-folha,
+.holerite-col-dataPagamento { width: 1%; white-space: nowrap; }
+/* "Mostrar todas as colunas" (padrão Passagens/Saúde/Prioridades) — por
+   padrão só Código/Rubrica/Valor ficam visíveis; Tipo/Qtd/Valor Base/
+   Parcela somem até o clique. No modo intervalo, Competência/Matrícula/
+   Folha NUNCA somem (são o que distingue cada linha da tabela única) e
+   Data de Pagamento entra no mesmo grupo ocultável que o resto. */
+.holerite-table.hide-tipo .holerite-col-tipo,
+.holerite-table.hide-qtd .holerite-col-qtd,
+.holerite-table.hide-valorBase .holerite-col-valorBase,
+.holerite-table.hide-parcela .holerite-col-parcela,
+.holerite-table.hide-dataPagamento .holerite-col-dataPagamento {
+  display: none;
+}
+/* tabela única do modo "Buscar intervalo" (ver renderRangeTable) — mesma
+   base de ".holerite-table", só não tem cards de grupo em volta. */
+.holerite-range-table { margin-bottom: 14px; }
+/* botão "Limpar filtros" (ver clearFiltersBtnHolerite) agora mora DENTRO
+   da própria barra de filtros (".legislacoes-filterbar", flex-wrap), não
+   mais solto abaixo empurrando o resto pra baixo — e ganha borda/fundo
+   (igual ".legislacoes-clear-btn") em vez do link discreto de
+   ".search-clear-btn" puro, porque agora ele convive lado a lado com os
+   dropdowns (precisa de mais presença visual). "holerite-btn-lg" (também
+   usado em "Buscar intervalo"/"Voltar pra navegação") aumenta a fonte/
+   padding — pedido do Georges: "os botões ficaram bem pequenos". */
+.holerite-filterbar-clear-btn {
+  font-size: 12.5px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 0.5px solid #dcdcd8;
+  background: #f7f7f5;
+  color: #55554f;
+  align-self: center;
+}
+.holerite-filterbar-clear-btn:hover { background: #eaeae6; }
+.holerite-btn-lg {
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 0.5px solid #dcdcd8;
+  background: #f7f7f5;
+}
+.holerite-btn-lg:hover { background: #eaeae6; }

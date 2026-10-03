@@ -12636,7 +12636,14 @@
     var searchSectionHolerite = buildCollapsibleSection("Pesquisar");
     var filterSectionHolerite = buildCollapsibleSection("Filtrar");
     var controlsHolerite = document.createElement("div");
-    controlsHolerite.className = "legislacoes-controls";
+    // "legislacoes-controls" é flex-row — pensado pra Legislações, que
+    // tem um botão de ciclo na mesma linha das 2 seções. Aqui não tem
+    // nenhum 3º elemento dividindo a linha, e usar a mesma classe deixava
+    // "Pesquisar"/"Filtrar" lado a lado tentando centralizar na mesma
+    // faixa (bug reportado pelo Georges: "quando clico ele expande... e
+    // fica bem bagunçado") — ".holerite-controls" empilha as 2 seções
+    // verticalmente, cada uma ocupando a largura toda (ver styles.css).
+    controlsHolerite.className = "holerite-controls";
     controlsHolerite.appendChild(searchSectionHolerite.section);
     controlsHolerite.appendChild(filterSectionHolerite.section);
     wrap.appendChild(controlsHolerite);
@@ -12652,7 +12659,12 @@
       items: [],
       search: "",
       tipoSelected: [], matriculaSelected: [], folhaSelected: [], lotacaoSelected: [],
-      sortKey: "codigo", sortDir: 1
+      rubricaSelected: [], dataPagamentoFilter: null,
+      sortKey: "codigo", sortDir: 1,
+      // "Mostrar todas as colunas" (ver COLS/renderGroupCard mais abaixo) —
+      // na tela grande já nasce mostrando tudo (pedido do Georges), no
+      // celular nasce só com Código/Rubrica/Valor.
+      columnsExpanded: window.innerWidth > 680
     };
 
     function matchesDetailFilters(it) {
@@ -12661,6 +12673,7 @@
       } else if (state.tipoSelected.length && state.tipoSelected.indexOf(it.tipo) === -1) {
         return false;
       }
+      if (state.rubricaSelected.length && state.rubricaSelected.indexOf(it.rubrica) === -1) return false;
       if (state.search) {
         var s = normalize(state.search);
         var hay = normalize([it.rubrica, it.codigo].filter(Boolean).join(" "));
@@ -12675,7 +12688,17 @@
       arr.sort(function (a, b) {
         var av, bv;
         if (key === "valor") { av = a.valor || 0; bv = b.valor || 0; }
+        else if (key === "valorBase") { av = a.valor_base || 0; bv = b.valor_base || 0; }
+        else if (key === "qtd") { av = a.qtd || 0; bv = b.qtd || 0; }
         else if (key === "rubrica") { av = a.rubrica || ""; bv = b.rubrica || ""; }
+        else if (key === "tipo") { av = a.tipo || ""; bv = b.tipo || ""; }
+        // 3 chaves só usadas na tabela única do modo intervalo (ver
+        // renderRangeTable) — os campos já existem em todo item (mesmo
+        // schema D1), não precisa de nada novo além de aceitar a chave aqui.
+        else if (key === "competencia") { av = a.competencia || ""; bv = b.competencia || ""; }
+        else if (key === "matricula") { av = a.matricula || ""; bv = b.matricula || ""; }
+        else if (key === "folha") { av = a.folha || ""; bv = b.folha || ""; }
+        else if (key === "dataPagamento") { av = a.data_pagamento || ""; bv = b.data_pagamento || ""; }
         else { av = a.codigo || ""; bv = b.codigo || ""; }
         if (typeof av === "number") return dir * (av - bv);
         return dir * String(av).localeCompare(String(bv), "pt-BR");
@@ -12683,9 +12706,34 @@
       return arr;
     }
 
+    // filtro por Data de Pagamento (data específica OU período — pedido do
+    // Georges) é tratado no nível do GRUPO (Matrícula×Folha×Competência),
+    // não da linha: data_pagamento é 1 valor só por grupo (mesmo pagamento
+    // pra todas as rubricas daquele holerite), igual matrícula/folha/
+    // lotação acima — por isso entra como 2º passo (filtra grupos já
+    // montados), não dentro de matchesDetailFilters (que só filtra linhas
+    // dentro de um grupo que já vai aparecer).
+    function groupMatchesDataPagamento(g) {
+      if (!state.dataPagamentoFilter) return true;
+      if (!g.dataPagamento) return false;
+      var d = g.dataPagamento.slice(0, 10);
+      var f = state.dataPagamentoFilter;
+      if (f.from && d < f.from) return false;
+      if (f.to && d > f.to) return false;
+      return true;
+    }
+
     function buildGroups() {
       var map = {}, order = [];
       state.items.forEach(function (it) {
+        // matrícula/folha/lotação já vêm filtrados do Worker (ver
+        // loadItems), mas qualquer mudança nesses 3 dropdowns só dispara
+        // renderBody() depois de loadItems() reconsultar — filtrar de novo
+        // aqui é defensivo/barato e evita qualquer lote "velho" aparecer
+        // entre o clique no filtro e a resposta do Worker chegar.
+        if (state.matriculaSelected.length && state.matriculaSelected.indexOf(it.matricula) === -1) return;
+        if (state.folhaSelected.length && state.folhaSelected.indexOf(it.folha) === -1) return;
+        if (state.lotacaoSelected.length && state.lotacaoSelected.indexOf(it.lotacao) === -1) return;
         var key = it.competencia + "|" + it.matricula + "|" + it.folha;
         if (!map[key]) {
           map[key] = { competencia: it.competencia, matricula: it.matricula, folha: it.folha, totals: {}, rows: [], dataPagamento: null };
@@ -12700,7 +12748,7 @@
         }
         if (matchesDetailFilters(it)) g.rows.push(it);
       });
-      var groups = order.map(function (k) { return map[k]; });
+      var groups = order.map(function (k) { return map[k]; }).filter(groupMatchesDataPagamento);
       groups.forEach(function (g) { g.rows = sortHoleriteRows(g.rows); });
       groups.sort(function (a, b) {
         if (a.competencia !== b.competencia) return a.competencia < b.competencia ? 1 : -1;
@@ -12709,6 +12757,26 @@
           (HOLERITE_FOLHA_ORDER[b.folha] !== undefined ? HOLERITE_FOLHA_ORDER[b.folha] : 9);
       });
       return groups;
+    }
+
+    // soma dos 5 totais (Proventos/Descontos/Líquido/Valor Pago/Diferença)
+    // combinando TODOS os grupos visíveis — pedido do Georges: "manter os
+    // totalizadores de cada matrícula, mas criar uma forma criativa de
+    // exibir os totalizadores combinados das matrículas" (ver
+    // renderAggregateCard mais abaixo).
+    function buildAggregateTotals(groups) {
+      var agg = { proventos: 0, descontos: 0, liquido: 0, valorPago: 0, diferenca: 0, temValorPago: false };
+      groups.forEach(function (g) {
+        agg.proventos += g.totals.proventos || 0;
+        agg.descontos += g.totals.descontos || 0;
+        agg.liquido += g.totals.liquido || 0;
+        if (typeof g.totals.valorPago === "number") {
+          agg.temValorPago = true;
+          agg.valorPago += g.totals.valorPago;
+          agg.diferenca += (typeof g.totals.diferenca === "number") ? g.totals.diferenca : 0;
+        }
+      });
+      return agg;
     }
 
     function buildSimpleOptionsFromItems(key) {
@@ -12727,6 +12795,8 @@
     var matriculaDropdownWrap = document.createElement("div");
     var folhaDropdownWrap = document.createElement("div");
     var lotacaoDropdownWrap = document.createElement("div");
+    var rubricaDropdownWrap = document.createElement("div");
+    var dataPagamentoFilterWrap = document.createElement("div");
 
     function buildFiltersBar() {
       tipoDropdownWrap.innerHTML = "";
@@ -12738,20 +12808,45 @@
         ] },
         function (opts) { state.tipoSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
       ));
+      // matrícula/folha/lotação: BUG corrigido (Georges reportou: selecionar
+      // "701.343 - TAT" continuava trazendo dado de "381.055 - AFTM") — o
+      // Worker já filtra por esses 3 campos (ver GET /holerite em
+      // worker.js), então mudar a seleção precisa chamar loadItems() (re-
+      // consultar), não só renderBody() (que só re-filtra o lote que já
+      // tinha sido carregado ANTES da seleção mudar).
+      // "default" (ver buildIconDropdown acima) reaplica a seleção atual
+      // depois do rebuild — sem isso, o checkbox voltava pra "Todos"
+      // visualmente a cada loadItems() mesmo com o filtro de verdade (no
+      // Worker) continuando aplicado, o que parecia "o filtro não pegou".
       matriculaDropdownWrap.innerHTML = "";
       matriculaDropdownWrap.appendChild(buildIconDropdown(
-        { property: "matricula", type: "select", label: "Matrícula", icon: "ti-id-badge-2", options: buildSimpleOptionsFromItems("matricula") },
-        function (opts) { state.matriculaSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+        { property: "matricula", type: "select", label: "Matrícula", icon: "ti-id-badge-2", options: buildSimpleOptionsFromItems("matricula"), default: state.matriculaSelected },
+        function (opts) { state.matriculaSelected = opts.map(function (o) { return o.pageId; }); loadItems(); }
       ));
       folhaDropdownWrap.innerHTML = "";
       folhaDropdownWrap.appendChild(buildIconDropdown(
-        { property: "folha", type: "select", label: "Folha", icon: "ti-file-text", options: buildSimpleOptionsFromItems("folha") },
-        function (opts) { state.folhaSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+        { property: "folha", type: "select", label: "Folha", icon: "ti-file-text", options: buildSimpleOptionsFromItems("folha"), default: state.folhaSelected },
+        function (opts) { state.folhaSelected = opts.map(function (o) { return o.pageId; }); loadItems(); }
       ));
       lotacaoDropdownWrap.innerHTML = "";
       lotacaoDropdownWrap.appendChild(buildIconDropdown(
-        { property: "lotacao", type: "select", label: "Lotação", icon: "ti-building", options: buildSimpleOptionsFromItems("lotacao") },
-        function (opts) { state.lotacaoSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+        { property: "lotacao", type: "select", label: "Lotação", icon: "ti-building", options: buildSimpleOptionsFromItems("lotacao"), default: state.lotacaoSelected },
+        function (opts) { state.lotacaoSelected = opts.map(function (o) { return o.pageId; }); loadItems(); }
+      ));
+      // Rubrica (multi_select, pedido do Georges) — client-side, igual
+      // Tipo: as opções vêm do próprio lote já carregado (mesmo padrão de
+      // Passagens/Saúde), não precisa ir no Worker de novo.
+      rubricaDropdownWrap.innerHTML = "";
+      rubricaDropdownWrap.appendChild(buildIconDropdown(
+        { property: "rubrica", type: "select", label: "Rubrica", icon: "ti-receipt", searchable: true, options: buildSimpleOptionsFromItems("rubrica"), default: state.rubricaSelected },
+        function (opts) { state.rubricaSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+      ));
+      // Data de Pagamento (data específica OU período, pedido do Georges) —
+      // client-side sobre g.dataPagamento (ver groupMatchesDataPagamento).
+      dataPagamentoFilterWrap.innerHTML = "";
+      dataPagamentoFilterWrap.appendChild(buildLocalDateRangeFilter(
+        { label: "Data de Pagamento" },
+        function (range) { state.dataPagamentoFilter = range; renderBody(); }
       ));
     }
 
@@ -12765,25 +12860,35 @@
     });
     searchSectionHolerite.body.appendChild(withSearchClear(searchInputHolerite));
 
+    // "Limpar filtros" (pedido do Georges: "coloque ao lado, mesma altura
+    // dos filtros — está embaixo, empurrando o resto pra baixo à toa")
+    // entra DENTRO da própria filterBarWrapHolerite (mesma linha flex-wrap
+    // dos dropdowns), não abaixo dela — ".holerite-filterbar-clear-btn"
+    // (ver styles.css) tira o width:100%/display:block que ".search-clear-
+    // btn" ganha em outros contextos e aumenta um pouco o padding/fonte
+    // (também pedido: "os botões ficaram bem pequenos").
     var filterBarWrapHolerite = document.createElement("div");
     filterBarWrapHolerite.className = "legislacoes-filterbar";
     filterBarWrapHolerite.appendChild(tipoDropdownWrap);
     filterBarWrapHolerite.appendChild(matriculaDropdownWrap);
     filterBarWrapHolerite.appendChild(folhaDropdownWrap);
     filterBarWrapHolerite.appendChild(lotacaoDropdownWrap);
-    filterSectionHolerite.body.appendChild(filterBarWrapHolerite);
+    filterBarWrapHolerite.appendChild(rubricaDropdownWrap);
+    filterBarWrapHolerite.appendChild(dataPagamentoFilterWrap);
 
     var clearFiltersBtnHolerite = document.createElement("button");
     clearFiltersBtnHolerite.type = "button";
-    clearFiltersBtnHolerite.className = "search-clear-btn";
+    clearFiltersBtnHolerite.className = "search-clear-btn holerite-filterbar-clear-btn";
     clearFiltersBtnHolerite.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
     clearFiltersBtnHolerite.addEventListener("click", function () {
       state.search = ""; searchInputHolerite.value = "";
       state.tipoSelected = []; state.matriculaSelected = []; state.folhaSelected = []; state.lotacaoSelected = [];
+      state.rubricaSelected = []; state.dataPagamentoFilter = null;
       buildFiltersBar();
-      renderBody();
+      loadItems();
     });
-    filterSectionHolerite.body.appendChild(clearFiltersBtnHolerite);
+    filterBarWrapHolerite.appendChild(clearFiltersBtnHolerite);
+    filterSectionHolerite.body.appendChild(filterBarWrapHolerite);
 
     // ---- navegação: única competência (prev/next) OU buscar intervalo (multi-select) ----
     var singleNavWrap = document.createElement("div");
@@ -12800,7 +12905,7 @@
     nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
     var toRangeBtn = document.createElement("button");
     toRangeBtn.type = "button";
-    toRangeBtn.className = "search-clear-btn";
+    toRangeBtn.className = "search-clear-btn holerite-btn-lg";
     toRangeBtn.innerHTML = '<i class="ti ti-calendar-search"></i> Buscar intervalo';
     singleNavWrap.appendChild(prevBtn);
     singleNavWrap.appendChild(compLabel);
@@ -12813,7 +12918,7 @@
     var rangeDropdownWrap = document.createElement("div");
     var toSingleBtn = document.createElement("button");
     toSingleBtn.type = "button";
-    toSingleBtn.className = "search-clear-btn";
+    toSingleBtn.className = "search-clear-btn holerite-btn-lg";
     toSingleBtn.innerHTML = '<i class="ti ti-arrow-back"></i> Voltar pra navegação';
     rangeNavWrap.appendChild(rangeDropdownWrap);
     rangeNavWrap.appendChild(toSingleBtn);
@@ -12871,6 +12976,104 @@
       return chip;
     }
 
+    // Rubrica em forma de chip (pedido do Georges: "igual fizemos com
+    // chips... deixe os valores de Provento na cor verde e os de Desconto
+    // na cor vermelha") — reaproveita as mesmas 2 cores de holeriteTipoChip
+    // (provento/desconto), classe própria só pra não herdar o texto fixo
+    // "Provento"/"Desconto" do chip de Tipo.
+    function holeriteRubricaChip(it) {
+      var chip = document.createElement("span");
+      chip.className = "holerite-tipo-chip holerite-rubrica-chip holerite-tipo-" +
+        (it.tipo === "Provento" ? "provento" : (it.tipo === "Desconto" ? "desconto" : "total"));
+      chip.textContent = it.rubrica || "—";
+      return chip;
+    }
+
+    function fmtDataPagamento(iso) {
+      return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso));
+    }
+
+    // colunas da tabela de detalhe — pedido do Georges: por padrão (celular)
+    // só Código/Rubrica/Valor; "Mostrar todas as colunas" revela Tipo/Qtd/
+    // Valor Base/Parcela. Compartilhado entre TODOS os cards de grupo (não
+    // é por-card — ver state.columnsExpanded) e com o modo intervalo
+    // (renderRangeTable mais abaixo), senão alternar o botão só mudaria
+    // metade das tabelas da página.
+    var HOLERITE_COLS = [
+      { key: "codigo", label: "Código", sortKey: "codigo" },
+      { key: "rubrica", label: "Rubrica", sortKey: "rubrica" },
+      { key: "tipo", label: "Tipo", sortKey: "tipo" },
+      { key: "qtd", label: "Qtd", sortKey: "qtd" },
+      { key: "valor", label: "Valor", sortKey: "valor" },
+      { key: "valorBase", label: "Valor Base", sortKey: "valorBase" },
+      { key: "parcela", label: "Parcela" }
+    ];
+    var HOLERITE_DEFAULT_HIDDEN = ["tipo", "qtd", "valorBase", "parcela"];
+
+    var columnsToolbarHolerite = document.createElement("div");
+    columnsToolbarHolerite.className = "priorities-columns-toolbar";
+    var columnsToggleBtnHolerite = document.createElement("button");
+    columnsToggleBtnHolerite.type = "button";
+    columnsToggleBtnHolerite.className = "priorities-columns-toggle-btn";
+    function updateHoleriteColumnsToggleLabel() {
+      columnsToggleBtnHolerite.innerHTML = state.columnsExpanded
+        ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
+        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+' + HOLERITE_DEFAULT_HIDDEN.length + ')';
+    }
+    columnsToggleBtnHolerite.addEventListener("click", function () {
+      state.columnsExpanded = !state.columnsExpanded;
+      updateHoleriteColumnsToggleLabel();
+      renderBody();
+    });
+    updateHoleriteColumnsToggleLabel();
+    columnsToolbarHolerite.appendChild(columnsToggleBtnHolerite);
+    wrap.insertBefore(columnsToolbarHolerite, body);
+
+    function totalBox(label, value, cls) {
+      var box = document.createElement("div");
+      box.className = "holerite-total-box " + cls;
+      var lbl = document.createElement("div");
+      lbl.className = "holerite-total-label";
+      lbl.textContent = label;
+      var val = document.createElement("div");
+      val.className = "holerite-total-value";
+      val.textContent = financeiroFormatBRL(value);
+      box.appendChild(lbl);
+      box.appendChild(val);
+      return box;
+    }
+
+    // resumo "criativo" combinando TODAS as matrículas visíveis da
+    // competência — pedido do Georges: "mantenha os totalizadores de cada
+    // matrícula, mas crie uma forma criativa de exibir os totalizadores
+    // combinados". Só aparece em modo single (1 competência) com mais de 1
+    // grupo (senão é redundante com o card único já exibido).
+    function renderAggregateCard(groups) {
+      if (state.mode !== "single" || groups.length < 2) return null;
+      var agg = buildAggregateTotals(groups);
+      var card = document.createElement("div");
+      card.className = "holerite-group-card holerite-aggregate-card";
+      var head = document.createElement("div");
+      head.className = "holerite-group-head";
+      var headTitle = document.createElement("div");
+      headTitle.className = "holerite-group-title";
+      headTitle.textContent = "💰 Total Combinado — " + groups.length + " matrículas/folhas";
+      head.appendChild(headTitle);
+      card.appendChild(head);
+      var totalsRow = document.createElement("div");
+      totalsRow.className = "holerite-totals-row";
+      totalsRow.appendChild(totalBox("Total de Proventos", agg.proventos, "holerite-total-proventos"));
+      totalsRow.appendChild(totalBox("Total de Descontos", agg.descontos, "holerite-total-descontos"));
+      totalsRow.appendChild(totalBox("Salário Líquido", agg.liquido, "holerite-total-liquido"));
+      if (agg.temValorPago) {
+        totalsRow.appendChild(totalBox("Valor Pago", agg.valorPago, "holerite-total-pago"));
+        var diffCls = (agg.diferenca === 0) ? "holerite-total-diff-ok" : "holerite-total-diff-bad";
+        totalsRow.appendChild(totalBox("Diferença", agg.diferenca, "holerite-total-diferenca " + diffCls));
+      }
+      card.appendChild(totalsRow);
+      return card;
+    }
+
     function renderGroupCard(g) {
       var card = document.createElement("div");
       card.className = "holerite-group-card";
@@ -12882,29 +13085,10 @@
       headTitle.textContent = g.matricula + " — " + g.folha +
         (state.mode === "range" ? " (" + holeriteCompetenciaLabel(g.competencia) + ")" : "");
       head.appendChild(headTitle);
-      if (g.dataPagamento) {
-        var payDate = document.createElement("span");
-        payDate.className = "holerite-group-paydate";
-        payDate.textContent = "Pagamento: " + new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(g.dataPagamento));
-        head.appendChild(payDate);
-      }
       card.appendChild(head);
 
       var totalsRow = document.createElement("div");
       totalsRow.className = "holerite-totals-row";
-      function totalBox(label, value, cls) {
-        var box = document.createElement("div");
-        box.className = "holerite-total-box " + cls;
-        var lbl = document.createElement("div");
-        lbl.className = "holerite-total-label";
-        lbl.textContent = label;
-        var val = document.createElement("div");
-        val.className = "holerite-total-value";
-        val.textContent = financeiroFormatBRL(value);
-        box.appendChild(lbl);
-        box.appendChild(val);
-        return box;
-      }
       totalsRow.appendChild(totalBox("Total de Proventos", g.totals.proventos, "holerite-total-proventos"));
       totalsRow.appendChild(totalBox("Total de Descontos", g.totals.descontos, "holerite-total-descontos"));
       totalsRow.appendChild(totalBox("Salário Líquido", g.totals.liquido, "holerite-total-liquido"));
@@ -12913,24 +13097,35 @@
         var diffCls = (g.totals.diferenca === 0) ? "holerite-total-diff-ok" : "holerite-total-diff-bad";
         totalsRow.appendChild(totalBox("Diferença", g.totals.diferenca, "holerite-total-diferenca " + diffCls));
       }
+      // Data de Pagamento — pedido do Georges: "coloque a data de pagamento
+      // como uma caixinha ao lado de DIFERENÇA, no mesmo padrão" (antes só
+      // aparecia como texto solto no cabeçalho do card).
+      if (g.dataPagamento) {
+        var payBox = document.createElement("div");
+        payBox.className = "holerite-total-box holerite-total-paydate";
+        var payLbl = document.createElement("div");
+        payLbl.className = "holerite-total-label";
+        payLbl.textContent = "Data de Pagamento";
+        var payVal = document.createElement("div");
+        payVal.className = "holerite-total-value";
+        payVal.textContent = fmtDataPagamento(g.dataPagamento);
+        payBox.appendChild(payLbl);
+        payBox.appendChild(payVal);
+        totalsRow.appendChild(payBox);
+      }
       card.appendChild(totalsRow);
 
       if (g.rows.length) {
         var table = document.createElement("table");
         table.className = "financeiro-table holerite-table";
+        HOLERITE_COLS.forEach(function (col) {
+          table.classList.toggle("hide-" + col.key, !state.columnsExpanded && HOLERITE_DEFAULT_HIDDEN.indexOf(col.key) !== -1);
+        });
         var thead = document.createElement("thead");
         var headRow = document.createElement("tr");
-        var COLS = [
-          { key: "codigo", label: "Código", sortKey: "codigo" },
-          { key: "rubrica", label: "Rubrica", sortKey: "rubrica" },
-          { key: "tipo", label: "Tipo" },
-          { key: "qtd", label: "Qtd" },
-          { key: "valor", label: "Valor", sortKey: "valor" },
-          { key: "parcela", label: "Parcela" }
-        ];
-        COLS.forEach(function (col) {
+        HOLERITE_COLS.forEach(function (col) {
           var th = document.createElement("th");
-          th.className = "financeiro-th" + (col.sortKey ? " financeiro-th-sortable" : "");
+          th.className = "financeiro-th holerite-col-" + col.key + (col.sortKey ? " financeiro-th-sortable" : "");
           var thLabel = document.createElement("span");
           thLabel.className = "financeiro-th-label";
           thLabel.textContent = col.label;
@@ -12964,12 +13159,14 @@
             row.title = "Abrir no Notion";
             row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
           }
-          var tdCodigo = document.createElement("td"); tdCodigo.textContent = it.codigo || "—"; row.appendChild(tdCodigo);
-          var tdRubrica = document.createElement("td"); tdRubrica.textContent = it.rubrica || "—"; row.appendChild(tdRubrica);
-          var tdTipo = document.createElement("td"); tdTipo.appendChild(holeriteTipoChip(it.tipo)); row.appendChild(tdTipo);
-          var tdQtd = document.createElement("td"); tdQtd.textContent = (typeof it.qtd === "number") ? String(it.qtd) : "—"; row.appendChild(tdQtd);
-          var tdValor = document.createElement("td"); tdValor.textContent = financeiroFormatBRL(it.valor); row.appendChild(tdValor);
+          var tdCodigo = document.createElement("td"); tdCodigo.className = "holerite-col-codigo"; tdCodigo.textContent = it.codigo || "—"; row.appendChild(tdCodigo);
+          var tdRubrica = document.createElement("td"); tdRubrica.className = "holerite-col-rubrica"; tdRubrica.appendChild(holeriteRubricaChip(it)); row.appendChild(tdRubrica);
+          var tdTipo = document.createElement("td"); tdTipo.className = "holerite-col-tipo"; tdTipo.appendChild(holeriteTipoChip(it.tipo)); row.appendChild(tdTipo);
+          var tdQtd = document.createElement("td"); tdQtd.className = "holerite-col-qtd"; tdQtd.textContent = (typeof it.qtd === "number") ? String(it.qtd) : "—"; row.appendChild(tdQtd);
+          var tdValor = document.createElement("td"); tdValor.className = "holerite-col-valor"; tdValor.textContent = financeiroFormatBRL(it.valor); row.appendChild(tdValor);
+          var tdValorBase = document.createElement("td"); tdValorBase.className = "holerite-col-valorBase"; tdValorBase.textContent = (typeof it.valor_base === "number") ? financeiroFormatBRL(it.valor_base) : "—"; row.appendChild(tdValorBase);
           var tdParcela = document.createElement("td");
+          tdParcela.className = "holerite-col-parcela";
           tdParcela.textContent = (typeof it.parcela === "number" && typeof it.total_parcelas === "number") ? (it.parcela + "/" + it.total_parcelas) : "—";
           row.appendChild(tdParcela);
           tbody.appendChild(row);
@@ -12984,6 +13181,110 @@
       }
 
       return card;
+    }
+
+    // <th> sortável reaproveitado por renderGroupCard E renderRangeTable —
+    // mesmo markup/comportamento (clique alterna asc/desc, seta ▲/▼),
+    // extraído pra não duplicar entre os 2 jeitos de montar tabela.
+    function buildSortableTh(col, extraClass) {
+      var th = document.createElement("th");
+      th.className = "financeiro-th" + (extraClass ? " " + extraClass : "") + (col.sortKey ? " financeiro-th-sortable" : "");
+      var thLabel = document.createElement("span");
+      thLabel.className = "financeiro-th-label";
+      thLabel.textContent = col.label;
+      th.appendChild(thLabel);
+      if (col.sortKey) {
+        var arrow = document.createElement("span");
+        arrow.className = "financeiro-th-arrow";
+        if (state.sortKey === col.sortKey) {
+          th.classList.add("active");
+          arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+        }
+        th.appendChild(arrow);
+        th.title = "Clique para classificar por " + col.label;
+        th.addEventListener("click", function () {
+          if (state.sortKey === col.sortKey) state.sortDir = state.sortDir * -1;
+          else { state.sortKey = col.sortKey; state.sortDir = 1; }
+          renderBody();
+        });
+      }
+      return th;
+    }
+
+    // Modo "Buscar intervalo" — pedido do Georges: em vez de 1 card por
+    // grupo (Matrícula×Folha×Competência, igual ao modo single), compilar
+    // TUDO numa tabela só, com Competência/Matrícula/Folha como colunas
+    // extras (sempre visíveis, não entram no botão "Mostrar todas as
+    // colunas") pra dar pra distinguir as linhas — Data de Pagamento entra
+    // como coluna hideable (ele perguntou se trazia ou não; decidi trazer
+    // como coluna opcional em vez de tirar de vez).
+    var HOLERITE_RANGE_EXTRA_COLS = [
+      { key: "competencia", label: "Competência", sortKey: "competencia" },
+      { key: "matricula", label: "Matrícula", sortKey: "matricula" },
+      { key: "folha", label: "Folha", sortKey: "folha" }
+    ];
+    var HOLERITE_RANGE_TAIL_COL = { key: "dataPagamento", label: "Data de Pagamento", sortKey: "dataPagamento" };
+
+    function renderRangeTable(groups) {
+      var allRows = [];
+      groups.forEach(function (g) { g.rows.forEach(function (it) { allRows.push(it); }); });
+      if (!allRows.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhuma rubrica bate com os filtros.";
+        return empty;
+      }
+      allRows = sortHoleriteRows(allRows);
+
+      var table = document.createElement("table");
+      table.className = "financeiro-table holerite-table holerite-range-table";
+      HOLERITE_COLS.forEach(function (col) {
+        table.classList.toggle("hide-" + col.key, !state.columnsExpanded && HOLERITE_DEFAULT_HIDDEN.indexOf(col.key) !== -1);
+      });
+      table.classList.toggle("hide-dataPagamento", !state.columnsExpanded);
+
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      HOLERITE_RANGE_EXTRA_COLS.forEach(function (col) {
+        headRow.appendChild(buildSortableTh(col, "holerite-col-" + col.key));
+      });
+      HOLERITE_COLS.forEach(function (col) {
+        headRow.appendChild(buildSortableTh(col, "holerite-col-" + col.key));
+      });
+      headRow.appendChild(buildSortableTh(HOLERITE_RANGE_TAIL_COL, "holerite-col-dataPagamento"));
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      allRows.forEach(function (it) {
+        var row = document.createElement("tr");
+        row.className = "financeiro-row";
+        if (it.url) {
+          row.classList.add("provas-row-clickable");
+          row.title = "Abrir no Notion";
+          row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
+        }
+        var tdComp = document.createElement("td"); tdComp.className = "holerite-col-competencia"; tdComp.textContent = holeriteCompetenciaLabel(it.competencia); row.appendChild(tdComp);
+        var tdMat = document.createElement("td"); tdMat.className = "holerite-col-matricula"; tdMat.textContent = it.matricula || "—"; row.appendChild(tdMat);
+        var tdFolha = document.createElement("td"); tdFolha.className = "holerite-col-folha"; tdFolha.textContent = it.folha || "—"; row.appendChild(tdFolha);
+        var tdCodigo = document.createElement("td"); tdCodigo.className = "holerite-col-codigo"; tdCodigo.textContent = it.codigo || "—"; row.appendChild(tdCodigo);
+        var tdRubrica = document.createElement("td"); tdRubrica.className = "holerite-col-rubrica"; tdRubrica.appendChild(holeriteRubricaChip(it)); row.appendChild(tdRubrica);
+        var tdTipo = document.createElement("td"); tdTipo.className = "holerite-col-tipo"; tdTipo.appendChild(holeriteTipoChip(it.tipo)); row.appendChild(tdTipo);
+        var tdQtd = document.createElement("td"); tdQtd.className = "holerite-col-qtd"; tdQtd.textContent = (typeof it.qtd === "number") ? String(it.qtd) : "—"; row.appendChild(tdQtd);
+        var tdValor = document.createElement("td"); tdValor.className = "holerite-col-valor"; tdValor.textContent = financeiroFormatBRL(it.valor); row.appendChild(tdValor);
+        var tdValorBase = document.createElement("td"); tdValorBase.className = "holerite-col-valorBase"; tdValorBase.textContent = (typeof it.valor_base === "number") ? financeiroFormatBRL(it.valor_base) : "—"; row.appendChild(tdValorBase);
+        var tdParcela = document.createElement("td");
+        tdParcela.className = "holerite-col-parcela";
+        tdParcela.textContent = (typeof it.parcela === "number" && typeof it.total_parcelas === "number") ? (it.parcela + "/" + it.total_parcelas) : "—";
+        row.appendChild(tdParcela);
+        var tdPagto = document.createElement("td");
+        tdPagto.className = "holerite-col-dataPagamento";
+        tdPagto.textContent = it.data_pagamento ? fmtDataPagamento(it.data_pagamento) : "—";
+        row.appendChild(tdPagto);
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      return table;
     }
 
     function renderBody() {
@@ -13003,6 +13304,14 @@
         body.appendChild(empty);
         return;
       }
+      if (state.mode === "range") {
+        // intervalo: 1 tabela só (ver renderRangeTable) em vez de 1 card
+        // por grupo — pedido do Georges.
+        body.appendChild(renderRangeTable(groups));
+        return;
+      }
+      var aggCard = renderAggregateCard(groups);
+      if (aggCard) body.appendChild(aggCard);
       groups.forEach(function (g) { body.appendChild(renderGroupCard(g)); });
     }
 
