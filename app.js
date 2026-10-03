@@ -16602,7 +16602,11 @@
     return arr.some(function (p) {
       var e = pontoHoraToMin(p && p.entrada);
       var s = pontoHoraToMin(p && p.saida);
-      return e != null && s == null && !(p && (p.pendenteSaida || p.pendenteEntrada));
+      // suprime Ímpar quando a saída (ou a própria entrada avulsa) já
+      // está marcada como vinda de um ajuste — aprovado ou ainda
+      // aguardando, tanto faz pra esse cálculo (ver entradaAjuste/
+      // saidaAjuste, que substituíram pendenteEntrada/pendenteSaida).
+      return e != null && s == null && !(p && (p.saidaAjuste || p.entradaAjuste));
     });
   }
 
@@ -16611,7 +16615,7 @@
   // antigo (boolean) que ainda não passou pelo worker.js de novo.
   function pontoNormalizeFeriado(raw) {
     if (raw === true) return "feriado";
-    if (raw === "feriado" || raw === "facultativo") return raw;
+    if (raw === "feriado" || raw === "facultativo" || raw === "ferias") return raw;
     return "util";
   }
 
@@ -16621,7 +16625,7 @@
   // (Date#getDay()).
   function pontoDiaEsperadoMin(weekday, feriado, cargaHorariaHoras) {
     var f = pontoNormalizeFeriado(feriado);
-    if (f === "feriado" || f === "facultativo") return 0;
+    if (f === "feriado" || f === "facultativo" || f === "ferias") return 0;
     if (weekday === 0 || weekday === 6) return 0;
     var carga = (cargaHorariaHoras === 6 || cargaHorariaHoras === 8) ? cargaHorariaHoras : 8;
     return carga * 60;
@@ -16672,6 +16676,73 @@
       total += pontoDiaSaldoMin(trabalhadasMin, esperadoMin);
     });
     return any ? total : null;
+  }
+
+  // bloco reutilizável de 4 campos (Motivo/Tipo Período/Observação/Status)
+  // ligado a um objeto "info" qualquer — usado tanto pelos detalhes de
+  // ajuste POR HORÁRIO (pendenteEntradaInfo/pendenteSaidaInfo, dentro de
+  // buildPairsEditor) quanto pelos detalhes do "Abono Aprovado" POR DIA
+  // (abonoInfo, dentro de renderPontoEletronicoPage) — mesmo formato de
+  // dado dos dois lados (reaproveita sanitizePendenteInfo no worker.js).
+  // 8 campos reais da tela "Aprovação de Abonos" da PMF (pedido do
+  // Georges, rodada CapturaPonto.py — antes eram só 4: Motivo/Tipo
+  // Período/Observação/Status; Data de Envio/Data Início/Data Fim/
+  // Bandeja ficavam de fora). "status" é o campo que decide Aprovado x
+  // Aguardando Parecer (ver pontoAjusteEhAprovado) — texto livre, copiado
+  // literal da coluna Status da PMF.
+  var PONTO_AJUSTE_INFO_FIELDS = [
+    { key: "motivo", label: "Motivo" },
+    { key: "tipoPeriodo", label: "Tipo Período" },
+    { key: "dataEnvio", label: "Data de Envio" },
+    { key: "dataInicio", label: "Data Início" },
+    { key: "dataFim", label: "Data Fim" },
+    { key: "observacao", label: "Observação Funcionário" },
+    { key: "bandeja", label: "Bandeja" },
+    { key: "status", label: "Status" }
+  ];
+
+  function pontoBuildInfoBlock(titleText, getInfo, setInfo, onChange, readOnly) {
+    var block = document.createElement("div");
+    block.className = "ponto-pair-details-block";
+    var title = document.createElement("div");
+    title.className = "ponto-pair-details-block-title";
+    title.textContent = titleText;
+    block.appendChild(title);
+    PONTO_AJUSTE_INFO_FIELDS.forEach(function (f) {
+      var val = (getInfo() || {})[f.key] || "";
+      if (readOnly && !val) return;
+      var fieldWrap = document.createElement("label");
+      fieldWrap.className = "ponto-pair-details-field";
+      var lab = document.createElement("span");
+      lab.textContent = f.label;
+      fieldWrap.appendChild(lab);
+      if (readOnly) {
+        var txt = document.createElement("span");
+        txt.className = "ponto-pair-details-readonly";
+        txt.textContent = val;
+        fieldWrap.appendChild(txt);
+      } else {
+        var inp = document.createElement("input");
+        inp.type = "text";
+        inp.value = val;
+        inp.addEventListener("change", function () {
+          var info = getInfo() || {};
+          info[f.key] = inp.value;
+          setInfo(info);
+          if (onChange) onChange();
+        });
+        fieldWrap.appendChild(inp);
+      }
+      block.appendChild(fieldWrap);
+    });
+    return block;
+  }
+
+  // Aprovado x Aguardando Parecer é decidido pelo texto de "status" —
+  // mesma regra do worker.js (pontoAjusteEhAprovado), duplicada aqui só
+  // porque o cálculo acontece no cliente (evita round-trip).
+  function pontoAjusteEhAprovado(info) {
+    return !!(info && /aprov/i.test(info.status || ""));
   }
 
   function renderPontoEletronicoPage(container, page) {
@@ -16817,7 +16888,7 @@
     var importTextarea = document.createElement("textarea");
     importTextarea.className = "ponto-import-textarea";
     importTextarea.rows = 6;
-    importTextarea.placeholder = '{"month":"2026-09","cargaHoraria":8,"days":[{"date":"2026-09-01","pairs":[{"entrada":"10:37","saida":"13:27"},{"entrada":"14:30","pendenteSaida":true}],"feriado":false,"pendenteAprovacao":false}]}';
+    importTextarea.placeholder = '{"month":"2026-09","cargaHoraria":8,"days":[{"date":"2026-09-01","pairs":[{"entrada":"10:37","saida":"13:27"},{"entrada":"14:30","saidaAjuste":true,"saidaAjusteInfo":{"motivo":"68 - Incluído/Alt pela Chefia","tipoPeriodo":"Único Horário","status":"Aguardando Parecer"}}],"feriado":false},{"date":"2026-09-02","pairs":[{"entrada":"10:00","saida":"12:00"},{"entrada":"13:00","saida":"19:00","saidaAjuste":true,"saidaAjusteInfo":{"motivo":"68 - Incluído/Alt pela Chefia","tipoPeriodo":"Data","dataInicio":"02/09/2026","observacao":"Dispensado pela chefia.","status":"Aprovado"}}],"feriado":false},{"date":"2026-09-03","pairs":[{"entrada":"07:05","saida":"10:00"}],"feriado":"feriado","pmfNota":{"tipo":"feriado_trabalhado","pmfValor":"00:00","observacao":"PMF não considerou essas horas no saldo dela."}}]}';
     importPanel.appendChild(importTextarea);
     var importBtn = document.createElement("button");
     importBtn.type = "button";
@@ -16998,16 +17069,21 @@
       }).finally(function () { carga6Btn.disabled = false; carga8Btn.disabled = false; });
     }
 
-    // salva um dia (pairs+feriado+pendenteAprovacao) — se vier vazio (sem
-    // pares, sem feriado e sem pendenteAprovacao), o worker.js apaga a
-    // chave da KV em vez de guardar "nada" (ver handlePontoDiaUpdate).
-    // Devolve a promise pra quem chamou poder reagir (ex: recolorir a
-    // célula só depois de confirmar salvo).
-    function saveDia(dateStr, pairs, feriado, pendenteAprovacao) {
+    // salva um dia (pairs+feriado+pmfNota) — se vier vazio (sem pares,
+    // sem feriado e sem pmfNota), o worker.js apaga a chave da KV em vez
+    // de guardar "nada" (ver handlePontoDiaUpdate). pendenteAprovacao é
+    // 100% derivada no worker.js (nunca enviada daqui). Devolve a promise
+    // pra quem chamou poder reagir (ex: recolorir a célula só depois de
+    // confirmar salvo).
+    function saveDia(dateStr, pairs, feriado, pmfNota) {
       return authFetch(cfg.templateWorkerUrl + "/ponto-dia?date=" + encodeURIComponent(dateStr), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pairs: pairs, feriado: feriado, pendenteAprovacao: !!pendenteAprovacao })
+        body: JSON.stringify({
+          pairs: pairs,
+          feriado: feriado,
+          pmfNota: pmfNota || null
+        })
       }).then(handle401).then(function (res) { return res.json(); }).then(function (data) {
         if (data.deleted) { delete state.days[dateStr]; }
         else if (data.item) { state.days[dateStr] = data.item; }
@@ -17066,7 +17142,7 @@
         }
         var d = parsed.days[i] || {};
         importStatusEl.textContent = "Importando " + (i + 1) + "/" + total + " (" + (d.date || "?") + ")…";
-        saveDia(d.date, Array.isArray(d.pairs) ? d.pairs : [], !!d.feriado, !!d.pendenteAprovacao)
+        saveDia(d.date, Array.isArray(d.pairs) ? d.pairs : [], d.feriado || false, d.pmfNota || null)
           .then(function () { done++; })
           .catch(function () { erros++; })
           .finally(function () { next(i + 1); });
@@ -17104,39 +17180,47 @@
     function buildPairsEditor(dateStr, dayData, onLocalChange) {
       var pairsWrap = document.createElement("div");
       pairsWrap.className = "ponto-pairs";
-      // Modelo interno "lista plana de horários" (reescrita pedida pelo
-      // Georges depois do bug do dia 16/09: ele tinha só vagas fixas de
-      // entrada/saída por par, e incluir um horário faltante numa vaga
-      // "errada" — ex. a vaga de saída de um turno que não era o dele —
-      // virava um par com saída antes da entrada e contava negativo).
-      // Agora cada horário batido/ajustado é um item SOLTO
-      // {time, pendente, pendenteInfo}; os pares (Turno 1, Turno 2...)
-      // são SEMPRE derivados ordenando esses itens por horário crescente
-      // e agrupando em sequência (1º=entrada do par 1, 2º=saída do par 1,
-      // 3º=entrada do par 2...) — nunca mais uma vaga fixa pra errar.
-      // "+ Horário" solto entra na ordem certa sozinho, não precisa
-      // escolher "é entrada ou é saída".
-      // O formato SALVO (backend, worker.js) não muda — continua
-      // {entrada,saida,pendenteEntrada,pendenteSaida,...}; a conversão
-      // pra esse formato acontece em currentCleanPairs()/derivedPairs().
+      // Modelo interno "lista plana de horários": cada horário batido ou
+      // incluído por ajuste é um item solto {time, ajuste, ajusteInfo};
+      // os pares (Turno 1, Turno 2...) são sempre derivados ordenando
+      // esses itens por horário crescente e agrupando em sequência.
+      // "ajuste" (pedido do Georges, rodada CapturaPonto.py) SUBSTITUI o
+      // antigo "pendente": agora cobre tanto um horário ainda Aguardando
+      // Parecer quanto um já Aprovado — o texto em ajusteInfo.status é
+      // quem decide qual dos dois (ver pontoAjusteEhAprovado). O formato
+      // SALVO (worker.js) é {entrada,saida,entradaAjuste,saidaAjuste,
+      // entradaAjusteInfo,saidaAjusteInfo,...}; a conversão acontece em
+      // currentCleanPairs(). Self-heal de dado no formato antigo
+      // (pendenteEntrada/pendenteSaida/…Info, sem status — Setembro/2026
+      // foi salvo assim) acontece já aqui na leitura.
       var times = [];
       (dayData.pairs || []).forEach(function (p) {
         if (PONTO_HORA_REGEX.test(p.entrada || "")) {
-          times.push({ time: p.entrada, pendente: !!p.pendenteEntrada, pendenteInfo: p.pendenteEntradaInfo || null });
+          var eAjuste = !!(p.entradaAjuste || p.pendenteEntrada);
+          var eInfo = p.entradaAjusteInfo || p.pendenteEntradaInfo || null;
+          if (eAjuste && p.pendenteEntrada && !p.entradaAjuste && eInfo && !eInfo.status) {
+            eInfo = Object.assign({}, eInfo, { status: "Aguardando Parecer" });
+          }
+          times.push({ time: p.entrada, ajuste: eAjuste, ajusteInfo: eInfo });
         }
         if (PONTO_HORA_REGEX.test(p.saida || "")) {
-          times.push({ time: p.saida, pendente: !!p.pendenteSaida, pendenteInfo: p.pendenteSaidaInfo || null });
+          var sAjuste = !!(p.saidaAjuste || p.pendenteSaida);
+          var sInfo = p.saidaAjusteInfo || p.pendenteSaidaInfo || null;
+          if (sAjuste && p.pendenteSaida && !p.saidaAjuste && sInfo && !sInfo.status) {
+            sInfo = Object.assign({}, sInfo, { status: "Aguardando Parecer" });
+          }
+          times.push({ time: p.saida, ajuste: sAjuste, ajusteInfo: sInfo });
         }
       });
-      // par final sem saída ainda, mas já com ajuste pendente aguardando
-      // valor (não dá pra representar como "horário" solto — não tem
-      // valor) — guardado à parte; só é usado quando sobra 1 horário sem
-      // par no final da ordenação (ver derivedPairs()).
-      var trailingPendente = false, trailingPendenteInfo = null;
+      // par final sem saída ainda, mas já com ajuste aguardando valor
+      // (não dá pra representar como "horário" solto — não tem valor) —
+      // guardado à parte; só é usado quando sobra 1 horário sem par no
+      // final da ordenação (ver derivedPairs()).
+      var trailingAjuste = false, trailingAjusteInfo = null;
       (dayData.pairs || []).forEach(function (p) {
-        if (PONTO_HORA_REGEX.test(p.entrada || "") && !PONTO_HORA_REGEX.test(p.saida || "") && p.pendenteSaida) {
-          trailingPendente = true;
-          trailingPendenteInfo = p.pendenteSaidaInfo || null;
+        if (PONTO_HORA_REGEX.test(p.entrada || "") && !PONTO_HORA_REGEX.test(p.saida || "") && (p.saidaAjuste || p.pendenteSaida)) {
+          trailingAjuste = true;
+          trailingAjusteInfo = p.saidaAjusteInfo || p.pendenteSaidaInfo || null;
         }
       });
 
@@ -17165,25 +17249,32 @@
         var out = [];
         groupedPairs().forEach(function (pair) {
           var entradaItem = pair[0], saidaItem = pair[1];
-          var pendenteSaida = saidaItem ? !!saidaItem.pendente : trailingPendente;
-          var pendenteSaidaInfo = saidaItem ? saidaItem.pendenteInfo : trailingPendenteInfo;
+          var saidaAjuste = saidaItem ? !!saidaItem.ajuste : trailingAjuste;
+          var saidaAjusteInfo = saidaItem ? saidaItem.ajusteInfo : trailingAjusteInfo;
           out.push({
             entrada: entradaItem.time,
             saida: saidaItem ? saidaItem.time : null,
-            pendenteEntrada: !!entradaItem.pendente,
-            pendenteSaida: !!pendenteSaida,
-            pendenteEntradaInfo: entradaItem.pendente ? (entradaItem.pendenteInfo || null) : null,
-            pendenteSaidaInfo: pendenteSaida ? (pendenteSaidaInfo || null) : null
+            entradaAjuste: !!entradaItem.ajuste,
+            saidaAjuste: !!saidaAjuste,
+            entradaAjusteInfo: entradaItem.ajuste ? (entradaItem.ajusteInfo || null) : null,
+            saidaAjusteInfo: saidaAjuste ? (saidaAjusteInfo || null) : null
           });
         });
         return out;
       }
 
       var feriadoState = pontoNormalizeFeriado(dayData.feriado);
+      // "pmfNota" (pedido do Georges, rodada CapturaPonto.py) — nota de
+      // DIA (feriado trabalhado / divergência de cálculo da PMF), ver
+      // sanitizePontoPmfNota no worker.js. Substitui o antigo
+      // "abonoAprovado"/"abonoInfo" de dia inteiro (nunca chegou a ser
+      // usado com dado real) — abono aprovado agora é derivado por
+      // horário (ver entradaAjuste/saidaAjuste acima).
+      var pmfNotaState = dayData.pmfNota || null;
 
       function persist() {
         var clean = currentCleanPairs();
-        saveDia(dateStr, clean, feriadoState, false).then(function () {
+        saveDia(dateStr, clean, feriadoState, pmfNotaState).then(function () {
           onLocalChange();
         }).catch(function () {
           statusEl.textContent = "Erro ao salvar " + dateStr + ".";
@@ -17191,41 +17282,13 @@
         });
       }
 
-      // monta um bloco de 4 campos (Motivo/Tipo Período/Observação/
-      // Status) ligado ao objeto de info de um horário pendente —
-      // getInfo()/setInfo() leem/gravam direto no item (entrada, saída ou
-      // o "trailing" sem valor ainda).
+      // bloco de 8 campos (Motivo/Tipo Período/Data de Envio/Data
+      // Início/Data Fim/Observação/Bandeja/Status) ligado ao objeto de
+      // info de um horário marcado como ajuste — getInfo()/setInfo() leem
+      // e gravam direto no item (entrada, saída ou o "trailing" sem valor
+      // ainda).
       function buildInfoBlock(titleText, getInfo, setInfo) {
-        var block = document.createElement("div");
-        block.className = "ponto-pair-details-block";
-        var title = document.createElement("div");
-        title.className = "ponto-pair-details-block-title";
-        title.textContent = titleText;
-        block.appendChild(title);
-        [
-          { key: "motivo", label: "Motivo" },
-          { key: "tipoPeriodo", label: "Tipo Período" },
-          { key: "observacao", label: "Observação" },
-          { key: "status", label: "Status" }
-        ].forEach(function (f) {
-          var fieldWrap = document.createElement("label");
-          fieldWrap.className = "ponto-pair-details-field";
-          var lab = document.createElement("span");
-          lab.textContent = f.label;
-          fieldWrap.appendChild(lab);
-          var inp = document.createElement("input");
-          inp.type = "text";
-          inp.value = (getInfo() || {})[f.key] || "";
-          inp.addEventListener("change", function () {
-            var info = getInfo() || {};
-            info[f.key] = inp.value;
-            setInfo(info);
-            persist();
-          });
-          fieldWrap.appendChild(inp);
-          block.appendChild(fieldWrap);
-        });
-        return block;
+        return pontoBuildInfoBlock(titleText, getInfo, setInfo, persist);
       }
 
       function renderPairs() {
@@ -17235,14 +17298,6 @@
           var row = document.createElement("div");
           row.className = "ponto-pair";
 
-          // "Turno N" (pedido do Georges: nomear as colunas/caixinhas, e
-          // depois — rodada 4 — "coloque turno 1, turno 2 acima dos
-          // horários inicial e final, de forma centralizada") — por isso
-          // mora direto em `row` (que agora é column), centralizado em
-          // cima; os horários/botões ficam todos dentro de `timesRow`,
-          // uma linha horizontal própria logo abaixo. Rótulo derivado da
-          // posição do par depois de ordenado (não existe mais "slot
-          // fixo" pra numerar de outro jeito).
           var turnoLabel = document.createElement("span");
           turnoLabel.className = "ponto-pair-turno-label";
           turnoLabel.textContent = "Turno " + (idx + 1);
@@ -17255,13 +17310,6 @@
           eIn.type = "time";
           eIn.className = "ponto-pair-input";
           eIn.value = entradaItem.time || "";
-          // "blur" (não "change"): o Georges reclamou que, no input nativo
-          // type=time, assim que termina de digitar a HORA (antes da
-          // dezena/unidade do MINUTO), o navegador já dispara "change" —
-          // isso reordenava/reagrupava a lista na hora, destruindo o campo
-          // em edição e fazendo perder o foco no meio da digitação do
-          // minuto. "blur" só dispara quando o campo perde o foco de
-          // verdade (tab/clique fora), dando tempo de terminar hora+minuto.
           eIn.addEventListener("blur", function () {
             if (!eIn.value) {
               if (times.indexOf(entradaItem) !== -1) times.splice(times.indexOf(entradaItem), 1);
@@ -17274,27 +17322,36 @@
             persist();
           });
           timesRow.appendChild(eIn);
-          // "⏳" clicável ao lado da ENTRADA — alterna pendente só deste
-          // horário específico.
-          var eInPendBtn = document.createElement("button");
-          eInPendBtn.type = "button";
-          eInPendBtn.className = "ponto-pair-pending-btn";
-          eInPendBtn.textContent = "⏳";
-          function refreshEInPendBtn() {
-            eInPendBtn.classList.toggle("active", !!entradaItem.pendente);
-            eInPendBtn.title = entradaItem.pendente
-              ? "Entrada aguardando aprovação (clique pra desmarcar)"
-              : "Marcar esta entrada como aguardando aprovação";
+          // botão de ajuste da ENTRADA — alterna "veio de um ajuste" só
+          // deste horário específico; o ícone muda conforme o status
+          // (✅ Aprovado / ⏳ Aguardando Parecer / 🔗 ajuste sem status
+          // ainda) — ver pontoAjusteEhAprovado.
+          var eInAjusteBtn = document.createElement("button");
+          eInAjusteBtn.type = "button";
+          eInAjusteBtn.className = "ponto-pair-pending-btn";
+          function refreshEInAjusteBtn() {
+            eInAjusteBtn.classList.toggle("active", !!entradaItem.ajuste);
+            if (!entradaItem.ajuste) {
+              eInAjusteBtn.classList.remove("ponto-ajuste-aprovado", "ponto-ajuste-pendente");
+              eInAjusteBtn.textContent = "🔗";
+              eInAjusteBtn.title = "Marcar esta entrada como vinda de um ajuste (Aprovação de Abonos)";
+            } else {
+              var aprovado = pontoAjusteEhAprovado(entradaItem.ajusteInfo);
+              eInAjusteBtn.classList.toggle("ponto-ajuste-aprovado", aprovado);
+              eInAjusteBtn.classList.toggle("ponto-ajuste-pendente", !aprovado);
+              eInAjusteBtn.textContent = aprovado ? "✅" : "⏳";
+              eInAjusteBtn.title = (aprovado ? "Entrada incluída por ajuste já Aprovado" : "Entrada incluída por ajuste — Aguardando Parecer") + " (clique pra desmarcar)";
+            }
           }
-          refreshEInPendBtn();
-          eInPendBtn.addEventListener("click", function () {
-            entradaItem.pendente = !entradaItem.pendente;
-            refreshEInPendBtn();
+          refreshEInAjusteBtn();
+          eInAjusteBtn.addEventListener("click", function () {
+            entradaItem.ajuste = !entradaItem.ajuste;
+            refreshEInAjusteBtn();
             refreshDetailsBtn();
             renderDetailsPanel();
             persist();
           });
-          timesRow.appendChild(eInPendBtn);
+          timesRow.appendChild(eInAjusteBtn);
           var sep = document.createElement("span");
           sep.className = "ponto-pair-sep";
           sep.textContent = "–";
@@ -17303,8 +17360,6 @@
           sOut.type = "time";
           sOut.className = "ponto-pair-input";
           sOut.value = saidaItem ? (saidaItem.time || "") : "";
-          // mesmo motivo do eIn acima: "blur" em vez de "change", pra não
-          // reordenar no meio da digitação hora/minuto.
           sOut.addEventListener("blur", function () {
             if (!sOut.value) {
               if (saidaItem && times.indexOf(saidaItem) !== -1) { times.splice(times.indexOf(saidaItem), 1); }
@@ -17313,43 +17368,51 @@
               if (saidaItem.time === sOut.value) return; // nada mudou
               saidaItem.time = sOut.value;
             } else {
-              times.push({ time: sOut.value, pendente: trailingPendente, pendenteInfo: trailingPendenteInfo });
-              trailingPendente = false;
-              trailingPendenteInfo = null;
+              times.push({ time: sOut.value, ajuste: trailingAjuste, ajusteInfo: trailingAjusteInfo });
+              trailingAjuste = false;
+              trailingAjusteInfo = null;
             }
             renderPairs();
             persist();
           });
           timesRow.appendChild(sOut);
-          // mesmo botão "⏳", agora pra SAÍDA — pode ficar marcado mesmo
-          // com a saída ainda em branco (ajuste já submetido, só não tem
-          // valor confirmado ainda) — é esse caso que faz pontoDiaImpar()
-          // não acusar "⚠ Ímpar" (ver comentário lá).
-          var sOutPendBtn = document.createElement("button");
-          sOutPendBtn.type = "button";
-          sOutPendBtn.className = "ponto-pair-pending-btn";
-          sOutPendBtn.textContent = "⏳";
-          function refreshSOutPendBtn() {
-            var checked = saidaItem ? !!saidaItem.pendente : trailingPendente;
-            sOutPendBtn.classList.toggle("active", checked);
-            sOutPendBtn.title = checked
-              ? "Saída aguardando aprovação (clique pra desmarcar)"
-              : "Marcar esta saída como aguardando aprovação";
-          }
-          refreshSOutPendBtn();
-          sOutPendBtn.addEventListener("click", function () {
-            if (saidaItem) {
-              saidaItem.pendente = !saidaItem.pendente;
+          // mesmo botão, agora pra SAÍDA — pode ficar marcado mesmo com a
+          // saída ainda em branco (ajuste já submetido, só não tem valor
+          // confirmado ainda) — é esse caso que faz pontoDiaImpar() não
+          // acusar "⚠ Ímpar" (ver comentário lá).
+          var sOutAjusteBtn = document.createElement("button");
+          sOutAjusteBtn.type = "button";
+          sOutAjusteBtn.className = "ponto-pair-pending-btn";
+          function refreshSOutAjusteBtn() {
+            var ajusteNow = saidaItem ? !!saidaItem.ajuste : trailingAjuste;
+            var infoNow = saidaItem ? saidaItem.ajusteInfo : trailingAjusteInfo;
+            sOutAjusteBtn.classList.toggle("active", ajusteNow);
+            if (!ajusteNow) {
+              sOutAjusteBtn.classList.remove("ponto-ajuste-aprovado", "ponto-ajuste-pendente");
+              sOutAjusteBtn.textContent = "🔗";
+              sOutAjusteBtn.title = "Marcar esta saída como vinda de um ajuste (Aprovação de Abonos)";
             } else {
-              trailingPendente = !trailingPendente;
-              if (!trailingPendente) trailingPendenteInfo = null;
+              var aprovado = pontoAjusteEhAprovado(infoNow);
+              sOutAjusteBtn.classList.toggle("ponto-ajuste-aprovado", aprovado);
+              sOutAjusteBtn.classList.toggle("ponto-ajuste-pendente", !aprovado);
+              sOutAjusteBtn.textContent = aprovado ? "✅" : "⏳";
+              sOutAjusteBtn.title = (aprovado ? "Saída incluída por ajuste já Aprovado" : "Saída incluída por ajuste — Aguardando Parecer") + " (clique pra desmarcar)";
             }
-            refreshSOutPendBtn();
+          }
+          refreshSOutAjusteBtn();
+          sOutAjusteBtn.addEventListener("click", function () {
+            if (saidaItem) {
+              saidaItem.ajuste = !saidaItem.ajuste;
+            } else {
+              trailingAjuste = !trailingAjuste;
+              if (!trailingAjuste) trailingAjusteInfo = null;
+            }
+            refreshSOutAjusteBtn();
             refreshDetailsBtn();
             renderDetailsPanel();
             persist();
           });
-          timesRow.appendChild(sOutPendBtn);
+          timesRow.appendChild(sOutAjusteBtn);
           // "sem par" — mesmo padrão "--:-- sem par" do sistema da PMF.
           var semParHint = document.createElement("span");
           semParHint.className = "ponto-pair-sem-par";
@@ -17364,18 +17427,17 @@
           rmBtn.addEventListener("click", function () {
             times.splice(times.indexOf(entradaItem), 1);
             if (saidaItem) times.splice(times.indexOf(saidaItem), 1);
-            if (!saidaItem) { trailingPendente = false; trailingPendenteInfo = null; }
+            if (!saidaItem) { trailingAjuste = false; trailingAjusteInfo = null; }
             renderPairs();
             persist();
           });
-          // "i" de detalhes do ajuste (Motivo, Tipo Período, Observação
-          // Funcionário, Status) — só aparece quando a entrada e/ou a
-          // saída deste par está marcada pendente.
+          // "i" de detalhes do ajuste (8 campos) — só aparece quando a
+          // entrada e/ou a saída deste par está marcada como ajuste.
           var detailsBtn = document.createElement("button");
           detailsBtn.type = "button";
           detailsBtn.className = "ponto-pair-details-btn";
           detailsBtn.innerHTML = '<i class="ti ti-info-circle"></i>';
-          detailsBtn.title = "Ver/editar detalhes do ajuste (Motivo, Tipo Período, Observação, Status)";
+          detailsBtn.title = "Ver/editar detalhes do ajuste (Aprovação de Abonos)";
           timesRow.appendChild(detailsBtn);
           timesRow.appendChild(rmBtn);
           pairsWrap.appendChild(row);
@@ -17387,28 +17449,28 @@
 
           function renderDetailsPanel() {
             detailsPanel.innerHTML = "";
-            if (entradaItem.pendente) {
+            if (entradaItem.ajuste) {
               detailsPanel.appendChild(buildInfoBlock(
-                "Entrada (" + (entradaItem.time || "–") + ") — aguarda aprovação",
-                function () { return entradaItem.pendenteInfo; },
-                function (v) { entradaItem.pendenteInfo = v; }
+                "Entrada (" + (entradaItem.time || "–") + ") — ajuste",
+                function () { return entradaItem.ajusteInfo; },
+                function (v) { entradaItem.ajusteInfo = v; refreshEInAjusteBtn(); }
               ));
             }
-            var saidaPendenteNow = saidaItem ? saidaItem.pendente : trailingPendente;
-            if (saidaPendenteNow) {
+            var saidaAjusteNow = saidaItem ? saidaItem.ajuste : trailingAjuste;
+            if (saidaAjusteNow) {
               detailsPanel.appendChild(buildInfoBlock(
-                "Saída (" + (saidaItem ? saidaItem.time : "--:--") + ") — aguarda aprovação",
-                function () { return saidaItem ? saidaItem.pendenteInfo : trailingPendenteInfo; },
-                function (v) { if (saidaItem) saidaItem.pendenteInfo = v; else trailingPendenteInfo = v; }
+                "Saída (" + (saidaItem ? saidaItem.time : "--:--") + ") — ajuste",
+                function () { return saidaItem ? saidaItem.ajusteInfo : trailingAjusteInfo; },
+                function (v) { if (saidaItem) saidaItem.ajusteInfo = v; else trailingAjusteInfo = v; refreshSOutAjusteBtn(); }
               ));
             }
           }
           renderDetailsPanel();
 
           function refreshDetailsBtn() {
-            var hasPendente = !!entradaItem.pendente || (saidaItem ? !!saidaItem.pendente : trailingPendente);
-            detailsBtn.style.display = hasPendente ? "" : "none";
-            if (!hasPendente) detailsPanel.style.display = "none";
+            var hasAjuste = !!entradaItem.ajuste || (saidaItem ? !!saidaItem.ajuste : trailingAjuste);
+            detailsBtn.style.display = hasAjuste ? "" : "none";
+            if (!hasAjuste) detailsPanel.style.display = "none";
           }
           refreshDetailsBtn();
           detailsBtn.addEventListener("click", function () {
@@ -17418,9 +17480,7 @@
         });
 
         // horário(s) "solto(s)" recém-adicionados via "+ Horário", ainda
-        // sem valor digitado — aparecem como uma linha simples (1 campo)
-        // até o Georges preencher; ao preencher, renderPairs() reordena e
-        // ele passa a aparecer dentro do Turno certo automaticamente.
+        // sem valor digitado.
         draftTimes().forEach(function (draft) {
           var row = document.createElement("div");
           row.className = "ponto-pair ponto-pair-draft";
@@ -17435,7 +17495,6 @@
           inp.type = "time";
           inp.className = "ponto-pair-input";
           inp.value = "";
-          // "blur", mesmo motivo do eIn/sOut acima.
           inp.addEventListener("blur", function () {
             if (!inp.value) return;
             draft.time = inp.value;
@@ -17466,7 +17525,7 @@
         addBtn.innerHTML = '<i class="ti ti-plus"></i> Horário';
         addBtn.title = "Adiciona um horário solto — ele entra ordenado automaticamente, sem precisar escolher 'entrada' ou 'saída'";
         addBtn.addEventListener("click", function () {
-          times.push({ time: "", pendente: false, pendenteInfo: null });
+          times.push({ time: "", ajuste: false, ajusteInfo: null });
           renderPairs();
         });
         pairsWrap.appendChild(addBtn);
@@ -17477,7 +17536,9 @@
         el: pairsWrap,
         getCleanPairs: currentCleanPairs,
         getFeriado: function () { return feriadoState; },
-        setFeriado: function (v) { feriadoState = pontoNormalizeFeriado(v); persist(); }
+        setFeriado: function (v) { feriadoState = pontoNormalizeFeriado(v); persist(); },
+        getPmfNota: function () { return pmfNotaState; },
+        setPmfNota: function (v) { pmfNotaState = v || null; persist(); }
       };
     }
 
@@ -17502,7 +17563,8 @@
         var rowEl = document.createElement("div");
         rowEl.className = "ponto-row" + (isWeekend ? " ponto-row-weekend" : "") +
           (feriadoNow === "feriado" ? " ponto-row-feriado" : "") +
-          (feriadoNow === "facultativo" ? " ponto-row-facultativo" : "");
+          (feriadoNow === "facultativo" ? " ponto-row-facultativo" : "") +
+          (feriadoNow === "ferias" ? " ponto-row-ferias" : "");
 
         // "dia" — separado em dois blocos visuais (pedido do Georges:
         // "indicando o dia da semana de forma mais separada em relação ao
@@ -17532,15 +17594,16 @@
         var statusCell = document.createElement("div");
         statusCell.className = "ponto-cell ponto-cell-status";
 
-        // chip de Feriado — 3 estados cíclicos (pedido do Georges, igual
-        // padrão já usado em outras páginas): Dia Útil → Feriado →
-        // Ponto Facultativo → Dia Útil ao clicar, mudando de cor e
-        // contabilizando (facultativo conta igual feriado, ver
-        // pontoDiaEsperadoMin).
+        // chip de Feriado — 4 estados cíclicos (pedido do Georges, rodada
+        // CapturaPonto.py: + "Férias"): Dia Útil → Feriado → Ponto
+        // Facultativo → Férias → Dia Útil ao clicar. Férias conta igual
+        // feriado/facultativo pro cálculo (esperado 0, ver
+        // pontoDiaEsperadoMin) — dia de férias não tem batida nem carga.
         var feriadoChipEl = document.createElement("button");
         feriadoChipEl.type = "button";
         feriadoChipEl.className = "ponto-feriado-chip";
-        var PONTO_FERIADO_CHIP_LABEL = { util: "Dia Útil", feriado: "Feriado", facultativo: "Ponto Facultativo" };
+        var PONTO_FERIADO_CHIP_ORDER = ["util", "feriado", "facultativo", "ferias"];
+        var PONTO_FERIADO_CHIP_LABEL = { util: "Dia Útil", feriado: "Feriado", facultativo: "Ponto Facultativo", ferias: "Férias" };
         // fim de semana: esperado já é 0 automaticamente (ver
         // pontoDiaEsperadoMin), então o estado "util" não significa "dia
         // de trabalho normal" nesse caso — mostrar "Dia Útil" ali confundia
@@ -17550,14 +17613,16 @@
           var label = (isWeekend && feriadoNow === "util") ? "Fim de Semana" : PONTO_FERIADO_CHIP_LABEL[feriadoNow];
           feriadoChipEl.textContent = label;
           feriadoChipEl.className = "ponto-feriado-chip ponto-feriado-chip-" + feriadoNow + (isWeekend && feriadoNow === "util" ? " ponto-feriado-chip-weekend" : "");
-          feriadoChipEl.title = "Clique pra alternar (Dia Útil → Feriado → Ponto Facultativo)";
+          feriadoChipEl.title = "Clique pra alternar (Dia Útil → Feriado → Ponto Facultativo → Férias)";
         }
         refreshFeriadoChip();
         feriadoChipEl.addEventListener("click", function () {
-          feriadoNow = feriadoNow === "util" ? "feriado" : (feriadoNow === "feriado" ? "facultativo" : "util");
+          var idx = PONTO_FERIADO_CHIP_ORDER.indexOf(feriadoNow);
+          feriadoNow = PONTO_FERIADO_CHIP_ORDER[(idx + 1) % PONTO_FERIADO_CHIP_ORDER.length];
           refreshFeriadoChip();
           rowEl.classList.toggle("ponto-row-feriado", feriadoNow === "feriado");
           rowEl.classList.toggle("ponto-row-facultativo", feriadoNow === "facultativo");
+          rowEl.classList.toggle("ponto-row-ferias", feriadoNow === "ferias");
           pairsApi.setFeriado(feriadoNow);
           updateCalcCells(pairsApi, feriadoNow);
           renderSummaryOnly();
@@ -17570,16 +17635,169 @@
         imparBadgeEl.textContent = "⚠ Ímpar";
         imparBadgeEl.style.display = "none";
         statusCell.appendChild(imparBadgeEl);
-        // "⏳ Aguarda aprovação" — agora é SÓ este chip (pedido do
-        // Georges: "não deve ser um check box"), e seu estado vem direto
-        // dos horários marcados ⏳ em cada par (ver updateCalcCells) — não
-        // existe mais um campo manual pra (des)sincronizar.
+        // "⏳ Aguarda aprovação" — SEMPRE derivado dos horários marcados
+        // como ajuste e AINDA não Aprovado (ver entradaAjuste/saidaAjuste
+        // + pontoAjusteEhAprovado).
         var pendenteBadgeEl = document.createElement("span");
         pendenteBadgeEl.className = "ponto-pendente-badge";
         pendenteBadgeEl.title = "Tem horário aguardando aprovação da chefia (ver Aprovação de Abonos na PMF)";
         pendenteBadgeEl.textContent = "⏳ Aguarda aprovação";
         pendenteBadgeEl.style.display = "none";
         statusCell.appendChild(pendenteBadgeEl);
+
+        // "✅ Abono Aprovado" (pedido do Georges, rodada CapturaPonto.py)
+        // — SEMPRE derivado: aparece quando QUALQUER metade (entrada ou
+        // saída) de QUALQUER par do dia está marcada como ajuste já
+        // Aprovado. Não é mais um toggle manual de dia inteiro (editar
+        // acontece por horário, dentro de cada par — ver buildPairsEditor)
+        // — aqui só agrega e mostra, com (i) listando os detalhes de cada
+        // ajuste aprovado distinto encontrado no dia (pode ser mais de 1,
+        // ex: abono de dia inteiro com 2 pares de 8h cobertos pelo mesmo
+        // ajuste, ou 2 ajustes diferentes no mesmo dia).
+        var abonoBadgeEl = document.createElement("span");
+        abonoBadgeEl.className = "ponto-abono-badge ponto-abono-badge-readonly";
+        abonoBadgeEl.title = "Dia tem horário(s) incluído(s) por ajuste já Aprovado";
+        abonoBadgeEl.style.display = "none";
+        statusCell.appendChild(abonoBadgeEl);
+
+        var abonoDetailsBtn = document.createElement("button");
+        abonoDetailsBtn.type = "button";
+        abonoDetailsBtn.className = "ponto-pair-details-btn";
+        abonoDetailsBtn.innerHTML = '<i class="ti ti-info-circle"></i>';
+        abonoDetailsBtn.title = "Ver detalhes do(s) ajuste(s) aprovado(s) deste dia";
+        abonoDetailsBtn.style.display = "none";
+        statusCell.appendChild(abonoDetailsBtn);
+
+        var abonoDetailsPanel = document.createElement("div");
+        abonoDetailsPanel.className = "ponto-pair-details ponto-abono-details";
+        abonoDetailsPanel.style.display = "none";
+        statusCell.appendChild(abonoDetailsPanel);
+
+        abonoDetailsBtn.addEventListener("click", function () {
+          abonoDetailsPanel.style.display = abonoDetailsPanel.style.display === "none" ? "" : "none";
+        });
+
+        // "pmfNota" (pedido do Georges, rodada CapturaPonto.py) — nota de
+        // dia pros 2 casos em que o saldo que a PMF mostra diverge de
+        // propósito do que o Meu Hub calcula: feriado trabalhado (PMF não
+        // soma no saldo dela) e divergência de cálculo da própria PMF.
+        // Diferente do Abono Aprovado acima, ESTE é editável aqui (não
+        // por horário) — normalmente vem pronto do CapturaPonto.py, mas
+        // dá pra ajustar/remover na mão.
+        var PONTO_PMF_NOTA_LABEL = { feriado_trabalhado: "🏖️ Feriado trabalhado", divergencia_calculo: "⚠️ Divergência PMF" };
+        var pmfNotaBadgeEl = document.createElement("span");
+        pmfNotaBadgeEl.className = "ponto-pmfnota-badge";
+        pmfNotaBadgeEl.style.display = "none";
+        statusCell.appendChild(pmfNotaBadgeEl);
+
+        var pmfNotaAddBtn = document.createElement("button");
+        pmfNotaAddBtn.type = "button";
+        pmfNotaAddBtn.className = "ponto-abono-add-btn";
+        pmfNotaAddBtn.title = "Anotar que a PMF não considerou/calculou diferente neste dia (feriado trabalhado ou divergência de cálculo)";
+        pmfNotaAddBtn.textContent = "+ Nota PMF";
+        pmfNotaAddBtn.style.display = "none";
+        statusCell.appendChild(pmfNotaAddBtn);
+
+        var pmfNotaDetailsBtn = document.createElement("button");
+        pmfNotaDetailsBtn.type = "button";
+        pmfNotaDetailsBtn.className = "ponto-pair-details-btn";
+        pmfNotaDetailsBtn.innerHTML = '<i class="ti ti-info-circle"></i>';
+        pmfNotaDetailsBtn.title = "Ver/editar a nota de divergência com a PMF";
+        pmfNotaDetailsBtn.style.display = "none";
+        statusCell.appendChild(pmfNotaDetailsBtn);
+
+        var pmfNotaPanel = document.createElement("div");
+        pmfNotaPanel.className = "ponto-pair-details ponto-pmfnota-details";
+        pmfNotaPanel.style.display = "none";
+        statusCell.appendChild(pmfNotaPanel);
+
+        function renderPmfNotaPanel() {
+          pmfNotaPanel.innerHTML = "";
+          var nota = pairsApi.getPmfNota() || {};
+          var block = document.createElement("div");
+          block.className = "ponto-pair-details-block";
+          var title = document.createElement("div");
+          title.className = "ponto-pair-details-block-title";
+          title.textContent = "Nota PMF";
+          block.appendChild(title);
+
+          var tipoWrap = document.createElement("label");
+          tipoWrap.className = "ponto-pair-details-field";
+          var tipoLab = document.createElement("span");
+          tipoLab.textContent = "Tipo";
+          tipoWrap.appendChild(tipoLab);
+          var tipoSel = document.createElement("select");
+          [["feriado_trabalhado", "Feriado trabalhado"], ["divergencia_calculo", "Divergência de cálculo"]].forEach(function (opt) {
+            var o = document.createElement("option");
+            o.value = opt[0]; o.textContent = opt[1];
+            if (nota.tipo === opt[0]) o.selected = true;
+            tipoSel.appendChild(o);
+          });
+          tipoSel.addEventListener("change", function () {
+            var n = pairsApi.getPmfNota() || {};
+            n.tipo = tipoSel.value;
+            pairsApi.setPmfNota(n);
+            refreshPmfNotaUI();
+          });
+          tipoWrap.appendChild(tipoSel);
+          block.appendChild(tipoWrap);
+
+          [
+            { key: "pmfValor", label: "Valor da PMF" },
+            { key: "diferenca", label: "Diferença" },
+            { key: "observacao", label: "Observação" }
+          ].forEach(function (f) {
+            var fieldWrap = document.createElement("label");
+            fieldWrap.className = "ponto-pair-details-field";
+            var lab = document.createElement("span");
+            lab.textContent = f.label;
+            fieldWrap.appendChild(lab);
+            var inp = document.createElement("input");
+            inp.type = "text";
+            inp.value = nota[f.key] || "";
+            inp.addEventListener("change", function () {
+              var n = pairsApi.getPmfNota() || {};
+              n[f.key] = inp.value;
+              pairsApi.setPmfNota(n);
+            });
+            fieldWrap.appendChild(inp);
+            block.appendChild(fieldWrap);
+          });
+
+          var rmBtn = document.createElement("button");
+          rmBtn.type = "button";
+          rmBtn.className = "ponto-pair-remove-btn";
+          rmBtn.innerHTML = '<i class="ti ti-x"></i> Remover nota';
+          rmBtn.addEventListener("click", function () {
+            pairsApi.setPmfNota(null);
+            refreshPmfNotaUI();
+            pmfNotaPanel.style.display = "none";
+          });
+          block.appendChild(rmBtn);
+
+          pmfNotaPanel.appendChild(block);
+        }
+
+        pmfNotaAddBtn.addEventListener("click", function () {
+          pairsApi.setPmfNota({ tipo: "feriado_trabalhado" });
+          refreshPmfNotaUI();
+          renderPmfNotaPanel();
+          pmfNotaPanel.style.display = "";
+        });
+        pmfNotaDetailsBtn.addEventListener("click", function () {
+          renderPmfNotaPanel();
+          pmfNotaPanel.style.display = pmfNotaPanel.style.display === "none" ? "" : "none";
+        });
+
+        function refreshPmfNotaUI() {
+          var nota = pairsApi.getPmfNota();
+          pmfNotaBadgeEl.style.display = nota ? "" : "none";
+          pmfNotaBadgeEl.textContent = nota ? (PONTO_PMF_NOTA_LABEL[nota.tipo] || "ℹ️ Nota PMF") : "";
+          pmfNotaAddBtn.style.display = nota ? "none" : "";
+          pmfNotaDetailsBtn.style.display = nota ? "" : "none";
+          if (!nota) pmfNotaPanel.style.display = "none";
+        }
+
         rowEl.appendChild(statusCell);
 
         var pairsCell = document.createElement("div");
@@ -17594,36 +17812,58 @@
         saldoCell.className = "ponto-cell ponto-cell-saldo";
         rowEl.appendChild(saldoCell);
 
-        // "pendenteAprovacao" (badge ⏳) agora é SEMPRE derivado dos
-        // horários do próprio par (nunca mais um checkbox manual — era
-        // esse desencontro que causava o bug real do dia 06/09: marcou
-        // ⏳ no horário, mas o checkbox do dia ficou sem marcar e o chip
-        // não aparecia).
+        // "pendente"/"abono aprovado" (badges ⏳/✅) SEMPRE derivados dos
+        // horários do próprio par (nunca um checkbox/toggle manual de dia
+        // inteiro — era esse desencontro que causava bugs reais antes).
         function updateCalcCells(pairsEditorApi, feriadoNow) {
           var cleanPairs = pairsEditorApi.getCleanPairs();
-          var hasRecord = cleanPairs.length > 0 || feriadoNow !== "util";
+          var pmfNota = pairsEditorApi.getPmfNota();
+          var hasRecord = cleanPairs.length > 0 || feriadoNow !== "util" || !!pmfNota;
           var trabalhadasMin = pontoDiaTrabalhadasMin(cleanPairs);
           var esperadoMin = pontoDiaEsperadoMin(weekday, feriadoNow, state.cargaHoraria);
           var saldoMin = pontoDiaSaldoMin(trabalhadasMin, esperadoMin);
           var impar = pontoDiaImpar(cleanPairs);
-          var pendente = cleanPairs.some(function (p) { return p.pendenteEntrada || p.pendenteSaida; });
+          var pendente = cleanPairs.some(function (p) {
+            return (p.entradaAjuste && !pontoAjusteEhAprovado(p.entradaAjusteInfo)) ||
+              (p.saidaAjuste && !pontoAjusteEhAprovado(p.saidaAjusteInfo));
+          });
+          // coleta os infos distintos de ajuste já Aprovado no dia (pode
+          // ter mais de 1 — dedupe por JSON.stringify).
+          var aprovadosInfos = [], aprovadosSeen = {};
+          cleanPairs.forEach(function (p) {
+            [["entradaAjuste", "entradaAjusteInfo"], ["saidaAjuste", "saidaAjusteInfo"]].forEach(function (pairKeys) {
+              if (p[pairKeys[0]] && pontoAjusteEhAprovado(p[pairKeys[1]])) {
+                var key = JSON.stringify(p[pairKeys[1]] || {});
+                if (!aprovadosSeen[key]) { aprovadosSeen[key] = true; aprovadosInfos.push(p[pairKeys[1]] || {}); }
+              }
+            });
+          });
           trabalhadasCell.textContent = hasRecord ? pontoFormatMin(trabalhadasMin) : "—";
           imparBadgeEl.style.display = (hasRecord && impar) ? "" : "none";
           pendenteBadgeEl.style.display = pendente ? "" : "none";
+          abonoBadgeEl.style.display = aprovadosInfos.length ? "" : "none";
+          abonoBadgeEl.textContent = "✅ Abono Aprovado" + (aprovadosInfos.length > 1 ? " (" + aprovadosInfos.length + ")" : "");
+          abonoDetailsBtn.style.display = aprovadosInfos.length ? "" : "none";
+          if (aprovadosInfos.length && abonoDetailsPanel.style.display !== "none") {
+            abonoDetailsPanel.innerHTML = "";
+            aprovadosInfos.forEach(function (info, i) {
+              abonoDetailsPanel.appendChild(pontoBuildInfoBlock("Ajuste Aprovado " + (i + 1), function () { return info; }, function () {}, null, true));
+            });
+          }
+          if (!aprovadosInfos.length) abonoDetailsPanel.style.display = "none";
+          refreshPmfNotaUI();
           saldoCell.textContent = hasRecord ? pontoFormatSaldoMin(saldoMin) : "—";
           saldoCell.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
           if (hasRecord && saldoMin > 0) saldoCell.classList.add("ponto-saldo-positivo");
           if (hasRecord && saldoMin < 0) saldoCell.classList.add("ponto-saldo-negativo");
-          // cor da linha inteira (pedido do Georges): fds/feriado/facultativo
-          // fica azul SEMPRE (tenha ou não horário) — mas isso é só a cor
-          // "de base"; se o dia (seja ele qual for) tiver Ímpar ou Aguarda
-          // aprovação, essas duas tomam prioridade por cima do azul, porque
-          // são coisas que precisam de atenção/ação. Entre as duas, Aguarda
-          // aprovação (amarelo) vence Ímpar (vermelho) — é mais raro e é
-          // justamente o caso que suprime o Ímpar (ver pontoDiaImpar) então
-          // quando os dois "empatam" na prática o pendente é o motivo real.
-          rowEl.classList.remove("ponto-row-impar", "ponto-row-pendente");
+          // cor da linha inteira (pedido do Georges): fds/feriado/
+          // facultativo/férias fica azul SEMPRE — cor "de base"; Ímpar,
+          // Aguarda aprovação ou Abono Aprovado tomam prioridade por
+          // cima. Ordem: Aguarda aprovação (amarelo) > Abono Aprovado
+          // (verde) > Ímpar (vermelho) > azul de fds/feriado > neutro.
+          rowEl.classList.remove("ponto-row-impar", "ponto-row-pendente", "ponto-row-abono");
           if (pendente) rowEl.classList.add("ponto-row-pendente");
+          else if (aprovadosInfos.length) rowEl.classList.add("ponto-row-abono");
           else if (hasRecord && impar) rowEl.classList.add("ponto-row-impar");
           // dados usados pelos chips de filtro (Aguarda aprovação/Ímpar/
           // Saldo negativo) — guardados direto no rowEl pra não precisar
@@ -17631,6 +17871,7 @@
           rowEl.dataset.pontoPendente = pendente ? "1" : "0";
           rowEl.dataset.pontoImpar = (hasRecord && impar) ? "1" : "0";
           rowEl.dataset.pontoSaldoNeg = (hasRecord && saldoMin < 0) ? "1" : "0";
+          rowEl.dataset.pontoAbono = aprovadosInfos.length ? "1" : "0";
           applyRowFilter(rowEl);
           return hasRecord ? saldoMin : 0;
         }

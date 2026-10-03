@@ -7150,7 +7150,8 @@ html, body {
    útil normal". */
 .ponto-row-weekend,
 .ponto-row-feriado,
-.ponto-row-facultativo { background: #eaf2fb; border-color: #c9ddf3; }
+.ponto-row-facultativo,
+.ponto-row-ferias { background: #eaf2fb; border-color: #c9ddf3; }
 
 /* Ímpar (vermelho claro) e Aguarda aprovação (amarelo claro) — qualquer
    dia (útil, fds ou feriado/facultativo) fica nessas cores quando se
@@ -7158,6 +7159,12 @@ html, body {
    sobre Ímpar quando os dois calham no mesmo dia (ver updateCalcCells). */
 .ponto-row-impar { background: #fdeeec; border-color: #f3c7bf; }
 .ponto-row-pendente { background: #fff6da; border-color: #f0dd9a; }
+/* "Abono Aprovado" (pedido do Georges): dia (ou horário único) coberto
+   por abono já APROVADO na PMF — diferente de Pendente (ainda incerto,
+   amarelo) e de Ímpar (falta algo, vermelho). Verde: já resolvido, só
+   informativo. Prioridade: Pendente > Abono Aprovado > Ímpar (ver
+   updateCalcCells no app.js). */
+.ponto-row-abono { background: #e9f6ee; border-color: #bfe3cb; }
 
 .ponto-cell { display: flex; flex-direction: column; }
 
@@ -7207,9 +7214,11 @@ html, body {
 }
 .ponto-row-weekend .ponto-weekday,
 .ponto-row-feriado .ponto-weekday,
-.ponto-row-facultativo .ponto-weekday { background: #d3e4f7; color: #2f6fad; }
+.ponto-row-facultativo .ponto-weekday,
+.ponto-row-ferias .ponto-weekday { background: #d3e4f7; color: #2f6fad; }
 .ponto-row-impar .ponto-weekday { background: #f6cfc6; color: #a3392a; }
 .ponto-row-pendente .ponto-weekday { background: #f0e0a0; color: #8a6d1f; }
+.ponto-row-abono .ponto-weekday { background: #bfe3cb; color: #1f6e42; }
 .ponto-day {
   font-size: 16px;
   font-weight: 800;
@@ -7222,7 +7231,7 @@ html, body {
    Coluna própria, estreita, sempre presente (mesmo vazia) pra não
    desalinhar as linhas sem badge. */
 .ponto-cell-status {
-  min-width: 150px;
+  min-width: 170px;
   flex-shrink: 0;
   justify-content: center;
   align-items: flex-start;
@@ -7265,6 +7274,13 @@ html, body {
   background: #f3eefc;
   color: #6b3fa0;
   border-color: #ddc9f3;
+}
+/* "Férias" (pedido do Georges, rodada CapturaPonto.py) — 4º estado do
+   chip, mesmo conceito de feriado/facultativo pro cálculo (esperado 0). */
+.ponto-feriado-chip-ferias {
+  background: #e3f6f1;
+  color: #1a7a66;
+  border-color: #bfe8dd;
 }
 
 .ponto-cell-pairs {
@@ -7477,7 +7493,8 @@ html, body {
 .ponto-cell-saldo.ponto-saldo-positivo { color: #2f8a4b; }
 .ponto-cell-saldo.ponto-saldo-negativo { color: #c0392b; }
 .ponto-impar-badge,
-.ponto-pendente-badge {
+.ponto-pendente-badge,
+.ponto-abono-badge {
   display: inline-block;
   font-size: 10px;
   font-weight: 700;
@@ -7494,6 +7511,70 @@ html, body {
   color: #2a6f97;
   background: #e5f2fa;
 }
+/* "Abono Aprovado" (rodada CapturaPonto.py) agora é SEMPRE derivado dos
+   horários (não um toggle de dia inteiro) — virou <span> só-leitura, sem
+   cursor de botão; editar acontece por horário, dentro de cada par. */
+.ponto-abono-badge-readonly {
+  color: #1f6e42;
+  background: #ddf2e4;
+}
+/* "+ Abono Aprovado"/"+ Nota PMF" — mesmo espírito do chip de Feriado
+   (botão discreto, só aparece quando o dia ainda não está marcado) pra
+   não poluir a coluna Observações nos dias sem nada (maioria).*/
+.ponto-abono-add-btn {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 5px;
+  padding: 2px 6px;
+  border: 1px dashed #c7d6cc;
+  background: transparent;
+  color: #6b7d70;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ponto-abono-add-btn:hover { background: #eef6f0; border-color: #a9c4b1; }
+.ponto-abono-details { background: #f3fbf5; border-color: #d6ecdc; }
+
+/* campo só-leitura dentro de um bloco de detalhes (pontoBuildInfoBlock
+   com readOnly:true — usado no painel agregado de Abono Aprovado, que
+   não deve ser editado ali, só nos horários individuais). */
+.ponto-pair-details-readonly {
+  font-size: 12px;
+  color: #3a3a35;
+  padding: 4px 0;
+}
+
+/* "pmfNota" (rodada CapturaPonto.py) — nota de dia pra feriado
+   trabalhado / divergência de cálculo com a PMF, mesmo espírito visual
+   do Abono Aprovado mas em tom âmbar (é um AVISO de divergência, não uma
+   confirmação positiva). */
+.ponto-pmfnota-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  color: #8a5a1f;
+  background: #fbe8d2;
+}
+.ponto-pmfnota-details { background: #fdf6ee; border-color: #f0ddc2; }
+.ponto-pmfnota-details select {
+  border: 1px solid #e4e2db;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: #3a3a35;
+  background: #fff;
+}
+
+/* botão de ajuste por horário (🔗 sem ajuste / ⏳ pendente / ✅ aprovado
+   — rodada CapturaPonto.py, substitui o antigo "⏳" fixo) — cor muda
+   conforme o status do ajuste, lido do campo "status" copiado da PMF. */
+.ponto-ajuste-pendente.active { background: #fff3d6; border-color: #f0dd9a; }
+.ponto-ajuste-aprovado.active { background: #ddf2e4; border-color: #bfe3cb; }
 
 /* ---- Resumo Anual (grid Jan-Dez) ---- */
 .ponto-year-summary {
