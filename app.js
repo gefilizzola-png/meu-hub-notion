@@ -16788,13 +16788,41 @@
     // meses são buscados 1x por ano navegado e ficam em cache (yearCache)
     // pra não refazer a mesma chamada toda hora que o Georges edita um
     // dia. ----
+    // rodada Out/26 (pedido do Georges: "deixe apenas uma caixa com o
+    // total de horas no ano e, se eu clicar nela, aí abre todos os meses
+    // da forma que exibe hoje" — menos poluição, sobretudo no Zfold):
+    // caixa única sempre visível com o saldo somado do ano inteiro
+    // (meses futuros/sem dado ficam fora da soma); clique nela
+    // expande/recolhe a grade Jan-Dez de sempre, com o título junto.
+    var yearGridExpanded = false;
     var yearSummaryWrap = document.createElement("div");
     yearSummaryWrap.className = "ponto-year-summary";
+    var yearTotalBox = document.createElement("button");
+    yearTotalBox.type = "button";
+    yearTotalBox.className = "ponto-year-total-box";
+    var yearTotalLabel = document.createElement("span");
+    yearTotalLabel.className = "ponto-year-total-label";
+    var yearTotalValue = document.createElement("span");
+    yearTotalValue.className = "ponto-year-total-value";
+    var yearTotalChevron = document.createElement("i");
+    yearTotalChevron.className = "ti ti-chevron-down ponto-year-total-chevron";
+    yearTotalBox.appendChild(yearTotalLabel);
+    yearTotalBox.appendChild(yearTotalValue);
+    yearTotalBox.appendChild(yearTotalChevron);
+    yearTotalBox.addEventListener("click", function () {
+      yearGridExpanded = !yearGridExpanded;
+      yearSummaryTitle.style.display = yearGridExpanded ? "" : "none";
+      yearGridEl.style.display = yearGridExpanded ? "" : "none";
+      yearTotalChevron.classList.toggle("ponto-year-total-chevron-open", yearGridExpanded);
+    });
+    yearSummaryWrap.appendChild(yearTotalBox);
     var yearSummaryTitle = document.createElement("div");
     yearSummaryTitle.className = "ponto-year-summary-title";
+    yearSummaryTitle.style.display = "none";
     yearSummaryWrap.appendChild(yearSummaryTitle);
     var yearGridEl = document.createElement("div");
     yearGridEl.className = "ponto-year-grid";
+    yearGridEl.style.display = "none";
     yearSummaryWrap.appendChild(yearGridEl);
     wrap.appendChild(yearSummaryWrap);
 
@@ -16831,30 +16859,20 @@
     // ---- carga horária da competência (6h x 8h — pedido do Georges:
     // "estou fazendo ampliação de jornada... mas como em breve devo
     // voltar pra 6h, para cada competência/mês, a página deve me permitir
-    // escolher") — PUT /ponto-mes, não afeta meses já passados. ----
-    var cargaRow = document.createElement("div");
-    cargaRow.className = "ponto-carga-row";
-    var cargaLabel = document.createElement("span");
-    cargaLabel.className = "ponto-carga-label";
-    cargaLabel.textContent = "Carga horária desta competência:";
-    cargaRow.appendChild(cargaLabel);
-    var carga6Btn = document.createElement("button");
-    carga6Btn.type = "button";
-    carga6Btn.className = "ponto-carga-btn";
-    carga6Btn.textContent = "6h";
-    var carga8Btn = document.createElement("button");
-    carga8Btn.type = "button";
-    carga8Btn.className = "ponto-carga-btn";
-    carga8Btn.textContent = "8h";
+    // escolher") — PUT /ponto-mes, não afeta meses já passados. Virou 1
+    // botão só, cicla 8h<->6h ao clicar (pedido do Georges, rodada Out/26:
+    // "igual fizemos em outras páginas" — mesmo padrão de
+    // nextSupermercadoStatus/cycleNotifCategoryChip), sem o texto "Carga
+    // horária desta competência:" do lado (poluía — Zfold fechado). ----
+    var cargaBtn = document.createElement("button");
+    cargaBtn.type = "button";
+    cargaBtn.className = "ponto-carga-btn ponto-carga-btn-cycle";
     function updateCargaBtns() {
-      carga6Btn.classList.toggle("active", state.cargaHoraria === 6);
-      carga8Btn.classList.toggle("active", state.cargaHoraria === 8);
+      cargaBtn.textContent = state.cargaHoraria + "h";
+      cargaBtn.title = "Carga horária desta competência: " + state.cargaHoraria + "h (clique pra mudar pra " + (state.cargaHoraria === 8 ? 6 : 8) + "h)";
     }
-    carga6Btn.addEventListener("click", function () { saveMesConfig(6); });
-    carga8Btn.addEventListener("click", function () { saveMesConfig(8); });
-    cargaRow.appendChild(carga6Btn);
-    cargaRow.appendChild(carga8Btn);
-    topRow2Left.appendChild(cargaRow);
+    cargaBtn.addEventListener("click", function () { saveMesConfig(state.cargaHoraria === 8 ? 6 : 8); });
+    topRow2Left.appendChild(cargaBtn);
     topRow2.appendChild(topRow2Left);
 
     var topRow2Right = document.createElement("div");
@@ -16880,24 +16898,26 @@
     // ---- "Importar mês (colar dados)" — pedido do Georges, rodada 4:
     // "vira um item menor... deixa apenas um botão que abre a caixa de
     // texto e os botões" (antes era uma barra recolhível de largura
-    // total, ocupando espaço mesmo fechada). Agora é só um link/botão
-    // discreto, na mesma linha do saldo (rodada 5); o painel
-    // (hint+textarea+Importar) continua abrindo abaixo, largura total,
-    // só depois do 1º clique. ----
+    // total, ocupando espaço mesmo fechada). Rodada Out/26: "só com o
+    // ícone de upload, e passar o mouse em cima mostra a msg" — virou
+    // botão só-ícone (sem texto do lado), com o texto completo só no
+    // title (tooltip). Painel (hint+textarea+Importar) continua abrindo
+    // abaixo, largura total, só depois do 1º clique. ----
     var importToggleBtn = document.createElement("button");
     importToggleBtn.type = "button";
-    importToggleBtn.className = "ponto-import-toggle";
-    importToggleBtn.innerHTML = '<i class="ti ti-upload"></i> Importar mês (colar dados)';
+    importToggleBtn.className = "ponto-import-toggle ponto-icon-only-btn";
+    importToggleBtn.title = "Importar mês (colar dados)";
+    importToggleBtn.innerHTML = '<i class="ti ti-upload"></i>';
     topRow2Right.appendChild(importToggleBtn);
 
     // "Editar manualmente" — liga/desliga manualEditMode (ver comentário
-    // acima, perto da declaração de "state"). Reaproveita a mesma classe
-    // visual do botão de importar (toggle "active" igual).
+    // acima, perto da declaração de "state"). Mesmo tratamento só-ícone
+    // do botão de importar acima (rodada Out/26).
     var manualEditToggleBtn = document.createElement("button");
     manualEditToggleBtn.type = "button";
-    manualEditToggleBtn.className = "ponto-import-toggle";
-    manualEditToggleBtn.title = "Mostra os botões \"+ Nota PMF\" e \"+ Crédito (Horas Faltantes)\" em cada linha, pra lançar algo na mão sem precisar reimportar o dia";
-    manualEditToggleBtn.innerHTML = '<i class="ti ti-pencil"></i> Editar manualmente';
+    manualEditToggleBtn.className = "ponto-import-toggle ponto-icon-only-btn";
+    manualEditToggleBtn.title = "Editar manualmente — mostra os botões \"+ Nota PMF\" e \"+ Crédito (Horas Faltantes)\" em cada linha, pra lançar algo na mão sem precisar reimportar o dia";
+    manualEditToggleBtn.innerHTML = '<i class="ti ti-pencil"></i>';
     manualEditToggleBtn.addEventListener("click", function () {
       state.manualEditMode = !state.manualEditMode;
       manualEditToggleBtn.classList.toggle("active", state.manualEditMode);
@@ -16937,20 +16957,30 @@
 
     // ---- chips de filtro (pedido do Georges, rodada 5: "crie filtros do
     // tipo chip pra eu filtrar os dias que Aguarda aprovação ou Ímpar...
-    // tbm um filtro pra dias com Saldo negativo") — client-side puro,
-    // sobre as linhas já renderizadas (cada rowEl guarda seu próprio
-    // estado em dataset, atualizado em updateCalcCells). Mais de 1 chip
-    // ativo ao mesmo tempo = OU entre eles (mostra a linha se bater em
-    // QUALQUER um dos chips marcados), igual ao padrão de outros filtros
-    // rápidos do app. ----
-    var activeFilters = { pendente: false, impar: false, saldoNeg: false };
+    // tbm um filtro pra dias com Saldo negativo"; rodada Out/26: "crie
+    // pras demais opções que criamos" — expandido pra cobrir Abono
+    // Aprovado, Feriado/Facultativo/Férias, Divergência PMF e Crédito)
+    // — client-side puro, sobre as linhas já renderizadas (cada rowEl
+    // guarda seu próprio estado em dataset, atualizado em
+    // updateCalcCells). Mais de 1 chip ativo ao mesmo tempo = OU entre
+    // eles (mostra a linha se bater em QUALQUER um dos chips marcados),
+    // igual ao padrão de outros filtros rápidos do app. Lista e lógica
+    // de match são data-driven (PONTO_FILTER_CHIPS) pra não precisar
+    // repetir o mesmo "if" em 3 lugares toda vez que um chip novo entra.
+    // ----
+    var activeFilters = {};
     var filterChipsRow = document.createElement("div");
     filterChipsRow.className = "ponto-filter-chips";
     var PONTO_FILTER_CHIPS = [
-      { key: "pendente", label: "⏳ Aguarda aprovação" },
-      { key: "impar", label: "⚠ Ímpar" },
-      { key: "saldoNeg", label: "Saldo negativo" }
+      { key: "pendente", label: "⏳ Aguarda aprovação", dataset: "pontoPendente" },
+      { key: "impar", label: "⚠ Ímpar", dataset: "pontoImpar" },
+      { key: "saldoNeg", label: "Saldo negativo", dataset: "pontoSaldoNeg" },
+      { key: "abono", label: "✅ Abono Aprovado", dataset: "pontoAbono" },
+      { key: "feriado", label: "📅 Feriado/Facultativo/Férias", dataset: "pontoFeriado" },
+      { key: "pmfNota", label: "ℹ️ Divergência PMF", dataset: "pontoPmfNota" },
+      { key: "credito", label: "🕐 Crédito (Horas Faltantes)", dataset: "pontoCredito" }
     ];
+    PONTO_FILTER_CHIPS.forEach(function (f) { activeFilters[f.key] = false; });
     var filterChipEls = {};
     PONTO_FILTER_CHIPS.forEach(function (f) {
       var chip = document.createElement("button");
@@ -16968,13 +16998,13 @@
     wrap.appendChild(filterChipsRow);
 
     function anyFilterActive() {
-      return activeFilters.pendente || activeFilters.impar || activeFilters.saldoNeg;
+      return PONTO_FILTER_CHIPS.some(function (f) { return activeFilters[f.key]; });
     }
     function applyRowFilter(rowEl) {
       if (!anyFilterActive()) { rowEl.style.display = ""; return; }
-      var match = (activeFilters.pendente && rowEl.dataset.pontoPendente === "1") ||
-        (activeFilters.impar && rowEl.dataset.pontoImpar === "1") ||
-        (activeFilters.saldoNeg && rowEl.dataset.pontoSaldoNeg === "1");
+      var match = PONTO_FILTER_CHIPS.some(function (f) {
+        return activeFilters[f.key] && rowEl.dataset[f.dataset] === "1";
+      });
       rowEl.style.display = match ? "" : "none";
     }
     function reapplyAllFilters() {
@@ -17025,6 +17055,22 @@
     function renderYearGrid() {
       var year = Number(state.month.split("-")[0]);
       yearSummaryTitle.textContent = "Resumo Anual — " + year;
+      yearTotalLabel.textContent = "Saldo acumulado em " + year;
+      // soma só os meses com dado real (ignora futuro/sem lançamento) —
+      // mesmo critério usado em cada célula do grid abaixo.
+      var totalMin = 0, anyTotal = false;
+      for (var tm = 1; tm <= 12; tm++) {
+        var tMonthStr = year + "-" + pontoPad2(tm);
+        if (pontoMonthIsFuture(tMonthStr)) continue;
+        var tVal = yearCache.hasOwnProperty(tMonthStr) ? yearCache[tMonthStr] : undefined;
+        if (tVal === null || tVal === undefined) continue;
+        anyTotal = true;
+        totalMin += tVal;
+      }
+      yearTotalValue.textContent = anyTotal ? pontoFormatSaldoMin(totalMin) : "–";
+      yearTotalValue.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
+      if (anyTotal && totalMin > 0) yearTotalValue.classList.add("ponto-saldo-positivo");
+      if (anyTotal && totalMin < 0) yearTotalValue.classList.add("ponto-saldo-negativo");
       yearGridEl.innerHTML = "";
       for (var m = 1; m <= 12; m++) {
         var monthStr = year + "-" + pontoPad2(m);
@@ -17084,7 +17130,7 @@
     }
 
     function saveMesConfig(carga) {
-      carga6Btn.disabled = true; carga8Btn.disabled = true;
+      cargaBtn.disabled = true;
       authFetch(cfg.templateWorkerUrl + "/ponto-mes?month=" + encodeURIComponent(state.month), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -17095,7 +17141,7 @@
       }).catch(function () {
         statusEl.textContent = "Erro ao salvar carga horária.";
         statusEl.style.display = "";
-      }).finally(function () { carga6Btn.disabled = false; carga8Btn.disabled = false; });
+      }).finally(function () { cargaBtn.disabled = false; });
     }
 
     // salva um dia (pairs+feriado+pmfNota) — se vier vazio (sem pares,
@@ -17599,7 +17645,17 @@
             // (ver state.manualEditMode) — crédito normalmente vem pronto
             // do arquivo de importação, então o botão ficava poluindo toda
             // linha vazia (pedido do Georges, rodada conferência de junho).
-            if (!state.manualEditMode) return;
+            if (!state.manualEditMode) {
+              // bug real reportado pelo Georges (print com "quadradinho"
+              // vazio do lado de "+ Horário" em TODO dia): mesmo sem nada
+              // dentro, esta div ainda tinha a classe ".ponto-pair", que
+              // tem padding/border/background próprios — sobrava uma
+              // caixinha vazia visível. Escondendo o container inteiro
+              // (não só o conteúdo) quando não há crédito nem modo manual.
+              creditoRow.style.display = "none";
+              return;
+            }
+            creditoRow.style.display = "";
             var addCreditoBtn = document.createElement("button");
             addCreditoBtn.type = "button";
             addCreditoBtn.className = "ponto-pair-add-btn ponto-credito-add-btn";
@@ -17614,6 +17670,7 @@
             creditoRow.appendChild(addCreditoBtn);
             return;
           }
+          creditoRow.style.display = "";
           var label = document.createElement("span");
           label.className = "ponto-pair-turno-label";
           label.textContent = "Crédito";
@@ -17798,17 +17855,17 @@
         pendenteBadgeEl.style.display = "none";
         statusCell.appendChild(pendenteBadgeEl);
 
-        // "✅ Abono Aprovado" (pedido do Georges, rodada CapturaPonto.py)
-        // — SEMPRE derivado: aparece quando QUALQUER metade (entrada ou
-        // saída) de QUALQUER par do dia está marcada como ajuste já
-        // Aprovado. Não é mais um toggle manual de dia inteiro (editar
-        // acontece por horário, dentro de cada par — ver buildPairsEditor)
-        // — aqui só agrega e mostra o badge. NÃO tem (i) próprio (pedido do
-        // Georges, rodada conferência de junho): era um duplicado exato do
-        // (i) que já existe do lado de cada horário ajustado dentro do
-        // Turno — e vivia quebrado pelo mesmo motivo do bug de 30/06 (ver
-        // buildDayRow acima). Quem quiser o detalhe clica no (i) do próprio
-        // horário.
+        // "✅ Abono Aprovado" — SEMPRE derivado: aparece quando QUALQUER
+        // metade (entrada ou saída) de QUALQUER par do dia está marcada
+        // como ajuste já Aprovado. Fica só como badge pequeno nas
+        // Observações do dia (pedido do Georges, rodada conferência
+        // Out/26: "não quero verde pra abono aprovado, fica ícone de
+        // aprovação só na batida que teve a aprovação, não na linha
+        // toda... nas observações daquela linha/dia pode manter ✅ Abono
+        // Aprovado") — a cor de FUNDO da linha (ponto-row-abono) foi
+        // removida; o badge aqui e o ✅/⏳ de cada horário (dentro do
+        // Turno, ver buildPairsEditor/eInAjusteBtn/sOutAjusteBtn) seguem
+        // normalmente. NÃO tem (i) próprio — duplicava o (i) por horário.
         var abonoBadgeEl = document.createElement("span");
         abonoBadgeEl.className = "ponto-abono-badge ponto-abono-badge-readonly";
         abonoBadgeEl.title = "Dia tem horário(s) incluído(s) por ajuste já Aprovado";
@@ -18006,22 +18063,26 @@
           saldoCell.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
           if (hasRecord && saldoMin > 0) saldoCell.classList.add("ponto-saldo-positivo");
           if (hasRecord && saldoMin < 0) saldoCell.classList.add("ponto-saldo-negativo");
-          // cor da linha inteira (pedido do Georges): fds/feriado/
-          // facultativo/férias fica azul SEMPRE — cor "de base"; Ímpar,
-          // Aguarda aprovação ou Abono Aprovado tomam prioridade por
-          // cima. Ordem: Aguarda aprovação (amarelo) > Abono Aprovado
-          // (verde) > Ímpar (vermelho) > azul de fds/feriado > neutro.
-          rowEl.classList.remove("ponto-row-impar", "ponto-row-pendente", "ponto-row-abono");
+          // cor da linha inteira (pedido do Georges, rodada Out/26: "não
+          // quero verde pra abono aprovado, fica ícone de aprovação só na
+          // batida que teve a aprovação, não na linha toda") — SEM mais
+          // "ponto-row-abono" aqui. fds/feriado/facultativo/férias fica
+          // azul SEMPRE — cor "de base"; Ímpar ou Aguarda aprovação tomam
+          // prioridade por cima. Ordem: Aguarda aprovação (amarelo) >
+          // Ímpar (vermelho) > azul de fds/feriado > neutro.
+          rowEl.classList.remove("ponto-row-impar", "ponto-row-pendente");
           if (pendente) rowEl.classList.add("ponto-row-pendente");
-          else if (aprovadosInfos.length) rowEl.classList.add("ponto-row-abono");
           else if (hasRecord && impar) rowEl.classList.add("ponto-row-impar");
-          // dados usados pelos chips de filtro (Aguarda aprovação/Ímpar/
-          // Saldo negativo) — guardados direto no rowEl pra não precisar
+          // dados usados pelos chips de filtro (ver PONTO_FILTER_CHIPS
+          // acima) — guardados direto no rowEl pra não precisar
           // recalcular tudo de novo no filtro.
           rowEl.dataset.pontoPendente = pendente ? "1" : "0";
           rowEl.dataset.pontoImpar = (hasRecord && impar) ? "1" : "0";
           rowEl.dataset.pontoSaldoNeg = (hasRecord && saldoMin < 0) ? "1" : "0";
           rowEl.dataset.pontoAbono = aprovadosInfos.length ? "1" : "0";
+          rowEl.dataset.pontoFeriado = (feriadoNow !== "util") ? "1" : "0";
+          rowEl.dataset.pontoPmfNota = pmfNota ? "1" : "0";
+          rowEl.dataset.pontoCredito = creditoAjuste ? "1" : "0";
           applyRowFilter(rowEl);
           return hasRecord ? saldoMin : 0;
         }

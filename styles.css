@@ -7053,10 +7053,10 @@ html, body {
   gap: 8px;
   flex-wrap: wrap;
 }
-.ponto-carga-label {
-  font-size: 13px;
-  color: #6b6a63;
-}
+/* sem mais ".ponto-carga-label" (texto "Carga horária desta
+   competência:") — removido a pedido do Georges, rodada Out/26, pra
+   economizar espaço no Zfold; o botão de carga virou 1 só, cicla 6h/8h
+   (ver ".ponto-carga-btn-cycle" abaixo). */
 .ponto-carga-btn {
   padding: 6px 14px;
   border-radius: 8px;
@@ -7074,6 +7074,15 @@ html, body {
   border-color: #4a90d9;
   color: #fff;
 }
+/* botão único cicla 6h/8h (sempre "ativo" — mostra o valor atual, clique
+   muda pro outro, mesmo padrão de outros toggles de 1 botão do app). */
+.ponto-carga-btn-cycle {
+  background: #4a90d9;
+  border-color: #4a90d9;
+  color: #fff;
+  font-weight: 700;
+}
+.ponto-carga-btn-cycle:hover { background: #3f7fc1; }
 /* linha combinada (rodada 5, pedido do Georges): nav de mês + carga à
    esquerda, saldo + importar à direita, mesma altura, logo abaixo do
    Resumo Anual. */
@@ -7159,12 +7168,10 @@ html, body {
    sobre Ímpar quando os dois calham no mesmo dia (ver updateCalcCells). */
 .ponto-row-impar { background: #fdeeec; border-color: #f3c7bf; }
 .ponto-row-pendente { background: #fff6da; border-color: #f0dd9a; }
-/* "Abono Aprovado" (pedido do Georges): dia (ou horário único) coberto
-   por abono já APROVADO na PMF — diferente de Pendente (ainda incerto,
-   amarelo) e de Ímpar (falta algo, vermelho). Verde: já resolvido, só
-   informativo. Prioridade: Pendente > Abono Aprovado > Ímpar (ver
-   updateCalcCells no app.js). */
-.ponto-row-abono { background: #e9f6ee; border-color: #bfe3cb; }
+/* SEM mais ".ponto-row-abono" (cor de linha verde pra Abono Aprovado) —
+   removido a pedido do Georges, rodada Out/26: a linha inteira não fica
+   mais verde, só o badge pequeno ".ponto-abono-badge-readonly" (nas
+   Observações do dia) e o ✅ de cada horário aprovado continuam verdes. */
 
 .ponto-cell { display: flex; flex-direction: column; }
 
@@ -7218,7 +7225,6 @@ html, body {
 .ponto-row-ferias .ponto-weekday { background: #d3e4f7; color: #2f6fad; }
 .ponto-row-impar .ponto-weekday { background: #f6cfc6; color: #a3392a; }
 .ponto-row-pendente .ponto-weekday { background: #f0e0a0; color: #8a6d1f; }
-.ponto-row-abono .ponto-weekday { background: #bfe3cb; color: #1f6e42; }
 .ponto-day {
   font-size: 16px;
   font-weight: 800;
@@ -7591,6 +7597,43 @@ html, body {
   flex-direction: column;
   gap: 8px;
 }
+/* caixa única sempre visível com o total do ano (pedido do Georges,
+   rodada Out/26: "deixe apenas uma caixa com o total de horas no ano...
+   se eu clicar nela, aí abre todos os meses") — clicável, igual a um
+   botão, reaproveitando a família visual ".financeiro-summary-pill". */
+.ponto-year-total-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 0.5px solid #e4e2db;
+  background: #f7f6f2;
+  cursor: pointer;
+  text-align: left;
+}
+.ponto-year-total-box:hover { background: #f0efe9; }
+.ponto-year-total-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9a988e;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.ponto-year-total-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: #3a3a35;
+}
+.ponto-year-total-value.ponto-saldo-positivo { color: #2f8a4b; }
+.ponto-year-total-value.ponto-saldo-negativo { color: #c0392b; }
+.ponto-year-total-chevron {
+  color: #9a988e;
+  font-size: 14px;
+  transition: transform 0.15s ease;
+}
+.ponto-year-total-chevron-open { transform: rotate(180deg); }
 .ponto-year-summary-title {
   font-size: 13px;
   font-weight: 700;
@@ -7650,6 +7693,18 @@ html, body {
 }
 .ponto-import-toggle:hover,
 .ponto-import-toggle.active { background: #f0efe9; color: #4a90d9; }
+/* "Importar mês"/"Editar manualmente" viram botão só-ícone (pedido do
+   Georges, rodada Out/26: "deixe apenas o ícone... e exibe a msg quando
+   passar o ponteiro" — economiza espaço no Zfold fechado). Vira um
+   quadradinho, texto só no title (tooltip nativo do navegador). */
+.ponto-icon-only-btn {
+  gap: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
+  font-size: 15px;
+}
 .ponto-import-panel {
   border: 0.5px dashed #d8d6cd;
   border-radius: 10px;
@@ -7698,10 +7753,56 @@ html, body {
 .ponto-import-status-erro { color: #c0392b; }
 
 @media (max-width: 640px) {
-  .ponto-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  /* rodada Out/26 (pedido do Georges, prints do Zfold fechado/aberto:
+     "ficou péssimo no celular") — cabeçalho da tabela (DIA/DATA /
+     OBSERVAÇÕES / HORÁRIOS / HORAS TRABALHADAS / SALDO) quebrava cada
+     rótulo numa linha própria, virando uma barra gigante e inútil nessa
+     largura — some, e cada linha de dia passa a se auto-explicar via os
+     mini-rótulos abaixo (".ponto-cell-trabalhadas"/".ponto-cell-saldo"
+     ganham um rótulo pequeno via ::before; Data/Observações/Horários já
+     são compreensíveis sem cabeçalho). */
+  .ponto-table-header { display: none; }
+  .ponto-row { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; }
   .ponto-cell-feriado,
-  .ponto-cell-status { justify-content: flex-start; }
+  .ponto-cell-status { justify-content: flex-start; min-width: 0; }
+  /* "Trabalhadas" e "Saldo" viram 1 linha horizontal compacta no fim do
+     card (em vez de 2 blocos empilhados alinhados à direita, que
+     sobravam um vazio enorme embaixo do "+ Horário") — cada valor ganha
+     um rótulo pequeno (content: ::before) já que o cabeçalho sumiu. */
   .ponto-cell-trabalhadas,
-  .ponto-cell-saldo { align-items: flex-start; text-align: left; }
+  .ponto-cell-saldo {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    width: 100%;
+    text-align: left;
+    padding: 2px 0;
+    border-top: 0.5px solid #f0efe9;
+  }
+  .ponto-cell-trabalhadas::before,
+  .ponto-cell-saldo::before {
+    font-size: 10px;
+    font-weight: 700;
+    color: #9a988e;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .ponto-cell-trabalhadas::before { content: "Horas trabalhadas"; }
+  .ponto-cell-saldo::before { content: "Saldo"; }
+  /* caixinhas de horário um pouco mais estreitas (pedido do Georges:
+     "economizar espaço... ficou muito poluído" no Zfold) — mesmo
+     conteúdo, só menos padding/largura de input. */
+  .ponto-pair { padding: 5px 6px; }
+  .ponto-pair-input { width: 76px; font-size: 12.5px; padding: 4px 5px; }
   .ponto-year-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 400px) {
+  /* Zfold fechado (~344-360px de largura útil) — mais um aperto nas
+     caixinhas de horário, senão "Turno 1"/"Turno 2" ainda ficam largos
+     demais pro par entrada–x–saída caber numa linha só. */
+  .ponto-pair-input { width: 66px; font-size: 12px; }
+  .ponto-cell-date { min-width: 50px; }
 }
