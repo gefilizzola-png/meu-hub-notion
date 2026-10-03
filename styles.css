@@ -7107,8 +7107,30 @@ html, body {
 }
 .ponto-row-weekend { background: #fbfaf7; }
 .ponto-row-feriado { background: #fff8ea; border-color: #f3e3b8; }
+/* "Ponto Facultativo" (pedido do Georges: 3º estado do chip de Feriado,
+   conta igual Feriado mas precisa ser visualmente distinto) — tom lilás
+   pra não ser confundido com o amarelo de Feriado. */
+.ponto-row-facultativo { background: #f3eefc; border-color: #ddc9f3; }
 
 .ponto-cell { display: flex; flex-direction: column; }
+
+/* ---- cabeçalho fixo da tabela (pedido do Georges: "dê nome às
+   colunas") — mesmas larguras/classes das células de dados, pra ficar
+   alinhado mesmo com o leiaute flexbox (não é um <table> real). ---- */
+.ponto-table-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 2px;
+  flex-wrap: wrap;
+}
+.ponto-table-header-cell {
+  font-size: 11px;
+  font-weight: 700;
+  color: #847f73;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
 
 /* "dia" — pedido do Georges: separar visualmente o dia da semana do
    dia/mês. A semana vira uma pastilha pequena (fundo tintado), o dia/mês
@@ -7144,30 +7166,46 @@ html, body {
    Coluna própria, estreita, sempre presente (mesmo vazia) pra não
    desalinhar as linhas sem badge. */
 .ponto-cell-status {
-  min-width: 118px;
+  min-width: 150px;
   flex-shrink: 0;
   justify-content: center;
-  gap: 3px;
-}
-
-.ponto-cell-feriado {
-  min-width: 140px;
-  flex-shrink: 0;
-  justify-content: center;
+  align-items: flex-start;
   gap: 4px;
 }
-.ponto-feriado-label,
-.ponto-pendente-label {
-  display: flex;
+
+/* chip de Feriado — 3 estados cíclicos (pedido do Georges, mesmo padrão
+   de outras páginas): Dia Útil (neutro) → Feriado (âmbar) → Ponto
+   Facultativo (lilás) → Dia Útil, clicando. Substitui o checkbox antigo
+   — não existe mais "Aguarda aprovação" como checkbox nesta coluna,
+   sobrou só o chip de Feriado + os 2 badges derivados (Ímpar/⏳). */
+.ponto-feriado-chip {
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: #6b6a63;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.ponto-feriado-label input,
-.ponto-pendente-label input { cursor: pointer; }
+.ponto-feriado-chip-util {
+  background: #f0efe9;
+  color: #847f73;
+  border-color: #e4e2db;
+}
+.ponto-feriado-chip-util:hover { background: #e7e5dd; }
+.ponto-feriado-chip-feriado {
+  background: #fff3d6;
+  color: #8a6d1f;
+  border-color: #f3e3b8;
+}
+.ponto-feriado-chip-facultativo {
+  background: #f3eefc;
+  color: #6b3fa0;
+  border-color: #ddc9f3;
+}
 
 .ponto-cell-pairs {
   flex: 1 1 260px;
@@ -7179,15 +7217,30 @@ html, body {
   align-items: center;
   gap: 8px;
 }
-/* par entrada/saída — visual mais leve/moderno (pedido do Georges: "as
-   caixinhas de cada horário ficaram bem feias"): sem caixa pesada em
-   volta, cada <input type="time"> com seu próprio contorno fino
-   arredondado, "x" só aparece ao passar o mouse/toque na linha. */
+/* par entrada/saída — leiaute "cartão" (pedido do Georges: "faça as
+   caixinhas dos horários mais bonita, mais moderna" — rodada 3): cada
+   Turno vira uma pílula com fundo levemente destacado e borda suave,
+   agrupando entrada+saída+ações num bloco só, em vez de inputs soltos
+   na mesma linha. O rótulo "Turno N" (também pedido) é derivado da
+   posição depois de ordenar os horários — ver buildPairsEditor. */
 .ponto-pair {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   position: relative;
+  background: #fafaf8;
+  border: 1px solid #ededE8;
+  border-radius: 10px;
+  padding: 5px 8px 5px 6px;
+}
+.ponto-pair-turno-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9b9a92;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  padding-right: 2px;
 }
 .ponto-pair-input {
   border: 1px solid #e4e2db;
@@ -7205,6 +7258,15 @@ html, body {
   box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
 }
 .ponto-pair-sep { color: #c7c5bc; font-size: 13px; }
+/* linha de "+ Horário" recém-adicionado, ainda sem valor (pedido do
+   Georges, bug 16/09: digitar um horário faltante numa vaga errada
+   virava par negativo) — visual tracejado/provisório até o Georges
+   preencher; depois de preenchido, reordena e aparece como um Turno
+   normal, sem precisar escolher "é entrada ou é saída". */
+.ponto-pair-draft {
+  background: #f5f9fd;
+  border: 1px dashed #bcd6ee;
+}
 /* "⏳" clicável ao lado de cada entrada/saída (pedido do Georges: marcar
    POR HORÁRIO que aquela batida específica aguarda aprovação, não só o
    dia inteiro) — apagado por padrão, destaque âmbar (mesma cor do badge
@@ -7229,6 +7291,68 @@ html, body {
   opacity: 1;
   filter: none;
   background: #e5f2fa;
+}
+/* "i" de detalhes do ajuste (Motivo/Tipo Período/Observação/Status —
+   pedido do Georges, copiado da tela Aprovação de Abonos da PMF) — só
+   fica visível quando o botão de pendente correspondente mostra que esse
+   par tem algo pendente (ver refreshDetailsBtn no app.js). */
+.ponto-pair-details-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #4a90d9;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.ponto-pair-details-btn:hover { background: #eaf3fc; }
+.ponto-pair-details {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: #f7fafc;
+  border: 1px solid #e0eaf2;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 2px 0 6px;
+}
+.ponto-pair-details-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  flex: 1 1 220px;
+}
+.ponto-pair-details-block-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2a6f97;
+}
+.ponto-pair-details-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  color: #847f73;
+}
+.ponto-pair-details-field input {
+  border: 1px solid #e4e2db;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: #3a3a35;
+  background: #fff;
+}
+.ponto-pair-details-field input:focus {
+  outline: none;
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
 }
 .ponto-pair-sem-par {
   font-size: 10px;
