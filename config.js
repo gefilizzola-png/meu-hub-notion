@@ -1393,6 +1393,38 @@ var NOTIFICATION_SOURCES = [
     defaultLeadTimes: [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
+  },
+  // Ponto Eletrônico — Ajustar mês anterior (pedido do Georges: "no início
+  // de cada mês, devo ajustar o ponto do mês anterior... configuraria
+  // pra me notificar todo dia 02, por exemplo, e aí em 02/11 me notifica
+  // que devo ajustar o ponto"). kind PRÓPRIO ("ponto_mes_ajuste"), mesmo
+  // espírito sintético de "backup" acima — não tem Notion/KV com uma
+  // lista, é 1 evento só, recalculado a cada refresh pra sempre apontar
+  // pro PRÓXIMO "dia do mês" configurado (campo "diaDoMes", 1-31, editável
+  // pela Central de Notificações — ver chip "📅 Dia do mês" no app.js,
+  // mesmo padrão do chip "💰 Valor mínimo" de transacoes_valor_minimo) que
+  // ainda não passou, às 08h (fuso São Paulo) — ver
+  // nextPontoAjusteMesEventTime/fetchPontoAjustarMesNotificationItems no
+  // app.js. "id" do item sintético embute o mês do GATILHO (ex: dia 02 de
+  // novembro vira "2026-11"), então todo mês novo volta a notificar do
+  // zero. O TEXTO da notificação nomeia o MÊS ANTERIOR ao gatilho (gatilho
+  // em novembro -> "ajustar o ponto de outubro/2026"), que é o mês que de
+  // fato precisa de ajuste nessa data. defaultDiaDoMes:2 é só o valor
+  // inicial — Georges pode mudar pela Central de Notificações a qualquer
+  // momento (campo guardado em nível de FONTE, não por antecedência, mesmo
+  // espírito de minValor/pinToEnd).
+  {
+    id: "ponto_ajuste_mes",
+    label: "Ponto Eletrônico — Ajustar mês anterior",
+    icon: "⏰",
+    kind: "ponto_mes_ajuste",
+    dateProperty: "gatilho",
+    target: { type: "page", target: "ponto_eletronico" },
+    defaultEnabled: true,
+    defaultDiaDoMes: 2,
+    defaultLeadTimes: [
+      { id: "0d", amount: 0, unit: "days", label: "no dia" }
+    ]
   }
 ];
 
@@ -1657,7 +1689,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-03 12:29",
+  appVersion: "2026-10-03 14:06",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha

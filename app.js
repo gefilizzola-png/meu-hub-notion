@@ -20590,6 +20590,59 @@
     }]);
   }
 
+  // Ponto Eletrônico — Ajustar mês anterior (kind "ponto_mes_ajuste" — pedido
+  // do Georges: "no início de cada mês, devo ajustar o ponto do mês
+  // anterior... configuraria pra me notificar todo dia 02, por exemplo, e
+  // aí em 02/11 me notifica que devo ajustar o ponto"). MESMO espírito
+  // sintético de nextBackupSemanalEventTime/fetchBackupNotificationItems
+  // acima — só que o "dia-alvo" não é um dia da SEMANA fixo, é um DIA DO
+  // MÊS configurável (source.diaDoMes, 1-31, editável pela Central de
+  // Notificações). daysInMonthUTC usa Date.UTC(y, m+1, 0) só pra pegar o
+  // último dia do mês (y/m) — é cálculo de calendário puro, não depende
+  // de fuso real.
+  function pontoAjusteMesDaysInMonthUTC(y, m) {
+    return new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  }
+  function nextPontoAjusteMesEventTime(diaDoMes) {
+    var spNow = new Date(Date.now() - 3 * 3600000); // "agora" como se já fosse hora de SP, em campos UTC
+    var y = spNow.getUTCFullYear(), m = spNow.getUTCMonth();
+    var dia = Math.max(1, Math.min(31, Math.round(diaDoMes) || 2));
+    var targetDay = Math.min(dia, pontoAjusteMesDaysInMonthUTC(y, m));
+    // 08h em SP = 11h UTC.
+    var eventTime = Date.UTC(y, m, targetDay, 11, 0, 0);
+    // esse mês já passou da folga de leitura (NOTIF_GRACE_MS) -> pula pro
+    // MESMO dia do mês seguinte, senão o lembrete ficaria preso num mês
+    // que já foi embora (mesmo raciocínio do backup semanal acima).
+    if (eventTime < Date.now() - NOTIF_GRACE_MS) {
+      var ny = (m === 11) ? y + 1 : y;
+      var nm = (m + 1) % 12;
+      y = ny; m = nm;
+      targetDay = Math.min(dia, pontoAjusteMesDaysInMonthUTC(y, m));
+      eventTime = Date.UTC(y, m, targetDay, 11, 0, 0);
+    }
+    return { eventTime: eventTime, y: y, m: m, d: targetDay };
+  }
+  var PONTO_AJUSTE_MES_NOMES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  function fetchPontoAjustarMesNotificationItems(source) {
+    var dia = (typeof source.diaDoMes === "number") ? source.diaDoMes : 2;
+    var next = nextPontoAjusteMesEventTime(dia);
+    var dateKey = next.y + "-" + String(next.m + 1).padStart(2, "0") + "-" + String(next.d).padStart(2, "0");
+    // o mês que PRECISA de ajuste nessa data é o ANTERIOR ao mês do
+    // gatilho (gatilho em novembro -> ajustar outubro).
+    var refY = next.y, refM = next.m - 1;
+    if (refM < 0) { refM = 11; refY -= 1; }
+    var mesLabel = PONTO_AJUSTE_MES_NOMES[refM] + "/" + refY;
+    var extraObj = {};
+    extraObj[source.dateProperty] = { start: new Date(next.eventTime).toISOString() };
+    return Promise.resolve([{
+      id: "ponto-ajustar-" + dateKey,
+      title: "Ajustar o Ponto Eletrônico de " + mesLabel,
+      url: location.origin + location.pathname + "#ponto_eletronico",
+      extra: extraObj
+    }]);
+  }
+
   // Provas do Vitor (kind "provas" — pedido do Georges: "Vitor tem prova
   // de Matemática amanhã, dia 24/09/2026, com um ícone condizente com o
   // tema"). MESMA janela de busca (past_2_days .. next_maxDays_days) da
@@ -20769,6 +20822,7 @@
     if (source.kind === "remedios") return fetchRemediosNotificationItems(source);
     if (source.kind === "provas") return fetchProvasNotificationItems(source);
     if (source.kind === "backup") return fetchBackupNotificationItems(source);
+    if (source.kind === "ponto_mes_ajuste") return fetchPontoAjustarMesNotificationItems(source);
     if (source.kind === "loans") return fetchLoansNotificationItems(source);
     if (source.kind === "transacoes_valor_minimo") return fetchTransacoesValorMinimoNotificationItems(source);
     return fetchNotionNotificationSourceItems(source);
@@ -20964,6 +21018,11 @@
   // renderNotifSettings abaixo).
   var notifMinValorExpandedKeys = {};
 
+  // mesmo padrão de notifMinValorExpandedKeys acima, mas pro chip "📅 Dia
+  // do mês" — só renderizado pra fonte "ponto_ajuste_mes" (ver
+  // renderNotifSettings abaixo).
+  var notifDiaDoMesExpandedKeys = {};
+
   // recolhido por padrão (pedido do Georges: chips de categoria da LISTA
   // principal, não da tela de gestão, atrás de um botão "Filtrar por
   // Categorias") — só em memória, reseta a cada reload de verdade.
@@ -21070,7 +21129,13 @@
         // (ver NOTIFICATION_SOURCES em config.js). 1 número POR FONTE, mesmo
         // espírito de pinToEnd — cai no defaultMinValor da fonte até o
         // Georges configurar o dele pela Central de Notificações.
-        minValor: (s && typeof s.minValor === "number") ? s.minValor : (source.defaultMinValor || 0)
+        minValor: (s && typeof s.minValor === "number") ? s.minValor : (source.defaultMinValor || 0),
+        // "Dia do mês" — só usado pela fonte "ponto_ajuste_mes" (pedido do
+        // Georges: "decidir em qual dia do mês quero ativar uma
+        // notificação"). 1 número (1-31) POR FONTE, mesmo espírito de
+        // minValor acima — cai no defaultDiaDoMes da fonte até o Georges
+        // configurar o dele pela Central de Notificações.
+        diaDoMes: (s && typeof s.diaDoMes === "number") ? s.diaDoMes : (source.defaultDiaDoMes || 2)
       };
     });
   }
@@ -21768,7 +21833,7 @@
       // e minValor continuam em nível de FONTE (card inteiro, não por
       // antecedência) — minValor só é relevante pra "transacoes_valor_minimo",
       // mas mandar sempre não tem custo (worker.js ignora pra outras fontes).
-      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd, minValor: s.minValor };
+      out[s.id] = { enabled: s.enabled, leadTimes: s.leadTimes, pinToEnd: s.pinToEnd, minValor: s.minValor, diaDoMes: s.diaDoMes };
     });
     return out;
   }
@@ -21832,6 +21897,20 @@
     var normalized = (!isNaN(n) && n >= 0) ? n : 0;
     if (s.minValor === normalized) return;
     s.minValor = normalized;
+    applyNotifSettingsChange();
+  }
+
+  // "Dia do mês" — só usado pela fonte "ponto_ajuste_mes" (pedido do
+  // Georges: escolher em qual dia do mês dispara o lembrete de "ajustar o
+  // ponto do mês anterior"). Mesmo espírito de setNotifSourceMinValor
+  // acima: 1 número POR FONTE, clampado 1-31 (inteiro).
+  function setNotifSourceDiaDoMes(sourceId, value) {
+    var s = findNotifSource(sourceId);
+    if (!s) return;
+    var n = Math.round(Number(value));
+    var normalized = (!isNaN(n) && n >= 1 && n <= 31) ? n : 2;
+    if (s.diaDoMes === normalized) return;
+    s.diaDoMes = normalized;
     applyNotifSettingsChange();
   }
 
@@ -22328,6 +22407,32 @@
         addPinRow.appendChild(minValorChipRow);
       }
 
+      // "Dia do mês" — SÓ pra fonte "ponto_ajuste_mes" (pedido do Georges:
+      // "decidir em qual dia do mês quero ativar uma notificação" pra
+      // lembrar de ajustar o Ponto Eletrônico do mês anterior). Mesmo
+      // padrão de "clicar na pílula pra expandir" do "💰 Valor mínimo"
+      // acima.
+      var diaDoMesExpanded = false;
+      if (s.kind === "ponto_mes_ajuste") {
+        diaDoMesExpanded = !!notifDiaDoMesExpandedKeys[s.id];
+        var diaDoMesChipRow = document.createElement("div");
+        diaDoMesChipRow.className = "notif-settings-leadtime-chip-row";
+        var diaDoMesChip = document.createElement("span");
+        diaDoMesChip.className = "notif-settings-leadtime-chip has-config" +
+          (diaDoMesExpanded ? " active" : "");
+        var diaDoMesChipLabel = document.createElement("span");
+        diaDoMesChipLabel.className = "notif-settings-leadtime-chip-label";
+        diaDoMesChipLabel.textContent = "📅 Dia do mês (" + (s.diaDoMes || 2) + ")";
+        diaDoMesChipLabel.title = "Clique pra ver/editar em qual dia do mês notificar";
+        diaDoMesChipLabel.addEventListener("click", function () {
+          notifDiaDoMesExpandedKeys[s.id] = !notifDiaDoMesExpandedKeys[s.id];
+          renderNotifSettings();
+        });
+        diaDoMesChip.appendChild(diaDoMesChipLabel);
+        diaDoMesChipRow.appendChild(diaDoMesChip);
+        addPinRow.appendChild(diaDoMesChipRow);
+      }
+
       block.appendChild(addPinRow);
 
       if (minValorExpanded) {
@@ -22358,6 +22463,37 @@
         minValorRow.appendChild(minValorText);
         minValorWrap.appendChild(minValorRow);
         block.appendChild(minValorWrap);
+      }
+
+      if (diaDoMesExpanded) {
+        var diaDoMesWrap = document.createElement("div");
+        diaDoMesWrap.className = "notif-settings-channels";
+        var diaDoMesRow = document.createElement("label");
+        diaDoMesRow.className = "notif-settings-channel-row";
+        var diaDoMesInput = document.createElement("input");
+        diaDoMesInput.type = "number";
+        diaDoMesInput.min = "1";
+        diaDoMesInput.max = "31";
+        diaDoMesInput.step = "1";
+        diaDoMesInput.className = "notif-settings-add-amount";
+        diaDoMesInput.value = s.diaDoMes || 2;
+        diaDoMesInput.addEventListener("change", function () {
+          setNotifSourceDiaDoMes(s.id, diaDoMesInput.value);
+        });
+        diaDoMesRow.appendChild(diaDoMesInput);
+        var diaDoMesText = document.createElement("span");
+        diaDoMesText.className = "notif-settings-channel-text";
+        var diaDoMesLabel = document.createElement("span");
+        diaDoMesLabel.className = "notif-settings-channel-label";
+        diaDoMesLabel.textContent = "Dia do mês (1-31)";
+        diaDoMesText.appendChild(diaDoMesLabel);
+        var diaDoMesHint = document.createElement("span");
+        diaDoMesHint.className = "notif-settings-channel-hint";
+        diaDoMesHint.textContent = "todo mês, nesse dia às 08h, notifica pra ajustar o Ponto Eletrônico do mês anterior — se o dia escolhido não existir no mês (ex: 31 em fevereiro), usa o último dia dele";
+        diaDoMesText.appendChild(diaDoMesHint);
+        diaDoMesRow.appendChild(diaDoMesText);
+        diaDoMesWrap.appendChild(diaDoMesRow);
+        block.appendChild(diaDoMesWrap);
       }
 
       if (pinExpanded) {
