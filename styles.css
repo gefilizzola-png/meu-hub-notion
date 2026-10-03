@@ -7197,6 +7197,14 @@ html, body {
   color: #6b6a63;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  /* bug real reportado pelo Georges: o badge ⏳ (ver obsHeaderPendingBadge
+     em app.js) aparecia numa linha ABAIXO de "OBSERVAÇÕES", aumentando a
+     altura do cabeçalho — causa: ".ponto-cell" (classe-base, também
+     aplicada aqui) é "flex-direction: column", então o texto e o badge
+     (2 filhos) empilhavam. Força linha única só nos cabeçalhos. */
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
 }
 
 /* "dia" — pedido do Georges: separar visualmente o dia da semana do
@@ -7470,6 +7478,23 @@ html, body {
 .ponto-pair:hover .ponto-pair-remove-btn,
 .ponto-pair-remove-btn:focus { opacity: 1; }
 .ponto-pair-remove-btn:hover { background: #fdeeec; color: #c0392b; }
+/* "Remover nota" (painel de pmfNota, fora de ".ponto-pair") — override pra
+   SEMPRE visível, com largura automática e texto (bug real reportado: o
+   botão existia no DOM mas ficava com opacity:0 pra sempre, sem o
+   ".ponto-pair:hover" que o ativa no caso do "x" pequeno por horário). */
+.ponto-details-remove-btn {
+  width: auto;
+  height: auto;
+  padding: 6px 10px;
+  gap: 5px;
+  opacity: 1;
+  color: #c0392b;
+  background: #fdeeec;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.ponto-details-remove-btn:hover { background: #f8d7d2; color: #a7311c; }
 .ponto-pair-add-btn {
   display: flex;
   align-items: center;
@@ -7751,82 +7776,158 @@ html, body {
 }
 .ponto-import-status-ok { color: #2f8a4b; }
 .ponto-import-status-erro { color: #c0392b; }
-/* chevron de recolher/expandir Horários — só existe visualmente dentro do
-   @media(max-width:640px) abaixo; em telas largas o clique na data não faz
-   nada (CSS não esconde .ponto-cell-pairs fora desse breakpoint) e o
-   ícone fica oculto pra não confundir. */
-.ponto-row-toggle-chevron { display: none; }
+/* chevron de recolher/expandir Horários de CADA dia (ver
+   ".ponto-cell-date-clickable"/rowToggleChevron em buildDayRow) — agora
+   funciona em qualquer tamanho de tela (ver ".ponto-row-collapsed"
+   abaixo, não é mais só dentro do @media), então fica sempre visível. */
+.ponto-row-toggle-chevron { display: inline-block; font-size: 13px; color: #9a988e; flex-shrink: 0; }
+.ponto-cell-date-clickable { display: flex; align-items: center; gap: 2px; cursor: pointer; }
+/* ".ponto-row-collapsed" esconde os Horários do dia — GLOBAL agora (não
+   mais restrito ao @media mobile), pra funcionar com os botões "Expandir
+   tudo"/"Recolher tudo" em qualquer tamanho de tela (pedido do Georges:
+   "seja na tela grande ou pequena"). O estado INICIAL (recolhido x
+   expandido) ainda depende do tamanho de tela no momento em que a tabela
+   é montada — ver pontoIsMobileNarrow() em app.js. */
+.ponto-row.ponto-row-collapsed .ponto-cell-pairs { display: none; }
 /* indicador de pendência no cabeçalho "Observações" (ver
    obsHeaderPendingBadge/refreshHeaderPendingIndicator em app.js) — some
    discretamente ao lado do rótulo quando tem ⏳ em algum dia do mês. */
 .ponto-header-pending-badge { margin-left: 6px; font-size: 13px; }
+/* "Expandir tudo"/"Recolher tudo" dos Horários (ver
+   collapseAllRowsWrap/pontoRowCollapseControls em app.js) — fica FORA do
+   cabeçalho da tabela de propósito, porque o cabeçalho inteiro some em
+   mobile e é lá que esses botões mais importam. */
+.ponto-collapseall-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+.ponto-collapseall-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9a988e;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+/* mensagem substituta do indicador ⏳ de cabeçalho, só pra mobile (o
+   cabeçalho inteiro some lá — ver "@media(max-width:640px) .ponto-table-
+   header{display:none}") — pedido do Georges: "ajuste para exibir o
+   ícone ou alguma mensagem do tipo 'Existem batidas aguardando aprovação'
+   quando for tela pequena". Escondido por padrão (mesmo com a classe
+   "visible" via JS — ver refreshHeaderPendingIndicator); só liga dentro
+   do @media abaixo. */
+.ponto-mobile-pending-banner {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #fff6da;
+  border: 0.5px solid #f0dd9a;
+  color: #8a6d1f;
+  font-size: 12.5px;
+  font-weight: 600;
+}
 
 @media (max-width: 640px) {
-  /* rodada Out/26 (pedido do Georges, prints do Zfold fechado/aberto:
-     "ficou péssimo no celular") — cabeçalho da tabela (DIA/DATA /
-     OBSERVAÇÕES / HORÁRIOS / HORAS TRABALHADAS / SALDO) quebrava cada
-     rótulo numa linha própria, virando uma barra gigante e inútil nessa
-     largura — some, e cada linha de dia passa a se auto-explicar via os
-     mini-rótulos abaixo (".ponto-cell-trabalhadas"/".ponto-cell-saldo"
-     ganham um rótulo pequeno via ::before; Data/Observações/Horários já
-     são compreensíveis sem cabeçalho). */
+  /* rodada Out/26 (pedido do Georges — "quero linhas menores, para exibir
+     vários dias ao abrir a tela [...] numa única linha: dia da semana,
+     dia do mês, dia útil/fds/feriado, Observações, horas trabalhadas em
+     preto e saldo colorido, sem precisar ter ali a expressão HORAS
+     TRABALHADAS e SALDO") — o cabeçalho da tabela inteiro some (ver
+     ".ponto-mobile-pending-banner" acima pro indicador de pendência que
+     substitui o cabeçalho) e cada linha vira 1 flex-row só, sem quebrar
+     pros blocos empilhados que tínhamos antes. */
   .ponto-table-header { display: none; }
-  .ponto-row { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; }
-  .ponto-cell-feriado,
-  .ponto-cell-status { justify-content: flex-start; min-width: 0; }
-  /* "Trabalhadas" e "Saldo" viram 1 linha horizontal compacta no fim do
-     card (em vez de 2 blocos empilhados alinhados à direita, que
-     sobravam um vazio enorme embaixo do "+ Horário") — cada valor ganha
-     um rótulo pequeno (content: ::before) já que o cabeçalho sumiu. */
-  .ponto-cell-trabalhadas,
-  .ponto-cell-saldo {
-    display: flex;
+  .ponto-row {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 6px 8px;
+  }
+  .ponto-cell-date { min-width: 0; flex: 0 0 auto; }
+  .ponto-cell-status {
+    min-width: 0;
+    flex: 1 1 auto;
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  /* cada badge/chip da coluna Observações encolhe com reticências em vez
+     de empurrar a linha pra baixo (ex: "⏳ Aguarda aprovação" é o mais
+     longo) — o emoji (primeiro caractere) sempre fica visível, o resto
+     é só um lembrete de que "tem algo aqui, clique no dia pra ver".
+     Só os badges/chips de TEXTO encolhem — botões ((i), "+ Nota PMF") e o
+     painel ".ponto-pair-details" (quando aberto) ficam de fora de
+     propósito, senão o painel abriria cortado/ilegível. */
+  .ponto-feriado-chip,
+  .ponto-impar-badge,
+  .ponto-pendente-badge,
+  .ponto-abono-badge,
+  .ponto-pmfnota-badge {
+    flex-shrink: 0;
+    max-width: 118px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ponto-feriado-chip { font-size: 9.5px; padding: 2px 6px; }
+  .ponto-impar-badge,
+  .ponto-pendente-badge,
+  .ponto-abono-badge,
+  .ponto-pmfnota-badge { font-size: 10px; }
+  .ponto-cell-status .ponto-pair-details-btn { flex-shrink: 0; }
+  /* painel de detalhes da Nota PMF, quando aberto dentro de Observações —
+     precisa de largura cheia, não pode herdar o encolhimento acima. */
+  .ponto-cell-status .ponto-pair-details {
+    flex-basis: 100%;
+    max-width: none;
+    overflow: visible;
+    white-space: normal;
+    order: 20;
+  }
+  /* "Trabalhadas" (preto) e "Saldo" (verde/vermelho/neutro) ficam juntos
+     na MESMA linha do dia/Observações — SEM os rótulos "HORAS
+     TRABALHADAS"/"SALDO" (pedido explícito: "eu já saberei o que é"). */
+  .ponto-cell-trabalhadas,
+  .ponto-cell-saldo {
+    flex: 0 0 auto;
+    width: auto;
     min-width: 0;
-    width: 100%;
-    text-align: left;
-    padding: 2px 0;
-    border-top: 0.5px solid #f0efe9;
+    padding: 0;
+    border-top: none;
+    font-size: 12.5px;
+    font-weight: 800;
   }
+  .ponto-cell-trabalhadas { color: #2c2b27; }
   .ponto-cell-trabalhadas::before,
-  .ponto-cell-saldo::before {
-    font-size: 10px;
-    font-weight: 700;
-    color: #9a988e;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-  .ponto-cell-trabalhadas::before { content: "Horas trabalhadas"; }
-  .ponto-cell-saldo::before { content: "Saldo"; }
-  /* caixinhas de horário um pouco mais estreitas (pedido do Georges:
-     "economizar espaço... ficou muito poluído" no Zfold) — mesmo
-     conteúdo, só menos padding/largura de input. */
+  .ponto-cell-saldo::before { content: none; }
+  /* Horários (quando expandidos) ficam numa linha de BAIXO, largura
+     cheia — ver ".ponto-row-collapsed" (global, perto do topo deste
+     arquivo) que esconde ".ponto-cell-pairs" por padrão aqui. */
+  .ponto-cell-pairs { flex: 1 1 100%; order: 10; }
   .ponto-pair { padding: 5px 6px; }
   .ponto-pair-input { width: 76px; font-size: 12.5px; padding: 4px 5px; }
   .ponto-year-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-
-  /* Horários recolhidos por padrão (pedido do Georges, rodada Out/26: "o
-     dia, observações, horas trabalhadas e saldo, mas os horários ficam
-     recolhidos. Se eu clicar, expande") — clicar na célula da data
-     (".ponto-cell-date-clickable", ver buildDayRow) alterna
-     ".ponto-row-collapsed" no rowEl. Fora desse media query a classe não
-     faz nada — telas largas continuam sempre expandidas. */
-  .ponto-cell-date-clickable {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-  }
-  .ponto-row-toggle-chevron { display: inline-block; font-size: 15px; color: #9a988e; }
-  .ponto-row.ponto-row-collapsed .ponto-cell-pairs { display: none; }
+  /* liga o banner substituto do cabeçalho (ver declaração base acima) —
+     só quando a classe "visible" diz que há pendência no mês. */
+  .ponto-mobile-pending-banner.visible { display: flex; }
 }
 
 @media (max-width: 400px) {
   /* Zfold fechado (~344-360px de largura útil) — mais um aperto nas
      caixinhas de horário, senão "Turno 1"/"Turno 2" ainda ficam largos
-     demais pro par entrada–x–saída caber numa linha só. */
+     demais pro par entrada–x–saída caber numa linha só. Mesma exclusão
+     do bloco de 640px: só os badges/chips de texto encolhem, nunca o
+     painel ".ponto-pair-details" nem botões. */
   .ponto-pair-input { width: 66px; font-size: 12px; }
   .ponto-cell-date { min-width: 50px; }
+  .ponto-feriado-chip,
+  .ponto-impar-badge,
+  .ponto-pendente-badge,
+  .ponto-abono-badge,
+  .ponto-pmfnota-badge { max-width: 70px; }
 }

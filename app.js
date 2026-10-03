@@ -16558,6 +16558,11 @@
 
   function pontoPad2(n) { return n < 10 ? "0" + n : "" + n; }
   function pontoDaysInMonth(y, mZeroBased) { return new Date(y, mZeroBased + 1, 0).getDate(); }
+  // mesmo breakpoint do CSS (@media max-width:640px) — usado só pra decidir
+  // o ESTADO INICIAL de cada dia (recolhido/expandido) quando a tabela é
+  // montada; o botão "Expandir/Recolher tudo" e o clique em cada linha
+  // funcionam em qualquer largura depois disso.
+  function pontoIsMobileNarrow() { return typeof window !== "undefined" && window.innerWidth <= 640; }
 
   // minutos desde 00:00 a partir de "HH:MM" — null se inválido.
   function pontoHoraToMin(hhmm) {
@@ -17055,6 +17060,62 @@
     obsHeaderPendingBadge.title = "Tem pelo menos 1 dia aguardando aprovação neste mês";
     obsHeaderPendingBadge.style.display = "none";
     if (obsHeaderCell) obsHeaderCell.appendChild(obsHeaderPendingBadge);
+
+    // mensagem equivalente pra mobile (pedido do Georges: "o emoji de Ag
+    // aprovação aparece na coluna OBSERVAÇÕES só na tela grande [...]
+    // ajuste pra exibir o ícone ou alguma mensagem tipo 'Existem batidas
+    // aguardando aprovação' quando for tela pequena") — o cabeçalho
+    // inteiro some em mobile (".ponto-table-header{display:none}"), então
+    // o badge dentro dele nunca aparecia lá. Esse banner mora FORA do
+    // cabeçalho, sempre no DOM; a classe "visible" (ver
+    // refreshHeaderPendingIndicator) é quem decide se mostra — e o CSS só
+    // deixa aparecer dentro do @media(max-width:640px), nunca no desktop
+    // (lá quem avisa é o badge no cabeçalho mesmo).
+    var mobilePendingBanner = document.createElement("div");
+    mobilePendingBanner.className = "ponto-mobile-pending-banner";
+    mobilePendingBanner.innerHTML = "⏳ Existem batidas aguardando aprovação";
+    wrap.appendChild(mobilePendingBanner);
+
+    // "Expandir tudo"/"Recolher tudo" dos Horários de cada dia (pedido do
+    // Georges — mesmo padrão ".toolbar-icon-btn" já usado em
+    // Legislações/Supermercado/Início) — funciona em QUALQUER tamanho de
+    // tela agora: cada dia nasce recolhido só em telas pequenas (ver
+    // pontoIsMobileNarrow() dentro de buildDayRow), mas o usuário pode
+    // clicar pra recolher/expandir TODOS de uma vez em telas grandes
+    // também ("na tela grande, que exibe tudo por padrão, mas posso
+    // recolher ou expandir clicando nos botões"). Essa barra fica FORA do
+    // tableHeaderEl de propósito — o cabeçalho inteiro some em mobile (ver
+    // @media max-width:640px), e é justo em mobile que esses botões mais
+    // importam.
+    var pontoRowCollapseControls = []; // lista de function(collapsed){...}, 1 por dia — populada em buildDayRow, limpa no topo de renderTable()
+    var collapseAllRowsWrap = document.createElement("div");
+    collapseAllRowsWrap.className = "ponto-collapseall-toolbar";
+    var collapseAllRowsLabel = document.createElement("span");
+    collapseAllRowsLabel.className = "ponto-collapseall-label";
+    collapseAllRowsLabel.textContent = "Horários:";
+    collapseAllRowsWrap.appendChild(collapseAllRowsLabel);
+    var collapseAllRowsBtn = document.createElement("button");
+    collapseAllRowsBtn.type = "button";
+    collapseAllRowsBtn.className = "toolbar-icon-btn";
+    collapseAllRowsBtn.title = "Recolher tudo";
+    collapseAllRowsBtn.setAttribute("aria-label", "Recolher tudo");
+    collapseAllRowsBtn.innerHTML = '<i class="ti ti-arrows-minimize"></i>';
+    collapseAllRowsBtn.addEventListener("click", function () {
+      pontoRowCollapseControls.forEach(function (fn) { fn(true); });
+    });
+    var expandAllRowsBtn = document.createElement("button");
+    expandAllRowsBtn.type = "button";
+    expandAllRowsBtn.className = "toolbar-icon-btn";
+    expandAllRowsBtn.title = "Expandir tudo";
+    expandAllRowsBtn.setAttribute("aria-label", "Expandir tudo");
+    expandAllRowsBtn.innerHTML = '<i class="ti ti-arrows-maximize"></i>';
+    expandAllRowsBtn.addEventListener("click", function () {
+      pontoRowCollapseControls.forEach(function (fn) { fn(false); });
+    });
+    collapseAllRowsWrap.appendChild(collapseAllRowsBtn);
+    collapseAllRowsWrap.appendChild(expandAllRowsBtn);
+    wrap.appendChild(collapseAllRowsWrap);
+
     wrap.appendChild(tableHeaderEl);
 
     var tableEl = document.createElement("div");
@@ -17768,6 +17829,7 @@
       monthLabel.textContent = financeiroMonthLabel(state.month);
       updateCargaBtns();
       tableEl.innerHTML = "";
+      pontoRowCollapseControls.length = 0;
 
       var parts = state.month.split("-").map(Number);
       var year = parts[0], monthIdx0 = parts[1] - 1;
@@ -17813,15 +17875,18 @@
         dayChip.className = "ponto-day";
         dayChip.textContent = pontoPad2(day) + "/" + pontoPad2(monthIdx0 + 1);
         dateCell.appendChild(dayChip);
-        // Horários recolhidos por padrão em telas pequenas (pedido do
-        // Georges, print Zfold fechado/aberto: "traz o dia, observações,
-        // horas trabalhadas e saldo, mas os horários ficam recolhidos. Se
-        // clicar, expande") — clicar na célula da data (dateCell) alterna.
-        // A classe ".ponto-row-collapsed" só tem efeito dentro do
-        // @media(max-width:640px) em styles.css — em telas largas o CSS
-        // ignora e os horários continuam sempre visíveis, sem precisar de
-        // lógica JS separada por tamanho de tela.
-        var rowCollapsed = true;
+        // Horários recolhidos por padrão (pedido do Georges, rodada
+        // Out/26: "traz o dia, observações, horas trabalhadas e saldo, mas
+        // os horários ficam recolhidos. Se clicar, expande" + depois
+        // "crie os botões de expandir tudo/recolher tudo... seja na tela
+        // grande ou pequena") — clicar na célula da data (dateCell)
+        // alterna SÓ esse dia; os botões "Expandir tudo"/"Recolher tudo"
+        // (ver pontoRowCollapseControls acima) alternam todos de uma vez.
+        // ".ponto-row-collapsed" agora vale em QUALQUER tamanho de tela
+        // (ver styles.css — não é mais só dentro do @media); o que muda
+        // por tamanho de tela é só o ESTADO INICIAL: tela pequena nasce
+        // recolhida, tela grande nasce expandida (pontoIsMobileNarrow()).
+        var rowCollapsed = pontoIsMobileNarrow();
         var rowToggleChevron = document.createElement("i");
         dateCell.appendChild(rowToggleChevron);
         dateCell.className += " ponto-cell-date-clickable";
@@ -17832,6 +17897,10 @@
         applyRowCollapsed();
         dateCell.addEventListener("click", function () {
           rowCollapsed = !rowCollapsed;
+          applyRowCollapsed();
+        });
+        pontoRowCollapseControls.push(function (collapsed) {
+          rowCollapsed = collapsed;
           applyRowCollapsed();
         });
         rowEl.appendChild(dateCell);
@@ -18037,7 +18106,14 @@
 
           var rmBtn = document.createElement("button");
           rmBtn.type = "button";
-          rmBtn.className = "ponto-pair-remove-btn";
+          // NÃO usar ".ponto-pair-remove-btn" sozinha aqui — essa classe é
+          // opacity:0 por padrão, só vira visível com ".ponto-pair:hover"
+          // (serve pro "x" pequeno de dentro de cada horário). Esse painel
+          // não está dentro de ".ponto-pair", então o botão nunca aparecia
+          // (bug real reportado pelo Georges — "Remover nota" invisível).
+          // ".ponto-details-remove-btn" (ver styles.css) deixa sempre
+          // visível, com texto, como convém num painel de detalhes.
+          rmBtn.className = "ponto-pair-remove-btn ponto-details-remove-btn";
           rmBtn.innerHTML = '<i class="ti ti-x"></i> Remover nota';
           rmBtn.addEventListener("click", function () {
             pairsApi.setPmfNota(null);
@@ -18211,6 +18287,7 @@
           if (r.dataset.pontoPendente === "1") anyPending = true;
         });
         obsHeaderPendingBadge.style.display = anyPending ? "" : "none";
+        mobilePendingBanner.classList.toggle("visible", anyPending);
       }
       renderSummaryOnly();
     }
