@@ -12582,6 +12582,477 @@
     });
   }
 
+  // ---------------- "page.holerite" — Holerite / PMF (Financeiro->Holerite, espelho em D1, 100% leitura) ----------------
+  // Pedido do Georges: migrar a base Notion "PMF" (linhas de holerite) pra
+  // uma tabela D1 ("holerite", banco "meu-hub-visor" — ver GET /holerite e
+  // GET /holerite-competencias no worker.js), evitando o limite de
+  // consultas do Notion e preparando terreno pra uma futura página de BI/
+  // evolução de rubrica (Página 2, ainda não construída — só quando ele
+  // pedir). Schema real da tabela D1 (ver migração/worker.js): url,
+  // created_time, nome, competencia ("AAAA-MM"), matricula, tipo (Provento/
+  // Desconto/Total), folha (Mensal/Suplementar/13º), lotacao, unidade,
+  // codigo, rubrica, nivel, qtd, parcela, total_parcelas, valor,
+  // valor_base, valor_pago, data_pagamento. As 3 linhas "Total" por
+  // Matrícula×Folha de cada competência (código 4000=Total de Proventos,
+  // 9900=Total de Descontos, 9990=Salário Líquido) viram os 3 totais em
+  // destaque de cada card de grupo; "diferenca" (valor_pago - valor, só
+  // preenchido na linha 9990) já vem calculada do worker.js.
+  // Navegação: por padrão 1 competência por vez (prev/next, como Contas
+  // Mensais), com um botão "Buscar intervalo" que troca pra um multi-select
+  // de competências (igual qualquer outro filtro multi-select do app).
+  // Filtros de Tipo/Matrícula/Folha/Lotação (multi-select) + busca de texto
+  // em Rubrica/Código — tudo client-side sobre o lote já carregado (mesmo
+  // espírito de Passagens/Saúde: o Worker só recorta por
+  // competência/matrícula/folha/lotação, o resto é filtrado na mão aqui).
+  // Clique na linha da tabela de detalhe abre a página original no Notion.
+  var HOLERITE_MES_NOMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  function holeriteCompetenciaLabel(comp) {
+    if (!comp || comp.indexOf("-") === -1) return comp || "—";
+    var parts = comp.split("-");
+    var mIdx = parseInt(parts[1], 10) - 1;
+    return (HOLERITE_MES_NOMES[mIdx] || parts[1]) + "/" + parts[0];
+  }
+  var HOLERITE_FOLHA_ORDER = { "Mensal": 0, "Suplementar": 1, "13º": 2 };
+  function renderHoleritePage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "holerite-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "🧾 Holerite / PMF";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando competências…";
+    wrap.appendChild(statusEl);
+
+    var navRow = document.createElement("div");
+    navRow.className = "holerite-nav-row";
+    wrap.appendChild(navRow);
+
+    var searchSectionHolerite = buildCollapsibleSection("Pesquisar");
+    var filterSectionHolerite = buildCollapsibleSection("Filtrar");
+    var controlsHolerite = document.createElement("div");
+    controlsHolerite.className = "legislacoes-controls";
+    controlsHolerite.appendChild(searchSectionHolerite.section);
+    controlsHolerite.appendChild(filterSectionHolerite.section);
+    wrap.appendChild(controlsHolerite);
+
+    var body = document.createElement("div");
+    wrap.appendChild(body);
+
+    var state = {
+      mode: "single",
+      allCompetencias: [], // ascendente
+      competencia: null,
+      rangeSelected: [],
+      items: [],
+      search: "",
+      tipoSelected: [], matriculaSelected: [], folhaSelected: [], lotacaoSelected: [],
+      sortKey: "codigo", sortDir: 1
+    };
+
+    function matchesDetailFilters(it) {
+      if (it.tipo === "Total") {
+        if (state.tipoSelected.indexOf("Total") === -1) return false;
+      } else if (state.tipoSelected.length && state.tipoSelected.indexOf(it.tipo) === -1) {
+        return false;
+      }
+      if (state.search) {
+        var s = normalize(state.search);
+        var hay = normalize([it.rubrica, it.codigo].filter(Boolean).join(" "));
+        if (hay.indexOf(s) === -1) return false;
+      }
+      return true;
+    }
+
+    function sortHoleriteRows(rows) {
+      var arr = rows.slice();
+      var key = state.sortKey, dir = state.sortDir;
+      arr.sort(function (a, b) {
+        var av, bv;
+        if (key === "valor") { av = a.valor || 0; bv = b.valor || 0; }
+        else if (key === "rubrica") { av = a.rubrica || ""; bv = b.rubrica || ""; }
+        else { av = a.codigo || ""; bv = b.codigo || ""; }
+        if (typeof av === "number") return dir * (av - bv);
+        return dir * String(av).localeCompare(String(bv), "pt-BR");
+      });
+      return arr;
+    }
+
+    function buildGroups() {
+      var map = {}, order = [];
+      state.items.forEach(function (it) {
+        var key = it.competencia + "|" + it.matricula + "|" + it.folha;
+        if (!map[key]) {
+          map[key] = { competencia: it.competencia, matricula: it.matricula, folha: it.folha, totals: {}, rows: [], dataPagamento: null };
+          order.push(key);
+        }
+        var g = map[key];
+        if (it.data_pagamento) g.dataPagamento = it.data_pagamento;
+        if (it.tipo === "Total") {
+          if (it.codigo === "4000") g.totals.proventos = it.valor;
+          else if (it.codigo === "9900") g.totals.descontos = it.valor;
+          else if (it.codigo === "9990") { g.totals.liquido = it.valor; g.totals.valorPago = it.valor_pago; g.totals.diferenca = it.diferenca; }
+        }
+        if (matchesDetailFilters(it)) g.rows.push(it);
+      });
+      var groups = order.map(function (k) { return map[k]; });
+      groups.forEach(function (g) { g.rows = sortHoleriteRows(g.rows); });
+      groups.sort(function (a, b) {
+        if (a.competencia !== b.competencia) return a.competencia < b.competencia ? 1 : -1;
+        if (a.matricula !== b.matricula) return a.matricula.localeCompare(b.matricula, "pt-BR");
+        return (HOLERITE_FOLHA_ORDER[a.folha] !== undefined ? HOLERITE_FOLHA_ORDER[a.folha] : 9) -
+          (HOLERITE_FOLHA_ORDER[b.folha] !== undefined ? HOLERITE_FOLHA_ORDER[b.folha] : 9);
+      });
+      return groups;
+    }
+
+    function buildSimpleOptionsFromItems(key) {
+      var seen = {}, out = [];
+      state.items.forEach(function (it) {
+        var v = it[key];
+        if (!v || seen[v]) return;
+        seen[v] = true;
+        out.push({ label: v, pageId: v });
+      });
+      out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+      return out;
+    }
+
+    var tipoDropdownWrap = document.createElement("div");
+    var matriculaDropdownWrap = document.createElement("div");
+    var folhaDropdownWrap = document.createElement("div");
+    var lotacaoDropdownWrap = document.createElement("div");
+
+    function buildFiltersBar() {
+      tipoDropdownWrap.innerHTML = "";
+      tipoDropdownWrap.appendChild(buildIconDropdown(
+        { property: "tipo", type: "select", label: "Tipo", icon: "ti-tag", options: [
+          { label: "Provento", pageId: "Provento" },
+          { label: "Desconto", pageId: "Desconto" },
+          { label: "Total", pageId: "Total" }
+        ] },
+        function (opts) { state.tipoSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+      ));
+      matriculaDropdownWrap.innerHTML = "";
+      matriculaDropdownWrap.appendChild(buildIconDropdown(
+        { property: "matricula", type: "select", label: "Matrícula", icon: "ti-id-badge-2", options: buildSimpleOptionsFromItems("matricula") },
+        function (opts) { state.matriculaSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+      ));
+      folhaDropdownWrap.innerHTML = "";
+      folhaDropdownWrap.appendChild(buildIconDropdown(
+        { property: "folha", type: "select", label: "Folha", icon: "ti-file-text", options: buildSimpleOptionsFromItems("folha") },
+        function (opts) { state.folhaSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+      ));
+      lotacaoDropdownWrap.innerHTML = "";
+      lotacaoDropdownWrap.appendChild(buildIconDropdown(
+        { property: "lotacao", type: "select", label: "Lotação", icon: "ti-building", options: buildSimpleOptionsFromItems("lotacao") },
+        function (opts) { state.lotacaoSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+      ));
+    }
+
+    var searchInputHolerite = document.createElement("input");
+    searchInputHolerite.type = "text";
+    searchInputHolerite.placeholder = "Buscar por rubrica ou código…";
+    searchInputHolerite.className = "aniversarios-search-input";
+    searchInputHolerite.addEventListener("input", function () {
+      state.search = searchInputHolerite.value.trim();
+      renderBody();
+    });
+    searchSectionHolerite.body.appendChild(withSearchClear(searchInputHolerite));
+
+    var filterBarWrapHolerite = document.createElement("div");
+    filterBarWrapHolerite.className = "legislacoes-filterbar";
+    filterBarWrapHolerite.appendChild(tipoDropdownWrap);
+    filterBarWrapHolerite.appendChild(matriculaDropdownWrap);
+    filterBarWrapHolerite.appendChild(folhaDropdownWrap);
+    filterBarWrapHolerite.appendChild(lotacaoDropdownWrap);
+    filterSectionHolerite.body.appendChild(filterBarWrapHolerite);
+
+    var clearFiltersBtnHolerite = document.createElement("button");
+    clearFiltersBtnHolerite.type = "button";
+    clearFiltersBtnHolerite.className = "search-clear-btn";
+    clearFiltersBtnHolerite.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearFiltersBtnHolerite.addEventListener("click", function () {
+      state.search = ""; searchInputHolerite.value = "";
+      state.tipoSelected = []; state.matriculaSelected = []; state.folhaSelected = []; state.lotacaoSelected = [];
+      buildFiltersBar();
+      renderBody();
+    });
+    filterSectionHolerite.body.appendChild(clearFiltersBtnHolerite);
+
+    // ---- navegação: única competência (prev/next) OU buscar intervalo (multi-select) ----
+    var singleNavWrap = document.createElement("div");
+    singleNavWrap.className = "holerite-single-nav";
+    var prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "holerite-nav-btn";
+    prevBtn.innerHTML = '<i class="ti ti-chevron-left"></i>';
+    var compLabel = document.createElement("span");
+    compLabel.className = "holerite-comp-label";
+    var nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "holerite-nav-btn";
+    nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
+    var toRangeBtn = document.createElement("button");
+    toRangeBtn.type = "button";
+    toRangeBtn.className = "search-clear-btn";
+    toRangeBtn.innerHTML = '<i class="ti ti-calendar-search"></i> Buscar intervalo';
+    singleNavWrap.appendChild(prevBtn);
+    singleNavWrap.appendChild(compLabel);
+    singleNavWrap.appendChild(nextBtn);
+    singleNavWrap.appendChild(toRangeBtn);
+
+    var rangeNavWrap = document.createElement("div");
+    rangeNavWrap.className = "holerite-range-nav";
+    rangeNavWrap.style.display = "none";
+    var rangeDropdownWrap = document.createElement("div");
+    var toSingleBtn = document.createElement("button");
+    toSingleBtn.type = "button";
+    toSingleBtn.className = "search-clear-btn";
+    toSingleBtn.innerHTML = '<i class="ti ti-arrow-back"></i> Voltar pra navegação';
+    rangeNavWrap.appendChild(rangeDropdownWrap);
+    rangeNavWrap.appendChild(toSingleBtn);
+
+    navRow.appendChild(singleNavWrap);
+    navRow.appendChild(rangeNavWrap);
+
+    function buildRangeDropdown() {
+      rangeDropdownWrap.innerHTML = "";
+      var opts = state.allCompetencias.slice().reverse().map(function (c) {
+        return { label: holeriteCompetenciaLabel(c), pageId: c };
+      });
+      rangeDropdownWrap.appendChild(buildIconDropdown(
+        { property: "competencia", type: "select", label: "Competências", icon: "ti-calendar", searchable: true, options: opts },
+        function (selOpts) {
+          state.rangeSelected = selOpts.map(function (o) { return o.pageId; });
+          loadItems();
+        }
+      ));
+    }
+
+    function updateSingleNav() {
+      compLabel.textContent = state.competencia ? holeriteCompetenciaLabel(state.competencia) : "—";
+      var idx = state.allCompetencias.indexOf(state.competencia);
+      prevBtn.disabled = idx <= 0;
+      nextBtn.disabled = idx === -1 || idx >= state.allCompetencias.length - 1;
+    }
+    prevBtn.addEventListener("click", function () {
+      var idx = state.allCompetencias.indexOf(state.competencia);
+      if (idx > 0) { state.competencia = state.allCompetencias[idx - 1]; updateSingleNav(); loadItems(); }
+    });
+    nextBtn.addEventListener("click", function () {
+      var idx = state.allCompetencias.indexOf(state.competencia);
+      if (idx !== -1 && idx < state.allCompetencias.length - 1) { state.competencia = state.allCompetencias[idx + 1]; updateSingleNav(); loadItems(); }
+    });
+    toRangeBtn.addEventListener("click", function () {
+      state.mode = "range";
+      singleNavWrap.style.display = "none";
+      rangeNavWrap.style.display = "";
+      buildRangeDropdown();
+      if (state.rangeSelected.length) loadItems(); else renderBody();
+    });
+    toSingleBtn.addEventListener("click", function () {
+      state.mode = "single";
+      rangeNavWrap.style.display = "none";
+      singleNavWrap.style.display = "";
+      loadItems();
+    });
+
+    function holeriteTipoChip(tipo) {
+      var chip = document.createElement("span");
+      chip.className = "holerite-tipo-chip holerite-tipo-" +
+        (tipo === "Provento" ? "provento" : (tipo === "Desconto" ? "desconto" : "total"));
+      chip.textContent = tipo || "—";
+      return chip;
+    }
+
+    function renderGroupCard(g) {
+      var card = document.createElement("div");
+      card.className = "holerite-group-card";
+
+      var head = document.createElement("div");
+      head.className = "holerite-group-head";
+      var headTitle = document.createElement("div");
+      headTitle.className = "holerite-group-title";
+      headTitle.textContent = g.matricula + " — " + g.folha +
+        (state.mode === "range" ? " (" + holeriteCompetenciaLabel(g.competencia) + ")" : "");
+      head.appendChild(headTitle);
+      if (g.dataPagamento) {
+        var payDate = document.createElement("span");
+        payDate.className = "holerite-group-paydate";
+        payDate.textContent = "Pagamento: " + new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(g.dataPagamento));
+        head.appendChild(payDate);
+      }
+      card.appendChild(head);
+
+      var totalsRow = document.createElement("div");
+      totalsRow.className = "holerite-totals-row";
+      function totalBox(label, value, cls) {
+        var box = document.createElement("div");
+        box.className = "holerite-total-box " + cls;
+        var lbl = document.createElement("div");
+        lbl.className = "holerite-total-label";
+        lbl.textContent = label;
+        var val = document.createElement("div");
+        val.className = "holerite-total-value";
+        val.textContent = financeiroFormatBRL(value);
+        box.appendChild(lbl);
+        box.appendChild(val);
+        return box;
+      }
+      totalsRow.appendChild(totalBox("Total de Proventos", g.totals.proventos, "holerite-total-proventos"));
+      totalsRow.appendChild(totalBox("Total de Descontos", g.totals.descontos, "holerite-total-descontos"));
+      totalsRow.appendChild(totalBox("Salário Líquido", g.totals.liquido, "holerite-total-liquido"));
+      if (typeof g.totals.valorPago === "number") {
+        totalsRow.appendChild(totalBox("Valor Pago", g.totals.valorPago, "holerite-total-pago"));
+        var diffCls = (g.totals.diferenca === 0) ? "holerite-total-diff-ok" : "holerite-total-diff-bad";
+        totalsRow.appendChild(totalBox("Diferença", g.totals.diferenca, "holerite-total-diferenca " + diffCls));
+      }
+      card.appendChild(totalsRow);
+
+      if (g.rows.length) {
+        var table = document.createElement("table");
+        table.className = "financeiro-table holerite-table";
+        var thead = document.createElement("thead");
+        var headRow = document.createElement("tr");
+        var COLS = [
+          { key: "codigo", label: "Código", sortKey: "codigo" },
+          { key: "rubrica", label: "Rubrica", sortKey: "rubrica" },
+          { key: "tipo", label: "Tipo" },
+          { key: "qtd", label: "Qtd" },
+          { key: "valor", label: "Valor", sortKey: "valor" },
+          { key: "parcela", label: "Parcela" }
+        ];
+        COLS.forEach(function (col) {
+          var th = document.createElement("th");
+          th.className = "financeiro-th" + (col.sortKey ? " financeiro-th-sortable" : "");
+          var thLabel = document.createElement("span");
+          thLabel.className = "financeiro-th-label";
+          thLabel.textContent = col.label;
+          th.appendChild(thLabel);
+          if (col.sortKey) {
+            var arrow = document.createElement("span");
+            arrow.className = "financeiro-th-arrow";
+            if (state.sortKey === col.sortKey) {
+              th.classList.add("active");
+              arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+            }
+            th.appendChild(arrow);
+            th.title = "Clique para classificar por " + col.label;
+            th.addEventListener("click", function () {
+              if (state.sortKey === col.sortKey) state.sortDir = state.sortDir * -1;
+              else { state.sortKey = col.sortKey; state.sortDir = 1; }
+              renderBody();
+            });
+          }
+          headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        var tbody = document.createElement("tbody");
+        g.rows.forEach(function (it) {
+          var row = document.createElement("tr");
+          row.className = "financeiro-row";
+          if (it.url) {
+            row.classList.add("provas-row-clickable");
+            row.title = "Abrir no Notion";
+            row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
+          }
+          var tdCodigo = document.createElement("td"); tdCodigo.textContent = it.codigo || "—"; row.appendChild(tdCodigo);
+          var tdRubrica = document.createElement("td"); tdRubrica.textContent = it.rubrica || "—"; row.appendChild(tdRubrica);
+          var tdTipo = document.createElement("td"); tdTipo.appendChild(holeriteTipoChip(it.tipo)); row.appendChild(tdTipo);
+          var tdQtd = document.createElement("td"); tdQtd.textContent = (typeof it.qtd === "number") ? String(it.qtd) : "—"; row.appendChild(tdQtd);
+          var tdValor = document.createElement("td"); tdValor.textContent = financeiroFormatBRL(it.valor); row.appendChild(tdValor);
+          var tdParcela = document.createElement("td");
+          tdParcela.textContent = (typeof it.parcela === "number" && typeof it.total_parcelas === "number") ? (it.parcela + "/" + it.total_parcelas) : "—";
+          row.appendChild(tdParcela);
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        card.appendChild(table);
+      } else {
+        var noRows = document.createElement("p");
+        noRows.className = "empty";
+        noRows.textContent = "Nenhuma rubrica bate com os filtros.";
+        card.appendChild(noRows);
+      }
+
+      return card;
+    }
+
+    function renderBody() {
+      body.innerHTML = "";
+      if (state.mode === "range" && !state.rangeSelected.length) {
+        var pick = document.createElement("p");
+        pick.className = "empty";
+        pick.textContent = "Escolha 1 ou mais competências acima pra buscar.";
+        body.appendChild(pick);
+        return;
+      }
+      var groups = buildGroups();
+      if (!groups.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhum dado de holerite encontrado.";
+        body.appendChild(empty);
+        return;
+      }
+      groups.forEach(function (g) { body.appendChild(renderGroupCard(g)); });
+    }
+
+    function loadItems() {
+      var params = [];
+      if (state.mode === "single") {
+        if (!state.competencia) { statusEl.textContent = "Nenhuma competência encontrada."; return; }
+        params.push("competencias=" + encodeURIComponent(state.competencia));
+      } else {
+        if (!state.rangeSelected.length) { renderBody(); return; }
+        params.push("competencias=" + encodeURIComponent(state.rangeSelected.join(",")));
+      }
+      if (state.matriculaSelected.length) params.push("matricula=" + encodeURIComponent(state.matriculaSelected.join(",")));
+      if (state.folhaSelected.length) params.push("folha=" + encodeURIComponent(state.folhaSelected.join(",")));
+      if (state.lotacaoSelected.length) params.push("lotacao=" + encodeURIComponent(state.lotacaoSelected.join(",")));
+
+      statusEl.style.display = "";
+      statusEl.textContent = "Carregando holerite…";
+      authFetch(cfg.templateWorkerUrl + "/holerite?" + params.join("&")).then(function (res) {
+        if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+        return res.ok ? res.json() : { items: [] };
+      }).then(function (data) {
+        state.items = (data && data.items) || [];
+        buildFiltersBar();
+        statusEl.style.display = "none";
+        renderBody();
+      }).catch(function (err) {
+        statusEl.style.display = "";
+        statusEl.textContent = "Erro ao buscar holerite: " + err.message;
+      });
+    }
+
+    authFetch(cfg.templateWorkerUrl + "/holerite-competencias").then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { competencias: [] }; }
+      return res.ok ? res.json() : { competencias: [] };
+    }).then(function (data) {
+      var list = (data && data.competencias) || [];
+      state.allCompetencias = list.map(function (c) { return c.competencia; }).reverse(); // ascendente
+      if (!state.allCompetencias.length) {
+        statusEl.textContent = "Nenhuma competência encontrada na tabela D1 ainda.";
+        return;
+      }
+      state.competencia = state.allCompetencias[state.allCompetencias.length - 1];
+      updateSingleNav();
+      loadItems();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao buscar competências: " + err.message;
+    });
+  }
+
   // ---------------- "page.transacoes" — Transações (espelho do Visor no D1, 100% leitura) ----------------
   // Pedido do Georges: "página de exibição das Transações no Meu Hub, com
   // diversos filtros dinâmicos e pesquisas" — tabela sortable (mesmo
@@ -20102,6 +20573,19 @@
         container.appendChild(dividerFinanceiroBI);
       }
       renderFinanceiroBIPage(container, page);
+      renderedSomething = true;
+    }
+
+    // "page.holerite" (pedido do Georges: migrar a base Notion "PMF" pra
+    // D1 e exibir totais por competência) — mesmo esquema de
+    // "page.financeiroBI" acima. Ver renderHoleritePage.
+    if (page.holerite) {
+      if (renderedSomething) {
+        var dividerHolerite = document.createElement("hr");
+        dividerHolerite.className = "content-divider";
+        container.appendChild(dividerHolerite);
+      }
+      renderHoleritePage(container, page);
     }
   }
 
@@ -20810,6 +21294,40 @@
     }).catch(function () { return []; });
   }
 
+  // Holerite/PMF — Nova competência (kind "holerite_competencia" — pedido
+  // do Georges: "Detectar competência nova no Notion"). 100% D1 via
+  // GET /holerite-competencias (já GROUP BY + ORDER BY competencia DESC no
+  // worker.js, então list[0] é sempre a mais recente). Item sintético
+  // ÚNICO (sem "varrer" N meses, igual backup semanal/ponto_mes_ajuste
+  // acima) — "id" embute a própria competência, então quando a
+  // sincronização diária (tarefa "holerite-d1-sync") trouxer uma
+  // competência nova o id muda e o dedup genérico (triggeredNotifIds)
+  // deixa a notificação disparar de novo sozinha, sem precisar de KV
+  // extra. "extra[source.dateProperty]" marca o evento como "agora" (sem
+  // antecedência futura possível aqui — só avisa depois que a competência
+  // já está migrada pra D1, igual transacoes_valor_minimo acima).
+  // holeriteCompetenciaLabel já existe (ver "page.holerite" acima,
+  // reaproveitado aqui sem redefinir — mesmo closure/escopo do app.js).
+  function fetchHoleriteCompetenciaNotificationItems(source) {
+    return authFetch(cfg.templateWorkerUrl + "/holerite-competencias").then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { competencias: [] }; }
+      return res.ok ? res.json() : { competencias: [] };
+    }).then(function (data) {
+      var list = (data && data.competencias) || [];
+      if (!list.length) return [];
+      var latest = list[0].competencia;
+      if (!latest) return [];
+      var extraObj = {};
+      extraObj[source.dateProperty] = { start: new Date().toISOString() };
+      return [{
+        id: "holerite_competencia:" + latest,
+        title: "Novo holerite disponível: competência " + holeriteCompetenciaLabel(latest),
+        url: location.origin + location.pathname + "#financeiro_holerite",
+        extra: extraObj
+      }];
+    }).catch(function () { return []; });
+  }
+
   // ponto único chamado por computeNotifications — decide QUAL busca usar
   // conforme "source.kind" (default "notion", ver resolvedNotifSources
   // acima). Mantém buildNotificationsFromSource 100% agnóstico: ele só
@@ -20825,6 +21343,7 @@
     if (source.kind === "ponto_mes_ajuste") return fetchPontoAjustarMesNotificationItems(source);
     if (source.kind === "loans") return fetchLoansNotificationItems(source);
     if (source.kind === "transacoes_valor_minimo") return fetchTransacoesValorMinimoNotificationItems(source);
+    if (source.kind === "holerite_competencia") return fetchHoleriteCompetenciaNotificationItems(source);
     return fetchNotionNotificationSourceItems(source);
   }
 

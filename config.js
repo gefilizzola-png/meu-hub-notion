@@ -1425,6 +1425,34 @@ var NOTIFICATION_SOURCES = [
     defaultLeadTimes: [
       { id: "0d", amount: 0, unit: "days", label: "no dia" }
     ]
+  },
+  // Holerite/PMF — Nova competência (pedido do Georges, confirmado via
+  // pergunta: "Detectar competência nova no Notion"). kind PRÓPRIO
+  // ("holerite_competencia"), 100% D1 via GET /holerite-competencias — item
+  // sintético ÚNICO (a competência mais recente já migrada pra D1), "id"
+  // embute a própria competência (ex: "holerite_competencia:2026-08") —
+  // igual toda outra fonte, o dedup de "já visto" é o
+  // localStorage/triggeredNotifIds genérico (ver fetchHoleriteCompetenciaNo
+  // tificationItems no app.js), SEM precisar de KV extra: quando a
+  // sincronização diária (tarefa "holerite-d1-sync") trouxer uma competência
+  // nova, o id muda e a notificação dispara de novo sozinha. "dateProperty:
+  // 'sincronizado'" aqui, igual a financeiro/remedios/loans acima, NÃO é
+  // campo do Notion — é só a chave de "extra" que reaproveita
+  // buildNotificationsFromSource sem mudar nada nele; o "evento" é
+  // considerado acontecido no instante em que a competência aparece no D1
+  // (sem antecedência futura possível, só avisa depois que já está lá —
+  // "Imediata", igual transacoes_valor_minimo).
+  {
+    id: "holerite_competencia",
+    label: "Holerite/PMF — Nova competência",
+    icon: "🧾",
+    kind: "holerite_competencia",
+    dateProperty: "sincronizado",
+    target: { type: "page", target: "financeiro_holerite" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "imediata", amount: 0, unit: "hours", label: "Imediata" }
+    ]
   }
 ];
 
@@ -1689,7 +1717,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-03 14:06",
+  appVersion: "2026-10-03 18:06",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3312,6 +3340,7 @@ const APP_CONFIG = {
       items: [
         { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
         { label: "Empréstimos", type: "page", target: "financeiro_emprestimos", icon: "cash" },
+        { label: "Holerite", type: "page", target: "financeiro_holerite", icon: "file-invoice" },
         { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
         { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
         // "Viagens" (pedido do Georges — nova pasta no Notion, mesmo caminho
@@ -3381,6 +3410,31 @@ const APP_CONFIG = {
       consultasExames: {
         database_id: SAUDE_DATABASE_ID
       }
+    },
+
+    // "page.holerite" — Holerite / PMF (pedido do Georges: "trazer os dados
+    // dessa página [base Notion 'PMF', linhas de holerite]... jogar pra uma
+    // D1, de todas colunas do schema do Notion, pra eu poder filtrar da
+    // forma que eu quiser"). Migrado 100% pra D1 (banco "meu-hub-visor",
+    // tabela "holerite" — ver GET /holerite e GET /holerite-competencias no
+    // worker.js); dados já validados no Notion, NUNCA alterados por esta
+    // página (só leitura, mesma regra 1 do Notion-é-read-only aplicada à
+    // cópia em D1 também — sincronização incremental roda via tarefa
+    // programada "holerite-d1-sync", upsert idempotente por url, nunca
+    // overwrite destrutivo). Página 1: totais por competência (navegação
+    // única + busca de intervalo), agrupados por Matrícula×Folha — ver
+    // renderHoleritePage no app.js. Página 2 (BI/Dashboard de evolução de
+    // rubrica) fica pra uma rodada futura, só quando o Georges pedir.
+    financeiro_holerite: {
+      title: "Holerite / PMF",
+      holerite: true,
+      itemsCompact: true,
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "PMF (Holerite) no Notion", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3e70481486dd80acb9edd75ddbfc8321?v=3e70481486dd802f8e73000c0b81ab51&source=copy_link" }
+        ] }
+      ],
+      items: []
     },
 
     financeiro_contas_mensais: {

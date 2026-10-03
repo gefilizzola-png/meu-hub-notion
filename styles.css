@@ -7931,3 +7931,122 @@ html, body {
   .ponto-abono-badge,
   .ponto-pmfnota-badge { max-width: 70px; }
 }
+
+/* ---------------- "page.holerite" — Holerite / PMF (rodada 1) ---------------- */
+/* linha de navegação no topo: ou o modo "única competência" (prev/next +
+   rótulo + botão pra trocar de modo) ou o modo "buscar intervalo"
+   (dropdown multi-select + botão pra voltar) — só um dos dois visível por
+   vez (ver renderHoleritePage no app.js). */
+.holerite-nav-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.holerite-single-nav,
+.holerite-range-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.holerite-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0.5px solid #eeede9;
+  border-radius: 8px;
+  background: #fff;
+  color: #55554f;
+  cursor: pointer;
+}
+.holerite-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.holerite-comp-label {
+  font-weight: 700;
+  font-size: 15px;
+  min-width: 110px;
+  text-align: center;
+}
+/* 1 card por grupo Matrícula×Folha (e, no modo intervalo, também por
+   competência — ver holerite-group-title no app.js, que acrescenta a
+   competência entre parênteses só nesse modo). */
+.holerite-group-card {
+  border: 0.5px solid #eeede9;
+  border-radius: 10px;
+  padding: 12px 14px 14px;
+  margin-bottom: 14px;
+  background: #fff;
+}
+.holerite-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.holerite-group-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+.holerite-group-paydate {
+  font-size: 11.5px;
+  color: #8a8a86;
+}
+/* os 3 (ou 5, quando já tem Valor Pago) totais em destaque — mesmo
+   espírito visual de ".financeiro-summary-pill". */
+.holerite-totals-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.holerite-total-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 0.5px solid #eeede9;
+  background: #fafaf8;
+  min-width: 120px;
+}
+.holerite-total-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #8a8a86;
+}
+.holerite-total-value {
+  font-size: 14px;
+  font-weight: 700;
+}
+.holerite-total-proventos .holerite-total-value { color: #2f9e44; }
+.holerite-total-descontos .holerite-total-value { color: #c2255c; }
+.holerite-total-liquido { background: #eaf2fb; }
+.holerite-total-pago { background: #eaf6ec; }
+.holerite-total-diff-ok .holerite-total-value { color: #2f9e44; }
+.holerite-total-diff-bad .holerite-total-value { color: #c2255c; }
+/* tabela de detalhe (Provento/Desconto/Total conforme filtro) dentro de
+   cada card — reaproveita ".financeiro-table"/".financeiro-th"/
+   ".financeiro-row"/".provas-row-clickable" já existentes, só o chip de
+   Tipo é próprio daqui. */
+.holerite-table { width: 100%; }
+.holerite-tipo-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.holerite-tipo-provento { background: #eaf6ec; color: #2f9e44; }
+.holerite-tipo-desconto { background: #fbe9ef; color: #c2255c; }
+.holerite-tipo-total { background: #eaf2fb; color: #2b6cb0; }
