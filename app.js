@@ -16995,7 +16995,14 @@
       filterChipEls[f.key] = chip;
       filterChipsRow.appendChild(chip);
     });
-    wrap.appendChild(filterChipsRow);
+    // seção colapsável "Filtrar" (pedido do Georges, telas pequenas: "crie
+    // também aquela 'seção' de Filtros, igual temos em outras páginas, na
+    // qual abre recolhida e eu clico em cima da palavra Filtros ou da
+    // flecha ao lado pra aparecer os chips") — mesmo padrão já usado em
+    // Passagens/Saúde (buildCollapsibleSection, regra permanente #15).
+    var filtrarSection = buildCollapsibleSection("Filtrar", false);
+    filtrarSection.body.appendChild(filterChipsRow);
+    wrap.appendChild(filtrarSection.section);
 
     function anyFilterActive() {
       return PONTO_FILTER_CHIPS.some(function (f) { return activeFilters[f.key]; });
@@ -17020,6 +17027,7 @@
     // dentro da própria linha — ver buildPairsEditor. ----
     var tableHeaderEl = document.createElement("div");
     tableHeaderEl.className = "ponto-table-header";
+    var obsHeaderCell = null;
     [
       { cls: "ponto-cell-date", label: "Dia / Data" },
       { cls: "ponto-cell-status", label: "Observações" },
@@ -17030,8 +17038,23 @@
       var h = document.createElement("div");
       h.className = "ponto-cell ponto-table-header-cell " + c.cls;
       h.textContent = c.label;
+      if (c.cls === "ponto-cell-status") obsHeaderCell = h;
       tableHeaderEl.appendChild(h);
     });
+    // indicador ⏳ no cabeçalho de Observações (pedido do Georges: "pra eu
+    // não ter que rolar até o final da página pra ver todos os dias
+    // daquele mês, já exiba no topo da coluna Observações o emoji/ícone
+    // que usamos para Aguarda aprovação, que daí eu saberei que tem algum
+    // pendente") — aparece quando QUALQUER dia do mês tem
+    // rowEl.dataset.pontoPendente="1" (ver updateCalcCells); atualizado em
+    // refreshHeaderPendingIndicator(), chamado dentro de
+    // renderSummaryOnly() (roda no load inicial e em toda edição).
+    var obsHeaderPendingBadge = document.createElement("span");
+    obsHeaderPendingBadge.className = "ponto-header-pending-badge";
+    obsHeaderPendingBadge.textContent = "⏳";
+    obsHeaderPendingBadge.title = "Tem pelo menos 1 dia aguardando aprovação neste mês";
+    obsHeaderPendingBadge.style.display = "none";
+    if (obsHeaderCell) obsHeaderCell.appendChild(obsHeaderPendingBadge);
     wrap.appendChild(tableHeaderEl);
 
     var tableEl = document.createElement("div");
@@ -17790,6 +17813,27 @@
         dayChip.className = "ponto-day";
         dayChip.textContent = pontoPad2(day) + "/" + pontoPad2(monthIdx0 + 1);
         dateCell.appendChild(dayChip);
+        // Horários recolhidos por padrão em telas pequenas (pedido do
+        // Georges, print Zfold fechado/aberto: "traz o dia, observações,
+        // horas trabalhadas e saldo, mas os horários ficam recolhidos. Se
+        // clicar, expande") — clicar na célula da data (dateCell) alterna.
+        // A classe ".ponto-row-collapsed" só tem efeito dentro do
+        // @media(max-width:640px) em styles.css — em telas largas o CSS
+        // ignora e os horários continuam sempre visíveis, sem precisar de
+        // lógica JS separada por tamanho de tela.
+        var rowCollapsed = true;
+        var rowToggleChevron = document.createElement("i");
+        dateCell.appendChild(rowToggleChevron);
+        dateCell.className += " ponto-cell-date-clickable";
+        function applyRowCollapsed() {
+          rowEl.classList.toggle("ponto-row-collapsed", rowCollapsed);
+          rowToggleChevron.className = "ti ponto-row-toggle-chevron " + (rowCollapsed ? "ti-chevron-right" : "ti-chevron-down");
+        }
+        applyRowCollapsed();
+        dateCell.addEventListener("click", function () {
+          rowCollapsed = !rowCollapsed;
+          applyRowCollapsed();
+        });
         rowEl.appendChild(dateCell);
 
         // "Observações" — pedido do Georges: unificar numa coluna só
@@ -17912,9 +17956,23 @@
         pmfNotaPanel.style.display = "none";
         statusCell.appendChild(pmfNotaPanel);
 
+        // rascunho local do pmfNota — pedido do Georges (print 31/10,
+        // "por que está aparecendo assim se não tem hora computada e é um
+        // feriado futuro?"): a causa real era o botão "+ Nota PMF" chamando
+        // pairsApi.setPmfNota (que PERSISTE na hora, ver "persist()" dentro
+        // de buildPairsEditor) só de abrir o painel, com tipo
+        // pré-selecionado e nenhum campo preenchido — um clique sem querer
+        // já deixava um registro fantasma salvo. Agora o "+" só guarda um
+        // rascunho EM MEMÓRIA (pmfNotaDraft); só vira persistido de verdade
+        // quando o usuário preenche rótulo/valor da PMF/diferença (os 3
+        // campos de texto) ou troca o Tipo depois de já existir um nota
+        // real. Fechar o painel sem preencher nada não deixa rastro.
+        var pmfNotaDraft = null;
+        function currentPmfNota() { return pairsApi.getPmfNota() || pmfNotaDraft; }
+
         function renderPmfNotaPanel() {
           pmfNotaPanel.innerHTML = "";
-          var nota = pairsApi.getPmfNota() || {};
+          var nota = currentPmfNota() || {};
           var block = document.createElement("div");
           block.className = "ponto-pair-details-block";
           var title = document.createElement("div");
@@ -17935,9 +17993,15 @@
             tipoSel.appendChild(o);
           });
           tipoSel.addEventListener("change", function () {
-            var n = pairsApi.getPmfNota() || {};
+            var n = {};
+            var base = currentPmfNota() || {};
+            for (var k in base) n[k] = base[k];
             n.tipo = tipoSel.value;
-            pairsApi.setPmfNota(n);
+            // só persiste de verdade se já existia um nota real (editando
+            // algo que já foi salvo) — se ainda é rascunho (clicou "+" mas
+            // não preencheu nada), só atualiza o rascunho em memória.
+            if (pairsApi.getPmfNota()) { pairsApi.setPmfNota(n); }
+            else { pmfNotaDraft = n; }
             refreshPmfNotaUI();
           });
           tipoWrap.appendChild(tipoSel);
@@ -17957,9 +18021,15 @@
             inp.type = "text";
             inp.value = nota[f.key] || "";
             inp.addEventListener("change", function () {
-              var n = pairsApi.getPmfNota() || {};
+              // aqui SIM é dado real sendo preenchido pelo usuário — vira
+              // persistido de verdade (sai do estado de rascunho).
+              var n = {};
+              var base = currentPmfNota() || {};
+              for (var k in base) n[k] = base[k];
               n[f.key] = inp.value;
               pairsApi.setPmfNota(n);
+              pmfNotaDraft = null;
+              refreshPmfNotaUI();
             });
             fieldWrap.appendChild(inp);
             block.appendChild(fieldWrap);
@@ -17971,6 +18041,7 @@
           rmBtn.innerHTML = '<i class="ti ti-x"></i> Remover nota';
           rmBtn.addEventListener("click", function () {
             pairsApi.setPmfNota(null);
+            pmfNotaDraft = null;
             refreshPmfNotaUI();
             pmfNotaPanel.style.display = "none";
           });
@@ -17980,7 +18051,11 @@
         }
 
         pmfNotaAddBtn.addEventListener("click", function () {
-          pairsApi.setPmfNota({ tipo: "feriado_trabalhado" });
+          // NÃO persiste aqui (ver comentário de pmfNotaDraft acima) — só
+          // abre o painel com um rascunho em memória, pra evitar deixar um
+          // registro fantasma salvo quando o usuário só clicou "+" e não
+          // preencheu nada (bug real reportado, dia 31/10).
+          pmfNotaDraft = { tipo: "feriado_trabalhado" };
           refreshPmfNotaUI();
           renderPmfNotaPanel();
           pmfNotaPanel.style.display = "";
@@ -17998,9 +18073,12 @@
           // state.manualEditMode) — mesmo motivo do "+ Crédito" acima, em
           // renderCreditoRow: esse dado normalmente já vem pronto da
           // importação, então o botão ficava poluindo toda linha vazia.
-          pmfNotaAddBtn.style.display = (!nota && state.manualEditMode) ? "" : "none";
-          pmfNotaDetailsBtn.style.display = nota ? "" : "none";
-          if (!nota) pmfNotaPanel.style.display = "none";
+          // Com um rascunho aberto (pmfNotaDraft, ainda não persistido), o
+          // "+" vira "i" de novo — assim dá pra reabrir o painel e
+          // terminar de preencher, ou pra fechar sem deixar rastro nenhum.
+          pmfNotaAddBtn.style.display = (!nota && !pmfNotaDraft && state.manualEditMode) ? "" : "none";
+          pmfNotaDetailsBtn.style.display = (nota || pmfNotaDraft) ? "" : "none";
+          if (!nota && !pmfNotaDraft) pmfNotaPanel.style.display = "none";
         }
 
         rowEl.appendChild(statusCell);
@@ -18124,7 +18202,15 @@
         summarySaldoEl.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
         if (any && total > 0) summarySaldoEl.classList.add("ponto-saldo-positivo");
         if (any && total < 0) summarySaldoEl.classList.add("ponto-saldo-negativo");
+        refreshHeaderPendingIndicator();
         ensureYearSummary();
+      }
+      function refreshHeaderPendingIndicator() {
+        var anyPending = false;
+        Array.prototype.forEach.call(tableEl.children, function (r) {
+          if (r.dataset.pontoPendente === "1") anyPending = true;
+        });
+        obsHeaderPendingBadge.style.display = anyPending ? "" : "none";
       }
       renderSummaryOnly();
     }

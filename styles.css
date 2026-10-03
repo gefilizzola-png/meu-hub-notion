@@ -7751,6 +7751,15 @@ html, body {
 }
 .ponto-import-status-ok { color: #2f8a4b; }
 .ponto-import-status-erro { color: #c0392b; }
+/* chevron de recolher/expandir Horários — só existe visualmente dentro do
+   @media(max-width:640px) abaixo; em telas largas o clique na data não faz
+   nada (CSS não esconde .ponto-cell-pairs fora desse breakpoint) e o
+   ícone fica oculto pra não confundir. */
+.ponto-row-toggle-chevron { display: none; }
+/* indicador de pendência no cabeçalho "Observações" (ver
+   obsHeaderPendingBadge/refreshHeaderPendingIndicator em app.js) — some
+   discretamente ao lado do rótulo quando tem ⏳ em algum dia do mês. */
+.ponto-header-pending-badge { margin-left: 6px; font-size: 13px; }
 
 @media (max-width: 640px) {
   /* rodada Out/26 (pedido do Georges, prints do Zfold fechado/aberto:
@@ -7797,6 +7806,21 @@ html, body {
   .ponto-pair { padding: 5px 6px; }
   .ponto-pair-input { width: 76px; font-size: 12.5px; padding: 4px 5px; }
   .ponto-year-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+  /* Horários recolhidos por padrão (pedido do Georges, rodada Out/26: "o
+     dia, observações, horas trabalhadas e saldo, mas os horários ficam
+     recolhidos. Se eu clicar, expande") — clicar na célula da data
+     (".ponto-cell-date-clickable", ver buildDayRow) alterna
+     ".ponto-row-collapsed" no rowEl. Fora desse media query a classe não
+     faz nada — telas largas continuam sempre expandidas. */
+  .ponto-cell-date-clickable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+  }
+  .ponto-row-toggle-chevron { display: inline-block; font-size: 15px; color: #9a988e; }
+  .ponto-row.ponto-row-collapsed .ponto-cell-pairs { display: none; }
 }
 
 @media (max-width: 400px) {
