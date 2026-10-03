@@ -16591,12 +16591,18 @@
   // falta aprovar), NÃO conta como Ímpar — o aviso "⏳" por horário (ver
   // buildPairsEditor) já comunica isso, e Ímpar ficaria redundante/errado
   // (daria a entender que ele ainda precisa agir, quando já agiu).
+  // suprime o "⚠ Ímpar" quando a saída ausente já está marcada ⏳ (o
+  // Georges já sabe que falta, tá aguardando aprovação) — e TAMBÉM quando
+  // é a própria entrada avulsa que está marcada ⏳ (bug real 27/09: incluiu
+  // manualmente um horário solto e sinalizou pendente nele, mas como o par
+  // ficou sem saída, continuava contando como Ímpar — ver pendenteEntrada
+  // abaixo, antes só olhava pendenteSaida).
   function pontoDiaImpar(pairs) {
     var arr = Array.isArray(pairs) ? pairs : [];
     return arr.some(function (p) {
       var e = pontoHoraToMin(p && p.entrada);
       var s = pontoHoraToMin(p && p.saida);
-      return e != null && s == null && !(p && p.pendenteSaida);
+      return e != null && s == null && !(p && (p.pendenteSaida || p.pendenteEntrada));
     });
   }
 
@@ -16686,14 +16692,35 @@
     wrap.style.display = "none";
     container.appendChild(wrap);
 
-    // ---- topo reorganizado (pedido do Georges, rodada 4: "o mês, botões
-    // pra alternar o mês e a carga horária do mês ficam organizados na
-    // mesma altura, de forma mais bonita") — nav de mês + carga horária
-    // na MESMA linha (antes eram 2 linhas empilhadas), mesmo padrão
-    // ".financeiro-top-row" (space-between, wrap) já usado em Financeiro/
-    // Transações. ----
-    var topRow = document.createElement("div");
-    topRow.className = "financeiro-top-row ponto-top-row";
+    // ---- "Resumo Anual" (pedido do Georges, rodada 4: "coloque as
+    // caixas de horas extras dos meses no topo") — grid Jan-Dez do ano da
+    // competência em tela, cada mês com o saldo total (ou "–" pra mês
+    // futuro/sem nenhum dia lançado). Clique num mês passado/atual navega
+    // direto pra ele. Bem no topo da página (rodada 5: "a seleção do mês
+    // ainda está acima do resumo do ano" — inverteu a ordem, resumo anual
+    // vem primeiro agora) — o mês em tela é sempre recalculado localmente
+    // (sem fetch extra — os dias já estão em state.days); os outros 11
+    // meses são buscados 1x por ano navegado e ficam em cache (yearCache)
+    // pra não refazer a mesma chamada toda hora que o Georges edita um
+    // dia. ----
+    var yearSummaryWrap = document.createElement("div");
+    yearSummaryWrap.className = "ponto-year-summary";
+    var yearSummaryTitle = document.createElement("div");
+    yearSummaryTitle.className = "ponto-year-summary-title";
+    yearSummaryWrap.appendChild(yearSummaryTitle);
+    var yearGridEl = document.createElement("div");
+    yearGridEl.className = "ponto-year-grid";
+    yearSummaryWrap.appendChild(yearGridEl);
+    wrap.appendChild(yearSummaryWrap);
+
+    // ---- linha combinada (rodada 5, pedido do Georges): nav de mês +
+    // carga horária à esquerda, saldo acumulado + importar à direita,
+    // tudo na MESMA altura, logo abaixo do Resumo Anual. ----
+    var topRow2 = document.createElement("div");
+    topRow2.className = "financeiro-top-row ponto-top-row2";
+
+    var topRow2Left = document.createElement("div");
+    topRow2Left.className = "ponto-top-row2-left";
 
     var nav = document.createElement("div");
     nav.className = "financeiro-month-nav";
@@ -16714,7 +16741,7 @@
     nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
     nextBtn.addEventListener("click", function () { changeMonth(financeiroShiftMonth(state.month, 1)); });
     nav.appendChild(nextBtn);
-    topRow.appendChild(nav);
+    topRow2Left.appendChild(nav);
 
     // ---- carga horária da competência (6h x 8h — pedido do Georges:
     // "estou fazendo ampliação de jornada... mas como em breve devo
@@ -16742,37 +16769,18 @@
     carga8Btn.addEventListener("click", function () { saveMesConfig(8); });
     cargaRow.appendChild(carga6Btn);
     cargaRow.appendChild(carga8Btn);
-    topRow.appendChild(cargaRow);
-    wrap.appendChild(topRow);
+    topRow2Left.appendChild(cargaRow);
+    topRow2.appendChild(topRow2Left);
 
-    // ---- "Resumo Anual" (pedido do Georges, rodada 4: "coloque as
-    // caixas de horas extras dos meses no topo") — grid Jan-Dez do ano da
-    // competência em tela, cada mês com o saldo total (ou "–" pra mês
-    // futuro/sem nenhum dia lançado). Clique num mês passado/atual navega
-    // direto pra ele. Fica logo abaixo do topRow, bem no topo da página —
-    // o mês em tela é sempre recalculado localmente (sem fetch extra — os
-    // dias já estão em state.days); os outros 11 meses são buscados 1x
-    // por ano navegado e ficam em cache (yearCache) pra não refazer a
-    // mesma chamada toda hora que o Georges edita um dia. ----
-    var yearSummaryWrap = document.createElement("div");
-    yearSummaryWrap.className = "ponto-year-summary";
-    var yearSummaryTitle = document.createElement("div");
-    yearSummaryTitle.className = "ponto-year-summary-title";
-    yearSummaryWrap.appendChild(yearSummaryTitle);
-    var yearGridEl = document.createElement("div");
-    yearGridEl.className = "ponto-year-grid";
-    yearSummaryWrap.appendChild(yearGridEl);
-    wrap.appendChild(yearSummaryWrap);
+    var topRow2Right = document.createElement("div");
+    topRow2Right.className = "ponto-top-row2-right";
 
     // ---- resumo do mês (saldo acumulado — pedido do Georges: "vira uma
-    // caixinha totalizando parecida com a que temos em Contas Mensais") —
-    // reaproveita a família visual ".financeiro-summary-pill" em vez do
-    // texto solto anterior. Só soma dias com algum registro salvo; dias
-    // ainda não preenchidos ficam fora da conta, pra não virar um
-    // "déficit" artificial de dias que o Georges simplesmente ainda não
-    // lançou. ----
-    var summaryRow = document.createElement("div");
-    summaryRow.className = "financeiro-summary ponto-summary-row";
+    // caixinha totalizando parecida com a que temos em Contas Mensais"),
+    // agora no canto direito superior junto do nav/carga. Só soma dias
+    // com algum registro salvo; dias ainda não preenchidos ficam fora da
+    // conta, pra não virar um "déficit" artificial de dias que o Georges
+    // simplesmente ainda não lançou. ----
     var summarySaldoEl = document.createElement("div");
     summarySaldoEl.className = "financeiro-summary-pill ponto-summary-saldo";
     var summarySaldoLabel = document.createElement("span");
@@ -16782,20 +16790,23 @@
     summarySaldoValue.className = "financeiro-summary-value";
     summarySaldoEl.appendChild(summarySaldoLabel);
     summarySaldoEl.appendChild(summarySaldoValue);
-    summaryRow.appendChild(summarySaldoEl);
-    wrap.appendChild(summaryRow);
+    topRow2Right.appendChild(summarySaldoEl);
 
     // ---- "Importar mês (colar dados)" — pedido do Georges, rodada 4:
     // "vira um item menor... deixa apenas um botão que abre a caixa de
     // texto e os botões" (antes era uma barra recolhível de largura
     // total, ocupando espaço mesmo fechada). Agora é só um link/botão
-    // discreto; o painel (hint+textarea+Importar) só existe no DOM
-    // depois do 1º clique. ----
+    // discreto, na mesma linha do saldo (rodada 5); o painel
+    // (hint+textarea+Importar) continua abrindo abaixo, largura total,
+    // só depois do 1º clique. ----
     var importToggleBtn = document.createElement("button");
     importToggleBtn.type = "button";
     importToggleBtn.className = "ponto-import-toggle";
     importToggleBtn.innerHTML = '<i class="ti ti-upload"></i> Importar mês (colar dados)';
-    wrap.appendChild(importToggleBtn);
+    topRow2Right.appendChild(importToggleBtn);
+    topRow2.appendChild(topRow2Right);
+    wrap.appendChild(topRow2);
+
     var importPanel = document.createElement("div");
     importPanel.className = "ponto-import-panel";
     importPanel.style.display = "none";
@@ -16823,6 +16834,52 @@
       importPanel.style.display = open ? "none" : "";
       importToggleBtn.classList.toggle("active", !open);
     });
+
+    // ---- chips de filtro (pedido do Georges, rodada 5: "crie filtros do
+    // tipo chip pra eu filtrar os dias que Aguarda aprovação ou Ímpar...
+    // tbm um filtro pra dias com Saldo negativo") — client-side puro,
+    // sobre as linhas já renderizadas (cada rowEl guarda seu próprio
+    // estado em dataset, atualizado em updateCalcCells). Mais de 1 chip
+    // ativo ao mesmo tempo = OU entre eles (mostra a linha se bater em
+    // QUALQUER um dos chips marcados), igual ao padrão de outros filtros
+    // rápidos do app. ----
+    var activeFilters = { pendente: false, impar: false, saldoNeg: false };
+    var filterChipsRow = document.createElement("div");
+    filterChipsRow.className = "ponto-filter-chips";
+    var PONTO_FILTER_CHIPS = [
+      { key: "pendente", label: "⏳ Aguarda aprovação" },
+      { key: "impar", label: "⚠ Ímpar" },
+      { key: "saldoNeg", label: "Saldo negativo" }
+    ];
+    var filterChipEls = {};
+    PONTO_FILTER_CHIPS.forEach(function (f) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "ponto-filter-chip";
+      chip.textContent = f.label;
+      chip.addEventListener("click", function () {
+        activeFilters[f.key] = !activeFilters[f.key];
+        chip.classList.toggle("active", activeFilters[f.key]);
+        reapplyAllFilters();
+      });
+      filterChipEls[f.key] = chip;
+      filterChipsRow.appendChild(chip);
+    });
+    wrap.appendChild(filterChipsRow);
+
+    function anyFilterActive() {
+      return activeFilters.pendente || activeFilters.impar || activeFilters.saldoNeg;
+    }
+    function applyRowFilter(rowEl) {
+      if (!anyFilterActive()) { rowEl.style.display = ""; return; }
+      var match = (activeFilters.pendente && rowEl.dataset.pontoPendente === "1") ||
+        (activeFilters.impar && rowEl.dataset.pontoImpar === "1") ||
+        (activeFilters.saldoNeg && rowEl.dataset.pontoSaldoNeg === "1");
+      rowEl.style.display = match ? "" : "none";
+    }
+    function reapplyAllFilters() {
+      Array.prototype.forEach.call(tableEl.children, applyRowFilter);
+    }
 
     // ---- cabeçalho da tabela (pedido do Georges: "dê nome às colunas") —
     // estático, não precisa ser reconstruído a cada renderTable(). A
@@ -17198,9 +17255,18 @@
           eIn.type = "time";
           eIn.className = "ponto-pair-input";
           eIn.value = entradaItem.time || "";
-          eIn.addEventListener("change", function () {
+          // "blur" (não "change"): o Georges reclamou que, no input nativo
+          // type=time, assim que termina de digitar a HORA (antes da
+          // dezena/unidade do MINUTO), o navegador já dispara "change" —
+          // isso reordenava/reagrupava a lista na hora, destruindo o campo
+          // em edição e fazendo perder o foco no meio da digitação do
+          // minuto. "blur" só dispara quando o campo perde o foco de
+          // verdade (tab/clique fora), dando tempo de terminar hora+minuto.
+          eIn.addEventListener("blur", function () {
             if (!eIn.value) {
-              times.splice(times.indexOf(entradaItem), 1);
+              if (times.indexOf(entradaItem) !== -1) times.splice(times.indexOf(entradaItem), 1);
+            } else if (entradaItem.time === eIn.value) {
+              return; // nada mudou — não reordena/persiste à toa
             } else {
               entradaItem.time = eIn.value;
             }
@@ -17237,10 +17303,14 @@
           sOut.type = "time";
           sOut.className = "ponto-pair-input";
           sOut.value = saidaItem ? (saidaItem.time || "") : "";
-          sOut.addEventListener("change", function () {
+          // mesmo motivo do eIn acima: "blur" em vez de "change", pra não
+          // reordenar no meio da digitação hora/minuto.
+          sOut.addEventListener("blur", function () {
             if (!sOut.value) {
-              if (saidaItem) { times.splice(times.indexOf(saidaItem), 1); }
+              if (saidaItem && times.indexOf(saidaItem) !== -1) { times.splice(times.indexOf(saidaItem), 1); }
+              else { return; }
             } else if (saidaItem) {
+              if (saidaItem.time === sOut.value) return; // nada mudou
               saidaItem.time = sOut.value;
             } else {
               times.push({ time: sOut.value, pendente: trailingPendente, pendenteInfo: trailingPendenteInfo });
@@ -17365,8 +17435,10 @@
           inp.type = "time";
           inp.className = "ponto-pair-input";
           inp.value = "";
-          inp.addEventListener("change", function () {
-            if (inp.value) { draft.time = inp.value; }
+          // "blur", mesmo motivo do eIn/sOut acima.
+          inp.addEventListener("blur", function () {
+            if (!inp.value) return;
+            draft.time = inp.value;
             renderPairs();
             persist();
           });
@@ -17542,6 +17614,24 @@
           saldoCell.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
           if (hasRecord && saldoMin > 0) saldoCell.classList.add("ponto-saldo-positivo");
           if (hasRecord && saldoMin < 0) saldoCell.classList.add("ponto-saldo-negativo");
+          // cor da linha inteira (pedido do Georges): fds/feriado/facultativo
+          // fica azul SEMPRE (tenha ou não horário) — mas isso é só a cor
+          // "de base"; se o dia (seja ele qual for) tiver Ímpar ou Aguarda
+          // aprovação, essas duas tomam prioridade por cima do azul, porque
+          // são coisas que precisam de atenção/ação. Entre as duas, Aguarda
+          // aprovação (amarelo) vence Ímpar (vermelho) — é mais raro e é
+          // justamente o caso que suprime o Ímpar (ver pontoDiaImpar) então
+          // quando os dois "empatam" na prática o pendente é o motivo real.
+          rowEl.classList.remove("ponto-row-impar", "ponto-row-pendente");
+          if (pendente) rowEl.classList.add("ponto-row-pendente");
+          else if (hasRecord && impar) rowEl.classList.add("ponto-row-impar");
+          // dados usados pelos chips de filtro (Aguarda aprovação/Ímpar/
+          // Saldo negativo) — guardados direto no rowEl pra não precisar
+          // recalcular tudo de novo no filtro.
+          rowEl.dataset.pontoPendente = pendente ? "1" : "0";
+          rowEl.dataset.pontoImpar = (hasRecord && impar) ? "1" : "0";
+          rowEl.dataset.pontoSaldoNeg = (hasRecord && saldoMin < 0) ? "1" : "0";
+          applyRowFilter(rowEl);
           return hasRecord ? saldoMin : 0;
         }
 

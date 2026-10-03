@@ -7074,6 +7074,47 @@ html, body {
   border-color: #4a90d9;
   color: #fff;
 }
+/* linha combinada (rodada 5, pedido do Georges): nav de mês + carga à
+   esquerda, saldo + importar à direita, mesma altura, logo abaixo do
+   Resumo Anual. */
+.ponto-top-row2 { align-items: center; }
+.ponto-top-row2-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ponto-top-row2-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* chips de filtro (rodada 5, pedido do Georges: "Aguarda aprovação",
+   "Ímpar", "Saldo negativo") — mesmo padrão pílula clicável já usado em
+   Filtros Rápidos de Prioridades/Supermercado. */
+.ponto-filter-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ponto-filter-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 0.5px solid #eeede9;
+  background: #fff;
+  color: #55554f;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ponto-filter-chip:hover { background: #f7f6f2; }
+.ponto-filter-chip.active {
+  background: #4a90d9;
+  border-color: #4a90d9;
+  color: #fff;
+}
 /* "Saldo acumulado no mês" — pedido do Georges (rodada 4): "vira uma
    caixinha totalizando parecida com a que temos em Contas Mensais".
    Reaproveita ".financeiro-summary"/".financeiro-summary-pill" (mesma
@@ -7099,12 +7140,24 @@ html, body {
   background: #fff;
   flex-wrap: wrap;
 }
-.ponto-row-weekend { background: #fbfaf7; }
-.ponto-row-feriado { background: #fff8ea; border-color: #f3e3b8; }
-/* "Ponto Facultativo" (pedido do Georges: 3º estado do chip de Feriado,
-   conta igual Feriado mas precisa ser visualmente distinto) — tom lilás
-   pra não ser confundido com o amarelo de Feriado. */
-.ponto-row-facultativo { background: #f3eefc; border-color: #ddc9f3; }
+/* cor da linha (pedido do Georges, rodada 5): fim de semana, Feriado e
+   Ponto Facultativo viram TODOS azul claro (unificado — antes eram 3
+   tons diferentes) — "independentemente de terem horário ou não". Vem
+   ANTES das regras de Ímpar/Pendente abaixo de propósito: quando a linha
+   também tem Ímpar ou Pendente, essas duas tomam prioridade visual por
+   cima do azul (mesma especificidade de seletor — quem vem depois no
+   arquivo vence), porque pedem mais atenção/ação do que só "não é dia
+   útil normal". */
+.ponto-row-weekend,
+.ponto-row-feriado,
+.ponto-row-facultativo { background: #eaf2fb; border-color: #c9ddf3; }
+
+/* Ímpar (vermelho claro) e Aguarda aprovação (amarelo claro) — qualquer
+   dia (útil, fds ou feriado/facultativo) fica nessas cores quando se
+   aplica, por cima do azul de fds/feriado acima. Pendente tem prioridade
+   sobre Ímpar quando os dois calham no mesmo dia (ver updateCalcCells). */
+.ponto-row-impar { background: #fdeeec; border-color: #f3c7bf; }
+.ponto-row-pendente { background: #fff6da; border-color: #f0dd9a; }
 
 .ponto-cell { display: flex; flex-direction: column; }
 
@@ -7152,8 +7205,11 @@ html, body {
   border-radius: 5px;
   padding: 2px 6px;
 }
-.ponto-row-weekend .ponto-weekday { background: #eee6d8; color: #8a7a4f; }
-.ponto-row-feriado .ponto-weekday { background: #f3e3b8; color: #8a6d1f; }
+.ponto-row-weekend .ponto-weekday,
+.ponto-row-feriado .ponto-weekday,
+.ponto-row-facultativo .ponto-weekday { background: #d3e4f7; color: #2f6fad; }
+.ponto-row-impar .ponto-weekday { background: #f6cfc6; color: #a3392a; }
+.ponto-row-pendente .ponto-weekday { background: #f0e0a0; color: #8a6d1f; }
 .ponto-day {
   font-size: 16px;
   font-weight: 800;
