@@ -16586,12 +16586,17 @@
 
   // true se existe algum par com entrada válida mas sem saída válida —
   // espelha o badge "⚠ Ímpar" / "batida ímpar · parcial" do sistema da PMF.
+  // Exceção (pedido do Georges): se a saída ausente já está marcada
+  // "pendenteSaida" (ele já submeteu o ajuste na Aprovação de Abonos e só
+  // falta aprovar), NÃO conta como Ímpar — o aviso "⏳" por horário (ver
+  // buildPairsEditor) já comunica isso, e Ímpar ficaria redundante/errado
+  // (daria a entender que ele ainda precisa agir, quando já agiu).
   function pontoDiaImpar(pairs) {
     var arr = Array.isArray(pairs) ? pairs : [];
     return arr.some(function (p) {
       var e = pontoHoraToMin(p && p.entrada);
       var s = pontoHoraToMin(p && p.saida);
-      return e != null && s == null;
+      return e != null && s == null && !(p && p.pendenteSaida);
     });
   }
 
@@ -16730,12 +16735,12 @@
     importSection.section.classList.add("ponto-import-section");
     var importHint = document.createElement("p");
     importHint.className = "ponto-import-hint";
-    importHint.textContent = "Cole aqui o JSON com os dias do mês (formato {month, cargaHoraria, days:[...]}) e clique em Importar. Útil pra lançar um mês inteiro de uma vez a partir do que aparece no sistema da PMF.";
+    importHint.textContent = "Cole aqui o JSON com os dias do mês (formato {month, cargaHoraria, days:[...]}) e clique em Importar. Útil pra lançar um mês inteiro de uma vez a partir do que aparece no sistema da PMF. Cada par aceita \"pendenteEntrada\"/\"pendenteSaida\" (true/false) pra marcar um horário específico como aguardando aprovação — inclusive um ajuste que só existe na tela de Aprovação de Abonos e ainda não tem valor de saída confirmado (nesse caso, deixe \"saida\" ausente e \"pendenteSaida\":true).";
     importSection.body.appendChild(importHint);
     var importTextarea = document.createElement("textarea");
     importTextarea.className = "ponto-import-textarea";
     importTextarea.rows = 6;
-    importTextarea.placeholder = '{"month":"2026-09","cargaHoraria":8,"days":[{"date":"2026-09-01","pairs":[{"entrada":"10:37","saida":"13:27"}],"feriado":false,"pendenteAprovacao":false}]}';
+    importTextarea.placeholder = '{"month":"2026-09","cargaHoraria":8,"days":[{"date":"2026-09-01","pairs":[{"entrada":"10:37","saida":"13:27"},{"entrada":"14:30","pendenteSaida":true}],"feriado":false,"pendenteAprovacao":false}]}';
     importSection.body.appendChild(importTextarea);
     var importBtn = document.createElement("button");
     importBtn.type = "button";
@@ -16892,8 +16897,14 @@
     // da PMF (dias com marcações + quais têm ajuste/esquecimento
     // "Aguardando Parecer"), em vez de digitar dia por dia. Formato colado
     // (JSON): {"month":"YYYY-MM","cargaHoraria":6|8,"days":[{"date":
-    // "YYYY-MM-DD","pairs":[{"entrada":"HH:MM","saida":"HH:MM"}],
-    // "feriado":bool,"pendenteAprovacao":bool}, ...]}. Salva dia por dia em
+    // "YYYY-MM-DD","pairs":[{"entrada":"HH:MM","saida":"HH:MM",
+    // "pendenteEntrada":bool,"pendenteSaida":bool}],"feriado":bool,
+    // "pendenteAprovacao":bool}, ...]}. pendenteEntrada/pendenteSaida
+    // (pedido do Georges) marcam um horário ESPECÍFICO como aguardando
+    // aprovação — inclusive batidas que só existem na tela de Aprovação de
+    // Abonos (ainda sem valor confirmado): nesse caso entra o par com
+    // "saida" ausente e "pendenteSaida":true, pra ele ver TUDO que bateu ou
+    // ajustou, mesmo pendente. Salva dia por dia em
     // sequência (não em paralelo, pra não sobrecarregar o Worker com 30
     // PUTs simultâneos) e, se o mês importado for o que está em tela,
     // recarrega a tabela no final.
@@ -16971,13 +16982,25 @@
     function buildPairsEditor(dateStr, dayData, onLocalChange) {
       var pairsWrap = document.createElement("div");
       pairsWrap.className = "ponto-pairs";
-      var pairs = (dayData.pairs || []).map(function (p) { return { entrada: p.entrada || "", saida: p.saida || "" }; });
+      // "pendenteEntrada"/"pendenteSaida" (pedido do Georges): agora cada
+      // horário (não só o dia inteiro) pode ser marcado como aguardando
+      // aprovação — pra ele enxergar, dentro de um dia com vários pares,
+      // qual batida específica já foi ajustada/submetida e qual ainda
+      // precisa de ação.
+      var pairs = (dayData.pairs || []).map(function (p) {
+        return { entrada: p.entrada || "", saida: p.saida || "", pendenteEntrada: !!p.pendenteEntrada, pendenteSaida: !!p.pendenteSaida };
+      });
 
       function currentCleanPairs() {
         var out = [];
         pairs.forEach(function (p) {
           if (!PONTO_HORA_REGEX.test(p.entrada || "")) return;
-          out.push({ entrada: p.entrada, saida: PONTO_HORA_REGEX.test(p.saida || "") ? p.saida : null });
+          out.push({
+            entrada: p.entrada,
+            saida: PONTO_HORA_REGEX.test(p.saida || "") ? p.saida : null,
+            pendenteEntrada: !!p.pendenteEntrada,
+            pendenteSaida: !!p.pendenteSaida
+          });
         });
         return out;
       }
@@ -17006,6 +17029,26 @@
           eIn.value = p.entrada || "";
           eIn.addEventListener("change", function () { p.entrada = eIn.value || ""; persist(); });
           row.appendChild(eIn);
+          // "⏳" clicável ao lado da ENTRADA (pedido do Georges: "coloque
+          // apenas o emoji do relógio... ao lado do horário/batida que
+          // aguarda aprovação") — alterna pendenteEntrada só deste par.
+          var eInPendBtn = document.createElement("button");
+          eInPendBtn.type = "button";
+          eInPendBtn.className = "ponto-pair-pending-btn";
+          eInPendBtn.textContent = "⏳";
+          function refreshEInPendBtn() {
+            eInPendBtn.classList.toggle("active", !!p.pendenteEntrada);
+            eInPendBtn.title = p.pendenteEntrada
+              ? "Entrada aguardando aprovação (clique pra desmarcar)"
+              : "Marcar esta entrada como aguardando aprovação";
+          }
+          refreshEInPendBtn();
+          eInPendBtn.addEventListener("click", function () {
+            p.pendenteEntrada = !p.pendenteEntrada;
+            refreshEInPendBtn();
+            persist();
+          });
+          row.appendChild(eInPendBtn);
           var sep = document.createElement("span");
           sep.className = "ponto-pair-sep";
           sep.textContent = "–";
@@ -17020,6 +17063,28 @@
             persist();
           });
           row.appendChild(sOut);
+          // mesmo botão "⏳", agora pra SAÍDA — importante: pode ficar
+          // marcado mesmo com a saída ainda em branco (ajuste já
+          // submetido, só não tem valor confirmado ainda) — é esse caso
+          // que faz pontoDiaImpar() não acusar "⚠ Ímpar" (ver comentário
+          // lá).
+          var sOutPendBtn = document.createElement("button");
+          sOutPendBtn.type = "button";
+          sOutPendBtn.className = "ponto-pair-pending-btn";
+          sOutPendBtn.textContent = "⏳";
+          function refreshSOutPendBtn() {
+            sOutPendBtn.classList.toggle("active", !!p.pendenteSaida);
+            sOutPendBtn.title = p.pendenteSaida
+              ? "Saída aguardando aprovação (clique pra desmarcar)"
+              : "Marcar esta saída como aguardando aprovação";
+          }
+          refreshSOutPendBtn();
+          sOutPendBtn.addEventListener("click", function () {
+            p.pendenteSaida = !p.pendenteSaida;
+            refreshSOutPendBtn();
+            persist();
+          });
+          row.appendChild(sOutPendBtn);
           // "sem par" (pedido do Georges — esqueceu de bater a saída de
           // um turno): deixar a saída em branco já é suportado — esse
           // aviso só deixa isso visível/claro na própria linha, mesmo
@@ -17050,7 +17115,7 @@
         addBtn.className = "ponto-pair-add-btn";
         addBtn.innerHTML = '<i class="ti ti-plus"></i> Horário';
         addBtn.addEventListener("click", function () {
-          pairs.push({ entrada: "", saida: "" });
+          pairs.push({ entrada: "", saida: "", pendenteEntrada: false, pendenteSaida: false });
           renderPairs();
         });
         pairsWrap.appendChild(addBtn);

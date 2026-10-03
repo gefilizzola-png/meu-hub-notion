@@ -7205,6 +7205,31 @@ html, body {
   box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
 }
 .ponto-pair-sep { color: #c7c5bc; font-size: 13px; }
+/* "⏳" clicável ao lado de cada entrada/saída (pedido do Georges: marcar
+   POR HORÁRIO que aquela batida específica aguarda aprovação, não só o
+   dia inteiro) — apagado por padrão, destaque âmbar (mesma cor do badge
+   "⏳ Aguarda aprovação" já existente) quando marcado. */
+.ponto-pair-pending-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  opacity: 0.35;
+  filter: grayscale(1);
+  transition: opacity 0.12s ease, filter 0.12s ease, background 0.12s ease;
+}
+.ponto-pair-pending-btn:hover { opacity: 0.8; background: #f7f6f2; }
+.ponto-pair-pending-btn.active {
+  opacity: 1;
+  filter: none;
+  background: #e5f2fa;
+}
 .ponto-pair-sem-par {
   font-size: 10px;
   font-weight: 600;
