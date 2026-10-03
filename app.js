@@ -16630,6 +16630,28 @@
     return y + "-" + pontoPad2(mZeroBased + 1) + "-" + pontoPad2(d);
   }
 
+  // saldo total de um mês inteiro — usado no grid "Resumo Anual" (pedido
+  // do Georges). Só soma dias com algum registro (mesma regra do saldo
+  // acumulado do mês em tela); devolve null quando o mês não tem NENHUM
+  // dia preenchido, pra distinguir "0 (bateu certinho)" de "sem dado
+  // nenhum" (grid mostra "–" nesse caso).
+  function pontoComputeMonthSaldoMin(days, cargaHorariaHoras) {
+    var total = 0, any = false;
+    (days || []).forEach(function (d) {
+      if (!d) return;
+      var pairs = d.pairs || [];
+      var hasRecord = pairs.length > 0 || d.feriado;
+      if (!hasRecord) return;
+      any = true;
+      var parts = (d.date || "").split("-").map(Number);
+      var weekday = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+      var trabalhadasMin = pontoDiaTrabalhadasMin(pairs);
+      var esperadoMin = pontoDiaEsperadoMin(weekday, d.feriado, cargaHorariaHoras);
+      total += pontoDiaSaldoMin(trabalhadasMin, esperadoMin);
+    });
+    return any ? total : null;
+  }
+
   function renderPontoEletronicoPage(container, page) {
     function handle401(res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
@@ -16726,6 +16748,24 @@
     importSection.body.appendChild(importStatusEl);
     wrap.appendChild(importSection.section);
 
+    // ---- "Resumo Anual" (pedido do Georges): grid Jan-Dez do ano da
+    // competência em tela, cada mês com o saldo total (ou "–" pra mês
+    // futuro/sem nenhum dia lançado). Clique num mês passado/atual navega
+    // direto pra ele. Fica ACIMA do "Saldo acumulado no mês" (pedido
+    // explícito). O mês em tela é sempre recalculado localmente (sem
+    // fetch extra — os dias já estão em state.days); os outros 11 meses
+    // são buscados 1x por ano navegado e ficam em cache (yearCache) pra
+    // não refazer a mesma chamada toda hora que o Georges edita um dia. ----
+    var yearSummaryWrap = document.createElement("div");
+    yearSummaryWrap.className = "ponto-year-summary";
+    var yearSummaryTitle = document.createElement("div");
+    yearSummaryTitle.className = "ponto-year-summary-title";
+    yearSummaryWrap.appendChild(yearSummaryTitle);
+    var yearGridEl = document.createElement("div");
+    yearGridEl.className = "ponto-year-grid";
+    yearSummaryWrap.appendChild(yearGridEl);
+    wrap.appendChild(yearSummaryWrap);
+
     // ---- resumo do mês (saldo acumulado — só soma dias com algum
     // registro salvo; dias ainda não preenchidos ficam fora da conta, pra
     // não virar um "déficit" artificial de dias que o Georges simplesmente
@@ -16744,6 +16784,76 @@
     function changeMonth(newMonth) {
       state.month = newMonth;
       loadMonth();
+    }
+
+    // "YYYY-MM" > "YYYY-MM" funciona por comparação de string normal (mesmo
+    // formato zero-padded) — mês depois do mês corrente real (não o
+    // exibido em tela) é "futuro" e nunca é buscado nem clicável.
+    function pontoMonthIsFuture(monthStr) {
+      return monthStr > financeiroCurrentMonth();
+    }
+
+    var yearCache = {}; // "YYYY-MM" -> saldoMin (number) | null (sem dado)
+
+    function renderYearGrid() {
+      var year = Number(state.month.split("-")[0]);
+      yearSummaryTitle.textContent = "Resumo Anual — " + year;
+      yearGridEl.innerHTML = "";
+      for (var m = 1; m <= 12; m++) {
+        var monthStr = year + "-" + pontoPad2(m);
+        var isFuture = pontoMonthIsFuture(monthStr);
+        var val = yearCache.hasOwnProperty(monthStr) ? yearCache[monthStr] : undefined;
+        var cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = "ponto-year-cell" + (monthStr === state.month ? " active" : "");
+        cell.disabled = isFuture;
+        var mLabel = document.createElement("span");
+        mLabel.className = "ponto-year-cell-month";
+        mLabel.textContent = FINANCEIRO_MONTH_NAMES[m - 1].slice(0, 3);
+        cell.appendChild(mLabel);
+        var vLabel = document.createElement("span");
+        vLabel.className = "ponto-year-cell-val";
+        if (isFuture || val === null || val === undefined) {
+          vLabel.textContent = "–";
+        } else {
+          vLabel.textContent = pontoFormatSaldoMin(val);
+          if (val > 0) vLabel.classList.add("ponto-saldo-positivo");
+          if (val < 0) vLabel.classList.add("ponto-saldo-negativo");
+        }
+        cell.appendChild(vLabel);
+        if (!isFuture) {
+          (function (targetMonth) {
+            cell.addEventListener("click", function () { changeMonth(targetMonth); });
+          })(monthStr);
+        }
+        yearGridEl.appendChild(cell);
+      }
+    }
+
+    // atualiza o cache do mês EM TELA a partir do que já está em memória
+    // (grátis, sem fetch — chamado a cada edição de dia) e garante que os
+    // outros meses do ano já tenham sido buscados pelo menos 1 vez nesta
+    // sessão (sem refazer fetch de um mês que já está no cache).
+    function ensureYearSummary() {
+      yearCache[state.month] = pontoComputeMonthSaldoMin(Object.keys(state.days).map(function (k) { return state.days[k]; }), state.cargaHoraria);
+      renderYearGrid();
+      var year = Number(state.month.split("-")[0]);
+      var pending = [];
+      for (var m = 1; m <= 12; m++) {
+        var monthStr = year + "-" + pontoPad2(m);
+        if (monthStr === state.month) continue;
+        if (pontoMonthIsFuture(monthStr)) { yearCache[monthStr] = null; continue; }
+        if (yearCache.hasOwnProperty(monthStr)) continue;
+        pending.push(monthStr);
+      }
+      if (!pending.length) return;
+      Promise.all(pending.map(function (monthStr) {
+        return authFetch(cfg.templateWorkerUrl + "/ponto?month=" + encodeURIComponent(monthStr))
+          .then(handle401).then(function (res) { return res.json(); }).then(function (data) {
+            var carga = (data.cargaHoraria === 6 || data.cargaHoraria === 8) ? data.cargaHoraria : 8;
+            yearCache[monthStr] = pontoComputeMonthSaldoMin(data.days || [], carga);
+          }).catch(function () { yearCache[monthStr] = null; });
+      })).then(renderYearGrid);
     }
 
     function saveMesConfig(carga) {
@@ -16904,8 +17014,24 @@
           sOut.type = "time";
           sOut.className = "ponto-pair-input";
           sOut.value = p.saida || "";
-          sOut.addEventListener("change", function () { p.saida = sOut.value || ""; persist(); });
+          sOut.addEventListener("change", function () {
+            p.saida = sOut.value || "";
+            semParHint.style.display = (PONTO_HORA_REGEX.test(p.entrada || "") && !sOut.value) ? "" : "none";
+            persist();
+          });
           row.appendChild(sOut);
+          // "sem par" (pedido do Georges — esqueceu de bater a saída de
+          // um turno): deixar a saída em branco já é suportado — esse
+          // aviso só deixa isso visível/claro na própria linha, mesmo
+          // padrão "--:-- sem par" que o sistema da PMF usa.
+          var semParHint = document.createElement("span");
+          semParHint.className = "ponto-pair-sem-par";
+          semParHint.textContent = "sem par";
+          semParHint.style.display = (PONTO_HORA_REGEX.test(p.entrada || "") && !p.saida) ? "" : "none";
+          row.appendChild(semParHint);
+          eIn.addEventListener("change", function () {
+            semParHint.style.display = (PONTO_HORA_REGEX.test(eIn.value || "") && !sOut.value) ? "" : "none";
+          });
           var rmBtn = document.createElement("button");
           rmBtn.type = "button";
           rmBtn.className = "ponto-pair-remove-btn";
@@ -16959,17 +17085,42 @@
         var rowEl = document.createElement("div");
         rowEl.className = "ponto-row" + (isWeekend ? " ponto-row-weekend" : "") + (dayData.feriado ? " ponto-row-feriado" : "");
 
+        // "dia" — separado em dois blocos visuais (pedido do Georges:
+        // "indicando o dia da semana de forma mais separada em relação ao
+        // dia do mês"): dia da semana vira uma pastilha pequena/muted no
+        // topo, dia/mês fica grande embaixo — não é mais 2 spans soltos.
         var dateCell = document.createElement("div");
         dateCell.className = "ponto-cell ponto-cell-date";
-        dateCell.innerHTML = '<span class="ponto-weekday">' + PONTO_WEEKDAY_SHORT[weekday] + '</span><span class="ponto-day">' + pontoPad2(day) + "/" + pontoPad2(monthIdx0 + 1) + "</span>";
-        if (dayData.pendenteAprovacao) {
-          var pendenteBadge = document.createElement("span");
-          pendenteBadge.className = "ponto-pendente-badge";
-          pendenteBadge.title = "Tem ajuste/esquecimento aguardando aprovação da chefia (ver Aprovação de Abonos na PMF)";
-          pendenteBadge.textContent = "⏳ Aguarda aprovação";
-          dateCell.appendChild(pendenteBadge);
-        }
+        var weekdayChip = document.createElement("span");
+        weekdayChip.className = "ponto-weekday";
+        weekdayChip.textContent = PONTO_WEEKDAY_SHORT[weekday];
+        dateCell.appendChild(weekdayChip);
+        var dayChip = document.createElement("span");
+        dayChip.className = "ponto-day";
+        dayChip.textContent = pontoPad2(day) + "/" + pontoPad2(monthIdx0 + 1);
+        dateCell.appendChild(dayChip);
         rowEl.appendChild(dateCell);
+
+        // "status" — pedido do Georges: padronizar onde ficam os avisos
+        // (Ímpar / Aguarda aprovação), que antes apareciam em lugares
+        // diferentes (um colado no Trabalhadas, outro na Data). Agora os
+        // dois SEMPRE moram aqui, empilhados, na mesma coluna — mesmo
+        // quando vazia (mantém o alinhamento das linhas sem badge).
+        var statusCell = document.createElement("div");
+        statusCell.className = "ponto-cell ponto-cell-status";
+        var imparBadgeEl = document.createElement("span");
+        imparBadgeEl.className = "ponto-impar-badge";
+        imparBadgeEl.title = "Tem horário sem par (sem saída registrada)";
+        imparBadgeEl.textContent = "⚠ Ímpar";
+        imparBadgeEl.style.display = "none";
+        statusCell.appendChild(imparBadgeEl);
+        var pendenteBadgeEl = document.createElement("span");
+        pendenteBadgeEl.className = "ponto-pendente-badge";
+        pendenteBadgeEl.title = "Tem ajuste/esquecimento aguardando aprovação da chefia (ver Aprovação de Abonos na PMF)";
+        pendenteBadgeEl.textContent = "⏳ Aguarda aprovação";
+        pendenteBadgeEl.style.display = dayData.pendenteAprovacao ? "" : "none";
+        statusCell.appendChild(pendenteBadgeEl);
+        rowEl.appendChild(statusCell);
 
         var feriadoCell = document.createElement("div");
         feriadoCell.className = "ponto-cell ponto-cell-feriado";
@@ -17014,9 +17165,8 @@
           var esperadoMin = pontoDiaEsperadoMin(weekday, feriadoNow, state.cargaHoraria);
           var saldoMin = pontoDiaSaldoMin(trabalhadasMin, esperadoMin);
           var impar = pontoDiaImpar(cleanPairs);
-          trabalhadasCell.innerHTML = hasRecord
-            ? pontoFormatMin(trabalhadasMin) + (impar ? ' <span class="ponto-impar-badge" title="Tem horário sem par (sem saída registrada)">⚠ Ímpar</span>' : "")
-            : "—";
+          trabalhadasCell.textContent = hasRecord ? pontoFormatMin(trabalhadasMin) : "—";
+          imparBadgeEl.style.display = (hasRecord && impar) ? "" : "none";
           saldoCell.textContent = hasRecord ? pontoFormatSaldoMin(saldoMin) : "—";
           saldoCell.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
           if (hasRecord && saldoMin > 0) saldoCell.classList.add("ponto-saldo-positivo");
@@ -17039,16 +17189,7 @@
 
         pendenteCheck.addEventListener("change", function () {
           pairsApi.setPendente(pendenteCheck.checked);
-          var existingBadge = dateCell.querySelector(".ponto-pendente-badge");
-          if (pendenteCheck.checked && !existingBadge) {
-            var badge = document.createElement("span");
-            badge.className = "ponto-pendente-badge";
-            badge.title = "Tem ajuste/esquecimento aguardando aprovação da chefia (ver Aprovação de Abonos na PMF)";
-            badge.textContent = "⏳ Aguarda aprovação";
-            dateCell.appendChild(badge);
-          } else if (!pendenteCheck.checked && existingBadge) {
-            existingBadge.remove();
-          }
+          pendenteBadgeEl.style.display = pendenteCheck.checked ? "" : "none";
         });
 
         var rowSaldoMin = updateCalcCells(pairsApi, dayData.feriado);
@@ -17077,6 +17218,7 @@
         summarySaldoEl.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
         if (any && total > 0) summarySaldoEl.classList.add("ponto-saldo-positivo");
         if (any && total < 0) summarySaldoEl.classList.add("ponto-saldo-negativo");
+        ensureYearSummary();
       }
       renderSummaryOnly();
     }

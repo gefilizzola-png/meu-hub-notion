@@ -7109,23 +7109,47 @@ html, body {
 .ponto-row-feriado { background: #fff8ea; border-color: #f3e3b8; }
 
 .ponto-cell { display: flex; flex-direction: column; }
+
+/* "dia" — pedido do Georges: separar visualmente o dia da semana do
+   dia/mês. A semana vira uma pastilha pequena (fundo tintado), o dia/mês
+   fica grande e forte logo abaixo — não são mais 2 textos soltos juntos. */
 .ponto-cell-date {
-  min-width: 56px;
+  min-width: 62px;
   flex-shrink: 0;
   align-items: flex-start;
-  gap: 1px;
+  gap: 4px;
 }
 .ponto-weekday {
-  font-size: 11px;
-  color: #9a988e;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.ponto-day {
-  font-size: 14px;
+  display: inline-block;
+  font-size: 10px;
   font-weight: 700;
-  color: #3a3a35;
+  color: #847f73;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f0efe9;
+  border-radius: 5px;
+  padding: 2px 6px;
 }
+.ponto-row-weekend .ponto-weekday { background: #eee6d8; color: #8a7a4f; }
+.ponto-row-feriado .ponto-weekday { background: #f3e3b8; color: #8a6d1f; }
+.ponto-day {
+  font-size: 16px;
+  font-weight: 800;
+  color: #2f2e2a;
+  letter-spacing: -0.01em;
+}
+
+/* "status" — pedido do Georges: Ímpar e Aguarda aprovação sempre no
+   MESMO lugar (antes um ficava colado no Trabalhadas e o outro na Data).
+   Coluna própria, estreita, sempre presente (mesmo vazia) pra não
+   desalinhar as linhas sem badge. */
+.ponto-cell-status {
+  min-width: 118px;
+  flex-shrink: 0;
+  justify-content: center;
+  gap: 3px;
+}
+
 .ponto-cell-feriado {
   min-width: 140px;
   flex-shrink: 0;
@@ -7153,26 +7177,40 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
+/* par entrada/saída — visual mais leve/moderno (pedido do Georges: "as
+   caixinhas de cada horário ficaram bem feias"): sem caixa pesada em
+   volta, cada <input type="time"> com seu próprio contorno fino
+   arredondado, "x" só aparece ao passar o mouse/toque na linha. */
 .ponto-pair {
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: #f7f6f2;
-  border-radius: 8px;
-  padding: 3px 5px;
+  gap: 5px;
+  position: relative;
 }
 .ponto-pair-input {
-  border: 0.5px solid #eeede9;
-  border-radius: 6px;
-  padding: 3px 4px;
+  border: 1px solid #e4e2db;
+  border-radius: 8px;
+  padding: 5px 7px;
   font-size: 13px;
   width: 92px;
   background: #fff;
   color: #3a3a35;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.ponto-pair-sep { color: #9a988e; font-size: 12px; }
+.ponto-pair-input:focus {
+  outline: none;
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
+}
+.ponto-pair-sep { color: #c7c5bc; font-size: 13px; }
+.ponto-pair-sem-par {
+  font-size: 10px;
+  font-weight: 600;
+  color: #b8860b;
+  white-space: nowrap;
+}
 .ponto-pair-remove-btn {
   display: flex;
   align-items: center;
@@ -7182,10 +7220,14 @@ html, body {
   border-radius: 5px;
   border: none;
   background: transparent;
-  color: #9a988e;
+  color: #c7c5bc;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
+.ponto-pair:hover .ponto-pair-remove-btn,
+.ponto-pair-remove-btn:focus { opacity: 1; }
 .ponto-pair-remove-btn:hover { background: #fdeeec; color: #c0392b; }
 .ponto-pair-add-btn {
   display: flex;
@@ -7193,7 +7235,7 @@ html, body {
   gap: 3px;
   padding: 5px 10px;
   border-radius: 8px;
-  border: 0.5px dashed #d8d6cd;
+  border: 1px dashed #d8d6cd;
   background: transparent;
   color: #6b6a63;
   font-size: 12px;
@@ -7215,27 +7257,70 @@ html, body {
 }
 .ponto-cell-saldo.ponto-saldo-positivo { color: #2f8a4b; }
 .ponto-cell-saldo.ponto-saldo-negativo { color: #c0392b; }
-.ponto-impar-badge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 700;
-  color: #b8860b;
-  background: #fff3d6;
-  border-radius: 5px;
-  padding: 1px 5px;
-  margin-left: 3px;
-  white-space: nowrap;
-}
+.ponto-impar-badge,
 .ponto-pendente-badge {
   display: inline-block;
   font-size: 10px;
   font-weight: 700;
+  border-radius: 5px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  text-align: left;
+}
+.ponto-impar-badge {
+  color: #b8860b;
+  background: #fff3d6;
+}
+.ponto-pendente-badge {
   color: #2a6f97;
   background: #e5f2fa;
-  border-radius: 5px;
-  padding: 1px 5px;
-  white-space: nowrap;
 }
+
+/* ---- Resumo Anual (grid Jan-Dez) ---- */
+.ponto-year-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ponto-year-summary-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b6a63;
+}
+.ponto-year-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.ponto-year-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 10px;
+  border: 1px solid #eeede9;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.08s ease;
+}
+.ponto-year-cell:hover:not(:disabled) { border-color: #4a90d9; background: #f5f9fd; }
+.ponto-year-cell:disabled { cursor: default; opacity: 0.45; }
+.ponto-year-cell.active { border-color: #4a90d9; background: #eaf3fc; }
+.ponto-year-cell-month {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9a988e;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.ponto-year-cell-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #3a3a35;
+}
+.ponto-year-cell-val.ponto-saldo-positivo { color: #2f8a4b; }
+.ponto-year-cell-val.ponto-saldo-negativo { color: #c0392b; }
 
 .ponto-import-section {
   border: 0.5px dashed #d8d6cd;
@@ -7286,7 +7371,9 @@ html, body {
 
 @media (max-width: 640px) {
   .ponto-row { flex-direction: column; align-items: stretch; gap: 6px; }
-  .ponto-cell-feriado { justify-content: flex-start; }
+  .ponto-cell-feriado,
+  .ponto-cell-status { justify-content: flex-start; }
   .ponto-cell-trabalhadas,
   .ponto-cell-saldo { align-items: flex-start; text-align: left; }
+  .ponto-year-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
