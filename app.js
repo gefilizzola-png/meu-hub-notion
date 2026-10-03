@@ -16883,12 +16883,12 @@
     importPanel.style.display = "none";
     var importHint = document.createElement("p");
     importHint.className = "ponto-import-hint";
-    importHint.textContent = "Cole aqui o JSON com os dias do mês (formato {month, cargaHoraria, days:[...]}) e clique em Importar. Útil pra lançar um mês inteiro de uma vez a partir do que aparece no sistema da PMF. Cada par aceita \"pendenteEntrada\"/\"pendenteSaida\" (true/false) pra marcar um horário específico como aguardando aprovação — inclusive um ajuste que só existe na tela de Aprovação de Abonos e ainda não tem valor de saída confirmado (nesse caso, deixe \"saida\" ausente e \"pendenteSaida\":true).";
+    importHint.textContent = "Cole aqui o JSON com os dias do mês (formato {month, cargaHoraria, days:[...]}) e clique em Importar. Útil pra lançar um mês inteiro de uma vez a partir do que aparece no sistema da PMF. Cada metade do par aceita \"entradaAjuste\"/\"saidaAjuste\" (true/false) + \"...AjusteInfo\" (8 campos, status \"Aprovado\" ou \"Aguardando Parecer\") pra marcar um horário específico como vindo de um ajuste da Aprovação de Abonos — inclusive um ajuste sem valor de saída confirmado ainda (deixe \"saida\" ausente e \"saidaAjuste\":true). \"pmfNota\" (dia) anota feriado trabalhado/divergência de cálculo com a PMF (campo \"rotulo\" é o texto do badge). \"creditoAjuste\"/\"creditoAjusteInfo\" (dia) é o abono \"Horas Faltantes\" — crédito de horas sem horário batido.";
     importPanel.appendChild(importHint);
     var importTextarea = document.createElement("textarea");
     importTextarea.className = "ponto-import-textarea";
     importTextarea.rows = 6;
-    importTextarea.placeholder = '{"month":"2026-09","cargaHoraria":8,"days":[{"date":"2026-09-01","pairs":[{"entrada":"10:37","saida":"13:27"},{"entrada":"14:30","saidaAjuste":true,"saidaAjusteInfo":{"motivo":"68 - Incluído/Alt pela Chefia","tipoPeriodo":"Único Horário","status":"Aguardando Parecer"}}],"feriado":false},{"date":"2026-09-02","pairs":[{"entrada":"10:00","saida":"12:00"},{"entrada":"13:00","saida":"19:00","saidaAjuste":true,"saidaAjusteInfo":{"motivo":"68 - Incluído/Alt pela Chefia","tipoPeriodo":"Data","dataInicio":"02/09/2026","observacao":"Dispensado pela chefia.","status":"Aprovado"}}],"feriado":false},{"date":"2026-09-03","pairs":[{"entrada":"07:05","saida":"10:00"}],"feriado":"feriado","pmfNota":{"tipo":"feriado_trabalhado","pmfValor":"00:00","observacao":"PMF não considerou essas horas no saldo dela."}}]}';
+    importTextarea.placeholder = '{"month":"2026-06","cargaHoraria":8,"days":[{"date":"2026-06-01","pairs":[{"entrada":"10:37","saida":"13:27"},{"entrada":"14:30","saidaAjuste":true,"saidaAjusteInfo":{"motivo":"68 - Incluído/Alt pela Chefia","tipoPeriodo":"Único Horário","status":"Aguardando Parecer"}}],"feriado":"util"},{"date":"2026-06-02","pairs":[{"entrada":"10:00","saida":"12:00"},{"entrada":"13:00","saida":"19:00","saidaAjuste":true,"saidaAjusteInfo":{"motivo":"68 - Incluído/Alt pela Chefia","tipoPeriodo":"Data","dataInicio":"02/06/2026","observacao":"Dispensado pela chefia.","status":"Aprovado"}}],"feriado":"util"},{"date":"2026-06-03","pairs":[{"entrada":"07:05","saida":"10:00"}],"feriado":"feriado","pmfNota":{"tipo":"feriado_trabalhado","rotulo":"Feriado trabalhado","pmfValor":"00:00","diferenca":"+02:55"}},{"date":"2026-06-29","pairs":[{"entrada":"08:53","saida":"12:45"}],"creditoAjuste":"04:08","creditoAjusteInfo":{"motivo":"68 - Incluído/Alt pela Chefia","tipoPeriodo":"Horas Faltantes","dataInicio":"29/06/2026","observacao":"Instrução normativa - Jogo do Brasil","status":"Aprovado"},"feriado":"util"}]}';
     importPanel.appendChild(importTextarea);
     var importBtn = document.createElement("button");
     importBtn.type = "button";
@@ -17075,14 +17075,16 @@
     // 100% derivada no worker.js (nunca enviada daqui). Devolve a promise
     // pra quem chamou poder reagir (ex: recolorir a célula só depois de
     // confirmar salvo).
-    function saveDia(dateStr, pairs, feriado, pmfNota) {
+    function saveDia(dateStr, pairs, feriado, pmfNota, creditoAjuste, creditoAjusteInfo) {
       return authFetch(cfg.templateWorkerUrl + "/ponto-dia?date=" + encodeURIComponent(dateStr), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pairs: pairs,
           feriado: feriado,
-          pmfNota: pmfNota || null
+          pmfNota: pmfNota || null,
+          creditoAjuste: creditoAjuste || null,
+          creditoAjusteInfo: creditoAjuste ? (creditoAjusteInfo || null) : null
         })
       }).then(handle401).then(function (res) { return res.json(); }).then(function (data) {
         if (data.deleted) { delete state.days[dateStr]; }
@@ -17142,7 +17144,7 @@
         }
         var d = parsed.days[i] || {};
         importStatusEl.textContent = "Importando " + (i + 1) + "/" + total + " (" + (d.date || "?") + ")…";
-        saveDia(d.date, Array.isArray(d.pairs) ? d.pairs : [], d.feriado || false, d.pmfNota || null)
+        saveDia(d.date, Array.isArray(d.pairs) ? d.pairs : [], d.feriado || false, d.pmfNota || null, d.creditoAjuste || null, d.creditoAjusteInfo || null)
           .then(function () { done++; })
           .catch(function () { erros++; })
           .finally(function () { next(i + 1); });
@@ -17271,10 +17273,20 @@
       // usado com dado real) — abono aprovado agora é derivado por
       // horário (ver entradaAjuste/saidaAjuste acima).
       var pmfNotaState = dayData.pmfNota || null;
+      // "creditoAjuste"/"creditoAjusteInfo" (pedido do Georges, 2ª rodada
+      // CapturaPonto.py) — abono "Horas Faltantes": crédito de horas no
+      // nível do DIA, sem horário de início/fim (ex: 29/06 — PMF credita
+      // 04:08 que faltavam pra carga, sem nenhuma batida cobrindo esse
+      // tempo). creditoAjusteState guarda a DURAÇÃO ("HH:MM", não um
+      // horário do relógio); creditoAjusteInfoState reaproveita os
+      // mesmos 8 campos dos outros ajustes (ver PONTO_AJUSTE_INFO_FIELDS).
+      // Ver updateCalcCells — soma esse valor em Horas Trabalhadas.
+      var creditoAjusteState = (typeof dayData.creditoAjuste === "string" && dayData.creditoAjuste) ? dayData.creditoAjuste : null;
+      var creditoAjusteInfoState = dayData.creditoAjusteInfo || null;
 
       function persist() {
         var clean = currentCleanPairs();
-        saveDia(dateStr, clean, feriadoState, pmfNotaState).then(function () {
+        saveDia(dateStr, clean, feriadoState, pmfNotaState, creditoAjusteState, creditoAjusteInfoState).then(function () {
           onLocalChange();
         }).catch(function () {
           statusEl.textContent = "Erro ao salvar " + dateStr + ".";
@@ -17529,12 +17541,108 @@
           renderPairs();
         });
         pairsWrap.appendChild(addBtn);
+
+        // "Crédito" (Horas Faltantes) — ver creditoAjusteState acima.
+        // Linha própria, fora da lista de pares/horários (não tem
+        // relação de ordem cronológica com eles).
+        var creditoRow = document.createElement("div");
+        creditoRow.className = "ponto-pair ponto-credito-row";
+        pairsWrap.appendChild(creditoRow);
+        var creditoDetailsPanel = document.createElement("div");
+        creditoDetailsPanel.className = "ponto-pair-details";
+        creditoDetailsPanel.style.display = "none";
+        pairsWrap.appendChild(creditoDetailsPanel);
+
+        function renderCreditoDetailsPanel() {
+          creditoDetailsPanel.innerHTML = "";
+          creditoDetailsPanel.appendChild(buildInfoBlock(
+            "Crédito (" + (creditoAjusteState || "–") + ") — Horas Faltantes",
+            function () { return creditoAjusteInfoState; },
+            function (v) { creditoAjusteInfoState = v; renderCreditoRow(); }
+          ));
+        }
+
+        function renderCreditoRow() {
+          creditoRow.innerHTML = "";
+          if (creditoAjusteState == null) {
+            creditoDetailsPanel.style.display = "none";
+            var addCreditoBtn = document.createElement("button");
+            addCreditoBtn.type = "button";
+            addCreditoBtn.className = "ponto-pair-add-btn ponto-credito-add-btn";
+            addCreditoBtn.innerHTML = '<i class="ti ti-plus"></i> Crédito (Horas Faltantes)';
+            addCreditoBtn.title = "Abono 'Horas Faltantes' da PMF — crédito de horas sem horário batido (ex: PMF credita o que falta pra carga)";
+            addCreditoBtn.addEventListener("click", function () {
+              creditoAjusteState = "00:00";
+              creditoAjusteInfoState = { tipoPeriodo: "Horas Faltantes", status: "Aguardando Parecer" };
+              renderCreditoRow();
+              persist();
+            });
+            creditoRow.appendChild(addCreditoBtn);
+            return;
+          }
+          var label = document.createElement("span");
+          label.className = "ponto-pair-turno-label";
+          label.textContent = "Crédito";
+          creditoRow.appendChild(label);
+          var timesRow = document.createElement("div");
+          timesRow.className = "ponto-pair-times";
+          creditoRow.appendChild(timesRow);
+          var inp = document.createElement("input");
+          inp.type = "text";
+          inp.className = "ponto-pair-input ponto-credito-input";
+          inp.placeholder = "HH:MM";
+          inp.value = creditoAjusteState || "";
+          inp.addEventListener("blur", function () {
+            if (PONTO_HORA_REGEX.test(inp.value) && inp.value !== creditoAjusteState) {
+              creditoAjusteState = inp.value;
+              persist();
+            } else {
+              inp.value = creditoAjusteState || "";
+            }
+          });
+          timesRow.appendChild(inp);
+
+          var ajusteBadge = document.createElement("span");
+          var aprovado = pontoAjusteEhAprovado(creditoAjusteInfoState);
+          ajusteBadge.className = "ponto-pair-pending-btn active " + (aprovado ? "ponto-ajuste-aprovado" : "ponto-ajuste-pendente");
+          ajusteBadge.textContent = aprovado ? "✅" : "⏳";
+          ajusteBadge.title = aprovado ? "Crédito já Aprovado" : "Crédito Aguardando Parecer (ver Status no (i))";
+          timesRow.appendChild(ajusteBadge);
+
+          var detailsBtn = document.createElement("button");
+          detailsBtn.type = "button";
+          detailsBtn.className = "ponto-pair-details-btn";
+          detailsBtn.innerHTML = '<i class="ti ti-info-circle"></i>';
+          detailsBtn.title = "Ver/editar detalhes do crédito (Aprovação de Abonos)";
+          detailsBtn.addEventListener("click", function () {
+            renderCreditoDetailsPanel();
+            creditoDetailsPanel.style.display = creditoDetailsPanel.style.display === "none" ? "" : "none";
+          });
+          timesRow.appendChild(detailsBtn);
+
+          var rmBtn = document.createElement("button");
+          rmBtn.type = "button";
+          rmBtn.className = "ponto-pair-remove-btn";
+          rmBtn.innerHTML = '<i class="ti ti-x"></i>';
+          rmBtn.title = "Remover crédito";
+          rmBtn.addEventListener("click", function () {
+            creditoAjusteState = null;
+            creditoAjusteInfoState = null;
+            renderCreditoRow();
+            persist();
+          });
+          timesRow.appendChild(rmBtn);
+          if (creditoDetailsPanel.style.display !== "none") renderCreditoDetailsPanel();
+        }
+        renderCreditoRow();
       }
       renderPairs();
 
       return {
         el: pairsWrap,
         getCleanPairs: currentCleanPairs,
+        getCreditoAjuste: function () { return creditoAjusteState; },
+        getCreditoAjusteInfo: function () { return creditoAjusteInfoState; },
         getFeriado: function () { return feriadoState; },
         setFeriado: function (v) { feriadoState = pontoNormalizeFeriado(v); persist(); },
         getPmfNota: function () { return pmfNotaState; },
@@ -17683,8 +17791,14 @@
         // soma no saldo dela) e divergência de cálculo da própria PMF.
         // Diferente do Abono Aprovado acima, ESTE é editável aqui (não
         // por horário) — normalmente vem pronto do CapturaPonto.py, mas
-        // dá pra ajustar/remover na mão.
-        var PONTO_PMF_NOTA_LABEL = { feriado_trabalhado: "🏖️ Feriado trabalhado", divergencia_calculo: "⚠️ Divergência PMF" };
+        // dá pra ajustar/remover na mão. "rotulo" (pedido do Georges, 2ª
+        // rodada) é o texto PRONTO (até 24 caracteres, um dos 4: "Feriado
+        // trabalhado"/"Facultativo trab."/"Tolerância 5 min"/"Cálculo
+        // PMF") que vira o badge — NUNCA mais um mapa fixo por tipo (a
+        // mesma tipo pode ter rótulos diferentes, ex: feriado x
+        // facultativo trabalhado). "observacao" não existe mais em
+        // pmfNota (ver sanitizePontoPmfNota no worker.js) — texto livre
+        // de ajuste agora é só em entradaAjusteInfo/saidaAjusteInfo.
         var pmfNotaBadgeEl = document.createElement("span");
         pmfNotaBadgeEl.className = "ponto-pmfnota-badge";
         pmfNotaBadgeEl.style.display = "none";
@@ -17743,9 +17857,9 @@
           block.appendChild(tipoWrap);
 
           [
+            { key: "rotulo", label: "Rótulo (badge, até 24 caracteres)" },
             { key: "pmfValor", label: "Valor da PMF" },
-            { key: "diferenca", label: "Diferença" },
-            { key: "observacao", label: "Observação" }
+            { key: "diferenca", label: "Diferença (Meu Hub − PMF)" }
           ].forEach(function (f) {
             var fieldWrap = document.createElement("label");
             fieldWrap.className = "ponto-pair-details-field";
@@ -17792,7 +17906,7 @@
         function refreshPmfNotaUI() {
           var nota = pairsApi.getPmfNota();
           pmfNotaBadgeEl.style.display = nota ? "" : "none";
-          pmfNotaBadgeEl.textContent = nota ? (PONTO_PMF_NOTA_LABEL[nota.tipo] || "ℹ️ Nota PMF") : "";
+          pmfNotaBadgeEl.textContent = nota ? (nota.rotulo || "ℹ️ Nota PMF") : "";
           pmfNotaAddBtn.style.display = nota ? "none" : "";
           pmfNotaDetailsBtn.style.display = nota ? "" : "none";
           if (!nota) pmfNotaPanel.style.display = "none";
@@ -17818,17 +17932,23 @@
         function updateCalcCells(pairsEditorApi, feriadoNow) {
           var cleanPairs = pairsEditorApi.getCleanPairs();
           var pmfNota = pairsEditorApi.getPmfNota();
-          var hasRecord = cleanPairs.length > 0 || feriadoNow !== "util" || !!pmfNota;
-          var trabalhadasMin = pontoDiaTrabalhadasMin(cleanPairs);
+          var creditoAjuste = pairsEditorApi.getCreditoAjuste();
+          var creditoAjusteInfo = pairsEditorApi.getCreditoAjusteInfo();
+          var hasRecord = cleanPairs.length > 0 || feriadoNow !== "util" || !!pmfNota || !!creditoAjuste;
+          // "Horas Faltantes" (creditoAjuste) soma direto em trabalhadas —
+          // é exatamente o que a PMF faz (credita o que falta pra carga,
+          // sem bater ponto) — ver sanitizePontoCreditoValor no worker.js.
+          var trabalhadasMin = pontoDiaTrabalhadasMin(cleanPairs) + (creditoAjuste ? (pontoHoraToMin(creditoAjuste) || 0) : 0);
           var esperadoMin = pontoDiaEsperadoMin(weekday, feriadoNow, state.cargaHoraria);
           var saldoMin = pontoDiaSaldoMin(trabalhadasMin, esperadoMin);
           var impar = pontoDiaImpar(cleanPairs);
           var pendente = cleanPairs.some(function (p) {
             return (p.entradaAjuste && !pontoAjusteEhAprovado(p.entradaAjusteInfo)) ||
               (p.saidaAjuste && !pontoAjusteEhAprovado(p.saidaAjusteInfo));
-          });
+          }) || (!!creditoAjuste && !pontoAjusteEhAprovado(creditoAjusteInfo));
           // coleta os infos distintos de ajuste já Aprovado no dia (pode
-          // ter mais de 1 — dedupe por JSON.stringify).
+          // ter mais de 1 — dedupe por JSON.stringify). O crédito de
+          // Horas Faltantes entra na mesma coleção quando Aprovado.
           var aprovadosInfos = [], aprovadosSeen = {};
           cleanPairs.forEach(function (p) {
             [["entradaAjuste", "entradaAjusteInfo"], ["saidaAjuste", "saidaAjusteInfo"]].forEach(function (pairKeys) {
@@ -17838,6 +17958,10 @@
               }
             });
           });
+          if (creditoAjuste && pontoAjusteEhAprovado(creditoAjusteInfo)) {
+            var creditoKey = JSON.stringify(creditoAjusteInfo || {});
+            if (!aprovadosSeen[creditoKey]) { aprovadosSeen[creditoKey] = true; aprovadosInfos.push(creditoAjusteInfo || {}); }
+          }
           trabalhadasCell.textContent = hasRecord ? pontoFormatMin(trabalhadasMin) : "—";
           imparBadgeEl.style.display = (hasRecord && impar) ? "" : "none";
           pendenteBadgeEl.style.display = pendente ? "" : "none";

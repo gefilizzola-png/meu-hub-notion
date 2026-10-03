@@ -7477,6 +7477,15 @@ html, body {
   cursor: pointer;
 }
 .ponto-pair-add-btn:hover { background: #f7f6f2; color: #4a90d9; border-color: #4a90d9; }
+/* "Crédito (Horas Faltantes)" (pedido do Georges, 2ª rodada
+   CapturaPonto.py) — abono de DIA sem horário (ex: 29/06, PMF credita
+   04:08 que faltam pra carga). Mesmo espírito visual do "+ Abono
+   Aprovado"/"+ Nota PMF": botão discreto quando vazio, vira linha
+   editável quando preenchido — reaproveita .ponto-pair-input/-pending-
+   btn/-details-btn/-remove-btn (só o texto é livre, não um horário). */
+.ponto-credito-add-btn { border-color: #d9c38a; color: #8a6d2f; }
+.ponto-credito-add-btn:hover { background: #fdf6ea; color: #8a6d2f; border-color: #c7a855; }
+.ponto-credito-input { width: 70px; text-align: center; }
 
 .ponto-cell-trabalhadas,
 .ponto-cell-saldo {
