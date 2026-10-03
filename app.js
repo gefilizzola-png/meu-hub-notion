@@ -16686,9 +16686,15 @@
     wrap.style.display = "none";
     container.appendChild(wrap);
 
-    // ---- navegação de mês (mesmo padrão visual de Financeiro — classes
-    // financeiro-month-* reaproveitadas, são só CSS genérico de navegação
-    // por mês, sem nada específico de dinheiro). ----
+    // ---- topo reorganizado (pedido do Georges, rodada 4: "o mês, botões
+    // pra alternar o mês e a carga horária do mês ficam organizados na
+    // mesma altura, de forma mais bonita") — nav de mês + carga horária
+    // na MESMA linha (antes eram 2 linhas empilhadas), mesmo padrão
+    // ".financeiro-top-row" (space-between, wrap) já usado em Financeiro/
+    // Transações. ----
+    var topRow = document.createElement("div");
+    topRow.className = "financeiro-top-row ponto-top-row";
+
     var nav = document.createElement("div");
     nav.className = "financeiro-month-nav";
     var prevBtn = document.createElement("button");
@@ -16708,7 +16714,7 @@
     nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
     nextBtn.addEventListener("click", function () { changeMonth(financeiroShiftMonth(state.month, 1)); });
     nav.appendChild(nextBtn);
-    wrap.appendChild(nav);
+    topRow.appendChild(nav);
 
     // ---- carga horária da competência (6h x 8h — pedido do Georges:
     // "estou fazendo ampliação de jornada... mas como em breve devo
@@ -16736,42 +16742,18 @@
     carga8Btn.addEventListener("click", function () { saveMesConfig(8); });
     cargaRow.appendChild(carga6Btn);
     cargaRow.appendChild(carga8Btn);
-    wrap.appendChild(cargaRow);
+    topRow.appendChild(cargaRow);
+    wrap.appendChild(topRow);
 
-    // ---- "Importar mês (colar dados)" — seção recolhida por padrão, só
-    // pra alimentar vários dias de uma vez colando o JSON (ver
-    // importarMes acima). Fica escondida no uso do dia a dia (o normal é
-    // editar célula por célula). ----
-    var importSection = buildCollapsibleSection("Importar mês (colar dados)", false);
-    importSection.section.classList.add("ponto-import-section");
-    var importHint = document.createElement("p");
-    importHint.className = "ponto-import-hint";
-    importHint.textContent = "Cole aqui o JSON com os dias do mês (formato {month, cargaHoraria, days:[...]}) e clique em Importar. Útil pra lançar um mês inteiro de uma vez a partir do que aparece no sistema da PMF. Cada par aceita \"pendenteEntrada\"/\"pendenteSaida\" (true/false) pra marcar um horário específico como aguardando aprovação — inclusive um ajuste que só existe na tela de Aprovação de Abonos e ainda não tem valor de saída confirmado (nesse caso, deixe \"saida\" ausente e \"pendenteSaida\":true).";
-    importSection.body.appendChild(importHint);
-    var importTextarea = document.createElement("textarea");
-    importTextarea.className = "ponto-import-textarea";
-    importTextarea.rows = 6;
-    importTextarea.placeholder = '{"month":"2026-09","cargaHoraria":8,"days":[{"date":"2026-09-01","pairs":[{"entrada":"10:37","saida":"13:27"},{"entrada":"14:30","pendenteSaida":true}],"feriado":false,"pendenteAprovacao":false}]}';
-    importSection.body.appendChild(importTextarea);
-    var importBtn = document.createElement("button");
-    importBtn.type = "button";
-    importBtn.className = "ponto-import-btn";
-    importBtn.innerHTML = '<i class="ti ti-upload"></i> Importar';
-    importBtn.addEventListener("click", function () { importarMes(importTextarea.value); });
-    importSection.body.appendChild(importBtn);
-    var importStatusEl = document.createElement("span");
-    importStatusEl.className = "ponto-import-status";
-    importSection.body.appendChild(importStatusEl);
-    wrap.appendChild(importSection.section);
-
-    // ---- "Resumo Anual" (pedido do Georges): grid Jan-Dez do ano da
+    // ---- "Resumo Anual" (pedido do Georges, rodada 4: "coloque as
+    // caixas de horas extras dos meses no topo") — grid Jan-Dez do ano da
     // competência em tela, cada mês com o saldo total (ou "–" pra mês
     // futuro/sem nenhum dia lançado). Clique num mês passado/atual navega
-    // direto pra ele. Fica ACIMA do "Saldo acumulado no mês" (pedido
-    // explícito). O mês em tela é sempre recalculado localmente (sem
-    // fetch extra — os dias já estão em state.days); os outros 11 meses
-    // são buscados 1x por ano navegado e ficam em cache (yearCache) pra
-    // não refazer a mesma chamada toda hora que o Georges edita um dia. ----
+    // direto pra ele. Fica logo abaixo do topRow, bem no topo da página —
+    // o mês em tela é sempre recalculado localmente (sem fetch extra — os
+    // dias já estão em state.days); os outros 11 meses são buscados 1x
+    // por ano navegado e ficam em cache (yearCache) pra não refazer a
+    // mesma chamada toda hora que o Georges edita um dia. ----
     var yearSummaryWrap = document.createElement("div");
     yearSummaryWrap.className = "ponto-year-summary";
     var yearSummaryTitle = document.createElement("div");
@@ -16782,16 +16764,65 @@
     yearSummaryWrap.appendChild(yearGridEl);
     wrap.appendChild(yearSummaryWrap);
 
-    // ---- resumo do mês (saldo acumulado — só soma dias com algum
-    // registro salvo; dias ainda não preenchidos ficam fora da conta, pra
-    // não virar um "déficit" artificial de dias que o Georges simplesmente
-    // ainda não lançou). ----
+    // ---- resumo do mês (saldo acumulado — pedido do Georges: "vira uma
+    // caixinha totalizando parecida com a que temos em Contas Mensais") —
+    // reaproveita a família visual ".financeiro-summary-pill" em vez do
+    // texto solto anterior. Só soma dias com algum registro salvo; dias
+    // ainda não preenchidos ficam fora da conta, pra não virar um
+    // "déficit" artificial de dias que o Georges simplesmente ainda não
+    // lançou. ----
     var summaryRow = document.createElement("div");
-    summaryRow.className = "ponto-summary-row";
-    var summarySaldoEl = document.createElement("span");
-    summarySaldoEl.className = "ponto-summary-saldo";
+    summaryRow.className = "financeiro-summary ponto-summary-row";
+    var summarySaldoEl = document.createElement("div");
+    summarySaldoEl.className = "financeiro-summary-pill ponto-summary-saldo";
+    var summarySaldoLabel = document.createElement("span");
+    summarySaldoLabel.className = "financeiro-summary-label";
+    summarySaldoLabel.textContent = "Saldo acumulado no mês";
+    var summarySaldoValue = document.createElement("span");
+    summarySaldoValue.className = "financeiro-summary-value";
+    summarySaldoEl.appendChild(summarySaldoLabel);
+    summarySaldoEl.appendChild(summarySaldoValue);
     summaryRow.appendChild(summarySaldoEl);
     wrap.appendChild(summaryRow);
+
+    // ---- "Importar mês (colar dados)" — pedido do Georges, rodada 4:
+    // "vira um item menor... deixa apenas um botão que abre a caixa de
+    // texto e os botões" (antes era uma barra recolhível de largura
+    // total, ocupando espaço mesmo fechada). Agora é só um link/botão
+    // discreto; o painel (hint+textarea+Importar) só existe no DOM
+    // depois do 1º clique. ----
+    var importToggleBtn = document.createElement("button");
+    importToggleBtn.type = "button";
+    importToggleBtn.className = "ponto-import-toggle";
+    importToggleBtn.innerHTML = '<i class="ti ti-upload"></i> Importar mês (colar dados)';
+    wrap.appendChild(importToggleBtn);
+    var importPanel = document.createElement("div");
+    importPanel.className = "ponto-import-panel";
+    importPanel.style.display = "none";
+    var importHint = document.createElement("p");
+    importHint.className = "ponto-import-hint";
+    importHint.textContent = "Cole aqui o JSON com os dias do mês (formato {month, cargaHoraria, days:[...]}) e clique em Importar. Útil pra lançar um mês inteiro de uma vez a partir do que aparece no sistema da PMF. Cada par aceita \"pendenteEntrada\"/\"pendenteSaida\" (true/false) pra marcar um horário específico como aguardando aprovação — inclusive um ajuste que só existe na tela de Aprovação de Abonos e ainda não tem valor de saída confirmado (nesse caso, deixe \"saida\" ausente e \"pendenteSaida\":true).";
+    importPanel.appendChild(importHint);
+    var importTextarea = document.createElement("textarea");
+    importTextarea.className = "ponto-import-textarea";
+    importTextarea.rows = 6;
+    importTextarea.placeholder = '{"month":"2026-09","cargaHoraria":8,"days":[{"date":"2026-09-01","pairs":[{"entrada":"10:37","saida":"13:27"},{"entrada":"14:30","pendenteSaida":true}],"feriado":false,"pendenteAprovacao":false}]}';
+    importPanel.appendChild(importTextarea);
+    var importBtn = document.createElement("button");
+    importBtn.type = "button";
+    importBtn.className = "ponto-import-btn";
+    importBtn.innerHTML = '<i class="ti ti-upload"></i> Importar';
+    importBtn.addEventListener("click", function () { importarMes(importTextarea.value); });
+    importPanel.appendChild(importBtn);
+    var importStatusEl = document.createElement("span");
+    importStatusEl.className = "ponto-import-status";
+    importPanel.appendChild(importStatusEl);
+    wrap.appendChild(importPanel);
+    importToggleBtn.addEventListener("click", function () {
+      var open = importPanel.style.display !== "none";
+      importPanel.style.display = open ? "none" : "";
+      importToggleBtn.classList.toggle("active", !open);
+    });
 
     // ---- cabeçalho da tabela (pedido do Georges: "dê nome às colunas") —
     // estático, não precisa ser reconstruído a cada renderTable(). A
@@ -17147,13 +17178,21 @@
           var row = document.createElement("div");
           row.className = "ponto-pair";
 
-          // "Turno N" (pedido do Georges: nomear as colunas/caixinhas) —
-          // rótulo inline, derivado da posição do par depois de ordenado
-          // (não existe mais "slot fixo" pra numerar de outro jeito).
+          // "Turno N" (pedido do Georges: nomear as colunas/caixinhas, e
+          // depois — rodada 4 — "coloque turno 1, turno 2 acima dos
+          // horários inicial e final, de forma centralizada") — por isso
+          // mora direto em `row` (que agora é column), centralizado em
+          // cima; os horários/botões ficam todos dentro de `timesRow`,
+          // uma linha horizontal própria logo abaixo. Rótulo derivado da
+          // posição do par depois de ordenado (não existe mais "slot
+          // fixo" pra numerar de outro jeito).
           var turnoLabel = document.createElement("span");
           turnoLabel.className = "ponto-pair-turno-label";
           turnoLabel.textContent = "Turno " + (idx + 1);
           row.appendChild(turnoLabel);
+          var timesRow = document.createElement("div");
+          timesRow.className = "ponto-pair-times";
+          row.appendChild(timesRow);
 
           var eIn = document.createElement("input");
           eIn.type = "time";
@@ -17168,7 +17207,7 @@
             renderPairs();
             persist();
           });
-          row.appendChild(eIn);
+          timesRow.appendChild(eIn);
           // "⏳" clicável ao lado da ENTRADA — alterna pendente só deste
           // horário específico.
           var eInPendBtn = document.createElement("button");
@@ -17189,11 +17228,11 @@
             renderDetailsPanel();
             persist();
           });
-          row.appendChild(eInPendBtn);
+          timesRow.appendChild(eInPendBtn);
           var sep = document.createElement("span");
           sep.className = "ponto-pair-sep";
           sep.textContent = "–";
-          row.appendChild(sep);
+          timesRow.appendChild(sep);
           var sOut = document.createElement("input");
           sOut.type = "time";
           sOut.className = "ponto-pair-input";
@@ -17211,7 +17250,7 @@
             renderPairs();
             persist();
           });
-          row.appendChild(sOut);
+          timesRow.appendChild(sOut);
           // mesmo botão "⏳", agora pra SAÍDA — pode ficar marcado mesmo
           // com a saída ainda em branco (ajuste já submetido, só não tem
           // valor confirmado ainda) — é esse caso que faz pontoDiaImpar()
@@ -17240,13 +17279,13 @@
             renderDetailsPanel();
             persist();
           });
-          row.appendChild(sOutPendBtn);
+          timesRow.appendChild(sOutPendBtn);
           // "sem par" — mesmo padrão "--:-- sem par" do sistema da PMF.
           var semParHint = document.createElement("span");
           semParHint.className = "ponto-pair-sem-par";
           semParHint.textContent = "sem par";
           semParHint.style.display = (!saidaItem) ? "" : "none";
-          row.appendChild(semParHint);
+          timesRow.appendChild(semParHint);
           var rmBtn = document.createElement("button");
           rmBtn.type = "button";
           rmBtn.className = "ponto-pair-remove-btn";
@@ -17267,8 +17306,8 @@
           detailsBtn.className = "ponto-pair-details-btn";
           detailsBtn.innerHTML = '<i class="ti ti-info-circle"></i>';
           detailsBtn.title = "Ver/editar detalhes do ajuste (Motivo, Tipo Período, Observação, Status)";
-          row.appendChild(detailsBtn);
-          row.appendChild(rmBtn);
+          timesRow.appendChild(detailsBtn);
+          timesRow.appendChild(rmBtn);
           pairsWrap.appendChild(row);
 
           var detailsPanel = document.createElement("div");
@@ -17319,6 +17358,9 @@
           label.className = "ponto-pair-turno-label";
           label.textContent = "Novo";
           row.appendChild(label);
+          var draftTimesRow = document.createElement("div");
+          draftTimesRow.className = "ponto-pair-times";
+          row.appendChild(draftTimesRow);
           var inp = document.createElement("input");
           inp.type = "time";
           inp.className = "ponto-pair-input";
@@ -17328,11 +17370,11 @@
             renderPairs();
             persist();
           });
-          row.appendChild(inp);
+          draftTimesRow.appendChild(inp);
           var hint = document.createElement("span");
           hint.className = "ponto-pair-sem-par";
           hint.textContent = "digite o horário — entra ordenado sozinho";
-          row.appendChild(hint);
+          draftTimesRow.appendChild(hint);
           var rmBtn = document.createElement("button");
           rmBtn.type = "button";
           rmBtn.className = "ponto-pair-remove-btn";
@@ -17342,7 +17384,7 @@
             times.splice(times.indexOf(draft), 1);
             renderPairs();
           });
-          row.appendChild(rmBtn);
+          draftTimesRow.appendChild(rmBtn);
           pairsWrap.appendChild(row);
         });
 
@@ -17427,9 +17469,15 @@
         feriadoChipEl.type = "button";
         feriadoChipEl.className = "ponto-feriado-chip";
         var PONTO_FERIADO_CHIP_LABEL = { util: "Dia Útil", feriado: "Feriado", facultativo: "Ponto Facultativo" };
+        // fim de semana: esperado já é 0 automaticamente (ver
+        // pontoDiaEsperadoMin), então o estado "util" não significa "dia
+        // de trabalho normal" nesse caso — mostrar "Dia Útil" ali confundia
+        // o Georges ("Sáb e Dom ficou como dia útil tbm"). O chip continua
+        // clicável (ex: trabalhou num feriado que caiu no fim de semana).
         function refreshFeriadoChip() {
-          feriadoChipEl.textContent = PONTO_FERIADO_CHIP_LABEL[feriadoNow];
-          feriadoChipEl.className = "ponto-feriado-chip ponto-feriado-chip-" + feriadoNow;
+          var label = (isWeekend && feriadoNow === "util") ? "Fim de Semana" : PONTO_FERIADO_CHIP_LABEL[feriadoNow];
+          feriadoChipEl.textContent = label;
+          feriadoChipEl.className = "ponto-feriado-chip ponto-feriado-chip-" + feriadoNow + (isWeekend && feriadoNow === "util" ? " ponto-feriado-chip-weekend" : "");
           feriadoChipEl.title = "Clique pra alternar (Dia Útil → Feriado → Ponto Facultativo)";
         }
         refreshFeriadoChip();
@@ -17525,7 +17573,7 @@
           if (!m) return;
           total += sign * (Number(m[1]) * 60 + Number(m[2]));
         });
-        summarySaldoEl.textContent = any ? ("Saldo acumulado no mês: " + pontoFormatSaldoMin(total)) : "Saldo acumulado no mês: —";
+        summarySaldoValue.textContent = any ? pontoFormatSaldoMin(total) : "—";
         summarySaldoEl.classList.remove("ponto-saldo-positivo", "ponto-saldo-negativo");
         if (any && total > 0) summarySaldoEl.classList.add("ponto-saldo-positivo");
         if (any && total < 0) summarySaldoEl.classList.add("ponto-saldo-negativo");
