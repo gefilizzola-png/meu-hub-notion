@@ -8476,3 +8476,33 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 
 .privacy-eye-btn.privacy-eye-active { color: #fff; background: #343a40; }
 .privacy-eye-btn.privacy-eye-active:hover { background: #495057; color: #fff; }
+
+/* ---------- Contas Mensais em abas (Gestão Mensal / Geral / Histórico Geral / Histórico Individual) ---------- */
+.financeiro-host .page-tabs { margin-bottom: 12px; }
+.financeiro-host .page-tab-btn i { margin-right: 2px; }
+.financeiro-filter-label { font-size: 12px; font-weight: 600; color: #868e96; margin: 8px 0 4px; text-transform: uppercase; letter-spacing: .03em; }
+.financeiro-hist-info { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 10px 0 6px; font-size: 13px; color: #495057; }
+.financeiro-hist-filterbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.financeiro-hist-wrap { overflow-x: auto; }
+.financeiro-hist-table { width: 100%; }
+.financeiro-hist-table th.financeiro-th-short, .financeiro-hist-table td.financeiro-td-short { width: 1%; white-space: nowrap; }
+.financeiro-hist-row-click { cursor: pointer; }
+.financeiro-hist-row-click:hover td { background: #f8f9fa; }
+.financeiro-status-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.financeiro-status-chip.paid { background: #ebfbee; color: #2b8a3e; }
+.financeiro-status-chip.pending { background: #fff4e6; color: #d9480f; }
+.financeiro-chip { display: inline-block; padding: 1px 8px; margin-right: 4px; border-radius: 999px; background: #f1f3f5; font-size: 12px; white-space: nowrap; }
+.financeiro-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.financeiro-copy-btn { border: none; background: transparent; cursor: pointer; color: #868e96; padding: 2px 4px; margin-left: 4px; border-radius: 6px; }
+.financeiro-copy-btn:hover { background: #f1f3f5; color: #343a40; }
+.financeiro-var-up { color: #c92a2a; font-weight: 600; }
+.financeiro-var-down { color: #2b8a3e; font-weight: 600; }
+.financeiro-bi-kpi-warn { border-color: #ffd8a8; background: #fff9f0; }
+.financeiro-timeline { display: flex; flex-direction: column; gap: 6px; }
+.financeiro-timeline-item { display: grid; grid-template-columns: minmax(150px, auto) 1fr auto; gap: 12px; align-items: center; padding: 8px 12px; border: 1px solid #e9ecef; border-left: 4px solid #adb5bd; border-radius: 8px; background: #fff; font-size: 13px; }
+.financeiro-timeline-item.soon { border-left-color: #f59f00; background: #fffbeb; }
+.financeiro-timeline-item.overdue { border-left-color: #e03131; background: #fff5f5; }
+.financeiro-timeline-date { color: #495057; white-space: nowrap; }
+.financeiro-timeline-name { font-weight: 600; }
+.financeiro-timeline-value { font-weight: 700; white-space: nowrap; }
+@media (max-width: 700px) { .financeiro-timeline-item { grid-template-columns: 1fr auto; } .financeiro-timeline-date { grid-column: 1 / -1; } }

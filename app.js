@@ -8123,7 +8123,693 @@
     return it.valorAPagar;
   }
 
-  function renderFinanceiroContasMensais(container, page, monthOverride, activeAccountsOverride) {
+  // ---------------- Contas Mensais em ABAS (Gestão Mensal / Geral / Histórico Geral / Histórico Individual) ----------------
+  // As funções entre os marcadores FIN_PURE são PURAS (sem DOM) — copiadas verbatim pro teste isolado.
+  // FIN_PURE_START
+  var FINANCEIRO_FATURA_KEYS_ALL = ["bb_smiles", "bb_ourocard", "nubank", "mercado_pago", "sem_parar"];
+
+  // linha "achatada" usada pelas abas Geral/Histórico: 1 por lançamento (ignora linhas sintéticas "não encontrada")
+  function financeiroNormRows(items, overrides) {
+    var out = [];
+    (items || []).forEach(function (it) {
+      if (!it || it.missing) return;
+      var info = financeiroPaidInfo(it, overrides || {});
+      var raw = financeiroDisplayValue(it, info);
+      var venc = it.vencimento && it.vencimento.start ? String(it.vencimento.start).slice(0, 10) : "";
+      out.push({
+        id: it.id, url: it.url, accountKey: it.accountKey, accountLabel: it.accountLabel,
+        tipo: FINANCEIRO_FATURA_KEYS_ALL.indexOf(it.accountKey) !== -1 ? "fatura" : "fixa",
+        competencia: it.competencia || "", venc: venc, ym: venc.slice(0, 7), year: venc.slice(0, 4),
+        previsto: typeof it.valorAPagar === "number" ? it.valorAPagar : null,
+        valor: typeof raw === "number" ? raw : null,
+        pago: !!info.isPaid, pagoEm: info.paidDateStr || "", via: info.notionPaid ? "notion" : (info.manuallyPaid ? "manual" : ""),
+        forma: it.formaPagamento && it.formaPagamento.name ? it.formaPagamento.name : "",
+        barras: it.represNumerica || "", pix: it.pix || "",
+      });
+    });
+    return out;
+  }
+
+  // f: { from:"YYYY-MM"|"", to:"YYYY-MM"|"", tipo:""|"fixa"|"fatura", accounts:[keys], years:[], status:""|"pago"|"pendente" }
+  function financeiroFilterRows(rows, f) {
+    f = f || {};
+    return (rows || []).filter(function (r) {
+      if (f.from && (!r.ym || r.ym < f.from)) return false;
+      if (f.to && (!r.ym || r.ym > f.to)) return false;
+      if (f.tipo && r.tipo !== f.tipo) return false;
+      if (f.accounts && f.accounts.length && f.accounts.indexOf(r.accountKey) === -1) return false;
+      if (f.years && f.years.length && f.years.indexOf(r.year) === -1) return false;
+      if (f.status === "pago" && !r.pago) return false;
+      if (f.status === "pendente" && r.pago) return false;
+      return true;
+    });
+  }
+
+  function financeiroGeralAgg(rows) {
+    var agg = { total: 0, count: 0, months: 0, avgMonth: 0, max: null, pendTotal: 0, pendCount: 0, previsto: 0, deltaPago: 0,
+      byTipo: { fixa: { total: 0, count: 0 }, fatura: { total: 0, count: 0 } }, byAccount: [], byMonth: [] };
+    var acc = {}, mon = {};
+    (rows || []).forEach(function (r) {
+      var v = r.valor === null ? 0 : r.valor;
+      agg.count++; agg.total += v;
+      agg.byTipo[r.tipo].total += v; agg.byTipo[r.tipo].count++;
+      if (!r.pago) { agg.pendCount++; agg.pendTotal += v; }
+      if (r.valor !== null && (agg.max === null || r.valor > agg.max.valor)) agg.max = r;
+      var a = acc[r.accountKey] || (acc[r.accountKey] = { key: r.accountKey, label: r.accountLabel, tipo: r.tipo, count: 0, total: 0, n: 0, max: null, min: null, last: null, lastVenc: "", prevTotal: 0, delta: 0 });
+      a.count++;
+      if (r.valor !== null) {
+        a.total += r.valor; a.n++;
+        if (a.max === null || r.valor > a.max) a.max = r.valor;
+        if (a.min === null || r.valor < a.min) a.min = r.valor;
+        if (r.venc >= a.lastVenc) { a.lastVenc = r.venc; a.last = r.valor; }
+      }
+      if (r.pago && r.valor !== null && r.previsto !== null) { a.prevTotal += r.previsto; a.delta += r.valor - r.previsto; agg.previsto += r.previsto; agg.deltaPago += r.valor - r.previsto; }
+      if (r.ym) {
+        var m = mon[r.ym] || (mon[r.ym] = { ym: r.ym, fixa: 0, fatura: 0 });
+        m[r.tipo] += v;
+      }
+    });
+    agg.byMonth = Object.keys(mon).sort().map(function (k) { return mon[k]; });
+    agg.months = agg.byMonth.length;
+    agg.avgMonth = agg.months ? agg.total / agg.months : 0;
+    agg.byAccount = Object.keys(acc).map(function (k) { var a = acc[k]; a.avg = a.n ? a.total / a.n : null; return a; });
+    return agg;
+  }
+
+  // última competência de cada conta vs média dos até 12 lançamentos anteriores (mín. 3)
+  function financeiroVariationAlerts(rows, minPct, todayStr) {
+    minPct = typeof minPct === "number" ? minPct : 0.2;
+    var limit = todayStr ? financeiroAddDays(todayStr, 31) : "9999-99-99";
+    var by = {};
+    (rows || []).forEach(function (r) {
+      if (!r.venc || r.valor === null || r.venc > limit) return;
+      (by[r.accountKey] = by[r.accountKey] || []).push(r);
+    });
+    var out = [];
+    Object.keys(by).forEach(function (k) {
+      var list = by[k].sort(function (a, b) { return a.venc < b.venc ? -1 : a.venc > b.venc ? 1 : 0; });
+      if (list.length < 4) return;
+      var last = list[list.length - 1];
+      var prior = list.slice(Math.max(0, list.length - 13), list.length - 1);
+      var avg = prior.reduce(function (s, x) { return s + x.valor; }, 0) / prior.length;
+      if (!(avg > 0)) return;
+      var pct = (last.valor - avg) / avg;
+      if (Math.abs(pct) >= minPct) out.push({ key: k, label: last.accountLabel, ym: last.ym, valor: last.valor, avg: avg, pct: pct, n: prior.length });
+    });
+    out.sort(function (a, b) { return Math.abs(b.pct) - Math.abs(a.pct); });
+    return out;
+  }
+
+  // contas que tiveram lançamento nos 3 meses anteriores mas ainda não têm no mês atual
+  function financeiroMissingAlerts(rows, todayYm) {
+    function shift(ym, d) { var p = ym.split("-").map(Number); var mo = p[1] - 1 + d; var y = p[0] + Math.floor(mo / 12); mo = ((mo % 12) + 12) % 12; return y + "-" + String(mo + 1).padStart(2, "0"); }
+    var has = {}, label = {};
+    (rows || []).forEach(function (r) { if (!r.ym) return; (has[r.accountKey] = has[r.accountKey] || {})[r.ym] = true; label[r.accountKey] = r.accountLabel; });
+    var out = [];
+    Object.keys(has).forEach(function (k) {
+      var s = has[k];
+      if (!s[todayYm] && s[shift(todayYm, -1)] && s[shift(todayYm, -2)] && s[shift(todayYm, -3)]) out.push({ key: k, label: label[k] });
+    });
+    out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+    return out;
+  }
+
+  // pendentes vencidos ou vencendo nos próximos N dias, em ordem de vencimento
+  function financeiroUpcoming(rows, todayStr, days) {
+    var end = financeiroAddDays(todayStr, days);
+    var out = [];
+    (rows || []).forEach(function (r) {
+      if (r.pago || !r.venc || r.venc > end) return;
+      var a = new Date(r.venc + "T00:00:00Z").getTime(), b = new Date(todayStr + "T00:00:00Z").getTime();
+      out.push({ row: r, diff: Math.round((a - b) / 86400000) });
+    });
+    out.sort(function (x, y) { return x.diff - y.diff; });
+    return out;
+  }
+
+  // valor "legível" de uma célula genérica do Histórico Individual (texto pra busca/ordenação/CSV)
+  function financeiroPropText(p) {
+    if (!p) return "";
+    var v = p.value;
+    if (v === null || v === undefined) return "";
+    if (typeof v === "boolean") return v ? "Sim" : "Não";
+    if (typeof v === "number") return String(v).replace(".", ",");
+    if (typeof v === "string") return v;
+    if (Array.isArray(v)) return v.map(function (x) { return x && typeof x === "object" ? (x.name || "") : String(x); }).join(", ");
+    if (typeof v === "object") { if (v.name) return v.name; if (v.start) return v.end ? v.start + " → " + v.end : v.start; }
+    return "";
+  }
+  // ordem das colunas: núcleo conhecido primeiro, o resto em ordem alfabética; colunas totalmente vazias somem
+  function financeiroDynamicColumns(rows) {
+    var CORE = ["Nome", "Competência", "Vencimento", "Valor a pagar", "Valor Pago", "Pagamento", "FormaPagamento"];
+    var seen = {}, types = {};
+    (rows || []).forEach(function (r) {
+      Object.keys(r.props || {}).forEach(function (n) {
+        var p = r.props[n];
+        if (financeiroPropText(p) !== "") seen[n] = true;
+        if (!types[n]) types[n] = p.type;
+      });
+    });
+    var names = Object.keys(seen);
+    var core = CORE.filter(function (n) { return seen[n]; });
+    var rest = names.filter(function (n) { return CORE.indexOf(n) === -1; }).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); });
+    return core.concat(rest).map(function (n) { return { name: n, type: types[n] }; });
+  }
+  // FIN_PURE_END
+
+  // ---- helpers de UI (abas Geral/Histórico) ----
+  function finMkTitle(parent, text) { var h = document.createElement("h4"); h.className = "financeiro-bi-subtitle"; h.textContent = text; parent.appendChild(h); return h; }
+  function finMkNote(parent, text) { var p = document.createElement("p"); p.className = "holerite-bi-note"; p.textContent = text; parent.appendChild(p); return p; }
+  function finMkGrid(parent) { var g = document.createElement("div"); g.className = "financeiro-bi-kpi-grid"; parent.appendChild(g); return g; }
+  function finMkCard(grid, label, value, sub, cls) {
+    var el = document.createElement("div");
+    el.className = "financeiro-bi-kpi" + (cls ? " " + cls : "");
+    var l = document.createElement("span"); l.className = "financeiro-bi-kpi-label"; l.textContent = label;
+    var v = document.createElement("span"); v.className = "financeiro-bi-kpi-value"; v.textContent = value;
+    el.appendChild(l); el.appendChild(v);
+    if (sub) { var s = document.createElement("span"); s.className = "holerite-bi-kpi-sub"; s.textContent = sub; el.appendChild(s); }
+    grid.appendChild(el);
+    return el;
+  }
+  function finMkChartBox(parent) {
+    var box = document.createElement("div"); box.className = "financeiro-bi-chart-box holerite-bi-chart-box";
+    var cw = document.createElement("div"); cw.className = "financeiro-bi-canvas-wrap financeiro-bi-canvas-wide";
+    var canvas = document.createElement("canvas"); cw.appendChild(canvas); box.appendChild(cw); parent.appendChild(box);
+    return canvas;
+  }
+  function finFmtYm(ym) {
+    if (!ym) return "—";
+    var p = ym.split("-");
+    return FINANCEIRO_MONTH_NAMES[Number(p[1]) - 1].slice(0, 3).toLowerCase() + "/" + p[0].slice(2);
+  }
+  function finPct(p) { return (p > 0 ? "+" : "") + (p * 100).toFixed(0).replace(".", ",") + "%"; }
+  function finCsvDownload(filename, headers, rows) {
+    function esc(x) { var s = x === null || x === undefined ? "" : String(x); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+    var csv = "﻿" + [headers].concat(rows).map(function (r) { return r.map(esc).join(";"); }).join("\r\n");
+    var url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    var a = document.createElement("a"); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  }
+  function finCopyBtn(text, title) {
+    var b = document.createElement("button"); b.type = "button"; b.className = "financeiro-copy-btn"; b.title = title || "Copiar";
+    b.innerHTML = '<i class="ti ti-copy"></i>';
+    b.addEventListener("click", function (e) {
+      e.stopPropagation();
+      financeiroCopyToClipboard(text);
+      b.innerHTML = '<i class="ti ti-check"></i>';
+      setTimeout(function () { b.innerHTML = '<i class="ti ti-copy"></i>'; }, 1400);
+    });
+    return b;
+  }
+  // tabela ordenável genérica. cols: [{label, num, short, sort(r), node(r, td) | text(r), cls(r)}]
+  function finSortTable(parent, cols, rows, sortState, onResort, opts) {
+    opts = opts || {};
+    var wrap = document.createElement("div"); wrap.className = "holerite-bi-table-wrap financeiro-hist-wrap";
+    var table = document.createElement("table"); table.className = "holerite-bi-table financeiro-hist-table";
+    var thead = document.createElement("thead"), hr = document.createElement("tr");
+    cols.forEach(function (c, i) {
+      var th = document.createElement("th"); th.className = "financeiro-th-sortable" + (c.short ? " financeiro-th-short" : "");
+      th.appendChild(document.createTextNode(c.label + " "));
+      var ar = document.createElement("span"); ar.className = "financeiro-th-arrow"; ar.textContent = sortState.col === i ? (sortState.dir === 1 ? "▲" : "▼") : "";
+      th.appendChild(ar);
+      th.addEventListener("click", function () {
+        if (sortState.col === i) sortState.dir = -sortState.dir; else { sortState.col = i; sortState.dir = c.num ? -1 : 1; }
+        onResort();
+      });
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr); table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    var c0 = cols[sortState.col];
+    var sorted = rows.slice();
+    if (c0 && c0.sort) sorted.sort(function (a, b) {
+      var av = c0.sort(a), bv = c0.sort(b);
+      var ae = av === null || av === undefined || av === "", be = bv === null || bv === undefined || bv === "";
+      if (ae && be) return 0; if (ae) return 1; if (be) return -1;   // vazios sempre no fim
+      if (typeof av === "number" && typeof bv === "number") return sortState.dir * (av - bv);
+      return sortState.dir * String(av).localeCompare(String(bv), "pt-BR");
+    });
+    sorted.forEach(function (r) {
+      var tr = document.createElement("tr");
+      if (opts.rowCls) { var rc = opts.rowCls(r); if (rc) tr.className = rc; }
+      if (opts.onRow) { tr.classList.add("financeiro-hist-row-click"); tr.addEventListener("click", function () { opts.onRow(r); }); }
+      cols.forEach(function (c) {
+        var td = document.createElement("td");
+        if (c.short) td.className = "financeiro-td-short";
+        if (c.node) c.node(r, td); else td.textContent = c.text ? c.text(r) : "";
+        var k = c.cls ? c.cls(r) : ""; if (k) td.classList.add(k);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    if (!sorted.length) { var tr0 = document.createElement("tr"), td0 = document.createElement("td"); td0.colSpan = cols.length; td0.textContent = "Nada para exibir."; tr0.appendChild(td0); tbody.appendChild(tr0); }
+    table.appendChild(tbody); wrap.appendChild(table); parent.appendChild(wrap);
+  }
+  function finStatusNode(r, td) {
+    var s = document.createElement("span");
+    s.className = "financeiro-status-chip " + (r.pago ? "paid" : "pending");
+    s.textContent = r.pago ? "✅ Pago" : "⏳ Pendente";
+    td.appendChild(s);
+  }
+
+  // overrides "pago manualmente" (KV) dos meses distintos presentes — só dos itens ainda sem "Pagamento" no Notion e dos últimos 18 meses
+  function financeiroLoadOverrides(items) {
+    var lim = financeiroShiftMonth(financeiroCurrentMonth(), -18);
+    var months = {};
+    (items || []).forEach(function (it) {
+      var v = it.vencimento && it.vencimento.start;
+      if (!v || (it.pagamento && it.pagamento.start)) return;
+      var ym = v.slice(0, 7);
+      if (ym >= lim) months[ym] = true;
+    });
+    var list = Object.keys(months);
+    if (!list.length) return Promise.resolve({});
+    return Promise.all(list.map(function (m) {
+      return authFetch(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(m)).then(function (r) { return r.json(); }).catch(function () { return {}; });
+    })).then(function (res) {
+      var merged = {};
+      res.forEach(function (pr) { var o = (pr && pr.overrides) || {}; Object.keys(o).forEach(function (k) { merged[k] = o[k]; }); });
+      return merged;
+    });
+  }
+
+  // ---------------- host das abas ----------------
+  function renderFinanceiroContasMensais(container, page) {
+    var host = document.createElement("div");
+    host.className = "financeiro-host";
+    var tabsBar = document.createElement("div"); tabsBar.className = "page-tabs";
+    var tabsBtns = document.createElement("div"); tabsBtns.className = "page-tabs-buttons";
+    tabsBar.appendChild(tabsBtns);
+    var tabBody = document.createElement("div"); tabBody.className = "financeiro-tab-body";
+    host.appendChild(tabsBar); host.appendChild(tabBody);
+    container.appendChild(host);
+
+    var TABS = [
+      { key: "gestao", label: "Gestão Mensal", icon: "ti-calendar-month" },
+      { key: "geral", label: "Geral", icon: "ti-chart-bar" },
+      { key: "hgeral", label: "Histórico Geral", icon: "ti-list-details" },
+      { key: "hind", label: "Histórico Individual", icon: "ti-file-search" },
+    ];
+    var state = { tab: "gestao", charts: {}, allPromise: null, geral: { period: "12m", tipo: "", sort: { col: 3, dir: -1 }, sortAl: { col: 4, dir: -1 } },
+      hg: { search: "", accounts: [], years: [], status: "", tipo: "", sort: { col: 1, dir: -1 } },
+      hi: { key: "", cache: {}, search: "", sort: null } };
+
+    function destroyCharts() { Object.keys(state.charts).forEach(function (k) { try { state.charts[k].destroy(); } catch (e) {} delete state.charts[k]; }); }
+
+    function loadAll() {
+      if (state.allPromise) return state.allPromise;
+      var keys = (page.financeiroAccounts || []).map(function (a) { return a.key; }).join(",");
+      state.allPromise = authFetch(cfg.templateWorkerUrl + "/financeiro-contas?accountKeys=" + encodeURIComponent(keys))
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then(function (data) {
+          var items = (data.items || []).filter(function (it) { return !it.missing; });
+          return financeiroLoadOverrides(items).then(function (ov) {
+            return { rows: financeiroNormRows(items, ov), errors: data.errors || [] };
+          });
+        })
+        .catch(function (e) { state.allPromise = null; throw e; });
+      return state.allPromise;
+    }
+    function loadingMsg(parent, text) { var p = document.createElement("p"); p.className = "financeiro-status"; p.textContent = text; parent.appendChild(p); return p; }
+    function errMsg(parent, e) { var p = document.createElement("p"); p.className = "financeiro-status financeiro-status-error"; p.textContent = "Erro ao carregar: " + (e && e.message ? e.message : e); parent.appendChild(p); }
+    function errorsNote(parent, errors) {
+      if (!errors || !errors.length) return;
+      finMkNote(parent, "⚠️ Não consegui ler: " + errors.map(function (x) { return x.accountLabel; }).join(", ") + " (as demais contas estão completas).");
+    }
+    function pillRow(parent, options, current, onPick) {
+      var row = document.createElement("div"); row.className = "financeiro-tags-row";
+      options.forEach(function (o) {
+        var b = document.createElement("button"); b.type = "button";
+        b.className = "financeiro-account-tag" + (o.k === current ? " active" : ""); b.textContent = o.t;
+        b.addEventListener("click", function () { onPick(o.k); });
+        row.appendChild(b);
+      });
+      parent.appendChild(row);
+      return row;
+    }
+
+    // ================= ABA: GERAL =================
+    function renderGeral(body) {
+      var st = state.geral;
+      var wrapG = document.createElement("div"); body.appendChild(wrapG);
+      loadingMsg(wrapG, "Carregando todas as contas…");
+      loadAll().then(function (data) {
+        wrapG.innerHTML = "";
+        var all = data.rows;
+        var todaySP = financeiroTodaySP(), todayYm = todaySP.slice(0, 7);
+        var years = {};
+        all.forEach(function (r) { if (r.year) years[r.year] = true; });
+        var yearList = Object.keys(years).sort().reverse();
+
+        function periodFilter() {
+          var f = { tipo: st.tipo };
+          if (st.period === "12m") { f.from = financeiroShiftMonth(todayYm, -11); f.to = todayYm; }
+          else if (st.period === "ano") { f.from = todayYm.slice(0, 4) + "-01"; f.to = todayYm.slice(0, 4) + "-12"; }
+          else if (/^\d{4}$/.test(st.period)) { f.from = st.period + "-01"; f.to = st.period + "-12"; }
+          return f;
+        }
+        var top = document.createElement("div"); wrapG.appendChild(top);
+        var filt = buildCollapsibleSection("Filtrar", false);
+        wrapG.appendChild(filt.section);
+        var content = document.createElement("div"); wrapG.appendChild(content);
+
+        function buildFilters() {
+          filt.body.innerHTML = "";
+          var per = [{ k: "12m", t: "Últimos 12 meses" }, { k: "ano", t: "Ano atual" }].concat(yearList.map(function (y) { return { k: y, t: y }; })).concat([{ k: "todos", t: "Todos" }]);
+          var l1 = document.createElement("div"); l1.className = "financeiro-filter-label"; l1.textContent = "Período"; filt.body.appendChild(l1);
+          pillRow(filt.body, per, st.period, function (k) { st.period = k; buildFilters(); draw(); });
+          var l2 = document.createElement("div"); l2.className = "financeiro-filter-label"; l2.textContent = "Tipo"; filt.body.appendChild(l2);
+          pillRow(filt.body, [{ k: "", t: "Todos" }, { k: "fixa", t: "Contas fixas" }, { k: "fatura", t: "Faturas" }], st.tipo, function (k) { st.tipo = k; buildFilters(); draw(); });
+          var clr = document.createElement("button"); clr.type = "button"; clr.className = "financeiro-month-today-btn";
+          clr.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+          clr.addEventListener("click", function () { st.period = "12m"; st.tipo = ""; buildFilters(); draw(); });
+          filt.body.appendChild(clr);
+        }
+        function periodLabel() {
+          var m = { "12m": "Últimos 12 meses", ano: "Ano atual", todos: "Todos os períodos" };
+          return (m[st.period] || st.period) + (st.tipo ? " · " + (st.tipo === "fixa" ? "Contas fixas" : "Faturas") : "");
+        }
+
+        function draw() {
+          destroyCharts();
+          top.innerHTML = ""; content.innerHTML = "";
+          finMkNote(top, "Período: " + periodLabel() + ". Valores = Valor Pago (Notion) quando a conta já foi paga, senão Valor a pagar.");
+          errorsNote(top, data.errors);
+          var rows = financeiroFilterRows(all, periodFilter());
+          var agg = financeiroGeralAgg(rows);
+
+          // ---- KPIs ----
+          var grid = finMkGrid(content);
+          finMkCard(grid, "Total no período", financeiroFormatBRL(agg.total), agg.count + " lançamentos");
+          finMkCard(grid, "Média mensal", financeiroFormatBRL(agg.avgMonth), agg.months + " meses com lançamento");
+          finMkCard(grid, "Maior lançamento", agg.max ? financeiroFormatBRL(agg.max.valor) : "—", agg.max ? agg.max.accountLabel + " · " + finFmtYm(agg.max.ym) : "");
+          finMkCard(grid, "Pendente", financeiroFormatBRL(agg.pendTotal), agg.pendCount + " em aberto", agg.pendCount ? "financeiro-bi-kpi-warn" : "");
+          finMkCard(grid, "Previsto × pago", (agg.deltaPago > 0 ? "+" : "") + financeiroFormatBRL(agg.deltaPago), "valor pago − valor a pagar, só contas quitadas");
+          finMkCard(grid, "Contas fixas", financeiroFormatBRL(agg.byTipo.fixa.total), agg.byTipo.fixa.count + " lançamentos");
+          finMkCard(grid, "Faturas", financeiroFormatBRL(agg.byTipo.fatura.total), agg.byTipo.fatura.count + " lançamentos");
+
+          // ---- Alertas ----
+          var varAl = financeiroVariationAlerts(all, 0.2, todaySP);
+          var misAl = financeiroMissingAlerts(all, todayYm);
+          var alSec = buildCollapsibleSection("🔔 Alertas (" + (varAl.length + misAl.length) + ")", varAl.length + misAl.length > 0);
+          content.appendChild(alSec.section);
+          if (!varAl.length && !misAl.length) finMkNote(alSec.body, "Nada fora do padrão: nenhuma conta variou ±20% da média dos 12 meses anteriores e nenhuma conta recorrente está sem lançamento no mês atual.");
+          if (varAl.length) {
+            finMkTitle(alSec.body, "Variação vs. média dos 12 lançamentos anteriores (≥ ±20%)");
+            finSortTable(alSec.body, [
+              { label: "Conta", sort: function (r) { return r.label; }, text: function (r) { return r.label; } },
+              { label: "Competência", short: true, sort: function (r) { return r.ym; }, text: function (r) { return finFmtYm(r.ym); } },
+              { label: "Valor", num: true, short: true, sort: function (r) { return r.valor; }, text: function (r) { return financeiroFormatBRL(r.valor); } },
+              { label: "Média 12m", num: true, short: true, sort: function (r) { return r.avg; }, text: function (r) { return financeiroFormatBRL(r.avg); } },
+              { label: "Variação", num: true, short: true, sort: function (r) { return r.pct; }, text: function (r) { return (r.pct > 0 ? "▲ " : "▼ ") + finPct(r.pct); }, cls: function (r) { return r.pct > 0 ? "financeiro-var-up" : "financeiro-var-down"; } },
+            ], varAl, st.sortAl, function () { draw(); });
+          }
+          if (misAl.length) {
+            finMkTitle(alSec.body, "Sem lançamento em " + financeiroMonthLabel(todayYm));
+            finMkNote(alSec.body, misAl.map(function (x) { return x.label; }).join(" · ") + " — tinham lançamento nos 3 meses anteriores e ainda não aparecem neste mês (a automação pode não ter rodado ainda).");
+          }
+
+          // ---- Próximos vencimentos ----
+          var up = financeiroUpcoming(all, todaySP, 30);
+          var upSec = buildCollapsibleSection("📅 Pendentes: vencidas e próximos 30 dias (" + up.length + ")", up.length > 0);
+          content.appendChild(upSec.section);
+          if (!up.length) finMkNote(upSec.body, "Nenhuma conta pendente vencida ou vencendo nos próximos 30 dias.");
+          else {
+            var tl = document.createElement("div"); tl.className = "financeiro-timeline"; upSec.body.appendChild(tl);
+            up.forEach(function (u) {
+              var it = document.createElement("div"); it.className = "financeiro-timeline-item" + (u.diff < 0 ? " overdue" : u.diff <= 3 ? " soon" : "");
+              var d = document.createElement("span"); d.className = "financeiro-timeline-date";
+              d.textContent = financeiroFormatDate(u.row.venc) + " · " + (u.diff < 0 ? Math.abs(u.diff) + "d em atraso" : u.diff === 0 ? "hoje" : "em " + u.diff + "d");
+              var n = document.createElement("span"); n.className = "financeiro-timeline-name"; n.textContent = u.row.accountLabel;
+              var v = document.createElement("span"); v.className = "financeiro-timeline-value"; v.textContent = financeiroFormatBRL(u.row.valor);
+              it.appendChild(d); it.appendChild(n); it.appendChild(v); upSec.body.appendChild(it);
+            });
+          }
+
+          // ---- Evolução mensal ----
+          var evSec = buildCollapsibleSection("📈 Evolução mensal (contas fixas × faturas)", true);
+          content.appendChild(evSec.section);
+          if (!agg.byMonth.length) finMkNote(evSec.body, "Sem lançamentos no período.");
+          else {
+            var cv = finMkChartBox(evSec.body);
+            loadChartJs().then(function (Chart) {
+              if (!cv.isConnected) return;
+              state.charts.ev = new Chart(cv.getContext("2d"), {
+                type: "bar",
+                data: { labels: agg.byMonth.map(function (m) { return finFmtYm(m.ym); }),
+                  datasets: [
+                    { label: "Contas fixas", data: agg.byMonth.map(function (m) { return Math.round(m.fixa * 100) / 100; }), backgroundColor: "#6366f1", borderRadius: 3 },
+                    { label: "Faturas", data: agg.byMonth.map(function (m) { return Math.round(m.fatura * 100) / 100; }), backgroundColor: "#f59e0b", borderRadius: 3 } ] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: function (v) { return "R$ " + v.toLocaleString("pt-BR"); } } } },
+                  plugins: { tooltip: { callbacks: { label: function (c) { return c.dataset.label + ": " + financeiroFormatBRL(c.parsed.y); } } } } },
+              });
+            }).catch(function (e) { finMkNote(evSec.body, "Não consegui carregar o gráfico (" + (e && e.message) + ")."); });
+          }
+
+          // ---- Por conta ----
+          var acSec = buildCollapsibleSection("🧾 Por conta (quantidade, valor, média)", true);
+          content.appendChild(acSec.section);
+          finSortTable(acSec.body, [
+            { label: "Conta", sort: function (r) { return r.label; }, text: function (r) { return r.label; } },
+            { label: "Tipo", short: true, sort: function (r) { return r.tipo; }, text: function (r) { return r.tipo === "fatura" ? "Fatura" : "Conta fixa"; } },
+            { label: "Qtd", num: true, short: true, sort: function (r) { return r.count; }, text: function (r) { return String(r.count); } },
+            { label: "Total", num: true, short: true, sort: function (r) { return r.total; }, text: function (r) { return financeiroFormatBRL(r.total); } },
+            { label: "Média", num: true, short: true, sort: function (r) { return r.avg; }, text: function (r) { return r.avg === null ? "—" : financeiroFormatBRL(r.avg); } },
+            { label: "Maior", num: true, short: true, sort: function (r) { return r.max; }, text: function (r) { return r.max === null ? "—" : financeiroFormatBRL(r.max); } },
+            { label: "Menor", num: true, short: true, sort: function (r) { return r.min; }, text: function (r) { return r.min === null ? "—" : financeiroFormatBRL(r.min); } },
+            { label: "Último", num: true, short: true, sort: function (r) { return r.last; }, text: function (r) { return r.last === null ? "—" : financeiroFormatBRL(r.last); } },
+            { label: "Δ previsto→pago", num: true, short: true, sort: function (r) { return r.delta; }, text: function (r) { return r.prevTotal ? (r.delta > 0 ? "+" : "") + financeiroFormatBRL(r.delta) : "—"; }, cls: function (r) { return r.delta > 0.005 ? "financeiro-var-up" : r.delta < -0.005 ? "financeiro-var-down" : ""; } },
+          ], agg.byAccount, st.sort, function () { draw(); }, { onRow: function (r) { state.hi.key = r.key; setTab("hind"); } });
+          finMkNote(acSec.body, "Clique numa linha para abrir o Histórico Individual da conta.");
+        }
+        buildFilters();
+        draw();
+      }).catch(function (e) { wrapG.innerHTML = ""; errMsg(wrapG, e); });
+    }
+
+    // ================= ABA: HISTÓRICO GERAL =================
+    function renderHistGeral(body) {
+      var st = state.hg;
+      var wrapH = document.createElement("div"); body.appendChild(wrapH);
+      loadingMsg(wrapH, "Carregando histórico…");
+      loadAll().then(function (data) {
+        wrapH.innerHTML = "";
+        var all = data.rows;
+        errorsNote(wrapH, data.errors);
+        var accOpts = (page.financeiroAccounts || []).slice().sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); }).map(function (a) { return { label: a.label, pageId: a.key }; });
+        var yrs = {}; all.forEach(function (r) { if (r.year) yrs[r.year] = true; });
+        var yearOpts = Object.keys(yrs).sort().reverse().map(function (y) { return { label: y, pageId: y }; });
+
+        var searchSec = buildCollapsibleSection("Pesquisar", false);
+        var filtSec = buildCollapsibleSection("Filtrar", false);
+        wrapH.appendChild(searchSec.section); wrapH.appendChild(filtSec.section);
+        var inp = document.createElement("input"); inp.type = "text"; inp.placeholder = "Buscar por conta, competência, forma de pagamento…"; inp.className = "aniversarios-search-input"; inp.value = st.search;
+        inp.addEventListener("input", function () { st.search = inp.value.trim(); drawTable(); });
+        searchSec.body.appendChild(withSearchClear(inp));
+
+        var barHost = document.createElement("div"); barHost.className = "financeiro-hist-filterbar"; filtSec.body.appendChild(barHost);
+        function buildFilterBar() {
+          barHost.innerHTML = "";
+          barHost.appendChild(buildIconDropdown({ label: "Conta", icon: "ti-building-bank", options: accOpts, searchable: true }, function (o) { st.accounts = o.map(function (x) { return x.pageId; }); drawTable(); }));
+          barHost.appendChild(buildIconDropdown({ label: "Ano", icon: "ti-calendar", options: yearOpts }, function (o) { st.years = o.map(function (x) { return x.pageId; }); drawTable(); }));
+          barHost.appendChild(buildIconDropdown({ label: "Situação", icon: "ti-circle-check", options: [{ label: "Pago", pageId: "pago", emoji: "✅" }, { label: "Pendente", pageId: "pendente", emoji: "⏳" }] }, function (o) { st.status = o.length === 1 ? o[0].pageId : ""; drawTable(); }));
+          barHost.appendChild(buildIconDropdown({ label: "Tipo", icon: "ti-category", options: [{ label: "Conta fixa", pageId: "fixa" }, { label: "Fatura", pageId: "fatura" }] }, function (o) { st.tipo = o.length === 1 ? o[0].pageId : ""; drawTable(); }));
+          var clr = document.createElement("button"); clr.type = "button"; clr.className = "financeiro-month-today-btn";
+          clr.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+          clr.addEventListener("click", function () { st.search = ""; inp.value = ""; st.accounts = []; st.years = []; st.status = ""; st.tipo = ""; buildFilterBar(); drawTable(); });
+          barHost.appendChild(clr);
+        }
+        buildFilterBar();
+
+        var info = document.createElement("div"); info.className = "financeiro-hist-info"; wrapH.appendChild(info);
+        var tableHost = document.createElement("div"); wrapH.appendChild(tableHost);
+        var lastRows = [];
+        function currentRows() {
+          var rows = financeiroFilterRows(all, { accounts: st.accounts, years: st.years, status: st.status, tipo: st.tipo });
+          var q = normalize(st.search);
+          if (q) rows = rows.filter(function (r) { return normalize([r.accountLabel, r.competencia, r.forma, r.ym, finFmtYm(r.ym)].join(" ")).indexOf(q) !== -1; });
+          return rows;
+        }
+        function drawTable() {
+          tableHost.innerHTML = ""; info.innerHTML = "";
+          var rows = currentRows(); lastRows = rows;
+          var tot = rows.reduce(function (s, r) { return s + (r.valor || 0); }, 0);
+          var sp = document.createElement("span"); sp.textContent = rows.length + " lançamentos · total " + financeiroFormatBRL(tot); info.appendChild(sp);
+          var ex = document.createElement("button"); ex.type = "button"; ex.className = "financeiro-month-today-btn"; ex.innerHTML = '<i class="ti ti-download"></i> Exportar CSV';
+          ex.addEventListener("click", function () {
+            finCsvDownload("historico-contas-" + financeiroTodaySP() + ".csv",
+              ["Conta", "Tipo", "Competência", "Vencimento", "Valor a pagar", "Valor", "Situação", "Pago em", "Forma de pagamento"],
+              lastRows.map(function (r) { return [r.accountLabel, r.tipo === "fatura" ? "Fatura" : "Conta fixa", r.competencia, r.venc, r.previsto === null ? "" : String(r.previsto).replace(".", ","), r.valor === null ? "" : String(r.valor).replace(".", ","), r.pago ? "Pago" : "Pendente", r.pagoEm, r.forma]; }));
+          });
+          info.appendChild(ex);
+          finSortTable(tableHost, [
+            { label: "Conta", sort: function (r) { return r.accountLabel; }, text: function (r) { return r.accountLabel; } },
+            { label: "Vencimento", short: true, sort: function (r) { return r.venc; }, text: function (r) { return financeiroFormatDate(r.venc); } },
+            { label: "Competência", short: true, sort: function (r) { return r.competencia; }, text: function (r) { return r.competencia || "—"; } },
+            { label: "Valor", num: true, short: true, sort: function (r) { return r.valor; }, text: function (r) { return financeiroFormatBRL(r.valor); } },
+            { label: "Situação", short: true, sort: function (r) { return r.pago ? 1 : 0; }, node: finStatusNode },
+            { label: "Pago em", short: true, sort: function (r) { return r.pagoEm; }, text: function (r) { return r.pagoEm ? financeiroFormatDate(r.pagoEm) : "—"; } },
+            { label: "Forma", short: true, sort: function (r) { return r.forma; }, text: function (r) { return r.forma || "—"; } },
+          ], rows, st.sort, drawTable, { onRow: function (r) { if (r.url) window.open(r.url, "_blank", "noopener"); } });
+        }
+        drawTable();
+      }).catch(function (e) { wrapH.innerHTML = ""; errMsg(wrapH, e); });
+    }
+
+    // ================= ABA: HISTÓRICO INDIVIDUAL =================
+    function renderHistInd(body) {
+      var st = state.hi;
+      var chipsHost = document.createElement("div"); body.appendChild(chipsHost);
+      var content = document.createElement("div"); body.appendChild(content);
+      var accs = (page.financeiroAccounts || []).slice().sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+      function drawChips() {
+        chipsHost.innerHTML = "";
+        var l = document.createElement("div"); l.className = "financeiro-filter-label"; l.textContent = "Escolha a conta"; chipsHost.appendChild(l);
+        pillRow(chipsHost, accs.map(function (a) { return { k: a.key, t: a.label }; }), st.key, function (k) { st.key = k; st.search = ""; st.sort = null; drawChips(); drawContent(); });
+      }
+      function fetchAccount(key) {
+        if (st.cache[key]) return Promise.resolve(st.cache[key]);
+        return authFetch(cfg.templateWorkerUrl + "/financeiro-contas?accountKeys=" + encodeURIComponent(key) + "&allProps=1")
+          .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+          .then(function (data) {
+            if (data.errors && data.errors.length) throw new Error(data.errors[0].message || "erro na base");
+            var items = (data.items || []).filter(function (it) { return !it.missing; });
+            return financeiroLoadOverrides(items).then(function (ov) {
+              var norm = financeiroNormRows(items, ov);
+              var byId = {}; norm.forEach(function (n) { byId[n.id] = n; });
+              var rows = items.map(function (it) { var n = byId[it.id] || {}; return { it: it, n: n, props: it.props || {}, pago: !!n.pago, url: it.url, venc: n.venc || "", valor: typeof n.valor === "number" ? n.valor : null }; });
+              st.cache[key] = { rows: rows, norm: norm };
+              return st.cache[key];
+            });
+          });
+      }
+      function drawContent() {
+        destroyCharts(); content.innerHTML = "";
+        if (!st.key) { finMkNote(content, "Escolha uma conta acima para ver todos os lançamentos dela. As colunas se adaptam ao que existe na base dessa conta no Notion."); return; }
+        var acc = accs.filter(function (a) { return a.key === st.key; })[0];
+        loadingMsg(content, "Carregando " + (acc ? acc.label : st.key) + "…");
+        var myKey = st.key;
+        fetchAccount(myKey).then(function (d) {
+          if (st.key !== myKey) return;
+          content.innerHTML = "";
+          var norm = d.norm, agg = financeiroGeralAgg(norm);
+          var grid = finMkGrid(content);
+          finMkCard(grid, "Lançamentos", String(agg.count), agg.months + " meses");
+          finMkCard(grid, "Total", financeiroFormatBRL(agg.total));
+          var a0 = agg.byAccount[0] || {};
+          finMkCard(grid, "Média", a0.avg === null || a0.avg === undefined ? "—" : financeiroFormatBRL(a0.avg));
+          finMkCard(grid, "Maior", a0.max === null || a0.max === undefined ? "—" : financeiroFormatBRL(a0.max));
+          finMkCard(grid, "Menor", a0.min === null || a0.min === undefined ? "—" : financeiroFormatBRL(a0.min));
+          finMkCard(grid, "Último", a0.last === null || a0.last === undefined ? "—" : financeiroFormatBRL(a0.last));
+          finMkCard(grid, "Pendente", financeiroFormatBRL(agg.pendTotal), agg.pendCount + " em aberto", agg.pendCount ? "financeiro-bi-kpi-warn" : "");
+
+          var series = norm.filter(function (n) { return n.venc && n.valor !== null; }).sort(function (a, b) { return a.venc < b.venc ? -1 : 1; });
+          if (series.length > 1) {
+            var evSec = buildCollapsibleSection("📈 Evolução do valor", true); content.appendChild(evSec.section);
+            var cv = finMkChartBox(evSec.body);
+            loadChartJs().then(function (Chart) {
+              if (!cv.isConnected) return;
+              state.charts.ind = new Chart(cv.getContext("2d"), {
+                type: "line",
+                data: { labels: series.map(function (n) { return finFmtYm(n.ym); }), datasets: [{ label: acc ? acc.label : "", data: series.map(function (n) { return n.valor; }), borderColor: "#6366f1", backgroundColor: "#6366f1", borderWidth: 2, pointRadius: 3, tension: 0.2 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return financeiroFormatBRL(c.parsed.y); } } } }, scales: { y: { ticks: { callback: function (v) { return "R$ " + v.toLocaleString("pt-BR"); } } } } },
+              });
+            }).catch(function () {});
+          }
+
+          var searchSec = buildCollapsibleSection("Pesquisar", false); content.appendChild(searchSec.section);
+          var inp = document.createElement("input"); inp.type = "text"; inp.placeholder = "Buscar em qualquer coluna…"; inp.className = "aniversarios-search-input"; inp.value = st.search;
+          inp.addEventListener("input", function () { st.search = inp.value.trim(); drawTable(); });
+          searchSec.body.appendChild(withSearchClear(inp));
+          var info = document.createElement("div"); info.className = "financeiro-hist-info"; content.appendChild(info);
+          var tableHost = document.createElement("div"); content.appendChild(tableHost);
+
+          var dyn = financeiroDynamicColumns(d.rows);
+          var hasVenc = dyn.some(function (c) { return c.name === "Vencimento"; });
+          function colDef(c) {
+            var name = c.name, type = c.type;
+            var isMoney = type === "number" && /valor|multa|juros|principal|total|pre[cç]o|custo|saldo|parcela$/i.test(name);
+            var isCopy = /repres|pix|barra|c[oó]digo|linha digit/i.test(name);
+            var def = { label: name, num: type === "number", short: type !== "title" && type !== "rich_text" };
+            def.sort = function (r) {
+              var p = r.props[name]; if (!p) return null; var v = p.value;
+              if (typeof v === "number") return v;
+              if (v && typeof v === "object" && !Array.isArray(v) && v.start) return v.start;
+              return financeiroPropText(p);
+            };
+            def.node = function (r, td) {
+              var p = r.props[name]; var v = p ? p.value : null; var txt = financeiroPropText(p);
+              if (txt === "") { td.textContent = "—"; return; }
+              if (isCopy && typeof v === "string") {
+                var sp = document.createElement("span"); sp.className = "financeiro-mono"; sp.textContent = v.length > 18 ? v.slice(0, 14) + "…" : v; sp.title = v;
+                td.appendChild(sp); td.appendChild(finCopyBtn(v, "Copiar " + name)); return;
+              }
+              if (type === "number") { td.textContent = isMoney ? financeiroFormatBRL(v) : String(v).replace(".", ","); return; }
+              if (p.type === "date" || p.type === "created_time" || p.type === "last_edited_time" || (v && typeof v === "object" && !Array.isArray(v) && v.start)) {
+                var s = v && v.start ? v.start : String(v);
+                td.textContent = financeiroFormatDate(String(s).slice(0, 10)) + (v && v.end ? " → " + financeiroFormatDate(String(v.end).slice(0, 10)) : ""); return;
+              }
+              if (type === "checkbox") { td.textContent = v ? "✓" : "—"; return; }
+              if (type === "url" && typeof v === "string") { var a = document.createElement("a"); a.href = v; a.target = "_blank"; a.rel = "noopener"; a.textContent = "abrir"; a.addEventListener("click", function (e) { e.stopPropagation(); }); td.appendChild(a); return; }
+              if (type === "select" || type === "status" || type === "multi_select") {
+                (Array.isArray(v) ? v : [v]).forEach(function (o) { var ch = document.createElement("span"); ch.className = "financeiro-chip"; ch.textContent = o && o.name ? o.name : String(o); td.appendChild(ch); });
+                return;
+              }
+              if (typeof v === "string" && v.length > 60) { td.textContent = v.slice(0, 57) + "…"; td.title = v; return; }
+              td.textContent = txt;
+            };
+            return def;
+          }
+          var cols = dyn.map(colDef);
+          cols.push({ label: "Situação", short: true, sort: function (r) { return r.pago ? 1 : 0; }, node: function (r, td) { finStatusNode(r, td); } });
+          if (!st.sort) { var vi = hasVenc ? dyn.findIndex(function (c) { return c.name === "Vencimento"; }) : 0; st.sort = { col: Math.max(0, vi), dir: hasVenc ? -1 : 1 }; }
+
+          function visibleRows() {
+            var q = normalize(st.search);
+            if (!q) return d.rows;
+            return d.rows.filter(function (r) { return normalize(Object.keys(r.props).map(function (k) { return financeiroPropText(r.props[k]); }).join(" ")).indexOf(q) !== -1; });
+          }
+          function drawTable() {
+            tableHost.innerHTML = ""; info.innerHTML = "";
+            var rows = visibleRows();
+            var sp = document.createElement("span"); sp.textContent = rows.length + " lançamentos"; info.appendChild(sp);
+            var ex = document.createElement("button"); ex.type = "button"; ex.className = "financeiro-month-today-btn"; ex.innerHTML = '<i class="ti ti-download"></i> Exportar CSV';
+            ex.addEventListener("click", function () {
+              finCsvDownload("historico-" + st.key + "-" + financeiroTodaySP() + ".csv", dyn.map(function (c) { return c.name; }).concat(["Situação"]),
+                rows.map(function (r) { return dyn.map(function (c) { return financeiroPropText(r.props[c.name]); }).concat([r.pago ? "Pago" : "Pendente"]); }));
+            });
+            info.appendChild(ex);
+            finSortTable(tableHost, cols, rows, st.sort, drawTable, { onRow: function (r) { if (r.url) window.open(r.url, "_blank", "noopener"); } });
+          }
+          drawTable();
+        }).catch(function (e) { if (st.key === myKey) { content.innerHTML = ""; errMsg(content, e); } });
+      }
+      drawChips(); drawContent();
+    }
+
+    // ================= troca de abas =================
+    function paintTabs() {
+      Array.prototype.forEach.call(tabsBtns.querySelectorAll(".page-tab-btn"), function (b) { b.classList.toggle("active", b.getAttribute("data-tab") === state.tab); });
+    }
+    function setTab(key) {
+      state.tab = key; destroyCharts(); tabBody.innerHTML = ""; paintTabs();
+      if (key === "geral") renderGeral(tabBody);
+      else if (key === "hgeral") renderHistGeral(tabBody);
+      else if (key === "hind") renderHistInd(tabBody);
+      else renderFinanceiroGestaoMensal(tabBody, page);
+    }
+    TABS.forEach(function (t) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "page-tab-btn"; b.setAttribute("data-tab", t.key);
+      b.innerHTML = '<i class="ti ' + t.icon + '"></i> ';
+      b.appendChild(document.createTextNode(t.label));
+      b.addEventListener("click", function () { setTab(t.key); });
+      tabsBtns.appendChild(b);
+    });
+    setTab("gestao");
+  }
+
+  function renderFinanceiroGestaoMensal(container, page, monthOverride, activeAccountsOverride) {
     var month = monthOverride || financeiroCurrentMonth();
     var isCurrentMonth = month === financeiroCurrentMonth();
     // "activeAccounts" (pedido do Georges — tags de filtro por conta):
@@ -8162,11 +8848,14 @@
           var pos = next.indexOf(acc.key);
           if (pos !== -1) next.splice(pos, 1); else next.push(acc.key);
           container.innerHTML = "";
-          renderFinanceiroContasMensais(container, page, month, next);
+          renderFinanceiroGestaoMensal(container, page, month, next);
         });
         tagsRow.appendChild(tagBtn);
       });
-      wrap.appendChild(tagsRow);
+      // "Filtros" recolhível (Rodada 2): os chips de conta ficam atrás do botão; abre sozinho enquanto há conta filtrada.
+      var fSec = buildCollapsibleSection("Filtros", filterActive);
+      fSec.body.appendChild(tagsRow);
+      wrap.appendChild(fSec.section);
     }
 
     // "topRow" — modo normal: navegação de mês (esquerda) + 3 totais
@@ -8191,7 +8880,7 @@
       prevBtn.innerHTML = '<i class="ti ti-chevron-left"></i>';
       prevBtn.addEventListener("click", function () {
         container.innerHTML = "";
-        renderFinanceiroContasMensais(container, page, financeiroShiftMonth(month, -1));
+        renderFinanceiroGestaoMensal(container, page, financeiroShiftMonth(month, -1));
       });
       nav.appendChild(prevBtn);
 
@@ -8207,7 +8896,7 @@
       nextBtn.innerHTML = '<i class="ti ti-chevron-right"></i>';
       nextBtn.addEventListener("click", function () {
         container.innerHTML = "";
-        renderFinanceiroContasMensais(container, page, financeiroShiftMonth(month, 1));
+        renderFinanceiroGestaoMensal(container, page, financeiroShiftMonth(month, 1));
       });
       nav.appendChild(nextBtn);
 
@@ -8218,7 +8907,7 @@
         todayBtn.textContent = "Mês atual";
         todayBtn.addEventListener("click", function () {
           container.innerHTML = "";
-          renderFinanceiroContasMensais(container, page, financeiroCurrentMonth());
+          renderFinanceiroGestaoMensal(container, page, financeiroCurrentMonth());
         });
         nav.appendChild(todayBtn);
       }
@@ -8268,7 +8957,7 @@
       clearBtn.textContent = "Limpar filtro";
       clearBtn.addEventListener("click", function () {
         container.innerHTML = "";
-        renderFinanceiroContasMensais(container, page, month, []);
+        renderFinanceiroGestaoMensal(container, page, month, []);
       });
       topRow.appendChild(clearBtn);
     }
@@ -8301,7 +8990,9 @@
       }
     });
     searchRow.appendChild(withSearchClear(searchInput));
-    wrap.appendChild(searchRow);
+    var pSec = buildCollapsibleSection("Pesquisar", false);
+    pSec.body.appendChild(searchRow);
+    wrap.appendChild(pSec.section);
 
     var status = document.createElement("p");
     status.className = "financeiro-status";
@@ -23863,7 +24554,8 @@
     sources.forEach(function (s) { srcById[s.id] = s; });
 
     var st = {
-      view: window.innerWidth <= 700 ? "agenda" : "month",
+      // visão inicial pela largura da tela (pedido do Georges): grande = mês inteiro, pequena = dia. Média (ex: Zfold aberto) ainda cai em mês — ajustar depois de testar.
+      view: window.innerWidth <= 700 ? "day" : "month",
       cursor: calSpToday(),
       hideDone: false,
       query: "",
@@ -24734,7 +25426,7 @@
             });
           }
           if (typeof sv.hideDone === "boolean") st.hideDone = sv.hideDone;
-          if (typeof sv.view === "string" && viewBtns[sv.view]) st.view = sv.view;
+          // a visão NÃO é mais restaurada do salvo: sempre abre pela largura da tela (mês em tela grande, dia em tela pequena).
         }
         buildFilterBar();
         reload();
