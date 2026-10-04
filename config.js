@@ -1717,7 +1717,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-04 11:07",
+  appVersion: "2026-10-04 12:39",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3340,6 +3340,7 @@ const APP_CONFIG = {
       items: [
         { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
         { label: "Empréstimos", type: "page", target: "financeiro_emprestimos", icon: "cash" },
+        { label: "Fiscal", type: "page", target: "financeiro_fiscal", icon: "building-bank" },
         { label: "PMF - Folha de Pagamento", type: "page", target: "financeiro_holerite", icon: "file-invoice" },
         { label: "PMF - Folha de Pagamento (BI)", type: "page", target: "financeiro_holerite_bi", icon: "chart-line" },
         { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
@@ -3348,6 +3349,31 @@ const APP_CONFIG = {
         // reproduzido aqui: Financeiro->Viagens->Passagens).
         { label: "Viagens", type: "page", target: "financeiro_viagens", icon: "plane-departure" }
       ]
+    },
+
+    // "Fiscal" — pasta (pedido do Georges: Financeiro -> Fiscal -> IRPF). Abre
+    // espaço pra outras análises por rubrica da folha (ver plano em contexto).
+    financeiro_fiscal: {
+      title: "Fiscal",
+      items: [
+        { label: "IRPF", type: "page", target: "financeiro_fiscal_irpf", icon: "receipt-tax" }
+      ]
+    },
+
+    // "page.irpf" — IRPF: IR retido (rubrica 6000) por ano/competência, alíquota
+    // efetiva, conferência da base (proventos tributáveis − previdência − teto) e
+    // comparação com a tabela progressiva. Lê o GET /holerite (D1), sem rota nova —
+    // ver renderIrpfPage no app.js. Sem Painel do Dia/Calendário; notificação depois.
+    financeiro_fiscal_irpf: {
+      title: "IRPF",
+      irpf: true,
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "PMF - Folha de Pagamento", type: "page", target: "financeiro_holerite", icon: "meuhub" },
+          { label: "BI da Folha de Pagamento", type: "page", target: "financeiro_holerite_bi", icon: "meuhub" }
+        ] }
+      ],
+      items: []
     },
 
     // "Viagens" — pasta simples (pedido do Georges: "Crie o mesmo caminho

@@ -8241,3 +8241,6 @@ html, body {
 .holerite-bi-timeline { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .holerite-bi-timeline-row { display: flex; gap: 12px; align-items: baseline; padding: 6px 10px; border-radius: 8px; background: rgba(0,0,0,0.03); font-size: 0.92rem; }
 .holerite-bi-timeline-date { min-width: 110px; font-weight: 600; opacity: 0.75; }
+
+/* IRPF: linhas de tabela com divergência */
+.holerite-bi-table tr.irpf-row-warn td { background: rgba(192,57,43,0.06); }

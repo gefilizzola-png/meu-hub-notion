@@ -13859,6 +13859,524 @@
     });
   }
 
+  // <IRPF_PURE>
+  // Página IRPF (Financeiro->Fiscal->IRPF): confere o IR retido na folha (código 6000).
+  // Regra observada nos holerites: base do IR = proventos tributáveis − previdência
+  // (5520/5580/5585, ou INSS 5500 nas matrículas de jeton) − desconto de teto (4150);
+  // RRA tem base separada (valor_base próprio) e fica fora desta conta.
+  var IRPF_COD_IR = "6000";
+  var IRPF_COD_TETO = "4150";
+  var IRPF_COD_PREV = ["5520", "5580", "5585", "5500"];
+  var IRPF_COD_PREV_RRA = "5524";
+  var IRPF_COD_RESTITUICAO = "3610";
+  // proventos que NÃO entram na base do IR mensal (indenizatórios/não incidentes,
+  // restituições, adiantamento de 13º) e proventos de RRA (base separada)
+  var IRPF_COD_NAO_TRIB = ["0449", "0459", "3735", "3736", "3739", "3745", "0078", "3609", "3610", "3613", "2500", "2501"];
+  var IRPF_COD_RRA = ["0179", "0702", "3790", "3800", "3801", "3802"];
+  var IRPF_DEP_MENSAL = 189.59;
+  var IRPF_MATRICULA_PRINCIPAL = "AFTM";
+  // tabelas mensais por vigência (de = primeira competência em vigor)
+  var IRPF_TABELAS = [
+    { de: "2015-04", faixas: [[1903.98, 0, 0], [2826.65, 0.075, 142.80], [3751.05, 0.15, 354.80], [4664.68, 0.225, 636.13], [Infinity, 0.275, 869.36]] },
+    { de: "2023-05", faixas: [[2112.00, 0, 0], [2826.65, 0.075, 158.40], [3751.05, 0.15, 370.40], [4664.68, 0.225, 651.73], [Infinity, 0.275, 884.96]] },
+    { de: "2024-02", faixas: [[2259.20, 0, 0], [2826.65, 0.075, 169.44], [3751.05, 0.15, 381.44], [4664.68, 0.225, 662.77], [Infinity, 0.275, 896.00]] },
+    { de: "2025-05", faixas: [[2428.80, 0, 0], [2826.65, 0.075, 182.16], [3751.05, 0.15, 394.16], [4664.68, 0.225, 675.49], [Infinity, 0.275, 908.73]] }
+  ];
+  function irpfTabela(comp) {
+    var c = String(comp || "").slice(0, 7), t = IRPF_TABELAS[0];
+    if (c.slice(5, 7) === "13") c = c.slice(0, 4) + "-12";
+    for (var i = 0; i < IRPF_TABELAS.length; i++) if (c >= IRPF_TABELAS[i].de) t = IRPF_TABELAS[i];
+    return t;
+  }
+  // IR pela tabela progressiva mensal sobre a base já deduzida de dependentes.
+  // Desde 2026 (Lei 15.270/25) há redutor entre 5.000 e 7.350; aplicado aqui sobre a própria base.
+  function irpfCalcTabela(base, comp) {
+    base = Number(base) || 0;
+    if (base <= 0) return 0;
+    var t = irpfTabela(comp), ir = 0;
+    for (var i = 0; i < t.faixas.length; i++) {
+      if (base <= t.faixas[i][0]) { ir = base * t.faixas[i][1] - t.faixas[i][2]; break; }
+    }
+    if (String(comp || "").slice(0, 4) >= "2026") {
+      if (base <= 5000) ir = 0;
+      else if (base < 7350) ir = Math.max(0, ir - Math.max(0, 978.62 - 0.133145 * base));
+    }
+    return holeriteBiR2(Math.max(0, ir));
+  }
+  function irpfAliqMarginal(base, comp) {
+    var t = irpfTabela(comp);
+    for (var i = 0; i < t.faixas.length; i++) if (base <= t.faixas[i][0]) return t.faixas[i][1];
+    return 0.275;
+  }
+  function irpfIsPrincipal(matricula) { return String(matricula || "").slice(-IRPF_MATRICULA_PRINCIPAL.length) === IRPF_MATRICULA_PRINCIPAL; }
+  // 1 registro por (competência, matrícula, folha) que tem linha de IR (6000)
+  function irpfGrupos(items) {
+    var provMap = {};
+    holeriteBiTotals(items).forEach(function (t) { provMap[t.competencia + "|" + t.matricula + "|" + t.folha] = t.prov; });
+    var map = {}, order = [];
+    (items || []).forEach(function (it) {
+      var key = it.competencia + "|" + it.matricula + "|" + it.folha;
+      var g = map[key];
+      if (!g) {
+        g = map[key] = { competencia: it.competencia, matricula: it.matricula, folha: it.folha, trib: 0, prev: 0, teto: 0, rra: 0, prevRra: 0, ir: 0, baseHolerite: 0, temIr: false, dataPagamento: "" };
+        order.push(key);
+      }
+      var cod = String(it.codigo || ""), v = Number(it.valor) || 0;
+      if (it.data_pagamento && !g.dataPagamento) g.dataPagamento = String(it.data_pagamento).slice(0, 10);
+      if (it.tipo === "Provento") {
+        if (IRPF_COD_RRA.indexOf(cod) !== -1) g.rra += v;
+        else if (IRPF_COD_NAO_TRIB.indexOf(cod) === -1) g.trib += v;
+      } else if (it.tipo === "Desconto") {
+        if (IRPF_COD_PREV.indexOf(cod) !== -1) g.prev += v;
+        else if (cod === IRPF_COD_PREV_RRA) g.prevRra += v;
+        else if (cod === IRPF_COD_TETO) g.teto += v;
+        else if (cod === IRPF_COD_IR) { g.ir += v; g.baseHolerite += Number(it.valor_base) || 0; g.temIr = true; }
+      }
+    });
+    var out = [];
+    order.forEach(function (k) {
+      var g = map[k];
+      if (!g.temIr) return;
+      g.bruto = holeriteBiR2(provMap[k] || 0);
+      g.trib = holeriteBiR2(g.trib); g.prev = holeriteBiR2(g.prev); g.teto = holeriteBiR2(g.teto);
+      g.rra = holeriteBiR2(g.rra); g.prevRra = holeriteBiR2(g.prevRra);
+      g.ir = holeriteBiR2(g.ir); g.baseHolerite = holeriteBiR2(g.baseHolerite);
+      g.baseCalc = holeriteBiR2(g.trib - g.prev - g.teto);
+      g.diff = holeriteBiR2(g.baseCalc - g.baseHolerite);
+      g.converge = Math.abs(g.diff) <= 0.05;
+      g.aliqBase = g.baseHolerite ? holeriteBiR2(g.ir / g.baseHolerite * 100) : 0;
+      g.aliqBruto = g.bruto ? holeriteBiR2(g.ir / g.bruto * 100) : 0;
+      g.principal = irpfIsPrincipal(g.matricula);
+      out.push(g);
+    });
+    out.sort(function (a, b) { return a.competencia < b.competencia ? -1 : a.competencia > b.competencia ? 1 : (a.matricula < b.matricula ? -1 : a.matricula > b.matricula ? 1 : 0); });
+    return out;
+  }
+  // IR esperado: matrícula principal pela tabela progressiva com n dependentes
+  // (n inferido = o que melhor explica o valor retido); demais matrículas, 27,5% sobre a base, sem dedução.
+  // A folha às vezes aplica a tabela da competência e às vezes a do mês de pagamento (ex.: 04/2025,
+  // paga em 05/2025, já veio com a tabela nova) — testa as duas e fica com a que melhor explica o retido.
+  function irpfEsperado(g) {
+    if (!g.principal) {
+      var ir = holeriteBiR2(g.baseHolerite * 0.275);
+      return { modo: "27,5% fixo", dependentes: 0, esperado: ir, residuo: holeriteBiR2(g.ir - ir), semDep: ir, tabelaDe: "" };
+    }
+    var refs = [g.competencia];
+    var pg = String(g.dataPagamento || "").slice(0, 7);
+    if (pg && pg !== g.competencia && !holeriteBiIs13(g.competencia)) refs.push(pg);
+    var best = null;
+    refs.forEach(function (ref) {
+      var semDep = irpfCalcTabela(g.baseHolerite, ref);
+      var cand = { n: 0, esperado: semDep, erro: Math.abs(g.ir - semDep), semDep: semDep, ref: ref };
+      for (var n = 1; n <= 6; n++) {
+        var e = irpfCalcTabela(g.baseHolerite - n * IRPF_DEP_MENSAL, ref), er = Math.abs(g.ir - e);
+        if (er < cand.erro - 0.005) cand = { n: n, esperado: e, erro: er, semDep: semDep, ref: ref };
+      }
+      if (!best || cand.erro < best.erro - 0.005) best = cand;
+    });
+    return { modo: "Tabela progressiva", dependentes: best.n, esperado: best.esperado, residuo: holeriteBiR2(g.ir - best.esperado), semDep: best.semDep, tabelaDe: irpfTabela(best.ref).de };
+  }
+  // totais por ano (todas as folhas dos grupos recebidos)
+  function irpfPorAno(grupos) {
+    var map = {};
+    grupos.forEach(function (g) {
+      var y = holeriteBiYear(g.competencia);
+      var r = map[y] || (map[y] = { ano: y, ir: 0, base: 0, bruto: 0, n: 0 });
+      r.ir += g.ir; r.base += g.baseHolerite; r.bruto += g.bruto; r.n++;
+    });
+    return Object.keys(map).sort().map(function (y) {
+      var r = map[y];
+      return { ano: y, ir: holeriteBiR2(r.ir), base: holeriteBiR2(r.base), bruto: holeriteBiR2(r.bruto), n: r.n,
+        aliqBase: r.base ? holeriteBiR2(r.ir / r.base * 100) : 0, aliqBruto: r.bruto ? holeriteBiR2(r.ir / r.bruto * 100) : 0 };
+    });
+  }
+  // RRA (base separada), previdência sobre RRA e restituições de IR, por ano
+  function irpfRraRestituicoes(items) {
+    var map = {};
+    (items || []).forEach(function (it) {
+      var cod = String(it.codigo || ""), v = Number(it.valor) || 0, y = holeriteBiYear(it.competencia);
+      var isRra = it.tipo === "Provento" && IRPF_COD_RRA.indexOf(cod) !== -1;
+      var isPrevRra = it.tipo === "Desconto" && cod === IRPF_COD_PREV_RRA;
+      var isRest = it.tipo === "Provento" && cod === IRPF_COD_RESTITUICAO;
+      if (!isRra && !isPrevRra && !isRest) return;
+      var r = map[y] || (map[y] = { ano: y, rra: 0, prevRra: 0, restituicao: 0, comps: {} });
+      if (isRra) { r.rra += v; r.comps[it.competencia] = true; }
+      if (isPrevRra) r.prevRra += v;
+      if (isRest) r.restituicao += v;
+    });
+    return Object.keys(map).sort().map(function (y) {
+      var r = map[y];
+      return { ano: y, rra: holeriteBiR2(r.rra), prevRra: holeriteBiR2(r.prevRra), restituicao: holeriteBiR2(r.restituicao), competencias: Object.keys(r.comps).sort() };
+    });
+  }
+  // </IRPF_PURE>
+
+  // ---------------- "page.irpf" — IRPF (Financeiro->Fiscal->IRPF, leitura do D1) ----------------
+  // Pedido do Georges: trazer o IR retido (rubrica 6000), conferir se a base converge
+  // com os proventos tributáveis menos previdência (e teto), ver a alíquota efetiva e
+  // comparar com a tabela progressiva. Lê o mesmo GET /holerite (D1), sem rota nova.
+  function irpfSortableTable(parent, cols, rows, sortState, onResort, rowCls) {
+    var tableWrap = document.createElement("div");
+    tableWrap.className = "holerite-bi-table-wrap";
+    var table = document.createElement("table");
+    table.className = "holerite-bi-table";
+    var thead = document.createElement("thead"), hr = document.createElement("tr");
+    cols.forEach(function (c, i) {
+      var th = document.createElement("th");
+      th.className = "financeiro-th-sortable";
+      th.appendChild(document.createTextNode(c.label + " "));
+      var ar = document.createElement("span");
+      ar.className = "financeiro-th-arrow";
+      ar.textContent = sortState.col === i ? (sortState.dir === 1 ? "▲" : "▼") : "";
+      th.appendChild(ar);
+      th.addEventListener("click", function () {
+        if (sortState.col === i) sortState.dir = -sortState.dir; else { sortState.col = i; sortState.dir = c.num ? -1 : 1; }
+        onResort();
+      });
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr); table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    var c0 = cols[sortState.col];
+    var sorted = rows.slice();
+    if (c0) sorted.sort(function (a, b) {
+      var av = c0.get(a), bv = c0.get(b);
+      if (av === null || av === undefined) av = c0.num ? -Infinity : "";
+      if (bv === null || bv === undefined) bv = c0.num ? -Infinity : "";
+      if (typeof av === "number" && typeof bv === "number") return sortState.dir * (av === bv ? 0 : av - bv);
+      return sortState.dir * String(av).localeCompare(String(bv), "pt-BR");
+    });
+    sorted.forEach(function (r) {
+      var tr = document.createElement("tr");
+      if (rowCls) { var rc = rowCls(r); if (rc) tr.className = rc; }
+      cols.forEach(function (c) {
+        var td = document.createElement("td");
+        td.textContent = c.text(r);
+        var k = c.cls ? c.cls(r) : "";
+        if (k) td.className = k;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    if (!sorted.length) {
+      var tr0 = document.createElement("tr"), td0 = document.createElement("td");
+      td0.colSpan = cols.length; td0.textContent = "Nada para exibir."; tr0.appendChild(td0); tbody.appendChild(tr0);
+    }
+    table.appendChild(tbody); tableWrap.appendChild(table); parent.appendChild(tableWrap);
+  }
+
+  function renderIrpfPage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "holerite-bi-block financeiro-bi-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "🧾 IRPF — Imposto de Renda retido na folha";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando folha de pagamento…";
+    wrap.appendChild(statusEl);
+
+    var filterSection = buildCollapsibleSection("Filtrar");
+    var filterRow = document.createElement("div");
+    filterRow.className = "holerite-bi-filter-row";
+    filterSection.body.appendChild(filterRow);
+    var filterWrapOuter = document.createElement("div");
+    filterWrapOuter.className = "holerite-controls";
+    filterWrapOuter.appendChild(filterSection.section);
+    filterWrapOuter.style.display = "none";
+    wrap.appendChild(filterWrapOuter);
+
+    var kpiWrap = document.createElement("div");
+    kpiWrap.className = "financeiro-bi-kpi-grid";
+    kpiWrap.style.display = "none";
+    wrap.appendChild(kpiWrap);
+    function mkSection() {
+      var s = document.createElement("div");
+      s.className = "financeiro-bi-section";
+      s.style.display = "none";
+      wrap.appendChild(s);
+      return s;
+    }
+    var retidoSection = mkSection(), mensalSection = mkSection(), confSection = mkSection(), tabelaSection = mkSection(), extraSection = mkSection();
+    var allSections = [retidoSection, mensalSection, confSection, tabelaSection, extraSection];
+
+    var state = { items: [], anos: [], matriculas: [], folhas: [], soDivergencias: false };
+    var sortConf = { col: 0, dir: -1 }, sortTab = { col: 0, dir: -1 }, sortExtra = { col: 0, dir: -1 };
+    var charts = {};
+    function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+    function moneyTick(v) {
+      var n = Number(v);
+      if (Math.abs(n) >= 1000) return "R$ " + (n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil";
+      return "R$ " + n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+    }
+    function mkTitle(parent, text) { var h = document.createElement("h4"); h.className = "financeiro-bi-subtitle"; h.textContent = text; parent.appendChild(h); }
+    function mkNote(parent, text) { var p = document.createElement("p"); p.className = "holerite-bi-note"; p.textContent = text; parent.appendChild(p); }
+    function mkChartBox(parent, canvasId) {
+      var box = document.createElement("div");
+      box.className = "financeiro-bi-chart-box holerite-bi-chart-box";
+      var cw = document.createElement("div");
+      cw.className = "financeiro-bi-canvas-wrap financeiro-bi-canvas-wide";
+      var canvas = document.createElement("canvas");
+      canvas.id = canvasId;
+      cw.appendChild(canvas); box.appendChild(cw); parent.appendChild(box);
+      return canvas;
+    }
+    function fmtPct2(v) { return String(v).replace(".", ",") + "%"; }
+    function fmtSigned(v) { return (v > 0 ? "+" : "") + transacoesFmtMoney(v); }
+    var COLOR_IR = "#c0392b", COLOR_ALIQ = "#f59e0b", COLOR_BASE = "#3b82f6";
+
+    function renderKpis(grupos) {
+      kpiWrap.innerHTML = ""; kpiWrap.style.display = "grid";
+      var ir = 0, base = 0, bruto = 0, conv = 0, mensais = 0, irMensal = 0;
+      grupos.forEach(function (g) {
+        ir += g.ir; base += g.baseHolerite; bruto += g.bruto;
+        if (g.converge) conv++;
+        if (g.folha === "Mensal") { mensais++; irMensal += g.ir; }
+      });
+      var rest = holeriteBiR2(irpfRraRestituicoes(state.itemsFiltered).reduce(function (s, r) { return s + r.restituicao; }, 0));
+      var defs = [
+        { label: "🧾 IR retido (total)", value: transacoesFmtMoney(ir), cls: "kpi-saida" },
+        { label: "📐 Base de cálculo (holerite)", value: transacoesFmtMoney(base) },
+        { label: "📊 Alíquota efetiva s/ base", value: base ? fmtPct2(holeriteBiR2(ir / base * 100)) : "—" },
+        { label: "📉 Alíquota efetiva s/ bruto", value: bruto ? fmtPct2(holeriteBiR2(ir / bruto * 100)) : "—", sub: "IR ÷ total de proventos" },
+        { label: "📅 IR médio por folha mensal", value: mensais ? transacoesFmtMoney(irMensal / mensais) : "—" },
+        { label: "✅ Base converge", value: conv + " de " + grupos.length, sub: grupos.length - conv ? (grupos.length - conv) + " com diferença" : "todas conferem", cls: conv === grupos.length ? "kpi-entrada" : "" },
+        { label: "↩️ Restituições de IR na folha", value: transacoesFmtMoney(rest) }
+      ];
+      defs.forEach(function (d) {
+        var el = document.createElement("div");
+        el.className = "financeiro-bi-kpi" + (d.cls ? " " + d.cls : "");
+        var lab = document.createElement("span"); lab.className = "financeiro-bi-kpi-label"; lab.textContent = d.label;
+        var val = document.createElement("span"); val.className = "financeiro-bi-kpi-value"; val.textContent = d.value;
+        el.appendChild(lab); el.appendChild(val);
+        if (d.sub) { var sb = document.createElement("span"); sb.className = "holerite-bi-kpi-sub"; sb.textContent = d.sub; el.appendChild(sb); }
+        kpiWrap.appendChild(el);
+      });
+    }
+
+    function renderRetido(grupos) {
+      destroyChart("irpfAnual");
+      retidoSection.innerHTML = ""; retidoSection.style.display = "";
+      mkTitle(retidoSection, "📆 IR retido por ano e alíquota efetiva");
+      var rows = irpfPorAno(grupos);
+      var canvas = mkChartBox(retidoSection, "irpfAnual");
+      charts.irpfAnual = new window.Chart(canvas.getContext("2d"), {
+        data: {
+          labels: rows.map(function (r) { return r.ano; }),
+          datasets: [
+            { type: "bar", label: "IR retido", data: rows.map(function (r) { return r.ir; }), backgroundColor: COLOR_IR, borderRadius: 5, yAxisID: "y" },
+            { type: "line", label: "Alíquota efetiva s/ bruto (%)", data: rows.map(function (r) { return r.aliqBruto; }), borderColor: COLOR_ALIQ, backgroundColor: COLOR_ALIQ, borderWidth: 2, pointRadius: 3, tension: 0.25, yAxisID: "y1" },
+            { type: "line", label: "Alíquota efetiva s/ base (%)", data: rows.map(function (r) { return r.aliqBase; }), borderColor: COLOR_BASE, backgroundColor: COLOR_BASE, borderDash: [5, 4], borderWidth: 2, pointRadius: 3, tension: 0.25, yAxisID: "y1" }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { tooltip: { callbacks: { label: function (ctx) {
+            if (ctx.dataset.yAxisID === "y1") return ctx.dataset.label + ": " + fmtPct2(ctx.parsed.y);
+            return ctx.dataset.label + ": " + transacoesFmtMoney(ctx.parsed.y);
+          } } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } },
+            y1: { position: "right", beginAtZero: true, grid: { display: false }, ticks: { callback: function (v) { return v + "%"; } } },
+            x: { grid: { display: false } } }
+        }
+      });
+      mkNote(retidoSection, "Soma de todas as folhas dos filtros (mensal, 13º e matrículas de jeton). Alíquota s/ bruto = IR ÷ total de proventos; s/ base = IR ÷ base de cálculo do holerite.");
+    }
+
+    function renderMensal(grupos) {
+      destroyChart("irpfMensal");
+      mensalSection.innerHTML = ""; mensalSection.style.display = "";
+      mkTitle(mensalSection, "🗓️ IR retido por competência");
+      var byComp = {}, order = [];
+      grupos.forEach(function (g) {
+        var r = byComp[g.competencia];
+        if (!r) { r = byComp[g.competencia] = { competencia: g.competencia, ir: 0, bruto: 0, base: 0 }; order.push(g.competencia); }
+        r.ir += g.ir; r.bruto += g.bruto; r.base += g.baseHolerite;
+      });
+      order.sort();
+      var rows = order.map(function (c) { return byComp[c]; });
+      var canvas = mkChartBox(mensalSection, "irpfMensal");
+      charts.irpfMensal = new window.Chart(canvas.getContext("2d"), {
+        data: {
+          labels: rows.map(function (r) { return holeriteBiPeriodLabel(r.competencia); }),
+          datasets: [
+            { type: "bar", label: "IR retido", data: rows.map(function (r) { return holeriteBiR2(r.ir); }), backgroundColor: COLOR_IR, borderRadius: 3, yAxisID: "y" },
+            { type: "line", label: "Alíquota efetiva s/ bruto (%)", data: rows.map(function (r) { return r.bruto ? holeriteBiR2(r.ir / r.bruto * 100) : null; }), borderColor: COLOR_ALIQ, backgroundColor: COLOR_ALIQ, borderWidth: 2, pointRadius: rows.length > 60 ? 0 : 3, tension: 0.25, yAxisID: "y1" }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+          plugins: { tooltip: { callbacks: { label: function (ctx) {
+            if (ctx.dataset.yAxisID === "y1") return ctx.dataset.label + ": " + fmtPct2(ctx.parsed.y);
+            return ctx.dataset.label + ": " + transacoesFmtMoney(ctx.parsed.y);
+          } } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } },
+            y1: { position: "right", beginAtZero: true, grid: { display: false }, ticks: { callback: function (v) { return v + "%"; } } },
+            x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } } }
+        }
+      });
+    }
+
+    function renderConferencia(grupos) {
+      confSection.innerHTML = ""; confSection.style.display = "";
+      mkTitle(confSection, "🧮 Conferência da base de cálculo");
+      var ctrl = document.createElement("div");
+      ctrl.className = "holerite-bi-toggle-row";
+      var btn = document.createElement("button");
+      btn.type = "button"; btn.className = "holerite-bi-toggle" + (state.soDivergencias ? " active" : "");
+      btn.textContent = "Só divergências";
+      btn.addEventListener("click", function () { state.soDivergencias = !state.soDivergencias; renderConferencia(grupos); });
+      ctrl.appendChild(btn); confSection.appendChild(ctrl);
+      var rows = state.soDivergencias ? grupos.filter(function (g) { return !g.converge; }) : grupos;
+      var cols = [
+        { label: "Competência", get: function (r) { return r.competencia; }, text: function (r) { return holeriteBiPeriodLabel(r.competencia); } },
+        { label: "Matrícula", get: function (r) { return r.matricula; }, text: function (r) { return r.matricula; } },
+        { label: "Proventos tributáveis", get: function (r) { return r.trib; }, text: function (r) { return transacoesFmtMoney(r.trib); }, num: true },
+        { label: "(−) Previdência", get: function (r) { return r.prev; }, text: function (r) { return transacoesFmtMoney(r.prev); }, num: true },
+        { label: "(−) Teto", get: function (r) { return r.teto; }, text: function (r) { return transacoesFmtMoney(r.teto); }, num: true },
+        { label: "Base recalculada", get: function (r) { return r.baseCalc; }, text: function (r) { return transacoesFmtMoney(r.baseCalc); }, num: true },
+        { label: "Base do holerite", get: function (r) { return r.baseHolerite; }, text: function (r) { return transacoesFmtMoney(r.baseHolerite); }, num: true },
+        { label: "Diferença", get: function (r) { return r.diff; }, text: function (r) { return fmtSigned(r.diff); }, num: true, cls: function (r) { return r.converge ? "" : "holerite-bi-down"; } },
+        { label: "Situação", get: function (r) { return r.converge ? 1 : 0; }, text: function (r) { return r.converge ? "✅ Converge" : "⚠️ Diverge"; } }
+      ];
+      var holder = document.createElement("div");
+      confSection.appendChild(holder);
+      function draw() { holder.innerHTML = ""; irpfSortableTable(holder, cols, rows, sortConf, draw); }
+      draw();
+      mkNote(confSection, "Base recalculada = proventos tributáveis − previdência (5520/5580/5585, ou INSS nas matrículas de jeton) − desconto de teto (4150). Ficam de fora: verbas indenizatórias/não incidentes (veículo, lanche, alimentação), adiantamento de 13º e RRA (base separada). Tolerância de R$ 0,05.");
+    }
+
+    function renderTabela(grupos) {
+      tabelaSection.innerHTML = ""; tabelaSection.style.display = "";
+      mkTitle(tabelaSection, "📏 Tabela progressiva × IR retido");
+      var rows = grupos.map(function (g) {
+        var e = irpfEsperado(g);
+        return { competencia: g.competencia, matricula: g.matricula, folha: g.folha, base: g.baseHolerite, modo: e.modo, dep: e.dependentes, semDep: e.semDep, esperado: e.esperado, tabelaDe: e.tabelaDe, ir: g.ir, residuo: e.residuo, aliqMarg: g.principal ? irpfAliqMarginal(g.baseHolerite, g.competencia) : 0.275 };
+      });
+      var cols = [
+        { label: "Competência", get: function (r) { return r.competencia; }, text: function (r) { return holeriteBiPeriodLabel(r.competencia); } },
+        { label: "Matrícula", get: function (r) { return r.matricula; }, text: function (r) { return r.matricula; } },
+        { label: "Base", get: function (r) { return r.base; }, text: function (r) { return transacoesFmtMoney(r.base); }, num: true },
+        { label: "Regra", get: function (r) { return r.modo; }, text: function (r) { return r.modo; } },
+        { label: "Tabela (vigência)", get: function (r) { return r.tabelaDe; }, text: function (r) { return r.tabelaDe ? holeriteBiPeriodLabel(r.tabelaDe) : "—"; } },
+        { label: "Faixa", get: function (r) { return r.aliqMarg; }, text: function (r) { return fmtPct2(holeriteBiR2(r.aliqMarg * 100)); }, num: true },
+        { label: "IR s/ dependentes", get: function (r) { return r.semDep; }, text: function (r) { return transacoesFmtMoney(r.semDep); }, num: true },
+        { label: "Dependentes implícitos", get: function (r) { return r.dep; }, text: function (r) { return String(r.dep); }, num: true },
+        { label: "IR esperado", get: function (r) { return r.esperado; }, text: function (r) { return transacoesFmtMoney(r.esperado); }, num: true },
+        { label: "IR retido", get: function (r) { return r.ir; }, text: function (r) { return transacoesFmtMoney(r.ir); }, num: true },
+        { label: "Resíduo", get: function (r) { return r.residuo; }, text: function (r) { return fmtSigned(r.residuo); }, num: true, cls: function (r) { return Math.abs(r.residuo) <= 0.05 ? "" : "holerite-bi-down"; } },
+        { label: "Situação", get: function (r) { return Math.abs(r.residuo) <= 0.05 ? 1 : 0; }, text: function (r) { return Math.abs(r.residuo) <= 0.05 ? "✅ Confere" : "⚠️ Diferença"; } }
+      ];
+      var holder = document.createElement("div");
+      tabelaSection.appendChild(holder);
+      function draw() { holder.innerHTML = ""; irpfSortableTable(holder, cols, rows, sortTab, draw); }
+      draw();
+      mkNote(tabelaSection, "Matrícula principal (AFTM): tabela mensal vigente na competência, com o nº de dependentes que melhor explica o valor retido (R$ 189,59 cada). Demais matrículas (jeton): 27,5% fixo sobre a base, sem dedução. Não considera o desconto simplificado (a dedução legal é maior) nem o ajuste anual da DIRPF.");
+    }
+
+    function renderExtra(items, grupos) {
+      extraSection.innerHTML = ""; extraSection.style.display = "";
+      mkTitle(extraSection, "🎁 13º, RRA e restituições por ano");
+      var por13 = {};
+      grupos.forEach(function (g) {
+        if (!holeriteBiIs13(g.competencia)) return;
+        var y = holeriteBiYear(g.competencia), r = por13[y] || (por13[y] = { ir: 0, base: 0, bruto: 0 });
+        r.ir += g.ir; r.base += g.baseHolerite; r.bruto += g.bruto;
+      });
+      var rr = irpfRraRestituicoes(items), anos = {};
+      Object.keys(por13).forEach(function (y) { anos[y] = true; });
+      rr.forEach(function (r) { anos[r.ano] = true; });
+      var rows = Object.keys(anos).sort().map(function (y) {
+        var a = por13[y] || { ir: 0, base: 0, bruto: 0 }, b = rr.filter(function (r) { return r.ano === y; })[0] || { rra: 0, prevRra: 0, restituicao: 0, competencias: [] };
+        return { ano: y, ir13: holeriteBiR2(a.ir), base13: holeriteBiR2(a.base), aliq13: a.bruto ? holeriteBiR2(a.ir / a.bruto * 100) : null,
+          rra: b.rra, prevRra: b.prevRra, restituicao: b.restituicao, comps: b.competencias };
+      });
+      if (!rows.length) { mkNote(extraSection, "Sem 13º, RRA ou restituições nos filtros atuais."); return; }
+      var cols = [
+        { label: "Ano", get: function (r) { return r.ano; }, text: function (r) { return r.ano; } },
+        { label: "IR retido no 13º", get: function (r) { return r.ir13; }, text: function (r) { return r.ir13 ? transacoesFmtMoney(r.ir13) : "—"; }, num: true },
+        { label: "Base do 13º", get: function (r) { return r.base13; }, text: function (r) { return r.base13 ? transacoesFmtMoney(r.base13) : "—"; }, num: true },
+        { label: "Alíq. efetiva 13º", get: function (r) { return r.aliq13; }, text: function (r) { return r.aliq13 === null ? "—" : fmtPct2(r.aliq13); }, num: true },
+        { label: "RRA (bruto)", get: function (r) { return r.rra; }, text: function (r) { return r.rra ? transacoesFmtMoney(r.rra) : "—"; }, num: true },
+        { label: "Previdência s/ RRA", get: function (r) { return r.prevRra; }, text: function (r) { return r.prevRra ? transacoesFmtMoney(r.prevRra) : "—"; }, num: true },
+        { label: "Competências com RRA", get: function (r) { return r.comps.length; }, text: function (r) { return r.comps.map(holeriteBiPeriodLabel).join(", ") || "—"; }, num: true },
+        { label: "Restituição de IR", get: function (r) { return r.restituicao; }, text: function (r) { return r.restituicao ? transacoesFmtMoney(r.restituicao) : "—"; }, num: true }
+      ];
+      var holder = document.createElement("div");
+      extraSection.appendChild(holder);
+      function draw() { holder.innerHTML = ""; irpfSortableTable(holder, cols, rows, sortExtra, draw); }
+      draw();
+      mkNote(extraSection, "O 13º tem tributação exclusiva em folha própria. As verbas de RRA (rendimentos recebidos acumuladamente) têm base separada: os holerites não trazem linha de IR sobre elas, então o ajuste fica para a DIRPF. “Restituição de IR” é o provento 3610 lançado na folha.");
+    }
+
+    function renderAll() {
+      var items = holeriteBiFilterItems(state.items, { anos: state.anos, matriculas: state.matriculas, folhas: state.folhas });
+      state.itemsFiltered = items;
+      var grupos = irpfGrupos(items);
+      if (!grupos.length) {
+        kpiWrap.style.display = "none";
+        allSections.forEach(function (s) { s.style.display = "none"; });
+        statusEl.style.display = ""; statusEl.textContent = "Nenhum IR retido para os filtros atuais.";
+        return;
+      }
+      statusEl.style.display = "none";
+      renderKpis(grupos);
+      renderRetido(grupos);
+      renderMensal(grupos);
+      renderConferencia(grupos);
+      renderTabela(grupos);
+      renderExtra(items, grupos);
+    }
+
+    function buildFilters() {
+      filterRow.innerHTML = "";
+      function uniq(key) {
+        var seen = {}, out = [];
+        state.items.forEach(function (it) { var v = key === "ano" ? holeriteBiYear(it.competencia) : it[key]; if (v && !seen[v]) { seen[v] = true; out.push(v); } });
+        return out;
+      }
+      var anos = uniq("ano").sort().reverse(), mats = uniq("matricula").sort();
+      var folhas = uniq("folha").sort(function (a, b) { return (HOLERITE_FOLHA_ORDER[a] || 0) - (HOLERITE_FOLHA_ORDER[b] || 0); });
+      function opts(list, icon) { return list.map(function (v) { return { pageId: v, label: v, icon: icon }; }); }
+      filterRow.appendChild(buildIconDropdown({ property: "Ano", type: "select", label: "Ano", emoji: "📆", icon: "ti-calendar", searchable: true, options: opts(anos, "ti-calendar") },
+        function (o) { state.anos = o.map(function (x) { return x.pageId; }); renderAll(); }));
+      filterRow.appendChild(buildIconDropdown({ property: "Matrícula", type: "select", label: "Matrícula", emoji: "🪪", icon: "ti-id", options: opts(mats, "ti-id") },
+        function (o) { state.matriculas = o.map(function (x) { return x.pageId; }); renderAll(); }));
+      filterRow.appendChild(buildIconDropdown({ property: "Folha", type: "select", label: "Folha", emoji: "📄", icon: "ti-file", options: opts(folhas, "ti-file") },
+        function (o) { state.folhas = o.map(function (x) { return x.pageId; }); renderAll(); }));
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "search-clear-btn";
+      clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+      clearBtn.addEventListener("click", function () {
+        state.anos = []; state.matriculas = []; state.folhas = []; state.soDivergencias = false;
+        buildFilters(); renderAll();
+      });
+      filterRow.appendChild(clearBtn);
+    }
+
+    Promise.all([
+      authFetch(cfg.templateWorkerUrl + "/holerite").then(function (res) {
+        if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+        return res.ok ? res.json() : { items: [] };
+      }),
+      loadChartJs()
+    ]).then(function (r) {
+      state.items = (r[0] && r[0].items) || [];
+      if (!state.items.length) { statusEl.textContent = "Nenhum dado encontrado na tabela D1."; return; }
+      filterWrapOuter.style.display = "";
+      buildFilters();
+      renderAll();
+    }).catch(function (err) {
+      statusEl.style.display = "";
+      statusEl.textContent = "Erro ao carregar o IRPF: " + (err && err.message ? err.message : "falha ao carregar dados/gráficos");
+    });
+  }
+
   // ---------------- "page.holerite" — PMF - Folha de Pagamento (Financeiro->PMF - Folha de Pagamento, espelho em D1, 100% leitura) ----------------
   // Pedido do Georges: migrar a base Notion "PMF" (linhas de holerite) pra
   // uma tabela D1 ("holerite", banco "meu-hub-visor" — ver GET /holerite e
@@ -22344,6 +22862,16 @@
         container.appendChild(dividerHoleriteBI);
       }
       renderHoleriteBIPage(container, page);
+    }
+
+    // "page.irpf" — IRPF (Financeiro->Fiscal->IRPF). Ver renderIrpfPage.
+    if (page.irpf) {
+      if (renderedSomething) {
+        var dividerIrpf = document.createElement("hr");
+        dividerIrpf.className = "content-divider";
+        container.appendChild(dividerIrpf);
+      }
+      renderIrpfPage(container, page);
     }
   }
 
