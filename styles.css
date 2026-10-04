@@ -8265,3 +8265,42 @@ html, body {
 .holerite-bi-table tr.rpc-row-previsto td { color: #8a8a85; font-style: italic; background: #fafaf8; }
 .holerite-bi-table tr.rpc-row-real td { background: rgba(22, 163, 74, 0.06); }
 .holerite-bi-table tr.rpc-total-row td { font-weight: 700; border-top: 2px solid #d9d8d3; background: #f4f4f1; font-style: normal; }
+
+/* RPC — Seguro: barra Recolher/Expandir tudo; Projeção: stepper −/+ e cartões de cenário (celular) */
+.rpc-seg-toolbar { display: flex; gap: 6px; margin: 2px 0 6px; }
+.rpc-proj-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: flex-end; }
+.rpc-proj-field { display: flex; flex-direction: column; align-items: stretch; gap: 4px; font-size: 13px; margin: 0; }
+.rpc-proj-label { color: #55554f; font-size: 12px; line-height: 1.25; }
+.rpc-stepper { display: inline-flex; align-items: stretch; }
+.rpc-stepper .rpc-proj-input {
+  width: 96px; border-radius: 0; text-align: center; min-width: 0;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.rpc-stepper .rpc-proj-input::-webkit-outer-spin-button,
+.rpc-stepper .rpc-proj-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.rpc-stepper-btn {
+  width: 34px; border: 1px solid var(--border, #d0d7de); background: #f4f4f1; color: inherit;
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 0;
+}
+.rpc-stepper-btn:first-child { border-radius: 6px 0 0 6px; border-right: 0; }
+.rpc-stepper-btn:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+.rpc-stepper-btn:active { background: #e6e6e1; }
+.rpc-scen-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+.rpc-scen-card { border: 1px solid #e3e3de; border-left: 4px solid #999; border-radius: 10px; padding: 10px 12px; background: #fff; }
+.rpc-scen-card.rpc-scen-real { background: rgba(22, 163, 74, 0.05); }
+.rpc-scen-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.rpc-scen-name { font-weight: 600; font-size: 13px; line-height: 1.25; }
+.rpc-scen-head .rpc-ref { margin-top: 0; white-space: nowrap; flex: 0 0 auto; }
+.rpc-scen-big { font-size: 20px; font-weight: 700; margin: 6px 0 8px; }
+.rpc-scen-cap { font-size: 11px; font-weight: 400; color: #77756d; }
+.rpc-scen-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+.rpc-scen-cell { display: flex; flex-direction: column; }
+.rpc-scen-cell-l { font-size: 10.5px; color: #77756d; }
+.rpc-scen-cell-v { font-size: 13px; font-weight: 600; }
+@media (max-width: 700px) {
+  .rpc-proj-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+  .rpc-stepper { display: flex; }
+  .rpc-stepper .rpc-proj-input { flex: 1; width: 100%; padding: 8px 4px; font-size: 15px; }
+  .rpc-stepper-btn { width: 40px; font-size: 20px; }
+  .rpc-tab-body .financeiro-bi-canvas-wrap { height: 280px; }
+}

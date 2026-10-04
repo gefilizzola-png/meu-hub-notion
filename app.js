@@ -4082,7 +4082,7 @@
     return ordered;
   }
 
-  function buildCollapsibleSection(titleText, startExpanded) {
+  function buildCollapsibleSection(titleText, startExpanded, onToggle) {
     var collapsed = !startExpanded;
     var sec = document.createElement("div");
     sec.className = "priorities-subsection";
@@ -4098,7 +4098,7 @@
     var h = document.createElement("h4");
     h.className = "priorities-subsection-title";
     h.textContent = titleText;
-    h.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); });
+    h.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); if (onToggle) onToggle(collapsed); });
     header.appendChild(h);
     var body = document.createElement("div");
     body.className = "priorities-subsection-body";
@@ -4106,7 +4106,7 @@
       sec.classList.toggle("collapsed", collapsed);
       icon.className = collapsed ? "ti ti-chevron-right" : "ti ti-chevron-down";
     }
-    toggleBtn.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); });
+    toggleBtn.addEventListener("click", function () { collapsed = !collapsed; applyCollapsed(); if (onToggle) onToggle(collapsed); });
     applyCollapsed();
     sec.appendChild(header);
     sec.appendChild(body);
@@ -14675,8 +14675,10 @@
       data: null, linhas: [], det: [], resumo: null, tab: "resumo",
       sortConf: { col: 0, dir: -1 }, sortCob: { col: 0, dir: 1 }, sortCarreg: { col: 0, dir: -1 }, sortMes: { col: 0, dir: -1 },
       sortBas: { col: 0, dir: -1 }, sortAdic: { col: 0, dir: -1 }, sortPec: { col: 0, dir: 1 }, sortProj: { col: 3, dir: -1 },
-      proj: { meses: 493, aporte: null, taxaAA: 8, renda: 0.5, vis: "real" }
+      proj: { meses: null, aporte: null, taxaAA: 8, renda: 0.5, vis: "real" },
+      seg: {}  // Seguro: chave da divisória -> true se recolhida (sobrevive ao reordenar tabelas)
     };
+    function rpcNarrow() { return window.innerWidth <= 700; }
     var TABS = [
       { key: "resumo", label: "Resumo" },
       { key: "aportes", label: "Aportes e taxas" },
@@ -14846,9 +14848,36 @@
       var premI = cInval && typeof cInval.premioMensal === "number" ? cInval.premioMensal : 550;
       var detS = rpcDetalhe(state.linhas, premM, premI);
 
+      // divisórias com estado lembrado (state.seg) + botões globais Recolher/Expandir tudo.
+      // "Recolher tudo" mantém só os cards de resumo: fecha o detalhamento mensal (tabela + nota)
+      // dentro de cada seção com cards e as seções que são só tabela.
+      var SEG_DETALHES = ["basDet", "adicDet", "tot", "cad"];
+      function segSec(parent, key, titleText, defaultExpanded) {
+        var exp = state.seg[key] === undefined ? defaultExpanded : !state.seg[key];
+        var s = buildCollapsibleSection(titleText, exp, function (c) { state.seg[key] = c; });
+        s.section.classList.add("rpc-section");
+        parent.appendChild(s.section);
+        return s.body;
+      }
+      var segBar = document.createElement("div");
+      segBar.className = "rpc-seg-toolbar";
+      [["Recolher tudo (só os cards)", "ti-arrows-minimize", true], ["Expandir tudo", "ti-arrows-maximize", false]].forEach(function (d) {
+        var b = document.createElement("button");
+        b.type = "button"; b.className = "toolbar-icon-btn";
+        b.title = d[0]; b.setAttribute("aria-label", d[0]);
+        b.innerHTML = '<i class="ti ' + d[1] + '"></i>';
+        b.addEventListener("click", function () {
+          if (d[2]) { SEG_DETALHES.forEach(function (k) { state.seg[k] = true; }); }
+          else { state.seg = {}; }
+          renderTab();
+        });
+        segBar.appendChild(b);
+      });
+      body.appendChild(segBar);
+
       // básico
       var Tb = rpcTotais(detS, ["riscoLado", "riscoTotal", "riscoMorteTotal", "riscoInvalTotal"]);
-      var secB = mkSec(body, "🛡️ Seguro básico (parcela de risco) — dividido entre você e a PMF", true);
+      var secB = segSec(body, "basTop", "🛡️ Seguro básico (parcela de risco) — dividido entre você e a PMF", true);
       var gb = mkGrid(secB);
       var refB = refTexto(Tb);
       var morteMes = rpcR2(RPC_RISCO_BASICO_MORTE_LADO * 2), invalMes = rpcR2(RPC_RISCO_BASICO_INVAL_LADO * 2);
@@ -14862,6 +14891,7 @@
       mkCard(gb, { l: "Acumulado — invalidez", v: fmtM(Tb.tudo.riscoInvalTotal), s: "você + PMF", ref: refB, prev: Tb.nPrevisto > 0 });
       mkCard(gb, { l: "Capital segurado — morte", v: fmtM(RPC_PECULIO_BASICO_EVENTO), s: "parcela básica", ref: "apólice 25/07/26–30/05/27" });
       mkCard(gb, { l: "Capital segurado — invalidez", v: fmtM(RPC_PECULIO_BASICO_EVENTO), s: "parcela básica", ref: "apólice 25/07/26–30/05/27" });
+      var detB = segSec(secB, "basDet", "📅 Detalhamento mensal", true);
       var colsB = [
         { label: "Competência", get: function (r) { return r.competencia; }, text: function (r) { return lbl(r.competencia); } },
         { label: "Situação", get: function (r) { return situ(r); }, text: situ },
@@ -14871,14 +14901,14 @@
         { label: "Morte (você + PMF)", get: function (r) { return r.riscoMorteTotal; }, text: function (r) { return fmtM(r.riscoMorteTotal); }, num: true },
         { label: "Invalidez (você + PMF)", get: function (r) { return r.riscoInvalTotal; }, text: function (r) { return fmtM(r.riscoInvalTotal); }, num: true }
       ];
-      irpfSortableTable(secB, colsB, detS, state.sortBas, function () { renderTab(); }, rowPrev);
-      addTotalRow(secB, ["Total", "", fmtM(Tb.tudo.riscoLado), fmtM(Tb.tudo.riscoLado), fmtM(Tb.tudo.riscoTotal), fmtM(Tb.tudo.riscoMorteTotal), fmtM(Tb.tudo.riscoInvalTotal)]);
-      mkNote(secB, "O seguro básico não aparece no holerite: a FUMPRESC desconta a sua metade (e a da PMF) do valor que seria creditado na conta. Em " + lbl("2026-07") + " ainda não houve cobrança. Divisão morte/invalidez e capital segurado vêm do simulador da FUMPRESC/MAG.");
+      irpfSortableTable(detB, colsB, detS, state.sortBas, function () { renderTab(); }, rowPrev);
+      addTotalRow(detB, ["Total", "", fmtM(Tb.tudo.riscoLado), fmtM(Tb.tudo.riscoLado), fmtM(Tb.tudo.riscoTotal), fmtM(Tb.tudo.riscoMorteTotal), fmtM(Tb.tudo.riscoInvalTotal)]);
+      mkNote(detB, "O seguro básico não aparece no holerite: a FUMPRESC desconta a sua metade (e a da PMF) do valor que seria creditado na conta. Em " + lbl("2026-07") + " ainda não houve cobrança. Divisão morte/invalidez e capital segurado vêm do simulador da FUMPRESC/MAG.");
 
       // adicional
       var comAdic = detS.filter(function (r) { return r.seguroAdicional !== null; });
       var Ta = rpcTotais(detS, ["seguroAdicional", "adicMorte", "adicInval"]);
-      var secA = mkSec(body, "➕ Seguro adicional (rubrica 5598) — pago só por você, direto no holerite", true);
+      var secA = segSec(body, "adicTop", "➕ Seguro adicional (rubrica 5598) — pago só por você, direto no holerite", true);
       var ga = mkGrid(secA);
       var refA = refRange(Ta.comps) + " · holerite";
       mkCard(ga, { l: "Prêmio mensal — total", v: fmtM(rpcR2(premM + premI)), s: "descontado no holerite (5598)", ref: "vigente" });
@@ -14889,6 +14919,7 @@
       mkCard(ga, { l: "Acumulado — invalidez", v: fmtM(Ta.tudo.adicInval), s: "", ref: refA });
       mkCard(ga, { l: "Capital segurado — morte", v: fmtM(cMorte ? cMorte.peculio : null), s: "parcela adicional", ref: "apólice 25/07/26–30/05/27" });
       mkCard(ga, { l: "Capital segurado — invalidez", v: fmtM(cInval ? cInval.peculio : null), s: "parcela adicional", ref: "apólice 25/07/26–30/05/27" });
+      var detA = segSec(secA, "adicDet", "📅 Detalhamento mensal", true);
       var colsA = [
         { label: "Competência", get: function (r) { return r.competencia; }, text: function (r) { return lbl(r.competencia); } },
         { label: "Origem", get: function () { return "Holerite"; }, text: function () { return "Holerite"; } },
@@ -14896,12 +14927,12 @@
         { label: "Invalidez", get: function (r) { return r.adicInval; }, text: function (r) { return fmtM(r.adicInval); }, num: true },
         { label: "Total descontado (5598)", get: function (r) { return r.seguroAdicional; }, text: function (r) { return fmtM(r.seguroAdicional); }, num: true }
       ];
-      irpfSortableTable(secA, colsA, comAdic, state.sortAdic, function () { renderTab(); });
-      addTotalRow(secA, ["Total", "", fmtM(Ta.tudo.adicMorte), fmtM(Ta.tudo.adicInval), fmtM(Ta.tudo.seguroAdicional)]);
-      mkNote(secA, "Este valor sai direto do seu contracheque e não é creditado na conta de aposentadoria. A divisão morte/invalidez é proporcional aos prêmios cadastrados (R$ " + String(premM).replace(".", ",") + " e R$ " + String(premI).replace(".", ",") + ").");
+      irpfSortableTable(detA, colsA, comAdic, state.sortAdic, function () { renderTab(); });
+      addTotalRow(detA, ["Total", "", fmtM(Ta.tudo.adicMorte), fmtM(Ta.tudo.adicInval), fmtM(Ta.tudo.seguroAdicional)]);
+      mkNote(detA, "Este valor sai direto do seu contracheque e não é creditado na conta de aposentadoria. A divisão morte/invalidez é proporcional aos prêmios cadastrados (R$ " + String(premM).replace(".", ",") + " e R$ " + String(premI).replace(".", ",") + ").");
 
       // cobertura total
-      var secT = mkSec(body, "🎯 Cobertura total (básica + adicional)", true);
+      var secT = segSec(body, "tot", "🎯 Cobertura total (básica + adicional)", true);
       var peM = cMorte && typeof cMorte.peculio === "number" ? cMorte.peculio : null, peI = cInval && typeof cInval.peculio === "number" ? cInval.peculio : null;
       var rowsT = [
         { evento: "Morte", basico: RPC_PECULIO_BASICO_EVENTO, adicional: peM, total: peM === null ? null : rpcR2(RPC_PECULIO_BASICO_EVENTO + peM), premio: rpcR2(morteMes + premM) },
@@ -14917,7 +14948,7 @@
       mkNote(secT, "Prêmio mensal total do seguro: " + fmtM(rpcR2(RPC_PREMIO_BASICO_LADO * 2 + premM + premI)) + " (R$ " + String(rpcR2(RPC_PREMIO_BASICO_LADO * 2)).replace(".", ",") + " básico dividido com a PMF + R$ " + String(rpcR2(premM + premI)).replace(".", ",") + " adicional só seu). Reajuste anual pelo IPCA.");
 
       // cadastro Notion
-      var secC = mkSec(body, "📋 Coberturas cadastradas (base Notion)", false);
+      var secC = segSec(body, "cad", "📋 Coberturas cadastradas (base Notion)", true);
       var cob = (state.data && state.data.coberturas) || [];
       if (!cob.length) { mkNote(secC, "Nenhuma cobertura cadastrada na base Notion."); return; }
       irpfSortableTable(secC, [
@@ -14937,25 +14968,54 @@
       var ult = state.linhas.filter(function (l) { return l.esperadoTotal !== null || l.extratoTotal !== null; }).pop();
       if (p.aporte === null) p.aporte = ult ? (ult.extratoTotal !== null ? ult.extratoTotal : ult.esperadoTotal) : 0;
       var media = rpcMediaRendimento(state.linhas);
+      // Meses até aposentar: nascimento 08/06/1986 + 75 anos = jun/2061; conta a partir do mês do saldo atual (encolhe a cada extrato)
+      var RPC_APOS_IDX = 2061 * 12 + 6;
+      var baseM = String(r.competenciaSaldo || "").match(/^(\d{4})-(\d{2})/);
+      var hoje = new Date();
+      var baseIdx = baseM ? (parseInt(baseM[1], 10) * 12 + parseInt(baseM[2], 10)) : (hoje.getFullYear() * 12 + hoje.getMonth() + 1);
+      var mesesAuto = Math.max(0, RPC_APOS_IDX - baseIdx);
+      var mesesAutoAtivo = p.meses === null;
+      if (mesesAutoAtivo) p.meses = mesesAuto;
+      var narrow = rpcNarrow();
       var ctl = document.createElement("div");
-      ctl.className = "holerite-bi-filter-row";
-      function mkInput(label, key, step) {
+      ctl.className = "holerite-bi-filter-row rpc-proj-controls";
+      // campo numérico com botões − / + (o celular não mostra as setinhas nativas do input)
+      function mkInput(label, key, bump, decimals) {
         var lab = document.createElement("label");
         lab.className = "rpc-proj-field";
-        lab.appendChild(document.createTextNode(label + " "));
+        var txt = document.createElement("span");
+        txt.className = "rpc-proj-label"; txt.textContent = label;
+        lab.appendChild(txt);
+        var st = document.createElement("div");
+        st.className = "rpc-stepper";
         var inp = document.createElement("input");
-        inp.type = "number"; inp.step = step; inp.value = p[key]; inp.className = "rpc-proj-input";
-        inp.addEventListener("change", function () {
-          var v = parseFloat(String(inp.value).replace(",", "."));
-          if (isFinite(v) && v >= 0) { p[key] = v; renderTab(); }
-        });
-        lab.appendChild(inp);
+        inp.type = "number"; inp.step = "any"; inp.min = "0"; inp.setAttribute("inputmode", "decimal");
+        inp.value = p[key]; inp.className = "rpc-proj-input";
+        function setVal(v) {
+          if (!isFinite(v) || v < 0) return;
+          p[key] = Math.round(v * Math.pow(10, decimals)) / Math.pow(10, decimals);
+          renderTab();
+        }
+        inp.addEventListener("change", function () { setVal(parseFloat(String(inp.value).replace(",", "."))); });
+        function mkBtn(sign) {
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "rpc-stepper-btn";
+          b.setAttribute("aria-label", (sign < 0 ? "Diminuir " : "Aumentar ") + label);
+          b.textContent = sign < 0 ? "−" : "+";
+          b.addEventListener("click", function () {
+            var cur = parseFloat(String(inp.value).replace(",", "."));
+            setVal((isFinite(cur) ? cur : 0) + sign * bump);
+          });
+          return b;
+        }
+        st.appendChild(mkBtn(-1)); st.appendChild(inp); st.appendChild(mkBtn(1));
+        lab.appendChild(st);
         ctl.appendChild(lab);
       }
-      mkInput("Meses até aposentar", "meses", "1");
-      mkInput("Aporte mensal total (você + PMF), R$", "aporte", "0.01");
-      mkInput("Cenário personalizado (% a.a.)", "taxaAA", "0.1");
-      mkInput("Renda mensal (% do fundo)", "renda", "0.1");
+      mkInput("Meses até aposentar", "meses", 1, 0);
+      mkInput("Aporte mensal total (você + PMF), R$", "aporte", 50, 2);
+      mkInput("Cenário personalizado (% a.a.)", "taxaAA", 0.5, 2);
+      mkInput("Renda mensal (% do fundo)", "renda", 0.1, 2);
       body.appendChild(ctl);
 
       var cen = [];
@@ -14977,7 +15037,41 @@
         { label: "Rendimentos", get: function (x) { return x.r.rendimentos; }, text: function (x) { return fmtM(x.r.rendimentos); }, num: true },
         { label: "Benefício inicial/mês", get: function (x) { return x.r.beneficioInicial; }, text: function (x) { return fmtM(x.r.beneficioInicial); }, num: true }
       ];
-      irpfSortableTable(body, cols, res, state.sortProj, function () { renderTab(); }, function (x) { return x.c.tipo !== "Nominal" ? "rpc-row-real" : ""; });
+      if (!narrow) {
+        irpfSortableTable(body, cols, res, state.sortProj, function () { renderTab(); }, function (x) { return x.c.tipo !== "Nominal" ? "rpc-row-real" : ""; });
+      } else {
+        // celular: um cartão por cenário (a tabela de 7 colunas não cabe)
+        var scenWrap = document.createElement("div");
+        scenWrap.className = "rpc-scen-list";
+        res.forEach(function (x) {
+          var card = document.createElement("div");
+          card.className = "rpc-scen-card" + (x.c.tipo !== "Nominal" ? " rpc-scen-real" : "");
+          card.style.borderLeftColor = x.c.cor;
+          var head = document.createElement("div");
+          head.className = "rpc-scen-head";
+          var nm = document.createElement("span"); nm.className = "rpc-scen-name"; nm.textContent = x.c.label;
+          var tp = document.createElement("span"); tp.className = "rpc-ref"; tp.textContent = x.c.tipo;
+          head.appendChild(nm); head.appendChild(tp);
+          card.appendChild(head);
+          var big = document.createElement("div");
+          big.className = "rpc-scen-big";
+          big.textContent = fmtM(x.r.saldoFinal);
+          var bigCap = document.createElement("span"); bigCap.className = "rpc-scen-cap"; bigCap.textContent = " saldo final";
+          big.appendChild(bigCap);
+          card.appendChild(big);
+          var mini = document.createElement("div");
+          mini.className = "rpc-scen-mini";
+          [["Aportado", fmtM(x.r.aportes)], ["Rendimentos", fmtM(x.r.rendimentos)], ["Benefício/mês", fmtM(x.r.beneficioInicial)], ["Rend. mensal", fmtPct(Math.round(x.c.i * 10000) / 100)]].forEach(function (m) {
+            var c = document.createElement("div"); c.className = "rpc-scen-cell";
+            var l = document.createElement("span"); l.className = "rpc-scen-cell-l"; l.textContent = m[0];
+            var v = document.createElement("span"); v.className = "rpc-scen-cell-v"; v.textContent = m[1];
+            c.appendChild(l); c.appendChild(v); mini.appendChild(c);
+          });
+          card.appendChild(mini);
+          scenWrap.appendChild(card);
+        });
+        body.appendChild(scenWrap);
+      }
 
       var tg = document.createElement("div");
       tg.className = "holerite-bi-toggle-row";
@@ -14995,12 +15089,15 @@
         type: "line",
         data: { labels: labels, datasets: vis.map(function (x) { return { label: x.c.label, data: x.r.serie.map(function (s) { return s.saldo; }), borderColor: x.c.cor, backgroundColor: x.c.cor, borderWidth: 2, pointRadius: 0, tension: 0.15 }; }) },
         options: { responsive: true, maintainAspectRatio: false,
-          plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + fmtM(ctx.parsed.y); } } } },
-          scales: { y: { beginAtZero: true, ticks: { callback: function (v) { return "R$ " + (Number(v) >= 1000000 ? (Number(v) / 1000000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mi" : Number(v).toLocaleString("pt-BR")); } } } } }
+          plugins: {
+            legend: narrow ? { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } } : { position: "top" },
+            tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + fmtM(ctx.parsed.y); } } }
+          },
+          scales: { x: { ticks: { maxTicksLimit: narrow ? 6 : 12 } }, y: { beginAtZero: true, ticks: { callback: function (v) { return "R$ " + (Number(v) >= 1000000 ? (Number(v) / 1000000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mi" : Number(v).toLocaleString("pt-BR")); } } } } }
       });
       mkNote(body, "Nominal: aporte constante em reais correntes, sem reajuste salarial e sem inflação. O rendimento composto pesa muito: 14% a.a. por " + Math.round(p.meses / 12) + " anos multiplica cada real aportado por ~" + Math.round(Math.pow(1.14, p.meses / 12)) + " vezes, e é por isso que o saldo nominal fica tão alto — o total aportado é só uma fração dele.");
       mkNote(body, "Realista (R$ de hoje): retorno de 3%, 4% e 6% a.a. acima da inflação, com o aporte reajustado pela inflação (poder de compra constante). É a leitura mais próxima do que o saldo e a renda poderão comprar.");
-      mkNote(body, "A informação de " + p.meses + " meses vem da simulação da MAG (aposentadoria aos 75 anos). A média real usa só os meses já lançados no extrato" + (media.n < 3 ? " — amostra ainda muito curta, trate como indicativo." : "."));
+      mkNote(body, "Meses até aposentar: " + p.meses + (p.meses === mesesAuto ? " (calculado: nascimento 08/06/1986 + 75 anos = jun/2061, a partir do saldo de " + (r.competenciaSaldo || "hoje") + "; diminui a cada extrato novo). A simulação original da MAG usava 493 meses." : " (valor digitado por você; apague e recarregue a página para voltar ao automático).") + " A média real usa só os meses já lançados no extrato" + (media.n < 3 ? " — amostra ainda muito curta, trate como indicativo." : "."));
     }
 
     // ---------- aba: Conferência ----------
@@ -23293,7 +23390,15 @@
         box.appendChild(boxItems);
         itemGroupsWrap.appendChild(box);
       });
-      container.appendChild(itemGroupsWrap);
+      // celular: os atalhos ("Abrir"/"Criar"...) ocupavam metade da tela —
+      // ficam dentro de uma divisória "Atalhos" recolhida (toque pra abrir).
+      if (window.innerWidth <= 700) {
+        var atalhosSec = buildCollapsibleSection("🔗 Atalhos", false);
+        atalhosSec.body.appendChild(itemGroupsWrap);
+        container.appendChild(atalhosSec.section);
+      } else {
+        container.appendChild(itemGroupsWrap);
+      }
       renderedSomething = true;
     }
 
