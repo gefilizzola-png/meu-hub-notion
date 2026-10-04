@@ -13912,7 +13912,8 @@
   // 1 registro por (competência, matrícula, folha) que tem linha de IR (6000)
   function irpfGrupos(items) {
     var provMap = {};
-    holeriteBiTotals(items).forEach(function (t) { provMap[t.competencia + "|" + t.matricula + "|" + t.folha] = t.prov; });
+    var liqMap = {};
+    holeriteBiTotals(items).forEach(function (t) { var k = t.competencia + "|" + t.matricula + "|" + t.folha; provMap[k] = t.prov; liqMap[k] = t.liq; });
     var map = {}, order = [];
     (items || []).forEach(function (it) {
       var key = it.competencia + "|" + it.matricula + "|" + it.folha;
@@ -13938,6 +13939,7 @@
       var g = map[k];
       if (!g.temIr) return;
       g.bruto = holeriteBiR2(provMap[k] || 0);
+      g.liquido = holeriteBiR2(liqMap[k] || 0);
       g.trib = holeriteBiR2(g.trib); g.prev = holeriteBiR2(g.prev); g.teto = holeriteBiR2(g.teto);
       g.rra = holeriteBiR2(g.rra); g.prevRra = holeriteBiR2(g.prevRra);
       g.ir = holeriteBiR2(g.ir); g.baseHolerite = holeriteBiR2(g.baseHolerite);
@@ -13946,6 +13948,7 @@
       g.converge = Math.abs(g.diff) <= 0.05;
       g.aliqBase = g.baseHolerite ? holeriteBiR2(g.ir / g.baseHolerite * 100) : 0;
       g.aliqBruto = g.bruto ? holeriteBiR2(g.ir / g.bruto * 100) : 0;
+      g.aliqLiquido = g.liquido ? holeriteBiR2(g.ir / g.liquido * 100) : 0;
       g.principal = irpfIsPrincipal(g.matricula);
       out.push(g);
     });
@@ -14104,7 +14107,7 @@
     var retidoSection = mkSection(), mensalSection = mkSection(), confSection = mkSection(), tabelaSection = mkSection(), extraSection = mkSection();
     var allSections = [retidoSection, mensalSection, confSection, tabelaSection, extraSection];
 
-    var state = { items: [], anos: [], matriculas: [], folhas: [], soDivergencias: false };
+    var state = { items: [], anos: [], matriculas: [], folhas: [], soDivergencias: false, mensalBase: "bruto" };
     var sortConf = { col: 0, dir: -1 }, sortTab = { col: 0, dir: -1 }, sortExtra = { col: 0, dir: -1 };
     var charts = {};
     function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
@@ -14191,21 +14194,33 @@
       destroyChart("irpfMensal");
       mensalSection.innerHTML = ""; mensalSection.style.display = "";
       mkTitle(mensalSection, "🗓️ IR retido por competência");
+      var porLiquido = state.mensalBase === "liquido";
+      var tog = document.createElement("div");
+      tog.className = "holerite-bi-toggle-row";
+      [{ v: "bruto", l: "Relatório por Bruto" }, { v: "liquido", l: "Relatório por Líquido" }].forEach(function (o) {
+        var bt = document.createElement("button");
+        bt.type = "button"; bt.className = "holerite-bi-toggle" + (state.mensalBase === o.v ? " active" : "");
+        bt.textContent = o.l;
+        bt.addEventListener("click", function () { state.mensalBase = o.v; renderMensal(grupos); });
+        tog.appendChild(bt);
+      });
+      mensalSection.appendChild(tog);
       var byComp = {}, order = [];
       grupos.forEach(function (g) {
         var r = byComp[g.competencia];
-        if (!r) { r = byComp[g.competencia] = { competencia: g.competencia, ir: 0, bruto: 0, base: 0 }; order.push(g.competencia); }
-        r.ir += g.ir; r.bruto += g.bruto; r.base += g.baseHolerite;
+        if (!r) { r = byComp[g.competencia] = { competencia: g.competencia, ir: 0, ref: 0 }; order.push(g.competencia); }
+        r.ir += g.ir; r.ref += porLiquido ? g.liquido : g.bruto;
       });
       order.sort();
       var rows = order.map(function (c) { return byComp[c]; });
+      var aliqLabel = porLiquido ? "Alíquota efetiva s/ líquido (%)" : "Alíquota efetiva s/ bruto (%)";
       var canvas = mkChartBox(mensalSection, "irpfMensal");
       charts.irpfMensal = new window.Chart(canvas.getContext("2d"), {
         data: {
           labels: rows.map(function (r) { return holeriteBiPeriodLabel(r.competencia); }),
           datasets: [
             { type: "bar", label: "IR retido", data: rows.map(function (r) { return holeriteBiR2(r.ir); }), backgroundColor: COLOR_IR, borderRadius: 3, yAxisID: "y" },
-            { type: "line", label: "Alíquota efetiva s/ bruto (%)", data: rows.map(function (r) { return r.bruto ? holeriteBiR2(r.ir / r.bruto * 100) : null; }), borderColor: COLOR_ALIQ, backgroundColor: COLOR_ALIQ, borderWidth: 2, pointRadius: rows.length > 60 ? 0 : 3, tension: 0.25, yAxisID: "y1" }
+            { type: "line", label: aliqLabel, data: rows.map(function (r) { return r.ref ? holeriteBiR2(r.ir / r.ref * 100) : null; }), borderColor: COLOR_ALIQ, backgroundColor: COLOR_ALIQ, borderWidth: 2, pointRadius: rows.length > 60 ? 0 : 3, tension: 0.25, yAxisID: "y1" }
           ]
         },
         options: {
@@ -14219,6 +14234,7 @@
             x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } } }
         }
       });
+      mkNote(mensalSection, porLiquido ? "Alíquota efetiva = IR retido ÷ salário líquido da competência (soma das matrículas/folhas filtradas)." : "Alíquota efetiva = IR retido ÷ total de proventos da competência (soma das matrículas/folhas filtradas).");
     }
 
     function renderConferencia(grupos) {
