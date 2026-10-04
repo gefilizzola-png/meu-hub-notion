@@ -8439,3 +8439,20 @@ html, body {
   .cal-ag-time { width: 70px; }
   .cal-ag-src { display: none; }
 }
+.cal-chip.solo { background: var(--cal-c, #868e96); color: #fff; font-weight: 600; }
+
+/* Calendário — grupos de chips */
+.cal-chips-groups { align-items: center; margin-bottom: 8px; }
+.cal-chips-label { font-size: 12px; font-weight: 600; color: #6b7280; margin-right: 2px; }
+.cal-chip-group { font-weight: 600; }
+.cal-chip-group.empty { opacity: .45; cursor: not-allowed; }
+.cal-grp-editor { margin-top: 8px; }
+.cal-grp-card { border: 1px solid var(--cal-border); background: #fff; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.cal-grp-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cal-grp-icon { width: 52px; text-align: center; padding: 5px 4px; border: 1px solid #ced4da; border-radius: 8px; font-size: 15px; }
+.cal-grp-name { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 13.5px; }
+.cal-grp-del { border: 0; background: transparent; color: #c92a2a; cursor: pointer; font-size: 17px; padding: 4px 6px; border-radius: 6px; }
+.cal-grp-del:hover { background: #fff0f0; }
+.cal-grp-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 12px; }
+.cal-grp-src { display: flex; align-items: center; gap: 7px; padding: 3px 2px; font-size: 13px; cursor: pointer; }
+.cal-grp-foot { display: flex; flex-wrap: wrap; gap: 6px; }

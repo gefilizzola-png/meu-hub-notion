@@ -1481,6 +1481,16 @@ var NOTIFICATION_SOURCES = [
 // Folha de Pagamento ficam de fora de propósito (pedido do Georges).
 var CALENDAR_CENTRAL_DATABASE_ID = "2310481486dd80079202fe1eaf5e14c4";
 var CALENDAR_DONE_ANDAMENTO_IDS = ["d228224dee1d43dabb72744097f10028", "2410481486dd80a3a8b0d819542a55c5"];
+// Grupos de chips do Calendário (seed). O Georges cria/edita os grupos na tela
+// ("Editar grupos" em Filtrar); o que ele salvar (KV, /calendar-settings → groups)
+// substitui este padrão. "sources" = ids de CALENDAR_SOURCES.
+var CALENDAR_DEFAULT_GROUPS = [
+  { id: "pmf", label: "PMF", icon: "🏛️", color: "#4a90d9", sources: ["reunioes", "sessoes", "processos_tat_jart", "tarefas"] },
+  { id: "familia", label: "Família", icon: "👨‍👩‍👦", color: "#e64980", sources: ["aniversarios", "saude", "provas_vitor"] },
+  { id: "financeiro", label: "Financeiro", icon: "💰", color: "#2f9e44", sources: ["financeiro", "emprestimos"] },
+  { id: "viagens", label: "Viagens", icon: "✈️", color: "#1c7ed6", sources: ["passagens"] },
+  { id: "outros", label: "Outros", icon: "📌", color: "#868e96", sources: ["meus_eventos"] }
+];
 var CALENDAR_SOURCES = [
   { id: "reunioes", label: "Reuniões", icon: "📅", color: "#4a90d9", kind: "central",
     origins: ["PMF - Reuniões"], target: { type: "page", target: "pmf_ctrl_reunioes" }, defaultEnabled: true },
@@ -1784,7 +1794,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-04 18:05",
+  appVersion: "2026-10-04 18:34",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha

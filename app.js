@@ -23737,6 +23737,7 @@
       query: "",
       enabled: {},
       hidden: {},
+      groups: JSON.parse(JSON.stringify(window.CALENDAR_DEFAULT_GROUPS || [])),
       events: [],
       errors: [],
       loading: true,
@@ -23816,6 +23817,11 @@
 
     var filterSec = buildCollapsibleSection("Filtrar", false);
     var filterBody = filterSec.body;
+    var chipsHost = document.createElement("div");   // refeito a cada mudança de filtro
+    var grpHost = document.createElement("div");     // editor de grupos (só refeito em mudança estrutural)
+    grpHost.style.display = "none";
+    filterBody.appendChild(chipsHost);
+    filterBody.appendChild(grpHost);
     root.appendChild(filterSec.section);
 
     var srcPanel = document.createElement("div");
@@ -23840,28 +23846,231 @@
       return b;
     }
 
-    // ---------- filtros (chips por fonte + ocultar concluídos) ----------
+    // Estado de um CONJUNTO de chips (1 chip = conjunto de 1; grupo = vários):
+    //   "solo" = só o conjunto está visível; "excl" = só o conjunto está oculto; "" = padrão/outro.
+    function calSetIds(ids) {
+      return (ids || []).filter(function (id) { return srcById[id] && st.enabled[id]; });
+    }
+    function calSetState(ids) {
+      var set = calSetIds(ids);
+      if (!set.length) return "";
+      var inSet = {};
+      set.forEach(function (id) { inSet[id] = true; });
+      var on = sources.filter(function (x) { return st.enabled[x.id]; });
+      var rest = on.length - set.length;
+      var allSetVisible = set.every(function (id) { return !st.hidden[id]; });
+      var allSetHidden = set.every(function (id) { return !!st.hidden[id]; });
+      var restHidden = on.filter(function (x) { return !inSet[x.id] && st.hidden[x.id]; }).length;
+      var restVisible = rest - restHidden;
+      if (rest >= 1 && allSetVisible && restVisible === 0) return "solo";
+      if (rest >= 2 && allSetHidden && restHidden === 0) return "excl";
+      return "";
+    }
+    function calChipState(id) { return calSetState([id]); }
+    // ciclo de 3 cliques: padrão -> só este conjunto -> tudo MENOS este conjunto -> padrão
+    function calCycleSet(ids) {
+      var set = calSetIds(ids);
+      if (!set.length) return;
+      var cs = calSetState(ids);
+      var inSet = {};
+      set.forEach(function (id) { inSet[id] = true; });
+      var on = sources.filter(function (x) { return st.enabled[x.id]; });
+      var rest = on.length - set.length;
+      st.hidden = {};
+      if (cs === "solo") {
+        if (rest >= 2) set.forEach(function (id) { st.hidden[id] = true; });   // 2º clique
+        // rest < 2: 2º estado seria igual ao "só o outro" -> volta ao padrão
+      } else if (cs === "excl") {
+        st.hidden = {};                                                          // 3º clique
+      } else {
+        on.forEach(function (x) { if (!inSet[x.id]) st.hidden[x.id] = true; });  // 1º clique
+      }
+      saveSettings({ subToggles: hiddenToSub() });
+      buildFilterBar();
+      draw();
+    }
+
+    // ---------- grupos ----------
+    function commitGroups() {
+      saveSettings({ groups: st.groups });
+    }
+    function newGroupId() {
+      return "g" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+    }
+    function buildGroupEditor() {
+      grpHost.innerHTML = "";
+      var box = document.createElement("div");
+      box.className = "cal-src-panel cal-grp-editor";
+      var h = document.createElement("div");
+      h.className = "cal-src-head";
+      h.textContent = "Grupos de chips";
+      box.appendChild(h);
+      var hint = document.createElement("p");
+      hint.className = "cal-src-hint";
+      hint.textContent = "Cada grupo reúne alguns chips para filtrar de uma vez. Marque abaixo quais fontes pertencem a cada grupo (uma fonte pode estar em mais de um).";
+      box.appendChild(hint);
+
+      st.groups.forEach(function (g, gi) {
+        var card = document.createElement("div");
+        card.className = "cal-grp-card";
+        var top = document.createElement("div");
+        top.className = "cal-grp-top";
+        var icon = document.createElement("input");
+        icon.type = "text";
+        icon.className = "cal-grp-icon";
+        icon.maxLength = 8;
+        icon.placeholder = "🙂";
+        icon.value = g.icon || "";
+        var name = document.createElement("input");
+        name.type = "text";
+        name.className = "cal-grp-name";
+        name.maxLength = 40;
+        name.placeholder = "Nome do grupo";
+        name.value = g.label || "";
+        function onText() { g.icon = icon.value.trim(); g.label = name.value; buildFilterBar(); }
+        icon.addEventListener("input", onText);
+        name.addEventListener("input", onText);
+        icon.addEventListener("change", commitGroups);
+        name.addEventListener("change", function () {
+          if (!name.value.trim()) { name.value = g.label = "Grupo"; buildFilterBar(); }
+          commitGroups();
+        });
+        var del = document.createElement("button");
+        del.type = "button";
+        del.className = "cal-grp-del";
+        del.title = "Excluir grupo";
+        del.innerHTML = '<i class="ti ti-trash"></i>';
+        del.addEventListener("click", function () {
+          if (!window.confirm("Excluir o grupo “" + (g.label || "sem nome") + "”? (As fontes continuam existindo.)")) return;
+          st.groups.splice(gi, 1);
+          commitGroups();
+          buildGroupEditor();
+          buildFilterBar();
+        });
+        top.appendChild(icon);
+        top.appendChild(name);
+        top.appendChild(del);
+        card.appendChild(top);
+
+        var list = document.createElement("div");
+        list.className = "cal-grp-sources";
+        sources.forEach(function (s) {
+          var lbl = document.createElement("label");
+          lbl.className = "cal-grp-src";
+          var cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = (g.sources || []).indexOf(s.id) !== -1;
+          cb.addEventListener("change", function () {
+            var arr = (g.sources || []).filter(function (x) { return x !== s.id; });
+            if (cb.checked) arr.push(s.id);
+            g.sources = arr;
+            commitGroups();
+            buildFilterBar();
+          });
+          var dot = document.createElement("span");
+          dot.className = "cal-src-dot";
+          dot.style.background = s.color;
+          var tx = document.createElement("span");
+          tx.textContent = s.icon + " " + s.label;
+          lbl.appendChild(cb);
+          lbl.appendChild(dot);
+          lbl.appendChild(tx);
+          list.appendChild(lbl);
+        });
+        card.appendChild(list);
+        box.appendChild(card);
+      });
+
+      var foot = document.createElement("div");
+      foot.className = "cal-grp-foot";
+      var addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "cal-chip cal-chip-neutral";
+      addBtn.innerHTML = '<i class="ti ti-plus"></i> Novo grupo';
+      addBtn.addEventListener("click", function () {
+        st.groups.push({ id: newGroupId(), label: "Novo grupo", icon: "📁", color: "", sources: [] });
+        commitGroups();
+        buildGroupEditor();
+        buildFilterBar();
+      });
+      var resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.className = "cal-chip cal-chip-neutral";
+      resetBtn.innerHTML = '<i class="ti ti-restore"></i> Restaurar grupos padrão';
+      resetBtn.addEventListener("click", function () {
+        if (!window.confirm("Voltar aos grupos padrão? Seus grupos atuais serão substituídos.")) return;
+        st.groups = JSON.parse(JSON.stringify(window.CALENDAR_DEFAULT_GROUPS || []));
+        commitGroups();
+        buildGroupEditor();
+        buildFilterBar();
+      });
+      var closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "cal-chip cal-chip-neutral";
+      closeBtn.innerHTML = '<i class="ti ti-check"></i> Fechar';
+      closeBtn.addEventListener("click", function () { grpHost.style.display = "none"; });
+      foot.appendChild(addBtn);
+      foot.appendChild(resetBtn);
+      foot.appendChild(closeBtn);
+      box.appendChild(foot);
+      grpHost.appendChild(box);
+    }
+
+    // ---------- filtros (grupos + chips por fonte + ocultar concluídos) ----------
     function buildFilterBar() {
-      filterBody.innerHTML = "";
+      chipsHost.innerHTML = "";
+
+      // linha de grupos
+      var gRow = document.createElement("div");
+      gRow.className = "cal-chips cal-chips-groups";
+      var gLabel = document.createElement("span");
+      gLabel.className = "cal-chips-label";
+      gLabel.textContent = "Grupos";
+      gRow.appendChild(gLabel);
+      st.groups.forEach(function (g) {
+        var ids = calSetIds(g.sources);
+        var chip = document.createElement("button");
+        chip.type = "button";
+        var gs = calSetState(g.sources);
+        chip.className = "cal-chip cal-chip-group" + (gs === "solo" ? " solo" : "") + (gs === "excl" ? " off" : "") + (!ids.length ? " empty" : "");
+        chip.style.setProperty("--cal-c", g.color || "#495057");
+        chip.title = !ids.length ? "Nenhuma fonte ativa neste grupo" :
+          (gs === "solo" ? "Só este grupo aparece — clique para ocultar só este grupo" :
+          (gs === "excl" ? "Só este grupo está oculto — clique para voltar ao padrão" : "Clique para ver só este grupo"));
+        chip.textContent = (g.icon ? g.icon + " " : "") + (g.label || "Grupo");
+        chip.disabled = !ids.length;
+        chip.addEventListener("click", function () { calCycleSet(g.sources); });
+        gRow.appendChild(chip);
+      });
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "cal-chip cal-chip-neutral";
+      editBtn.innerHTML = '<i class="ti ti-pencil"></i> Editar grupos';
+      editBtn.addEventListener("click", function () {
+        var open = grpHost.style.display !== "none";
+        grpHost.style.display = open ? "none" : "block";
+        if (!open) buildGroupEditor();
+      });
+      gRow.appendChild(editBtn);
+      chipsHost.appendChild(gRow);
+
+      // linha de chips individuais
       var row = document.createElement("div");
       row.className = "cal-chips";
       sources.forEach(function (s) {
         if (!st.enabled[s.id]) return;
         var chip = document.createElement("button");
         chip.type = "button";
-        chip.className = "cal-chip" + (st.hidden[s.id] ? " off" : "");
+        var isSolo = calChipState(s.id) === "solo";
+        chip.className = "cal-chip" + (st.hidden[s.id] ? " off" : "") + (isSolo ? " solo" : "");
         chip.style.setProperty("--cal-c", s.color);
-        chip.title = st.hidden[s.id] ? "Mostrar no Calendário" : "Ocultar do Calendário";
+        chip.title = isSolo ? "Só esta aparece — clique para ocultar só esta" :
+          (calChipState(s.id) === "excl" ? "Só esta está oculta — clique para voltar ao padrão" : "Clique para ver só esta");
         chip.textContent = s.icon + " " + s.label;
-        chip.addEventListener("click", function () {
-          st.hidden[s.id] = !st.hidden[s.id];
-          saveSettings({ subToggles: hiddenToSub() });
-          buildFilterBar();
-          draw();
-        });
+        chip.addEventListener("click", function () { calCycleSet([s.id]); });
         row.appendChild(chip);
       });
-      filterBody.appendChild(row);
+      chipsHost.appendChild(row);
 
       var row2 = document.createElement("div");
       row2.className = "cal-chips cal-chips-extra";
@@ -23876,6 +24085,18 @@
         draw();
       });
       row2.appendChild(doneChip);
+      var noneBtn = document.createElement("button");
+      noneBtn.type = "button";
+      noneBtn.className = "cal-chip cal-chip-neutral";
+      noneBtn.innerHTML = '<i class="ti ti-square-off"></i> Desmarcar todos';
+      noneBtn.addEventListener("click", function () {
+        st.hidden = {};
+        sources.forEach(function (x) { if (st.enabled[x.id]) st.hidden[x.id] = true; });
+        saveSettings({ subToggles: hiddenToSub() });
+        buildFilterBar();
+        draw();
+      });
+      row2.appendChild(noneBtn);
       var clearBtn = document.createElement("button");
       clearBtn.type = "button";
       clearBtn.className = "cal-chip cal-chip-neutral";
@@ -24088,7 +24309,7 @@
           }
           cell.addEventListener("click", function () { goDay(iso); });
         } else {
-          var MAX = 3;
+          var MAX = 4;
           evs.slice(0, MAX).forEach(function (ev) { cell.appendChild(buildChip(ev, now, true)); });
           if (evs.length > MAX) {
             var more = document.createElement("button");
@@ -24372,6 +24593,12 @@
           if (sv.subToggles && typeof sv.subToggles === "object") {
             Object.keys(sv.subToggles).forEach(function (k) {
               if (k.indexOf("hide:") === 0 && sv.subToggles[k]) st.hidden[k.slice(5)] = true;
+            });
+          }
+          if (Array.isArray(sv.groups)) {
+            st.groups = sv.groups.filter(function (g) { return g && typeof g === "object" && g.id; }).map(function (g) {
+              return { id: String(g.id), label: String(g.label || ""), icon: String(g.icon || ""), color: String(g.color || ""),
+                       sources: Array.isArray(g.sources) ? g.sources.filter(function (x) { return typeof x === "string"; }) : [] };
             });
           }
           if (typeof sv.hideDone === "boolean") st.hideDone = sv.hideDone;
