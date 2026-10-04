@@ -265,14 +265,22 @@
   // linha separadora (ex: Criar páginas → PMF, com "Acesso Rápido" embaixo).
   // Esta função devolve sempre a lista plana de items, na ordem em que
   // aparecem (items soltos primeiro, depois os grupos concatenados).
-  function pageItems(page) {
+  // "forNav" (pedido do Georges — o menu lateral ficou bagunçado): os botões de atalho
+  // cruzado entre páginas (itemGroups, type:"page", icon:"meuhub") são só ATALHOS no corpo
+  // da página — NÃO são filhos dela. Com forNav=true (árvore do menu, índice de busca e
+  // mapa de pais/breadcrumb) eles ficam de fora; o atalho por teclado (activateIndex)
+  // continua usando a lista completa.
+  function pageItems(page, forNav) {
     var out = (page.items || []).slice();
     // "itemGroups" (opcional) — mesma ideia de "items" soltos no topo, só
     // que divididos em pequenos subgrupos rotulados (ex: "Abrir no Notion"
     // / "Criar no Notion"). Entra na indexação igual a "items"/"groups".
     if (page.itemGroups) {
       page.itemGroups.forEach(function (g) {
-        (g.items || []).forEach(function (it) { out.push(it); });
+        (g.items || []).forEach(function (it) {
+          if (forNav && it.type === "page" && it.icon === "meuhub") return;
+          out.push(it);
+        });
       });
     }
     if (page.groups) {
@@ -294,7 +302,7 @@
       visited[pageId] = true;
       var page = cfg.pages[pageId];
       if (!page) return;
-      pageItems(page).forEach(function (item) {
+      pageItems(page, true).forEach(function (item) {
         flatIndex.push({
           label: item.label,
           type: item.type,
@@ -364,7 +372,7 @@
     visited = Object.assign({}, visited);
     visited[pageId] = true;
 
-    var childItems = pageItems(page);
+    var childItems = pageItems(page, true);
     var hasContent = childItems.length > 0;
     // "pinnedOnly" (ver comentário grande de pages.entrada em config.js) —
     // item que virou atalho fixo no topo do menu (renderSidebarPinned)
