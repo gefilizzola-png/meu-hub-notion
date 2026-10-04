@@ -7932,7 +7932,7 @@ html, body {
   .ponto-pmfnota-badge { max-width: 70px; }
 }
 
-/* ---------------- "page.holerite" — Holerite / PMF (rodada 1) ---------------- */
+/* ---------------- "page.holerite" — PMF - Folha de Pagamento (rodada 1) ---------------- */
 /* linha de navegação no topo: ou o modo "única competência" (prev/next +
    rótulo + botão pra trocar de modo) ou o modo "buscar intervalo"
    (dropdown multi-select + botão pra voltar) — só um dos dois visível por
@@ -8052,7 +8052,7 @@ html, body {
 .holerite-tipo-total { background: #eaf2fb; color: #2b6cb0; }
 
 /* ---------------- "page.holerite" (rodada 2 — ajustes pedidos pelo Georges) ---------------- */
-/* "Pesquisar"/"Filtrar" bagunçados ao expandir: Holerite reaproveitava
+/* "Pesquisar"/"Filtrar" bagunçados ao expandir: PMF - Folha de Pagamento reaproveitava
    ".legislacoes-controls" (display:flex, pensado pra Legislações — que tem
    um botão de ciclo na MESMA linha das 2 seções recolhíveis, por isso zera
    margin/padding delas pra centralizar tudo numa faixa horizontal). Aqui
@@ -8124,6 +8124,10 @@ html, body {
 .holerite-table.hide-qtd .holerite-col-qtd,
 .holerite-table.hide-valorBase .holerite-col-valorBase,
 .holerite-table.hide-parcela .holerite-col-parcela,
+.holerite-table.hide-competencia .holerite-col-competencia,
+.holerite-table.hide-matricula .holerite-col-matricula,
+.holerite-table.hide-folha .holerite-col-folha,
+.holerite-table.hide-nivel .holerite-col-nivel,
 .holerite-table.hide-dataPagamento .holerite-col-dataPagamento {
   display: none;
 }

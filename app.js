@@ -1288,14 +1288,19 @@
     // "Todos"; 1 marcada = ícone/cor/label dela; 2+ marcadas = "N selecionados"
     // (não dá pra mostrar um ícone/cor só quando são de status diferentes).
     function updateTriggerUI() {
-      // "filterDef.todosMarcaTudo" (Holerite → competências): "Todos" marca
+      // "filterDef.todosMarcaTudo" (PMF - Folha de Pagamento → competências): "Todos" marca
       // TODAS as opções visualmente; com todas marcadas o botão mostra
       // "Todos" em vez de "127 selecionados".
       var allMarked = filterDef.todosMarcaTudo && selected.length && selected.length === (filterDef.options || []).length;
+      // linha "Todos" dinâmica: tudo marcado → vira "Desmarcar" (clique
+      // limpa tudo); senão → "Todos" (clique marca tudo).
+      if (filterDef.todosMarcaTudo && typeof allLabel !== "undefined" && allLabel) {
+        allLabel.textContent = allMarked ? "Desmarcar" : "Todos";
+      }
       if (!selected.length || allMarked) {
         triggerIcon.className = "ti " + defaultIcon;
         triggerIcon.style.color = "";
-        triggerLabel.textContent = filterDef.label + ": Todos";
+        triggerLabel.textContent = filterDef.label + ": " + ((filterDef.todosMarcaTudo && !selected.length) ? "Nenhuma" : "Todos");
       } else if (selected.length === 1) {
         triggerIcon.className = "ti " + (selected[0].icon || defaultIcon);
         triggerIcon.style.color = selected[0].color || "";
@@ -1395,8 +1400,10 @@
     allRow.addEventListener("click", function (e) {
       e.stopPropagation(); // não deixa o listener global (fecha menus abertos) atrapalhar
       if (filterDef.todosMarcaTudo) {
-        // menu continua aberto: dá pra ver tudo marcado e desmarcar alguma
-        setSelected(rowEntries.map(function (en) { return en.opt; }));
+        // menu continua aberto: dá pra ver tudo marcado e desmarcar alguma;
+        // com tudo já marcado, o clique desmarca todas.
+        var everyMarked = rowEntries.length && selected.length === rowEntries.length;
+        setSelected(everyMarked ? [] : rowEntries.map(function (en) { return en.opt; }));
         return;
       }
       menu.classList.remove("open");
@@ -12591,7 +12598,7 @@
     });
   }
 
-  // ---------------- "page.holerite" — Holerite / PMF (Financeiro->Holerite, espelho em D1, 100% leitura) ----------------
+  // ---------------- "page.holerite" — PMF - Folha de Pagamento (Financeiro->PMF - Folha de Pagamento, espelho em D1, 100% leitura) ----------------
   // Pedido do Georges: migrar a base Notion "PMF" (linhas de holerite) pra
   // uma tabela D1 ("holerite", banco "meu-hub-visor" — ver GET /holerite e
   // GET /holerite-competencias no worker.js), evitando o limite de
@@ -12630,7 +12637,7 @@
 
     var title = document.createElement("h3");
     title.className = "group-title";
-    title.textContent = "🧾 Holerite / PMF";
+    title.textContent = "🧾 PMF - Folha de Pagamento";
     wrap.appendChild(title);
 
     var statusEl = document.createElement("p");
@@ -12668,7 +12675,7 @@
       items: [],
       search: "",
       tipoSelected: [], matriculaSelected: [], folhaSelected: [], lotacaoSelected: [],
-      rubricaSelected: [], dataPagamentoFilter: null,
+      rubricaSelected: [], nivelSelected: [], dataPagamentoFilter: null,
       sortKey: "codigo", sortDir: 1,
       collapsed: {}, // chave do grupo -> true (card recolhido)
       // "Mostrar todas as colunas" (ver COLS/renderGroupCard mais abaixo) —
@@ -12745,6 +12752,7 @@
         if (state.matriculaSelected.length && state.matriculaSelected.indexOf(it.matricula) === -1) return;
         if (state.folhaSelected.length && state.folhaSelected.indexOf(it.folha) === -1) return;
         if (state.lotacaoSelected.length && state.lotacaoSelected.indexOf(it.lotacao) === -1) return;
+        if (state.nivelSelected.length && state.nivelSelected.indexOf(String(it.nivel)) === -1) return;
         var key = it.competencia + "|" + it.matricula + "|" + it.folha;
         if (!map[key]) {
           map[key] = { competencia: it.competencia, matricula: it.matricula, folha: it.folha, totals: {}, rows: [], dataPagamento: null, nivel: null };
@@ -12808,6 +12816,7 @@
     var folhaDropdownWrap = document.createElement("div");
     var lotacaoDropdownWrap = document.createElement("div");
     var rubricaDropdownWrap = document.createElement("div");
+    var nivelDropdownWrap = document.createElement("div");
     var dataPagamentoFilterWrap = document.createElement("div");
 
     function buildFiltersBar() {
@@ -12853,6 +12862,22 @@
         { property: "rubrica", type: "select", label: "Rubrica", icon: "ti-receipt", searchable: true, options: buildSimpleOptionsFromItems("rubrica"), default: state.rubricaSelected },
         function (opts) { state.rubricaSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
       ));
+      // Nível (pedido do Georges) — client-side, opções = níveis presentes
+      // no lote carregado, em ordem numérica.
+      nivelDropdownWrap.innerHTML = "";
+      var nivelSeen = {}, nivelOpts = [];
+      state.items.forEach(function (it) {
+        if (it.nivel === null || it.nivel === undefined || it.nivel === "") return;
+        var k = String(it.nivel);
+        if (nivelSeen[k]) return;
+        nivelSeen[k] = true;
+        nivelOpts.push({ label: "Nível " + k, pageId: k, num: Number(it.nivel) });
+      });
+      nivelOpts.sort(function (a, b) { return a.num - b.num; });
+      nivelDropdownWrap.appendChild(buildIconDropdown(
+        { property: "nivel", type: "select", label: "Nível", icon: "ti-stairs-up", options: nivelOpts, default: state.nivelSelected },
+        function (opts) { state.nivelSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
+      ));
     }
 
     // Data de Pagamento (data específica OU período) — montado UMA vez (e
@@ -12895,6 +12920,7 @@
     filterBarWrapHolerite.appendChild(matriculaDropdownWrap);
     filterBarWrapHolerite.appendChild(folhaDropdownWrap);
     filterBarWrapHolerite.appendChild(lotacaoDropdownWrap);
+    filterBarWrapHolerite.appendChild(nivelDropdownWrap);
     filterBarWrapHolerite.appendChild(rubricaDropdownWrap);
     filterBarWrapHolerite.appendChild(dataPagamentoFilterWrap);
 
@@ -12905,7 +12931,7 @@
     clearFiltersBtnHolerite.addEventListener("click", function () {
       state.search = ""; searchInputHolerite.value = "";
       state.tipoSelected = []; state.matriculaSelected = []; state.folhaSelected = []; state.lotacaoSelected = [];
-      state.rubricaSelected = []; state.dataPagamentoFilter = null;
+      state.rubricaSelected = []; state.nivelSelected = []; state.dataPagamentoFilter = null;
       buildDataPagamentoFilter();
       buildFiltersBar();
       loadItems();
@@ -13043,7 +13069,7 @@
     function updateHoleriteColumnsToggleLabel() {
       columnsToggleBtnHolerite.innerHTML = state.columnsExpanded
         ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
-        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+' + HOLERITE_DEFAULT_HIDDEN.length + ')';
+        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+' + (HOLERITE_DEFAULT_HIDDEN.length + (isMultiView() ? 5 : 0)) + ')';
     }
     columnsToggleBtnHolerite.addEventListener("click", function () {
       state.columnsExpanded = !state.columnsExpanded;
@@ -13122,7 +13148,7 @@
     function renderAggregateCard(groups) {
       if (isMultiView()) {
         var wrapEl = document.createElement("div");
-        wrapEl.appendChild(buildTotalsCard("💰 Total Combinado — " + groups.length + " holerite" + (groups.length === 1 ? "" : "s"),
+        wrapEl.appendChild(buildTotalsCard("💰 Total Combinado — " + groups.length + " pagamento" + (groups.length === 1 ? "" : "s"),
           buildAggregateTotals(groups), "holerite-aggregate-card"));
         var byKey = {}, order = [];
         groups.forEach(function (g) {
@@ -13326,7 +13352,11 @@
       HOLERITE_COLS.forEach(function (col) {
         table.classList.toggle("hide-" + col.key, !state.columnsExpanded && HOLERITE_DEFAULT_HIDDEN.indexOf(col.key) !== -1);
       });
-      table.classList.toggle("hide-dataPagamento", !state.columnsExpanded);
+      // "Mostrar menos colunas" também aqui: só Código/Rubrica/Valor ficam;
+      // Competência/Matrícula/Folha/Nível/Data de Pagamento somem junto.
+      ["dataPagamento", "competencia", "matricula", "folha", "nivel"].forEach(function (k) {
+        table.classList.toggle("hide-" + k, !state.columnsExpanded);
+      });
 
       var thead = document.createElement("thead");
       var headRow = document.createElement("tr");
@@ -13375,11 +13405,14 @@
 
     function renderBody() {
       body.innerHTML = "";
+      updateHoleriteColumnsToggleLabel();
       var groups = buildGroups();
       if (!groups.length) {
         var empty = document.createElement("p");
         empty.className = "empty";
-        empty.textContent = "Nenhum dado de holerite encontrado.";
+        empty.textContent = (state.mode === "range" && !state.rangeSelected.length)
+          ? "Nenhuma competência selecionada. Marque 1 ou mais acima."
+          : "Nenhum dado de folha de pagamento encontrado.";
         body.appendChild(empty);
         return;
       }
@@ -13403,7 +13436,7 @@
     //  - intervalo com marcação → as marcadas; single → a da tela.
     function effectiveCompetencias() {
       if (state.dataPagamentoFilter && state.mode === "single") return state.allCompetencias.slice();
-      if (state.mode === "range") return state.rangeSelected.length ? state.rangeSelected.slice() : state.allCompetencias.slice();
+      if (state.mode === "range") return state.rangeSelected.slice(); // vazio = "Desmarcar" tudo = nada
       return state.competencia ? [state.competencia] : [];
     }
     // tabela única (renderRangeTable) quando é intervalo OU quando o filtro
@@ -13412,7 +13445,7 @@
 
     function hasActiveFilters() {
       return !!(state.search || state.tipoSelected.length || state.matriculaSelected.length ||
-        state.folhaSelected.length || state.lotacaoSelected.length || state.rubricaSelected.length ||
+        state.folhaSelected.length || state.lotacaoSelected.length || state.rubricaSelected.length || state.nivelSelected.length ||
         state.dataPagamentoFilter);
     }
 
@@ -13432,7 +13465,7 @@
       card.className = "holerite-group-card holerite-filtered-card";
       var head = document.createElement("div");
       head.className = "holerite-group-title";
-      head.textContent = "🔎 Total do filtrado — " + n + " rubrica" + (n === 1 ? "" : "s") + " em " + groups.length + " holerite" + (groups.length === 1 ? "" : "s");
+      head.textContent = "🔎 Total do filtrado — " + n + " rubrica" + (n === 1 ? "" : "s") + " em " + groups.length + " pagamento" + (groups.length === 1 ? "" : "s");
       card.appendChild(head);
       var row = document.createElement("div");
       row.className = "holerite-totals-row";
@@ -13446,7 +13479,18 @@
     function loadItems() {
       var params = [];
       var comps = effectiveCompetencias();
-      if (!comps.length) { statusEl.textContent = "Nenhuma competência encontrada."; return; }
+      if (!comps.length) {
+        if (state.mode === "range") {
+          // nenhuma competência marcada → não consulta nada
+          state.items = [];
+          statusEl.style.display = "none";
+          buildFiltersBar();
+          renderBody();
+        } else {
+          statusEl.textContent = "Nenhuma competência encontrada.";
+        }
+        return;
+      }
       // D1 só aceita 100 parâmetros por consulta e a base tem 127
       // competências — mandar todas dava erro silencioso ("Nenhum dado").
       // Quando é "todas" não manda o parâmetro (o Worker traz tudo); se for
@@ -13462,7 +13506,7 @@
       if (state.lotacaoSelected.length) params.push("lotacao=" + encodeURIComponent(state.lotacaoSelected.join(",")));
 
       statusEl.style.display = "";
-      statusEl.textContent = "Carregando holerite…";
+      statusEl.textContent = "Carregando folha de pagamento…";
       authFetch(cfg.templateWorkerUrl + "/holerite?" + params.join("&")).then(function (res) {
         if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
         return res.ok ? res.json() : { items: [] };
@@ -13474,7 +13518,7 @@
         renderBody();
       }).catch(function (err) {
         statusEl.style.display = "";
-        statusEl.textContent = "Erro ao buscar holerite: " + err.message;
+        statusEl.textContent = "Erro ao buscar folha de pagamento: " + err.message;
       });
     }
 
@@ -21737,7 +21781,7 @@
     }).catch(function () { return []; });
   }
 
-  // Holerite/PMF — Nova competência (kind "holerite_competencia" — pedido
+  // PMF - Folha de Pagamento — Nova competência (kind "holerite_competencia" — pedido
   // do Georges: "Detectar competência nova no Notion"). 100% D1 via
   // GET /holerite-competencias (já GROUP BY + ORDER BY competencia DESC no
   // worker.js, então list[0] é sempre a mais recente). Item sintético
@@ -21764,7 +21808,7 @@
       extraObj[source.dateProperty] = { start: new Date().toISOString() };
       return [{
         id: "holerite_competencia:" + latest,
-        title: "Novo holerite disponível: competência " + holeriteCompetenciaLabel(latest),
+        title: "Nova folha de pagamento disponível: competência " + holeriteCompetenciaLabel(latest),
         url: location.origin + location.pathname + "#financeiro_holerite",
         extra: extraObj
       }];

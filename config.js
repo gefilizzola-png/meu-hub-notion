@@ -1426,7 +1426,7 @@ var NOTIFICATION_SOURCES = [
       { id: "0d", amount: 0, unit: "days", label: "no dia" }
     ]
   },
-  // Holerite/PMF — Nova competência (pedido do Georges, confirmado via
+  // PMF - Folha de Pagamento — Nova competência (pedido do Georges, confirmado via
   // pergunta: "Detectar competência nova no Notion"). kind PRÓPRIO
   // ("holerite_competencia"), 100% D1 via GET /holerite-competencias — item
   // sintético ÚNICO (a competência mais recente já migrada pra D1), "id"
@@ -1444,7 +1444,7 @@ var NOTIFICATION_SOURCES = [
   // "Imediata", igual transacoes_valor_minimo).
   {
     id: "holerite_competencia",
-    label: "Holerite/PMF — Nova competência",
+    label: "PMF - Folha de Pagamento — Nova competência",
     icon: "🧾",
     kind: "holerite_competencia",
     dateProperty: "sincronizado",
@@ -1717,7 +1717,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-04 00:09",
+  appVersion: "2026-10-04 00:35",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3340,7 +3340,7 @@ const APP_CONFIG = {
       items: [
         { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
         { label: "Empréstimos", type: "page", target: "financeiro_emprestimos", icon: "cash" },
-        { label: "Holerite", type: "page", target: "financeiro_holerite", icon: "file-invoice" },
+        { label: "PMF - Folha de Pagamento", type: "page", target: "financeiro_holerite", icon: "file-invoice" },
         { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
         { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
         // "Viagens" (pedido do Georges — nova pasta no Notion, mesmo caminho
@@ -3412,7 +3412,7 @@ const APP_CONFIG = {
       }
     },
 
-    // "page.holerite" — Holerite / PMF (pedido do Georges: "trazer os dados
+    // "page.holerite" — PMF - Folha de Pagamento (pedido do Georges: "trazer os dados
     // dessa página [base Notion 'PMF', linhas de holerite]... jogar pra uma
     // D1, de todas colunas do schema do Notion, pra eu poder filtrar da
     // forma que eu quiser"). Migrado 100% pra D1 (banco "meu-hub-visor",
@@ -3426,12 +3426,12 @@ const APP_CONFIG = {
     // renderHoleritePage no app.js. Página 2 (BI/Dashboard de evolução de
     // rubrica) fica pra uma rodada futura, só quando o Georges pedir.
     financeiro_holerite: {
-      title: "Holerite / PMF",
+      title: "PMF - Folha de Pagamento",
       holerite: true,
       itemsCompact: true,
       itemGroups: [
         { title: "Abrir", items: [
-          { label: "PMF (Holerite) no Notion", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3e70481486dd80acb9edd75ddbfc8321?v=3e70481486dd802f8e73000c0b81ab51&source=copy_link" }
+          { label: "PMF (Folha de Pagamento) no Notion", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3e70481486dd80acb9edd75ddbfc8321?v=3e70481486dd802f8e73000c0b81ab51&source=copy_link" }
         ] }
       ],
       items: []
