@@ -1262,8 +1262,11 @@
     var defaultIcon = filterDef.icon || "ti-filter";
     var triggerIcon = document.createElement("i");
     triggerIcon.className = "ti " + defaultIcon;
+    // "filterDef.emoji" (opcional) — emoji no lugar do ícone ti-* do botão.
+    var triggerLabelPrefix = (filterDef.emoji ? filterDef.emoji + " " : "") + filterDef.label;
+    if (filterDef.emoji) triggerIcon.style.display = "none";
     var triggerLabel = document.createElement("span");
-    triggerLabel.textContent = filterDef.label + ": Todos";
+    triggerLabel.textContent = triggerLabelPrefix + ": Todos";
     var chevron = document.createElement("i");
     chevron.className = "ti ti-chevron-down";
 
@@ -1300,15 +1303,15 @@
       if (!selected.length || allMarked) {
         triggerIcon.className = "ti " + defaultIcon;
         triggerIcon.style.color = "";
-        triggerLabel.textContent = filterDef.label + ": " + ((filterDef.todosMarcaTudo && !selected.length) ? "Nenhuma" : "Todos");
+        triggerLabel.textContent = triggerLabelPrefix + ": " + ((filterDef.todosMarcaTudo && !selected.length) ? "Nenhuma" : "Todos");
       } else if (selected.length === 1) {
         triggerIcon.className = "ti " + (selected[0].icon || defaultIcon);
         triggerIcon.style.color = selected[0].color || "";
-        triggerLabel.textContent = filterDef.label + ": " + selected[0].label;
+        triggerLabel.textContent = triggerLabelPrefix + ": " + selected[0].label;
       } else {
         triggerIcon.className = "ti " + defaultIcon;
         triggerIcon.style.color = "";
-        triggerLabel.textContent = filterDef.label + ": " + selected.length + " selecionados" + (mode === "and" ? " (E)" : "");
+        triggerLabel.textContent = triggerLabelPrefix + ": " + selected.length + " selecionados" + (mode === "and" ? " (E)" : "");
       }
     }
 
@@ -1736,8 +1739,10 @@
     trigger.className = "filter-trigger";
     var triggerIcon = document.createElement("i");
     triggerIcon.className = "ti ti-calendar";
+    var triggerLabelPrefix = (filterDef.emoji ? filterDef.emoji + " " : "") + filterDef.label;
+    if (filterDef.emoji) triggerIcon.style.display = "none";
     var triggerLabel = document.createElement("span");
-    triggerLabel.textContent = filterDef.label + ": Todas";
+    triggerLabel.textContent = triggerLabelPrefix + ": Todas";
     var chevron = document.createElement("i");
     chevron.className = "ti ti-chevron-down";
     trigger.appendChild(triggerIcon);
@@ -1788,12 +1793,12 @@
       var to = toInput.value;
       if (!from && !to) {
         triggerIcon.style.color = "";
-        triggerLabel.textContent = filterDef.label + ": Todas";
+        triggerLabel.textContent = triggerLabelPrefix + ": Todas";
         onChange(null);
         return;
       }
       triggerIcon.style.color = "#4a90d9";
-      triggerLabel.textContent = filterDef.label + ": " + (from && to ? (fmtBR(from) + "–" + fmtBR(to)) : fmtBR(from || to));
+      triggerLabel.textContent = triggerLabelPrefix + ": " + (from && to ? (fmtBR(from) + "–" + fmtBR(to)) : fmtBR(from || to));
       onChange({ from: from || null, to: to || null });
     }
 
@@ -12822,7 +12827,7 @@
     function buildFiltersBar() {
       tipoDropdownWrap.innerHTML = "";
       tipoDropdownWrap.appendChild(buildIconDropdown(
-        { property: "tipo", type: "select", label: "Tipo", icon: "ti-tag", options: [
+        { property: "tipo", type: "select", label: "Tipo", emoji: "🏷️", icon: "ti-tag", options: [
           { label: "Provento", pageId: "Provento" },
           { label: "Desconto", pageId: "Desconto" },
           { label: "Total", pageId: "Total" }
@@ -12841,17 +12846,17 @@
       // Worker) continuando aplicado, o que parecia "o filtro não pegou".
       matriculaDropdownWrap.innerHTML = "";
       matriculaDropdownWrap.appendChild(buildIconDropdown(
-        { property: "matricula", type: "select", label: "Matrícula", icon: "ti-id-badge-2", options: buildSimpleOptionsFromItems("matricula"), default: state.matriculaSelected },
+        { property: "matricula", type: "select", label: "Matrícula", emoji: "🪪", icon: "ti-id-badge-2", options: buildSimpleOptionsFromItems("matricula"), default: state.matriculaSelected },
         function (opts) { state.matriculaSelected = opts.map(function (o) { return o.pageId; }); loadItems(); }
       ));
       folhaDropdownWrap.innerHTML = "";
       folhaDropdownWrap.appendChild(buildIconDropdown(
-        { property: "folha", type: "select", label: "Folha", icon: "ti-file-text", options: buildSimpleOptionsFromItems("folha"), default: state.folhaSelected },
+        { property: "folha", type: "select", label: "Folha", emoji: "📄", icon: "ti-file-text", options: buildSimpleOptionsFromItems("folha"), default: state.folhaSelected },
         function (opts) { state.folhaSelected = opts.map(function (o) { return o.pageId; }); loadItems(); }
       ));
       lotacaoDropdownWrap.innerHTML = "";
       lotacaoDropdownWrap.appendChild(buildIconDropdown(
-        { property: "lotacao", type: "select", label: "Lotação", icon: "ti-building", options: buildSimpleOptionsFromItems("lotacao"), default: state.lotacaoSelected },
+        { property: "lotacao", type: "select", label: "Lotação", emoji: "🏢", icon: "ti-building", options: buildSimpleOptionsFromItems("lotacao"), default: state.lotacaoSelected },
         function (opts) { state.lotacaoSelected = opts.map(function (o) { return o.pageId; }); loadItems(); }
       ));
       // Rubrica (multi_select, pedido do Georges) — client-side, igual
@@ -12859,7 +12864,7 @@
       // Passagens/Saúde), não precisa ir no Worker de novo.
       rubricaDropdownWrap.innerHTML = "";
       rubricaDropdownWrap.appendChild(buildIconDropdown(
-        { property: "rubrica", type: "select", label: "Rubrica", icon: "ti-receipt", searchable: true, options: buildSimpleOptionsFromItems("rubrica"), default: state.rubricaSelected },
+        { property: "rubrica", type: "select", label: "Rubrica", emoji: "🧾", icon: "ti-receipt", searchable: true, options: buildSimpleOptionsFromItems("rubrica"), default: state.rubricaSelected },
         function (opts) { state.rubricaSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
       ));
       // Nível (pedido do Georges) — client-side, opções = níveis presentes
@@ -12875,7 +12880,7 @@
       });
       nivelOpts.sort(function (a, b) { return a.num - b.num; });
       nivelDropdownWrap.appendChild(buildIconDropdown(
-        { property: "nivel", type: "select", label: "Nível", icon: "ti-stairs-up", options: nivelOpts, default: state.nivelSelected },
+        { property: "nivel", type: "select", label: "Nível", emoji: "📶", icon: "ti-stairs-up", options: nivelOpts, default: state.nivelSelected },
         function (opts) { state.nivelSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
       ));
     }
@@ -12891,7 +12896,7 @@
     function buildDataPagamentoFilter() {
       dataPagamentoFilterWrap.innerHTML = "";
       dataPagamentoFilterWrap.appendChild(buildLocalDateRangeFilter(
-        { label: "Data de Pagamento" },
+        { label: "Data de Pagamento", emoji: "💸" },
         function (range) { state.dataPagamentoFilter = range; loadItems(); }
       ));
     }
@@ -12983,7 +12988,7 @@
         return { label: holeriteCompetenciaLabel(c), pageId: c };
       });
       rangeDropdownWrap.appendChild(buildIconDropdown(
-        { property: "competencia", type: "select", label: "Competências", icon: "ti-calendar", searchable: true, options: opts, todosMarcaTudo: true, default: state.rangeSelected },
+        { property: "competencia", type: "select", label: "Competências", emoji: "🗓️", icon: "ti-calendar", searchable: true, options: opts, todosMarcaTudo: true, default: state.rangeSelected },
         function (selOpts) {
           state.rangeSelected = selOpts.map(function (o) { return o.pageId; });
           loadItems();
