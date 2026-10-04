@@ -19104,7 +19104,19 @@
     shareBtn.addEventListener("click", function () {
       var text = buildShareText();
       if (!text) { window.alert("Não há itens sinalizados como Comprar."); return; }
-      window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+      // Celular: folha de compartilhar nativa (texto vai direto, sem URL — emoji
+      // chega intacto). Computador: api.whatsapp.com (o wa.me já mostrou "�" no
+      // lugar dos emojis ao redirecionar). Se o emoji ainda sair quebrado, o
+      // botão "Copiar texto" cola o texto original sem passar por link nenhum.
+      var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+      if (isMobile && navigator.share) {
+        navigator.share({ text: text }).catch(function () {});
+        return;
+      }
+      // no computador, copia o texto ORIGINAL antes de abrir o link: se a página
+      // do WhatsApp mostrar "�" no lugar dos emojis, é só colar (Ctrl+V) na conversa.
+      try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text); } catch (e) {}
+      window.open("https://api.whatsapp.com/send?text=" + encodeURIComponent(text), "_blank", "noopener");
     });
     var copyBtn = document.createElement("button");
     copyBtn.type = "button";
@@ -24805,29 +24817,27 @@
     if (privacyObserver) { privacyObserver.disconnect(); privacyObserver = null; }
     var old = document.getElementById("privacyBar");
     if (old && old.parentNode) old.parentNode.removeChild(old);
-    if (container) container.classList.remove("privacy-scope", "privacy-hidden");
+    if (container) container.classList.remove("privacy-scope");
   }
+  // estado global (só em memória): abre SEMPRE exibindo; o olho do header alterna
+  var privacyOn = false;
+  function paintPrivacyEye() {
+    var b = document.getElementById("privacyEyeBtn");
+    if (!b) return;
+    document.body.classList.toggle("privacy-on", privacyOn);
+    b.innerHTML = privacyOn ? '<i class="ti ti-eye-off"></i>' : '<i class="ti ti-eye"></i>';
+    b.title = privacyOn ? "Valores escondidos — clique para exibir" : "Esconder valores";
+    b.setAttribute("aria-label", b.title);
+    b.setAttribute("aria-pressed", privacyOn ? "true" : "false");
+    b.classList.toggle("privacy-eye-active", privacyOn);
+  }
+  (function () {
+    var b = document.getElementById("privacyEyeBtn");
+    if (b) b.addEventListener("click", function () { privacyOn = !privacyOn; paintPrivacyEye(); });
+    paintPrivacyEye();
+  })();
   function setupPrivacy(container) {
-    container.classList.add("privacy-scope", "privacy-hidden");   // sempre abre escondido
-    var bar = document.createElement("div");
-    bar.id = "privacyBar";
-    bar.className = "privacy-bar";
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "privacy-toggle";
-    function paint() {
-      var hidden = container.classList.contains("privacy-hidden");
-      btn.innerHTML = hidden ? '<i class="ti ti-eye"></i> Exibir conteúdo' : '<i class="ti ti-eye-off"></i> Esconder conteúdo';
-      btn.title = hidden ? "Os valores estão borrados — clique para exibir" : "Clique para borrar os valores de novo";
-      btn.classList.toggle("revealed", !hidden);
-    }
-    btn.addEventListener("click", function () {
-      container.classList.toggle("privacy-hidden");
-      paint();
-    });
-    paint();
-    bar.appendChild(btn);
-    if (container.parentNode) container.parentNode.insertBefore(bar, container);
+    container.classList.add("privacy-scope");
     privacyObserver = new MutationObserver(function (muts) {
       muts.forEach(function (m) {
         if (m.type === "characterData") { privacyWrapTextNode(m.target); return; }

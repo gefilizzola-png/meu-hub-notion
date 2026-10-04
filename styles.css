@@ -8471,5 +8471,8 @@ html, body {
 .privacy-toggle:hover { background: #f1f3f5; }
 .privacy-toggle.revealed { background: #343a40; border-color: #343a40; color: #fff; }
 .sv { transition: filter .12s; }
-.privacy-hidden .sv { filter: blur(7px); -webkit-user-select: none; user-select: none; }
-.privacy-hidden canvas { filter: blur(12px); }
+body.privacy-on .privacy-scope .sv { filter: blur(7px); -webkit-user-select: none; user-select: none; }
+body.privacy-on .privacy-scope canvas { filter: blur(12px); }
+
+.privacy-eye-btn.privacy-eye-active { color: #fff; background: #343a40; }
+.privacy-eye-btn.privacy-eye-active:hover { background: #495057; color: #fff; }
