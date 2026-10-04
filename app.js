@@ -13984,13 +13984,14 @@
     var map = {};
     grupos.forEach(function (g) {
       var y = holeriteBiYear(g.competencia);
-      var r = map[y] || (map[y] = { ano: y, ir: 0, base: 0, bruto: 0, n: 0 });
-      r.ir += g.ir; r.base += g.baseHolerite; r.bruto += g.bruto; r.n++;
+      var r = map[y] || (map[y] = { ano: y, ir: 0, base: 0, bruto: 0, liquido: 0, n: 0 });
+      r.ir += g.ir; r.base += g.baseHolerite; r.bruto += g.bruto; r.liquido += (g.liquido || 0); r.n++;
     });
     return Object.keys(map).sort().map(function (y) {
       var r = map[y];
       return { ano: y, ir: holeriteBiR2(r.ir), base: holeriteBiR2(r.base), bruto: holeriteBiR2(r.bruto), n: r.n,
-        aliqBase: r.base ? holeriteBiR2(r.ir / r.base * 100) : 0, aliqBruto: r.bruto ? holeriteBiR2(r.ir / r.bruto * 100) : 0 };
+        liquido: holeriteBiR2(r.liquido), aliqBase: r.base ? holeriteBiR2(r.ir / r.base * 100) : 0, aliqBruto: r.bruto ? holeriteBiR2(r.ir / r.bruto * 100) : 0,
+        aliqLiquido: r.liquido ? holeriteBiR2(r.ir / r.liquido * 100) : 0 };
     });
   }
   // RRA (base separada), previdência sobre RRA e restituições de IR, por ano
@@ -14010,6 +14011,17 @@
     return Object.keys(map).sort().map(function (y) {
       var r = map[y];
       return { ano: y, rra: holeriteBiR2(r.rra), prevRra: holeriteBiR2(r.prevRra), restituicao: holeriteBiR2(r.restituicao), competencias: Object.keys(r.comps).sort() };
+    });
+  }
+  // filtro da tabela de conferência / tabela progressiva: competências escolhidas (vazio = todas) + só divergências
+  function irpfFiltraConferencia(grupos, competencias, soDivergencias) {
+    var set = {};
+    (competencias || []).forEach(function (c) { set[c] = true; });
+    var temSet = (competencias || []).length > 0;
+    return (grupos || []).filter(function (g) {
+      if (temSet && !set[g.competencia]) return false;
+      if (soDivergencias && g.converge) return false;
+      return true;
     });
   }
   // </IRPF_PURE>
@@ -14107,7 +14119,7 @@
     var retidoSection = mkSection(), mensalSection = mkSection(), confSection = mkSection(), tabelaSection = mkSection(), extraSection = mkSection();
     var allSections = [retidoSection, mensalSection, confSection, tabelaSection, extraSection];
 
-    var state = { items: [], anos: [], matriculas: [], folhas: [], soDivergencias: false, mensalBase: "bruto" };
+    var state = { items: [], anos: [], matriculas: [], folhas: [], soDivergencias: false, mensalBase: "bruto", competencias: [], grupos: [] };
     var sortConf = { col: 0, dir: -1 }, sortTab = { col: 0, dir: -1 }, sortExtra = { col: 0, dir: -1 };
     var charts = {};
     function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
@@ -14173,11 +14185,21 @@
           datasets: [
             { type: "bar", label: "IR retido", data: rows.map(function (r) { return r.ir; }), backgroundColor: COLOR_IR, borderRadius: 5, yAxisID: "y" },
             { type: "line", label: "Alíquota efetiva s/ bruto (%)", data: rows.map(function (r) { return r.aliqBruto; }), borderColor: COLOR_ALIQ, backgroundColor: COLOR_ALIQ, borderWidth: 2, pointRadius: 3, tension: 0.25, yAxisID: "y1" },
-            { type: "line", label: "Alíquota efetiva s/ base (%)", data: rows.map(function (r) { return r.aliqBase; }), borderColor: COLOR_BASE, backgroundColor: COLOR_BASE, borderDash: [5, 4], borderWidth: 2, pointRadius: 3, tension: 0.25, yAxisID: "y1" }
+            { type: "line", label: "Alíquota efetiva s/ líquido (%)", data: rows.map(function (r) { return r.aliqLiquido; }), borderColor: "#16a34a", backgroundColor: "#16a34a", borderDash: [2, 3], borderWidth: 2, pointRadius: 3, tension: 0.25, yAxisID: "y1" },
+            { type: "line", hidden: true, label: "Alíquota efetiva s/ base (%)", data: rows.map(function (r) { return r.aliqBase; }), borderColor: COLOR_BASE, backgroundColor: COLOR_BASE, borderDash: [5, 4], borderWidth: 2, pointRadius: 3, tension: 0.25, yAxisID: "y1" }
           ]
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
+          responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+          onClick: function (evt, els, chart) {
+            var hit = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, true);
+            if (!hit.length) return;
+            var ano = rows[hit[0].index].ano;
+            var comps = {};
+            state.grupos.forEach(function (g) { if (holeriteBiYear(g.competencia) === ano) comps[g.competencia] = true; });
+            drillCompetencias(Object.keys(comps).sort());
+          },
+          onHover: function (evt, els, chart) { chart.canvas.style.cursor = els.length ? "pointer" : "default"; },
           plugins: { tooltip: { callbacks: { label: function (ctx) {
             if (ctx.dataset.yAxisID === "y1") return ctx.dataset.label + ": " + fmtPct2(ctx.parsed.y);
             return ctx.dataset.label + ": " + transacoesFmtMoney(ctx.parsed.y);
@@ -14187,7 +14209,7 @@
             x: { grid: { display: false } } }
         }
       });
-      mkNote(retidoSection, "Soma de todas as folhas dos filtros (mensal, 13º e matrículas de jeton). Alíquota s/ bruto = IR ÷ total de proventos; s/ base = IR ÷ base de cálculo do holerite.");
+      mkNote(retidoSection, "Clique em um ano para abrir as competências dele na conferência. Soma de todas as folhas dos filtros (mensal, 13º e matrículas de jeton). Alíquota s/ bruto = IR ÷ total de proventos; s/ base = IR ÷ base de cálculo do holerite.");
     }
 
     function renderMensal(grupos) {
@@ -14225,6 +14247,11 @@
         },
         options: {
           responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+          onClick: function (evt, els, chart) {
+            var hit = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, true);
+            if (hit.length) drillCompetencias([rows[hit[0].index].competencia]);
+          },
+          onHover: function (evt, els, chart) { chart.canvas.style.cursor = els.length ? "pointer" : "default"; },
           plugins: { tooltip: { callbacks: { label: function (ctx) {
             if (ctx.dataset.yAxisID === "y1") return ctx.dataset.label + ": " + fmtPct2(ctx.parsed.y);
             return ctx.dataset.label + ": " + transacoesFmtMoney(ctx.parsed.y);
@@ -14234,7 +14261,7 @@
             x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } } }
         }
       });
-      mkNote(mensalSection, porLiquido ? "Alíquota efetiva = IR retido ÷ salário líquido da competência (soma das matrículas/folhas filtradas)." : "Alíquota efetiva = IR retido ÷ total de proventos da competência (soma das matrículas/folhas filtradas).");
+      mkNote(mensalSection, "Clique em uma competência para abrir os dados dela na conferência. " + (porLiquido ? "Alíquota efetiva = IR retido ÷ salário líquido da competência (soma das matrículas/folhas filtradas)." : "Alíquota efetiva = IR retido ÷ total de proventos da competência (soma das matrículas/folhas filtradas)."));
     }
 
     function renderConferencia(grupos) {
@@ -14246,8 +14273,23 @@
       btn.type = "button"; btn.className = "holerite-bi-toggle" + (state.soDivergencias ? " active" : "");
       btn.textContent = "Só divergências";
       btn.addEventListener("click", function () { state.soDivergencias = !state.soDivergencias; renderConferencia(grupos); });
-      ctrl.appendChild(btn); confSection.appendChild(ctrl);
-      var rows = state.soDivergencias ? grupos.filter(function (g) { return !g.converge; }) : grupos;
+      var compSeen = {}, compList = [];
+      state.items.forEach(function (it) { if (it.competencia && !compSeen[it.competencia]) { compSeen[it.competencia] = true; compList.push(it.competencia); } });
+      compList.sort().reverse();
+      var compDd = buildIconDropdown({ property: "Competência", type: "select", label: "Competência", emoji: "🗓️", icon: "ti-calendar", searchable: true, todosMarcaTudo: true,
+        default: state.competencias.length ? state.competencias : undefined,
+        options: compList.map(function (c) { return { pageId: c, label: holeriteBiPeriodLabel(c), icon: "ti-calendar" }; }) },
+        function (o) {
+          var ids = o.map(function (x) { return x.pageId; });
+          state.competencias = ids.length === compList.length ? [] : ids;
+          renderConferencia(grupos); renderTabela(grupos);
+        });
+      var clr = document.createElement("button");
+      clr.type = "button"; clr.className = "search-clear-btn";
+      clr.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+      clr.addEventListener("click", function () { state.competencias = []; state.soDivergencias = false; renderConferencia(grupos); renderTabela(grupos); });
+      ctrl.appendChild(compDd); ctrl.appendChild(btn); ctrl.appendChild(clr); confSection.appendChild(ctrl);
+      var rows = irpfFiltraConferencia(grupos, state.competencias, state.soDivergencias);
       var cols = [
         { label: "Competência", get: function (r) { return r.competencia; }, text: function (r) { return holeriteBiPeriodLabel(r.competencia); } },
         { label: "Matrícula", get: function (r) { return r.matricula; }, text: function (r) { return r.matricula; } },
@@ -14269,7 +14311,8 @@
     function renderTabela(grupos) {
       tabelaSection.innerHTML = ""; tabelaSection.style.display = "";
       mkTitle(tabelaSection, "📏 Tabela progressiva × IR retido");
-      var rows = grupos.map(function (g) {
+      if (state.competencias.length) mkNote(tabelaSection, "Filtrado pelas competências escolhidas na conferência (" + state.competencias.length + ").");
+      var rows = irpfFiltraConferencia(grupos, state.competencias, false).map(function (g) {
         var e = irpfEsperado(g);
         return { competencia: g.competencia, matricula: g.matricula, folha: g.folha, base: g.baseHolerite, modo: e.modo, dep: e.dependentes, semDep: e.semDep, esperado: e.esperado, tabelaDe: e.tabelaDe, ir: g.ir, residuo: e.residuo, aliqMarg: g.principal ? irpfAliqMarginal(g.baseHolerite, g.competencia) : 0.275 };
       });
@@ -14329,10 +14372,21 @@
       mkNote(extraSection, "O 13º tem tributação exclusiva em folha própria. As verbas de RRA (rendimentos recebidos acumuladamente) têm base separada: os holerites não trazem linha de IR sobre elas, então o ajuste fica para a DIRPF. “Restituição de IR” é o provento 3610 lançado na folha.");
     }
 
+    function drillCompetencias(comps) {
+      if (!comps || !comps.length) return;
+      state.competencias = comps.slice();
+      renderConferencia(state.grupos);
+      renderTabela(state.grupos);
+      confSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      confSection.classList.add("irpf-drill-flash");
+      setTimeout(function () { confSection.classList.remove("irpf-drill-flash"); }, 1600);
+    }
+
     function renderAll() {
       var items = holeriteBiFilterItems(state.items, { anos: state.anos, matriculas: state.matriculas, folhas: state.folhas });
       state.itemsFiltered = items;
       var grupos = irpfGrupos(items);
+      state.grupos = grupos;
       if (!grupos.length) {
         kpiWrap.style.display = "none";
         allSections.forEach(function (s) { s.style.display = "none"; });
@@ -14369,7 +14423,7 @@
       clearBtn.className = "search-clear-btn";
       clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
       clearBtn.addEventListener("click", function () {
-        state.anos = []; state.matriculas = []; state.folhas = []; state.soDivergencias = false;
+        state.anos = []; state.matriculas = []; state.folhas = []; state.soDivergencias = false; state.competencias = [];
         buildFilters(); renderAll();
       });
       filterRow.appendChild(clearBtn);

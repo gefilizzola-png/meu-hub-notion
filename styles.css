@@ -8248,3 +8248,7 @@ html, body {
 /* RPC — campos da projeção */
 .rpc-proj-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin: 0 14px 8px 0; }
 .rpc-proj-input { width: 110px; padding: 5px 8px; border: 1px solid var(--border, #d0d7de); border-radius: 6px; background: var(--bg, #fff); color: inherit; font: inherit; }
+
+/* IRPF — destaque ao abrir competência pelo gráfico (drill-down) */
+@keyframes irpfDrillFlash { 0% { box-shadow: 0 0 0 3px rgba(245,158,11,0.55); } 100% { box-shadow: 0 0 0 3px rgba(245,158,11,0); } }
+.irpf-drill-flash { animation: irpfDrillFlash 1.6s ease-out; border-radius: 12px; }
