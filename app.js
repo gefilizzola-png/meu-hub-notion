@@ -24112,7 +24112,7 @@
         draw();
       });
       row2.appendChild(clearBtn);
-      filterBody.appendChild(row2);
+      chipsHost.appendChild(row2);
     }
 
     // ---------- tela "Fontes" ----------
