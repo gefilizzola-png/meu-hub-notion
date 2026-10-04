@@ -1288,7 +1288,11 @@
     // "Todos"; 1 marcada = ícone/cor/label dela; 2+ marcadas = "N selecionados"
     // (não dá pra mostrar um ícone/cor só quando são de status diferentes).
     function updateTriggerUI() {
-      if (!selected.length) {
+      // "filterDef.todosMarcaTudo" (Holerite → competências): "Todos" marca
+      // TODAS as opções visualmente; com todas marcadas o botão mostra
+      // "Todos" em vez de "127 selecionados".
+      var allMarked = filterDef.todosMarcaTudo && selected.length && selected.length === (filterDef.options || []).length;
+      if (!selected.length || allMarked) {
         triggerIcon.className = "ti " + defaultIcon;
         triggerIcon.style.color = "";
         triggerLabel.textContent = filterDef.label + ": Todos";
@@ -1390,6 +1394,11 @@
     allRow.appendChild(allLabel);
     allRow.addEventListener("click", function (e) {
       e.stopPropagation(); // não deixa o listener global (fecha menus abertos) atrapalhar
+      if (filterDef.todosMarcaTudo) {
+        // menu continua aberto: dá pra ver tudo marcado e desmarcar alguma
+        setSelected(rowEntries.map(function (en) { return en.opt; }));
+        return;
+      }
       menu.classList.remove("open");
       setSelected([]);
     });
@@ -12942,11 +12951,13 @@
 
     function buildRangeDropdown() {
       rangeDropdownWrap.innerHTML = "";
+      // abre com TODAS marcadas (visual de "Todos")
+      if (!state.rangeSelected.length) state.rangeSelected = state.allCompetencias.slice();
       var opts = state.allCompetencias.slice().reverse().map(function (c) {
         return { label: holeriteCompetenciaLabel(c), pageId: c };
       });
       rangeDropdownWrap.appendChild(buildIconDropdown(
-        { property: "competencia", type: "select", label: "Competências", icon: "ti-calendar", searchable: true, options: opts },
+        { property: "competencia", type: "select", label: "Competências", icon: "ti-calendar", searchable: true, options: opts, todosMarcaTudo: true, default: state.rangeSelected },
         function (selOpts) {
           state.rangeSelected = selOpts.map(function (o) { return o.pageId; });
           loadItems();
@@ -13080,16 +13091,14 @@
     // matrícula, mas crie uma forma criativa de exibir os totalizadores
     // combinados". Só aparece em modo single (1 competência) com mais de 1
     // grupo (senão é redundante com o card único já exibido).
-    function renderAggregateCard(groups) {
-      if (state.mode !== "single" || groups.length < 2) return null;
-      var agg = buildAggregateTotals(groups);
+    function buildTotalsCard(titleText, agg, extraCls) {
       var card = document.createElement("div");
-      card.className = "holerite-group-card holerite-aggregate-card";
+      card.className = "holerite-group-card " + (extraCls || "");
       var head = document.createElement("div");
       head.className = "holerite-group-head";
       var headTitle = document.createElement("div");
       headTitle.className = "holerite-group-title";
-      headTitle.textContent = "💰 Total Combinado — " + groups.length + " matrículas/folhas";
+      headTitle.textContent = titleText;
       head.appendChild(headTitle);
       card.appendChild(head);
       var totalsRow = document.createElement("div");
@@ -13099,11 +13108,38 @@
       totalsRow.appendChild(totalBox("Salário Líquido", agg.liquido, "holerite-total-liquido"));
       if (agg.temValorPago) {
         totalsRow.appendChild(totalBox("Valor Pago", agg.valorPago, "holerite-total-pago"));
-        var diffCls = (agg.diferenca === 0) ? "holerite-total-diff-ok" : "holerite-total-diff-bad";
+        var diffCls = (Math.abs(agg.diferenca) < 0.005) ? "holerite-total-diff-ok" : "holerite-total-diff-bad";
         totalsRow.appendChild(totalBox("Diferença", agg.diferenca, "holerite-total-diferenca " + diffCls));
       }
       card.appendChild(totalsRow);
       return card;
+    }
+
+    // modo single: combinado das matrículas da competência (2+ grupos).
+    // modo intervalo/filtro de data: combinado de TODOS os holerites
+    // visíveis (pedido do Georges) + 1 cartão de totais por Matrícula/Folha
+    // somando as competências, equivalente aos cartões do modo single.
+    function renderAggregateCard(groups) {
+      if (isMultiView()) {
+        var wrapEl = document.createElement("div");
+        wrapEl.appendChild(buildTotalsCard("💰 Total Combinado — " + groups.length + " holerite" + (groups.length === 1 ? "" : "s"),
+          buildAggregateTotals(groups), "holerite-aggregate-card"));
+        var byKey = {}, order = [];
+        groups.forEach(function (g) {
+          var k = g.matricula + " — " + g.folha;
+          if (!byKey[k]) { byKey[k] = []; order.push(k); }
+          byKey[k].push(g);
+        });
+        order.sort(function (a, b) { return a.localeCompare(b, "pt-BR"); });
+        if (order.length > 1) {
+          order.forEach(function (k) {
+            wrapEl.appendChild(buildTotalsCard(k + " (" + byKey[k].length + " competência" + (byKey[k].length === 1 ? "" : "s") + ")", buildAggregateTotals(byKey[k]), ""));
+          });
+        }
+        return wrapEl;
+      }
+      if (groups.length < 2) return null;
+      return buildTotalsCard("💰 Total Combinado — " + groups.length + " matrículas/folhas", buildAggregateTotals(groups), "holerite-aggregate-card");
     }
 
     function renderGroupCard(g) {
@@ -13131,7 +13167,6 @@
       head.appendChild(headTitle);
       head.appendChild(toggleBtn);
       card.appendChild(head);
-      if (collapsed) return card;
 
       var totalsRow = document.createElement("div");
       totalsRow.className = "holerite-totals-row";
@@ -13160,6 +13195,9 @@
         totalsRow.appendChild(payBox);
       }
       card.appendChild(totalsRow);
+      // recolhido = some só a tabela de rubricas; matrícula + caixinhas de
+      // totais continuam visíveis (pedido do Georges).
+      if (collapsed) return card;
 
       if (g.rows.length) {
         var table = document.createElement("table");
@@ -13347,14 +13385,14 @@
       }
       var filtCard = renderFilteredTotals(groups);
       if (filtCard) body.appendChild(filtCard);
+      var aggCard = renderAggregateCard(groups);
+      if (aggCard) body.appendChild(aggCard);
       if (isMultiView()) {
         // intervalo (ou filtro de data): 1 tabela só (ver renderRangeTable)
         // em vez de 1 card por grupo — pedido do Georges.
         body.appendChild(renderRangeTable(groups));
         return;
       }
-      var aggCard = renderAggregateCard(groups);
-      if (aggCard) body.appendChild(aggCard);
       groups.forEach(function (g) { body.appendChild(renderGroupCard(g)); });
     }
 
@@ -13364,7 +13402,7 @@
     //  - intervalo com "Todos"/nada marcado → TODAS (antes trazia nada);
     //  - intervalo com marcação → as marcadas; single → a da tela.
     function effectiveCompetencias() {
-      if (state.dataPagamentoFilter) return state.allCompetencias.slice();
+      if (state.dataPagamentoFilter && state.mode === "single") return state.allCompetencias.slice();
       if (state.mode === "range") return state.rangeSelected.length ? state.rangeSelected.slice() : state.allCompetencias.slice();
       return state.competencia ? [state.competencia] : [];
     }
@@ -13409,7 +13447,16 @@
       var params = [];
       var comps = effectiveCompetencias();
       if (!comps.length) { statusEl.textContent = "Nenhuma competência encontrada."; return; }
-      params.push("competencias=" + encodeURIComponent(comps.join(",")));
+      // D1 só aceita 100 parâmetros por consulta e a base tem 127
+      // competências — mandar todas dava erro silencioso ("Nenhum dado").
+      // Quando é "todas" não manda o parâmetro (o Worker traz tudo); se for
+      // uma seleção grande (>90) também não manda e filtra aqui no cliente.
+      var sendAll = comps.length >= state.allCompetencias.length;
+      var clientComps = null;
+      if (!sendAll) {
+        if (comps.length > 90) clientComps = comps.slice();
+        else params.push("competencias=" + encodeURIComponent(comps.join(",")));
+      }
       if (state.matriculaSelected.length) params.push("matricula=" + encodeURIComponent(state.matriculaSelected.join(",")));
       if (state.folhaSelected.length) params.push("folha=" + encodeURIComponent(state.folhaSelected.join(",")));
       if (state.lotacaoSelected.length) params.push("lotacao=" + encodeURIComponent(state.lotacaoSelected.join(",")));
@@ -13421,6 +13468,7 @@
         return res.ok ? res.json() : { items: [] };
       }).then(function (data) {
         state.items = (data && data.items) || [];
+        if (clientComps) state.items = state.items.filter(function (it) { return clientComps.indexOf(it.competencia) !== -1; });
         buildFiltersBar();
         statusEl.style.display = "none";
         renderBody();
