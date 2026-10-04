@@ -12652,6 +12652,571 @@
     });
   }
 
+  // ---------------- "page.holeriteBI" — BI da PMF - Folha de Pagamento (Financeiro->PMF - Folha de Pagamento->BI, leitura do D1) ----------------
+  // Pedido do Georges: BI da folha — totais (bruto/descontado/recebido), evolução anual e por competência, ranking e evolução por rubrica, evolução por nível (AFTM), comparativo vencimento×descontos×líquido. Reaproveita GET /holerite (sem rota nova) e o loader lazy do Chart.js do BI Financeiro. As funções holeriteBi* entre os marcadores abaixo são PURAS (sem DOM) — são copiadas verbatim pro teste isolado.
+  // <HOLERITE_BI_PURE>
+  var HOLERITE_BI_COD_PROV = "4000";
+  var HOLERITE_BI_COD_DESC = "9900";
+  var HOLERITE_BI_COD_LIQ = "9990";
+  var HOLERITE_BI_COD_VENC = "0020";
+  function holeriteBiR2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+  function holeriteBiYear(comp) { return String(comp || "").slice(0, 4); }
+  function holeriteBiIs13(comp) { return String(comp || "").slice(5, 7) === "13"; }
+  function holeriteBiPeriodLabel(comp) {
+    var y = holeriteBiYear(comp), m = String(comp || "").slice(5, 7);
+    if (m === "13") return "13º/" + y;
+    var nomes = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    return (nomes[parseInt(m, 10) - 1] || m) + "/" + y.slice(2);
+  }
+  // filtros globais do BI: anos ["2024"], matriculas [...], folhas [...]
+  function holeriteBiFilterItems(items, f) {
+    f = f || {};
+    return (items || []).filter(function (it) {
+      if (f.anos && f.anos.length && f.anos.indexOf(holeriteBiYear(it.competencia)) === -1) return false;
+      if (f.matriculas && f.matriculas.length && f.matriculas.indexOf(it.matricula) === -1) return false;
+      if (f.folhas && f.folhas.length && f.folhas.indexOf(it.folha) === -1) return false;
+      return true;
+    });
+  }
+  // 1 registro por (competência, matrícula, folha) com Proventos/Descontos/Líquido
+  // (linhas-total 4000/9900/9990) e o Vencimento Estatutário (0020).
+  function holeriteBiTotals(items) {
+    var map = {}, order = [];
+    (items || []).forEach(function (it) {
+      var cod = String(it.codigo || "");
+      if (cod !== HOLERITE_BI_COD_PROV && cod !== HOLERITE_BI_COD_DESC && cod !== HOLERITE_BI_COD_LIQ) return;
+      var key = it.competencia + "|" + it.matricula + "|" + it.folha;
+      var t = map[key];
+      if (!t) {
+        t = map[key] = { competencia: it.competencia, matricula: it.matricula, folha: it.folha, nivel: (typeof it.nivel === "number" ? it.nivel : null), prov: 0, desc: 0, liq: 0, venc: 0 };
+        order.push(key);
+      }
+      var v = Number(it.valor) || 0;
+      if (cod === HOLERITE_BI_COD_PROV) t.prov += v;
+      else if (cod === HOLERITE_BI_COD_DESC) t.desc += v;
+      else t.liq += v;
+    });
+    (items || []).forEach(function (it) {
+      if (String(it.codigo || "") !== HOLERITE_BI_COD_VENC) return;
+      var t = map[it.competencia + "|" + it.matricula + "|" + it.folha];
+      if (t) t.venc += Number(it.valor) || 0;
+    });
+    return order.map(function (k) { return map[k]; });
+  }
+  function holeriteBiSum(totals) {
+    var s = { prov: 0, desc: 0, liq: 0, venc: 0, competencias: {} };
+    totals.forEach(function (t) {
+      s.prov += t.prov; s.desc += t.desc; s.liq += t.liq; s.venc += t.venc;
+      if (!holeriteBiIs13(t.competencia) && t.folha === "Mensal") s.competencias[t.competencia] = true;
+    });
+    s.meses = Object.keys(s.competencias).length;
+    s.prov = holeriteBiR2(s.prov); s.desc = holeriteBiR2(s.desc); s.liq = holeriteBiR2(s.liq); s.venc = holeriteBiR2(s.venc);
+    delete s.competencias;
+    return s;
+  }
+  function holeriteBiByYear(totals) {
+    var map = {};
+    totals.forEach(function (t) {
+      var y = holeriteBiYear(t.competencia);
+      var r = map[y] || (map[y] = { ano: y, prov: 0, desc: 0, liq: 0, venc: 0, _m: {} });
+      r.prov += t.prov; r.desc += t.desc; r.liq += t.liq; r.venc += t.venc;
+      if (!holeriteBiIs13(t.competencia) && t.folha === "Mensal") r._m[t.competencia] = true;
+    });
+    return Object.keys(map).sort().map(function (y) {
+      var r = map[y];
+      return { ano: y, prov: holeriteBiR2(r.prov), desc: holeriteBiR2(r.desc), liq: holeriteBiR2(r.liq), venc: holeriteBiR2(r.venc), meses: Object.keys(r._m).length };
+    });
+  }
+  function holeriteBiByCompetencia(totals) {
+    var map = {};
+    totals.forEach(function (t) {
+      var r = map[t.competencia] || (map[t.competencia] = { competencia: t.competencia, prov: 0, desc: 0, liq: 0, venc: 0 });
+      r.prov += t.prov; r.desc += t.desc; r.liq += t.liq; r.venc += t.venc;
+    });
+    return Object.keys(map).sort().map(function (c) {
+      var r = map[c];
+      r.prov = holeriteBiR2(r.prov); r.desc = holeriteBiR2(r.desc); r.liq = holeriteBiR2(r.liq); r.venc = holeriteBiR2(r.venc);
+      return r;
+    });
+  }
+  function holeriteBiRubricaKey(it) { return String(it.codigo || "") + "|" + String(it.rubrica || ""); }
+  // tipo: "Provento" | "Desconto" — ranking por valor total no período filtrado
+  function holeriteBiRubricaRank(items, tipo) {
+    var map = {};
+    (items || []).forEach(function (it) {
+      if (it.tipo !== tipo) return;
+      var k = holeriteBiRubricaKey(it);
+      var r = map[k] || (map[k] = { key: k, codigo: it.codigo, rubrica: it.rubrica, total: 0, _c: {} });
+      r.total += Number(it.valor) || 0;
+      r._c[it.competencia] = true;
+    });
+    return Object.keys(map).map(function (k) {
+      var r = map[k];
+      return { key: r.key, codigo: r.codigo, rubrica: r.rubrica, total: holeriteBiR2(r.total), competencias: Object.keys(r._c).length };
+    }).sort(function (a, b) { return b.total - a.total; });
+  }
+  // série de rubricas escolhidas por ano ("ano") ou competência ("mes")
+  function holeriteBiRubricaSeries(items, keys, gran) {
+    var periods = {}, sums = {};
+    (items || []).forEach(function (it) {
+      var p = gran === "ano" ? holeriteBiYear(it.competencia) : it.competencia;
+      periods[p] = true;
+      var k = holeriteBiRubricaKey(it);
+      if (keys.indexOf(k) === -1 || (it.tipo !== "Provento" && it.tipo !== "Desconto")) return;
+      sums[k] = sums[k] || {};
+      sums[k][p] = (sums[k][p] || 0) + (Number(it.valor) || 0);
+    });
+    var labels = Object.keys(periods).sort();
+    return {
+      periods: labels,
+      series: keys.map(function (k) {
+        return { key: k, data: labels.map(function (p) { return holeriteBiR2((sums[k] || {})[p] || 0); }) };
+      })
+    };
+  }
+  // Estatísticas por nível (só folha Mensal, só matrícula AFTM por padrão —
+  // o nível é o da carreira AFTM; TAT/JART não têm nível próprio).
+  function holeriteBiNivelStats(totals, matriculaSuffix) {
+    var suf = matriculaSuffix === undefined ? "AFTM" : matriculaSuffix;
+    var map = {};
+    totals.forEach(function (t) {
+      if (t.folha !== "Mensal" || t.nivel === null || t.nivel === undefined) return;
+      if (suf && String(t.matricula || "").slice(-suf.length) !== suf) return;
+      var r = map[t.nivel] || (map[t.nivel] = { nivel: t.nivel, n: 0, prov: 0, desc: 0, liq: 0, venc: 0, min: t.competencia, max: t.competencia });
+      r.n += 1; r.prov += t.prov; r.desc += t.desc; r.liq += t.liq; r.venc += t.venc;
+      if (t.competencia < r.min) r.min = t.competencia;
+      if (t.competencia > r.max) r.max = t.competencia;
+    });
+    var list = Object.keys(map).map(Number).sort(function (a, b) { return a - b; }).map(function (n) {
+      var r = map[n];
+      return { nivel: n, registros: r.n, min: r.min, max: r.max,
+        prov: holeriteBiR2(r.prov / r.n), desc: holeriteBiR2(r.desc / r.n), liq: holeriteBiR2(r.liq / r.n), venc: holeriteBiR2(r.venc / r.n) };
+    });
+    list.forEach(function (r, i) {
+      var prev = list[i - 1];
+      r.varVencPct = prev && prev.venc ? holeriteBiR2(((r.venc - prev.venc) / prev.venc) * 100) : null;
+      r.varLiqPct = prev && prev.liq ? holeriteBiR2(((r.liq - prev.liq) / prev.liq) * 100) : null;
+    });
+    return list;
+  }
+  // </HOLERITE_BI_PURE>
+
+  function renderHoleriteBIPage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "holerite-bi-block financeiro-bi-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "📊 BI — PMF - Folha de Pagamento";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando folha de pagamento…";
+    wrap.appendChild(statusEl);
+
+    var filterSection = buildCollapsibleSection("Filtrar");
+    var filterRow = document.createElement("div");
+    filterRow.className = "holerite-bi-filter-row";
+    filterSection.body.appendChild(filterRow);
+    var filterWrapOuter = document.createElement("div");
+    filterWrapOuter.className = "holerite-controls";
+    filterWrapOuter.appendChild(filterSection.section);
+    filterWrapOuter.style.display = "none";
+    wrap.appendChild(filterWrapOuter);
+
+    var kpiWrap = document.createElement("div");
+    kpiWrap.className = "financeiro-bi-kpi-grid";
+    kpiWrap.style.display = "none";
+    wrap.appendChild(kpiWrap);
+
+    function mkSection() {
+      var s = document.createElement("div");
+      s.className = "financeiro-bi-section";
+      s.style.display = "none";
+      wrap.appendChild(s);
+      return s;
+    }
+    var annualSection = mkSection();
+    var monthlySection = mkSection();
+    var compareSection = mkSection();
+    var rankSection = mkSection();
+    var rubricaSection = mkSection();
+    var nivelSection = mkSection();
+
+    var state = {
+      items: [],
+      anos: [], matriculas: [], folhas: [],
+      rankTipo: "Provento",
+      rubricaKeys: ["0020|VENCIMENTO ESTATUTARIO"],
+      rubricaGran: "ano"
+    };
+    var charts = {};
+    function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+    function moneyTick(v) {
+      var n = Number(v);
+      if (Math.abs(n) >= 1000) return "R$ " + (n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil";
+      return "R$ " + n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+    }
+    function mkTitle(parent, text) {
+      var h = document.createElement("h4");
+      h.className = "financeiro-bi-subtitle";
+      h.textContent = text;
+      parent.appendChild(h);
+      return h;
+    }
+    function mkNote(parent, text) {
+      var p = document.createElement("p");
+      p.className = "holerite-bi-note";
+      p.textContent = text;
+      parent.appendChild(p);
+    }
+    function mkChartBox(parent, canvasId, wide) {
+      var box = document.createElement("div");
+      box.className = "financeiro-bi-chart-box holerite-bi-chart-box";
+      var cw = document.createElement("div");
+      cw.className = "financeiro-bi-canvas-wrap" + (wide ? " financeiro-bi-canvas-wide" : "");
+      var canvas = document.createElement("canvas");
+      canvas.id = canvasId;
+      cw.appendChild(canvas);
+      box.appendChild(cw);
+      parent.appendChild(box);
+      return canvas;
+    }
+    function mkToggle(parent, options, current, onPick) {
+      var row = document.createElement("div");
+      row.className = "holerite-bi-toggle-row";
+      options.forEach(function (o) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "holerite-bi-toggle" + (o.value === current ? " active" : "");
+        b.textContent = o.label;
+        b.addEventListener("click", function () { onPick(o.value); });
+        row.appendChild(b);
+      });
+      parent.appendChild(row);
+    }
+    var COLOR_PROV = "#2f9e44", COLOR_DESC = "#c0392b", COLOR_LIQ = "#3b82f6", COLOR_VENC = "#8b5cf6";
+    function tooltipMoney(ctx) {
+      var v = ctx.parsed.y !== undefined && ctx.parsed.y !== null && ctx.chart.options.indexAxis !== "y" ? ctx.parsed.y : ctx.parsed.x;
+      return (ctx.dataset.label ? ctx.dataset.label + ": " : "") + transacoesFmtMoney(v);
+    }
+
+    function currentFilters() { return { anos: state.anos, matriculas: state.matriculas, folhas: state.folhas }; }
+
+    function renderKpis(totals, byComp) {
+      kpiWrap.innerHTML = "";
+      kpiWrap.style.display = "grid";
+      var s = holeriteBiSum(totals);
+      var mensais = byComp.filter(function (r) { return !holeriteBiIs13(r.competencia); });
+      var maiorLiq = mensais.reduce(function (m, r) { return r.liq > m.liq ? r : m; }, { liq: 0, competencia: "" });
+      var defs = [
+        { label: "💰 Total bruto (proventos)", value: transacoesFmtMoney(s.prov), cls: "kpi-entrada" },
+        { label: "💸 Total descontado", value: transacoesFmtMoney(s.desc), cls: "kpi-saida" },
+        { label: "🏦 Total recebido (líquido)", value: transacoesFmtMoney(s.liq), cls: "kpi-entrada" },
+        { label: "📅 Competências mensais", value: String(s.meses) },
+        { label: "📈 Líquido médio/mês", value: transacoesFmtMoney(s.meses ? s.liq / s.meses : 0) },
+        { label: "🧮 Descontos sobre o bruto", value: (s.prov ? (s.desc / s.prov * 100).toFixed(1).replace(".", ",") : "0") + "%" },
+        { label: "🔺 Maior líquido mensal", value: transacoesFmtMoney(maiorLiq.liq), sub: maiorLiq.competencia ? holeriteCompetenciaLabel(maiorLiq.competencia) : "" }
+      ];
+      defs.forEach(function (d) {
+        var el = document.createElement("div");
+        el.className = "financeiro-bi-kpi" + (d.cls ? " " + d.cls : "");
+        var lab = document.createElement("span"); lab.className = "financeiro-bi-kpi-label"; lab.textContent = d.label;
+        var val = document.createElement("span"); val.className = "financeiro-bi-kpi-value"; val.textContent = d.value;
+        el.appendChild(lab); el.appendChild(val);
+        if (d.sub) { var sb = document.createElement("span"); sb.className = "holerite-bi-kpi-sub"; sb.textContent = d.sub; el.appendChild(sb); }
+        kpiWrap.appendChild(el);
+      });
+    }
+
+    function renderAnnual(totals) {
+      destroyChart("holeriteBiAnual");
+      annualSection.innerHTML = ""; annualSection.style.display = "";
+      mkTitle(annualSection, "📆 Evolução anual — bruto, descontos e líquido");
+      var rows = holeriteBiByYear(totals);
+      var canvas = mkChartBox(annualSection, "holeriteBiAnual", true);
+      charts.holeriteBiAnual = new window.Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: {
+          labels: rows.map(function (r) { return r.ano; }),
+          datasets: [
+            { label: "Proventos", data: rows.map(function (r) { return r.prov; }), backgroundColor: COLOR_PROV, borderRadius: 5 },
+            { label: "Descontos", data: rows.map(function (r) { return r.desc; }), backgroundColor: COLOR_DESC, borderRadius: 5 },
+            { label: "Líquido", data: rows.map(function (r) { return r.liq; }), backgroundColor: COLOR_LIQ, borderRadius: 5 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { tooltip: { callbacks: { label: tooltipMoney } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } }, x: { grid: { display: false } } }
+        }
+      });
+      mkNote(annualSection, "Soma de todas as folhas do ano (mensal, 13º e suplementar). Anos incompletos (início da carreira no sistema e o ano corrente) somam menos meses.");
+    }
+
+    function renderMonthly(byComp) {
+      destroyChart("holeriteBiMensal");
+      monthlySection.innerHTML = ""; monthlySection.style.display = "";
+      mkTitle(monthlySection, "🗓️ Evolução por competência");
+      var canvas = mkChartBox(monthlySection, "holeriteBiMensal", true);
+      function ds(label, key, color) {
+        return { label: label, data: byComp.map(function (r) { return r[key]; }), borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: byComp.length > 60 ? 0 : 3, pointHoverRadius: 4, tension: 0.25 };
+      }
+      charts.holeriteBiMensal = new window.Chart(canvas.getContext("2d"), {
+        type: "line",
+        data: { labels: byComp.map(function (r) { return holeriteBiPeriodLabel(r.competencia); }),
+          datasets: [ds("Proventos", "prov", COLOR_PROV), ds("Descontos", "desc", COLOR_DESC), ds("Líquido", "liq", COLOR_LIQ)] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { tooltip: { callbacks: { label: tooltipMoney } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } } }
+        }
+      });
+      mkNote(monthlySection, "Cada ponto é uma competência (inclui 13º e folhas suplementares, que aparecem como picos).");
+    }
+
+    function renderCompare(totals) {
+      destroyChart("holeriteBiComparativo");
+      compareSection.innerHTML = ""; compareSection.style.display = "";
+      mkTitle(compareSection, "⚖️ Vencimento × descontos × líquido (folha mensal)");
+      var rows = holeriteBiByCompetencia(totals.filter(function (t) { return t.folha === "Mensal"; }));
+      var canvas = mkChartBox(compareSection, "holeriteBiComparativo", true);
+      function ds(label, key, color, extra) {
+        var o = { label: label, data: rows.map(function (r) { return r[key]; }), borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: rows.length > 60 ? 0 : 3, tension: 0.25 };
+        for (var k in (extra || {})) o[k] = extra[k];
+        return o;
+      }
+      var pct = rows.map(function (r) { return r.prov ? holeriteBiR2(r.liq / r.prov * 100) : null; });
+      charts.holeriteBiComparativo = new window.Chart(canvas.getContext("2d"), {
+        type: "line",
+        data: { labels: rows.map(function (r) { return holeriteBiPeriodLabel(r.competencia); }),
+          datasets: [
+            ds("Vencimento estatutário", "venc", COLOR_VENC),
+            ds("Descontos", "desc", COLOR_DESC),
+            ds("Líquido", "liq", COLOR_LIQ),
+            { label: "Líquido / bruto (%)", data: pct, borderColor: "#f59e0b", backgroundColor: "#f59e0b", borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: 0.25, yAxisID: "y1" }
+          ] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { tooltip: { callbacks: { label: function (ctx) {
+            if (ctx.dataset.yAxisID === "y1") return ctx.dataset.label + ": " + String(ctx.parsed.y).replace(".", ",") + "%";
+            return tooltipMoney(ctx);
+          } } } },
+          scales: {
+            y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } },
+            y1: { position: "right", min: 0, max: 100, grid: { display: false }, ticks: { callback: function (v) { return v + "%"; } } },
+            x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } }
+          }
+        }
+      });
+      mkNote(compareSection, "A linha tracejada (eixo direito) mostra quanto do bruto sobra no líquido a cada mês.");
+    }
+
+    function renderRank(items) {
+      destroyChart("holeriteBiRank");
+      rankSection.innerHTML = ""; rankSection.style.display = "";
+      mkTitle(rankSection, "🏆 Total por rubrica");
+      mkToggle(rankSection, [{ value: "Provento", label: "Proventos" }, { value: "Desconto", label: "Descontos" }], state.rankTipo,
+        function (v) { state.rankTipo = v; renderRank(items); });
+      var rows = holeriteBiRubricaRank(items, state.rankTipo).slice(0, 12);
+      if (!rows.length) { mkNote(rankSection, "Sem dados para os filtros atuais."); return; }
+      var canvas = mkChartBox(rankSection, "holeriteBiRank", false);
+      var color = state.rankTipo === "Provento" ? COLOR_PROV : COLOR_DESC;
+      charts.holeriteBiRank = new window.Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: { labels: rows.map(function (r) { return r.rubrica + " (" + r.codigo + ")"; }),
+          datasets: [{ data: rows.map(function (r) { return r.total; }), backgroundColor: color, borderRadius: 6, maxBarThickness: 26 }] },
+        options: {
+          indexAxis: "y", responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (ctx) {
+            var r = rows[ctx.dataIndex];
+            return transacoesFmtMoney(r.total) + " · " + r.competencias + " competência(s)";
+          } } } },
+          scales: { x: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } }, y: { grid: { display: false } } }
+        }
+      });
+      // altura proporcional ao número de barras
+      canvas.parentNode.style.height = Math.max(220, rows.length * 32 + 40) + "px";
+    }
+
+    function renderRubricaEvo(items) {
+      destroyChart("holeriteBiRubricaEvo");
+      rubricaSection.innerHTML = ""; rubricaSection.style.display = "";
+      mkTitle(rubricaSection, "📈 Evolução por rubrica");
+      var ranks = holeriteBiRubricaRank(items, "Provento").map(function (r) { r.tipo = "Provento"; return r; })
+        .concat(holeriteBiRubricaRank(items, "Desconto").map(function (r) { r.tipo = "Desconto"; return r; }));
+      ranks.sort(function (a, b) { return Math.abs(b.total) - Math.abs(a.total); });
+      var options = ranks.map(function (r) {
+        return { pageId: r.key, label: r.rubrica + " (" + r.codigo + ")", icon: r.tipo === "Provento" ? "ti-circle-plus" : "ti-circle-minus", color: r.tipo === "Provento" ? COLOR_PROV : COLOR_DESC };
+      });
+      var validKeys = state.rubricaKeys.filter(function (k) { return options.some(function (o) { return o.pageId === k; }); });
+      state.rubricaKeys = validKeys;
+      var controlsRow = document.createElement("div");
+      controlsRow.className = "holerite-bi-rubrica-controls";
+      var chartHolder = document.createElement("div");
+      function drawChart() {
+        destroyChart("holeriteBiRubricaEvo");
+        chartHolder.innerHTML = "";
+        if (!state.rubricaKeys.length) { mkNote(chartHolder, "Escolha uma ou mais rubricas no filtro acima para ver a evolução."); return; }
+        var res = holeriteBiRubricaSeries(items, state.rubricaKeys, state.rubricaGran);
+        var canvas = mkChartBox(chartHolder, "holeriteBiRubricaEvo", true);
+        var many = res.periods.length > 40;
+        charts.holeriteBiRubricaEvo = new window.Chart(canvas.getContext("2d"), {
+          type: state.rubricaGran === "ano" ? "bar" : "line",
+          data: {
+            labels: res.periods.map(function (p) { return state.rubricaGran === "ano" ? p : holeriteBiPeriodLabel(p); }),
+            datasets: res.series.map(function (s, i) {
+              var opt = options.filter(function (o) { return o.pageId === s.key; })[0];
+              var col = FINANCEIRO_BI_PALETTE[i % FINANCEIRO_BI_PALETTE.length];
+              return { label: opt ? opt.label : s.key, data: s.data, backgroundColor: col, borderColor: col, borderWidth: 2, borderRadius: 4, pointRadius: many ? 0 : 3, tension: 0.25 };
+            })
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: { tooltip: { callbacks: { label: tooltipMoney } } },
+            scales: { y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 16 } } }
+          }
+        });
+      }
+      var dd = buildIconDropdown(
+        { property: "Rubrica", type: "select", label: "Rubricas", emoji: "🧾", icon: "ti-receipt", searchable: true, options: options, default: state.rubricaKeys },
+        function (opts) { state.rubricaKeys = opts.map(function (o) { return o.pageId; }); drawChart(); }
+      );
+      controlsRow.appendChild(dd);
+      mkToggle(controlsRow, [{ value: "ano", label: "Por ano" }, { value: "mes", label: "Por competência" }], state.rubricaGran,
+        function (v) { state.rubricaGran = v; renderRubricaEvo(items); });
+      rubricaSection.appendChild(controlsRow);
+      rubricaSection.appendChild(chartHolder);
+      drawChart();
+      mkNote(rubricaSection, "Dica: marque várias rubricas para comparar (ex.: Vencimento, Gratificação de Jornada e Jeton). O ano corrente e anos sem lançamento aparecem com valores menores/zero.");
+    }
+
+    function renderNivel(totals) {
+      destroyChart("holeriteBiNivel");
+      nivelSection.innerHTML = ""; nivelSection.style.display = "";
+      mkTitle(nivelSection, "🪜 Evolução por nível (AFTM)");
+      var stats = holeriteBiNivelStats(totals, "AFTM");
+      if (!stats.length) { mkNote(nivelSection, "Sem dados de nível para os filtros atuais (o nível vale para a matrícula AFTM, folha mensal)."); return; }
+      var canvas = mkChartBox(nivelSection, "holeriteBiNivel", false);
+      charts.holeriteBiNivel = new window.Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: { labels: stats.map(function (r) { return "Nível " + r.nivel; }),
+          datasets: [
+            { label: "Vencimento médio", data: stats.map(function (r) { return r.venc; }), backgroundColor: COLOR_VENC, borderRadius: 5 },
+            { label: "Proventos médios", data: stats.map(function (r) { return r.prov; }), backgroundColor: COLOR_PROV, borderRadius: 5 },
+            { label: "Líquido médio", data: stats.map(function (r) { return r.liq; }), backgroundColor: COLOR_LIQ, borderRadius: 5 }
+          ] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { tooltip: { callbacks: { label: tooltipMoney } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: moneyTick }, grid: { color: "rgba(0,0,0,0.06)" } }, x: { grid: { display: false } } } }
+      });
+      var tableWrap = document.createElement("div");
+      tableWrap.className = "holerite-bi-table-wrap";
+      var table = document.createElement("table");
+      table.className = "holerite-bi-table";
+      var thead = document.createElement("thead");
+      var hr = document.createElement("tr");
+      ["Nível", "Período", "Meses", "Vencimento médio", "Δ venc.", "Proventos médios", "Líquido médio", "Δ líquido"].forEach(function (h) {
+        var th = document.createElement("th"); th.textContent = h; hr.appendChild(th);
+      });
+      thead.appendChild(hr); table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      function pctCell(v) {
+        var td = document.createElement("td");
+        if (v === null) { td.textContent = "—"; return td; }
+        td.textContent = (v >= 0 ? "+" : "") + String(v).replace(".", ",") + "%";
+        td.className = v >= 0 ? "holerite-bi-up" : "holerite-bi-down";
+        return td;
+      }
+      stats.forEach(function (r) {
+        var tr = document.createElement("tr");
+        function td(text) { var c = document.createElement("td"); c.textContent = text; tr.appendChild(c); }
+        td("Nível " + r.nivel);
+        td(holeriteCompetenciaLabel(r.min) + " → " + holeriteCompetenciaLabel(r.max));
+        td(String(r.registros));
+        td(transacoesFmtMoney(r.venc));
+        tr.appendChild(pctCell(r.varVencPct));
+        td(transacoesFmtMoney(r.prov));
+        td(transacoesFmtMoney(r.liq));
+        tr.appendChild(pctCell(r.varLiqPct));
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody); tableWrap.appendChild(table);
+      nivelSection.appendChild(tableWrap);
+      mkNote(nivelSection, "Médias por mês na folha Mensal da matrícula AFTM (não inclui 13º/suplementar). Δ compara com o nível anterior.");
+    }
+
+    function renderAll() {
+      var items = holeriteBiFilterItems(state.items, currentFilters());
+      var totals = holeriteBiTotals(items);
+      if (!totals.length) {
+        kpiWrap.style.display = "none";
+        [annualSection, monthlySection, compareSection, rankSection, rubricaSection, nivelSection].forEach(function (s) { s.style.display = "none"; });
+        statusEl.style.display = ""; statusEl.textContent = "Nenhum dado para os filtros atuais.";
+        return;
+      }
+      statusEl.style.display = "none";
+      var byComp = holeriteBiByCompetencia(totals);
+      renderKpis(totals, byComp);
+      renderAnnual(totals);
+      renderMonthly(byComp);
+      renderCompare(totals);
+      renderRank(items);
+      renderRubricaEvo(items);
+      renderNivel(totals);
+    }
+
+    function buildFilters() {
+      filterRow.innerHTML = "";
+      function uniq(key) {
+        var seen = {}, out = [];
+        state.items.forEach(function (it) { var v = key === "ano" ? holeriteBiYear(it.competencia) : it[key]; if (v && !seen[v]) { seen[v] = true; out.push(v); } });
+        return out;
+      }
+      var anos = uniq("ano").sort().reverse();
+      var mats = uniq("matricula").sort();
+      var folhas = uniq("folha").sort(function (a, b) { return (HOLERITE_FOLHA_ORDER[a] || 0) - (HOLERITE_FOLHA_ORDER[b] || 0); });
+      function opts(list, icon) { return list.map(function (v) { return { pageId: v, label: v, icon: icon }; }); }
+      filterRow.appendChild(buildIconDropdown({ property: "Ano", type: "select", label: "Ano", emoji: "📆", icon: "ti-calendar", searchable: true, options: opts(anos, "ti-calendar") },
+        function (o) { state.anos = o.map(function (x) { return x.pageId; }); renderAll(); }));
+      filterRow.appendChild(buildIconDropdown({ property: "Matrícula", type: "select", label: "Matrícula", emoji: "🪪", icon: "ti-id", options: opts(mats, "ti-id") },
+        function (o) { state.matriculas = o.map(function (x) { return x.pageId; }); renderAll(); }));
+      filterRow.appendChild(buildIconDropdown({ property: "Folha", type: "select", label: "Folha", emoji: "📄", icon: "ti-file", options: opts(folhas, "ti-file") },
+        function (o) { state.folhas = o.map(function (x) { return x.pageId; }); renderAll(); }));
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "search-clear-btn";
+      clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+      clearBtn.addEventListener("click", function () {
+        state.anos = []; state.matriculas = []; state.folhas = [];
+        buildFilters();
+        renderAll();
+      });
+      filterRow.appendChild(clearBtn);
+    }
+
+    Promise.all([
+      authFetch(cfg.templateWorkerUrl + "/holerite").then(function (res) {
+        if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+        return res.ok ? res.json() : { items: [] };
+      }),
+      loadChartJs()
+    ]).then(function (r) {
+      state.items = (r[0] && r[0].items) || [];
+      if (!state.items.length) { statusEl.textContent = "Nenhum dado encontrado na tabela D1."; return; }
+      filterWrapOuter.style.display = "";
+      buildFilters();
+      renderAll();
+    }).catch(function (err) {
+      statusEl.style.display = "";
+      statusEl.textContent = "Erro ao carregar o BI: " + (err && err.message ? err.message : "falha ao carregar dados/gráficos");
+    });
+  }
+
   // ---------------- "page.holerite" — PMF - Folha de Pagamento (Financeiro->PMF - Folha de Pagamento, espelho em D1, 100% leitura) ----------------
   // Pedido do Georges: migrar a base Notion "PMF" (linhas de holerite) pra
   // uma tabela D1 ("holerite", banco "meu-hub-visor" — ver GET /holerite e
@@ -21127,6 +21692,16 @@
         container.appendChild(dividerHolerite);
       }
       renderHoleritePage(container, page);
+    }
+
+    // "page.holeriteBI" — BI da PMF - Folha de Pagamento. Ver renderHoleriteBIPage.
+    if (page.holeriteBI) {
+      if (renderedSomething) {
+        var dividerHoleriteBI = document.createElement("hr");
+        dividerHoleriteBI.className = "content-divider";
+        container.appendChild(dividerHoleriteBI);
+      }
+      renderHoleriteBIPage(container, page);
     }
   }
 

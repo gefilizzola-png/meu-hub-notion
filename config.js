@@ -1717,7 +1717,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-04 00:48",
+  appVersion: "2026-10-04 10:53",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3341,6 +3341,7 @@ const APP_CONFIG = {
         { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "receipt" },
         { label: "Empréstimos", type: "page", target: "financeiro_emprestimos", icon: "cash" },
         { label: "PMF - Folha de Pagamento", type: "page", target: "financeiro_holerite", icon: "file-invoice" },
+        { label: "PMF - Folha de Pagamento (BI)", type: "page", target: "financeiro_holerite_bi", icon: "chart-line" },
         { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
         { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
         // "Viagens" (pedido do Georges — nova pasta no Notion, mesmo caminho
@@ -3431,7 +3432,25 @@ const APP_CONFIG = {
       itemsCompact: true,
       itemGroups: [
         { title: "Abrir", items: [
-          { label: "PMF (Folha de Pagamento) no Notion", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3e70481486dd80acb9edd75ddbfc8321?v=3e70481486dd802f8e73000c0b81ab51&source=copy_link" }
+          { label: "PMF (Folha de Pagamento) no Notion", type: "notion", icon: "notion", url: "https://app.notion.com/p/georges-filizzola/3e70481486dd80acb9edd75ddbfc8321?v=3e70481486dd802f8e73000c0b81ab51&source=copy_link" },
+          // botão cruzado pro BI (regra permanente #13a — páginas vinculadas)
+          { label: "BI da Folha de Pagamento", type: "page", target: "financeiro_holerite_bi", icon: "meuhub" }
+        ] }
+      ],
+      items: []
+    },
+
+    // "page.holeriteBI" — BI da PMF - Folha de Pagamento (pedido do Georges:
+    // totais bruto/descontado/recebido, evolução anual e por competência,
+    // total e evolução por rubrica, evolução por nível, comparativo
+    // vencimento×descontos×líquido). Lê o mesmo GET /holerite (D1) da página
+    // principal, sem rota nova — ver renderHoleriteBIPage no app.js.
+    financeiro_holerite_bi: {
+      title: "BI — PMF - Folha de Pagamento",
+      holeriteBI: true,
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "PMF - Folha de Pagamento", type: "page", target: "financeiro_holerite", icon: "meuhub" }
         ] }
       ],
       items: []

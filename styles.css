@@ -8163,3 +8163,76 @@ html, body {
 
 /* "x" de limpar dentro da busca do dropdown multi-select (buildIconDropdown searchable) */
 .filter-search-wrap .filter-search-clear { right: 4px; }
+
+/* ---------- BI da PMF - Folha de Pagamento (renderHoleriteBIPage) ---------- */
+.holerite-bi-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.holerite-bi-chart-box {
+  width: 100%;
+  flex: none;
+  min-width: 0;
+}
+.holerite-bi-note {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  color: #78766e;
+}
+.holerite-bi-kpi-sub {
+  font-size: 11px;
+  color: #78766e;
+}
+.holerite-bi-toggle-row {
+  display: inline-flex;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.holerite-bi-rubrica-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.holerite-bi-rubrica-controls .holerite-bi-toggle-row { margin: 0; }
+.holerite-bi-toggle {
+  border: 0.5px solid #dcdcd8;
+  background: #fff;
+  color: #57554d;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.holerite-bi-toggle:hover { background: #f4f3ef; }
+.holerite-bi-toggle.active {
+  background: #262624;
+  border-color: #262624;
+  color: #fff;
+}
+.holerite-bi-table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+.holerite-bi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.holerite-bi-table th,
+.holerite-bi-table td {
+  padding: 8px 10px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 0.5px solid #ebeae6;
+}
+.holerite-bi-table th:first-child,
+.holerite-bi-table td:first-child,
+.holerite-bi-table th:nth-child(2),
+.holerite-bi-table td:nth-child(2) { text-align: left; }
+.holerite-bi-table th { font-size: 12px; color: #78766e; font-weight: 600; }
+.holerite-bi-up { color: #2f9e44; font-weight: 600; }
+.holerite-bi-down { color: #c0392b; font-weight: 600; }
