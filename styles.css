@@ -8252,3 +8252,16 @@ html, body {
 /* IRPF — destaque ao abrir competência pelo gráfico (drill-down) */
 @keyframes irpfDrillFlash { 0% { box-shadow: 0 0 0 3px rgba(245,158,11,0.55); } 100% { box-shadow: 0 0 0 3px rgba(245,158,11,0); } }
 .irpf-drill-flash { animation: irpfDrillFlash 1.6s ease-out; border-radius: 12px; }
+
+/* RPC — abas, chips de "mês considerado", linhas previstas/total */
+.rpc-tab-body { margin-top: 4px; }
+.rpc-section { margin: 10px 0 18px; }
+.rpc-ref {
+  display: inline-block; align-self: flex-start; margin-top: 4px;
+  font-size: 10.5px; line-height: 1.3; padding: 2px 8px; border-radius: 999px;
+  background: #eef0f2; color: #55554f; font-weight: 500;
+}
+.rpc-ref-prev { background: #fff3d6; color: #8a5a00; }
+.holerite-bi-table tr.rpc-row-previsto td { color: #8a8a85; font-style: italic; background: #fafaf8; }
+.holerite-bi-table tr.rpc-row-real td { background: rgba(22, 163, 74, 0.06); }
+.holerite-bi-table tr.rpc-total-row td { font-weight: 700; border-top: 2px solid #d9d8d3; background: #f4f4f1; font-style: normal; }
