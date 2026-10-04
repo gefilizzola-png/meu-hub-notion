@@ -1784,7 +1784,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-04 17:46",
+  appVersion: "2026-10-04 18:05",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2048,6 +2048,8 @@ const APP_CONFIG = {
     // o Georges liga/desliga cada uma pela tela "Fontes" da própria página (KV). Somente
     // leitura sobre o Notion (nada de arrastar/reagendar). Fica fixo no menu
     // (sidebarPinned) e na pasta Pastas (pinnedOnly).
+    // (a página antiga "calendario", que só levava ao link do Notion, foi
+    // fundida aqui — o mesmo atalho continua disponível em Eventos.)
     calendario: {
       title: "Calendário",
       calendar: true
@@ -3016,13 +3018,6 @@ const APP_CONFIG = {
         { label: "Calendário", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Calend-rio-3b60481486dd80299a01f7e5c3d2a321?source=copy_link", icon: "calendar" },
         { label: "Listas", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Listas-3b60481486dd801ea254cedab932b18e?source=copy_link", icon: "list" },
         { label: "Blocos", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Blocos-3b60481486dd80dba8aacb93d340f685?source=copy_link", icon: "layout-grid" }
-      ]
-    },
-
-    calendario: {
-      title: "Calendário",
-      items: [
-        { label: "Calendário", type: "notion", url: "https://app.notion.com/p/georges-filizzola/Calend-rio-3b60481486dd80299a01f7e5c3d2a321?source=copy_link", icon: "calendar" }
       ]
     },
 
