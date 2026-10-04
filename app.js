@@ -14797,10 +14797,17 @@
       renderKpis(); renderProj(); renderPlano(); renderChart(); renderConf(); renderCob(); renderNotas();
     }
 
+    var rpcErro = "";
     function fetchJson(path, fallback) {
       return authFetch(cfg.templateWorkerUrl + path).then(function (res) {
         if (res.status === 401 && window.Auth) { Auth.signOut(); return fallback; }
-        return res.ok ? res.json() : fallback;
+        if (res.ok) return res.json();
+        return res.text().then(function (t) {
+          var msg = t;
+          try { var j = JSON.parse(t); msg = j.error || t; if (j.details && j.details.message) msg += " — " + j.details.message; } catch (e) {}
+          if (path === "/rpc") rpcErro = "HTTP " + res.status + ": " + String(msg).slice(0, 300);
+          return fallback;
+        });
       });
     }
     Promise.all([
@@ -14809,7 +14816,7 @@
       fetchJson("/holerite?codigo=" + RPC_COD_SEGURO_ADICIONAL, { items: [] }),
       loadChartJs()
     ]).then(function (r) {
-      if (!r[0]) { statusEl.textContent = "Não foi possível ler as bases da RPC no Notion (verifique se a integração tem acesso a elas)."; return; }
+      if (!r[0]) { statusEl.textContent = "Não foi possível ler as bases da RPC. " + (rpcErro ? "Detalhe: " + rpcErro + ". " : "") + (/404|Rota não encontrada/.test(rpcErro) ? "O Worker ainda não foi atualizado — faça o redeploy do worker.js." : "Verifique se a integração do Notion tem acesso às 3 bases (menu ••• da página \"RPC - FloripaPrev\" → Conexões)."); return; }
       state.data = r[0];
       state.holeriteDesc = (r[1] && r[1].items) || [];
       state.holeriteSeg = (r[2] && r[2].items) || [];
