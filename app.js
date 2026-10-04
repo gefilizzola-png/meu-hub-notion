@@ -1297,8 +1297,16 @@
       var allMarked = filterDef.todosMarcaTudo && selected.length && selected.length === (filterDef.options || []).length;
       // linha "Todos" dinâmica: tudo marcado → vira "Desmarcar" (clique
       // limpa tudo); senão → "Todos" (clique marca tudo).
-      if (filterDef.todosMarcaTudo && typeof allLabel !== "undefined" && allLabel) {
-        allLabel.textContent = allMarked ? "Desmarcar" : "Todos";
+      if (typeof allLabel !== "undefined" && allLabel) {
+        if (searchActive()) {
+          var visO = visibleOpts();
+          var visAll = visO.length && visO.every(function (o) { return selected.indexOf(o) !== -1; });
+          allLabel.textContent = visAll ? "Desmarcar" : "Todos";
+        } else if (filterDef.todosMarcaTudo) {
+          allLabel.textContent = allMarked ? "Desmarcar" : "Todos";
+        } else {
+          allLabel.textContent = "Todos";
+        }
       }
       if (!selected.length || allMarked) {
         triggerIcon.className = "ti " + defaultIcon;
@@ -1371,6 +1379,7 @@
     // uma opção, a caixa limpa sozinha e a lista volta a mostrar tudo — pra
     // digitar o próximo termo sem precisar apagar o anterior na mão.
     var searchBox = null;
+    var searchClearBtn = null;
     if (filterDef.searchable) {
       var searchWrap = document.createElement("div");
       searchWrap.className = "filter-search-wrap";
@@ -1385,6 +1394,21 @@
       menu.appendChild(searchWrap);
       searchBox.addEventListener("click", function (e) { e.stopPropagation(); });
       searchBox.addEventListener("input", function () { filterRows(searchBox.value); });
+      // "x" pra limpar o texto digitado (padrão de toda barra de busca)
+      searchBox.style.paddingRight = "26px";
+      searchClearBtn = document.createElement("button");
+      searchClearBtn.type = "button";
+      searchClearBtn.className = "search-input-clear-btn filter-search-clear";
+      searchClearBtn.innerHTML = '<i class="ti ti-x"></i>';
+      searchClearBtn.title = "Limpar pesquisa";
+      searchClearBtn.style.display = "none";
+      searchClearBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        searchBox.value = "";
+        filterRows("");
+        searchBox.focus();
+      });
+      searchWrap.appendChild(searchClearBtn);
     }
 
     function filterRows(query) {
@@ -1393,6 +1417,15 @@
         var match = !nq || normalize(entry.opt.label).indexOf(nq) !== -1;
         entry.row.style.display = match ? "" : "none";
       });
+      if (searchClearBtn) searchClearBtn.style.display = query ? "flex" : "none";
+      updateTriggerUI();
+    }
+
+    // Padrão: com pesquisa ativa, "Todos"/"Desmarcar" age SÓ nas opções visíveis.
+    function searchActive() { return !!(searchBox && normalize(searchBox.value).trim()); }
+    function visibleOpts() {
+      return rowEntries.filter(function (en) { return en.row.style.display !== "none"; })
+        .map(function (en) { return en.opt; });
     }
 
     var allRow = document.createElement("div");
@@ -1402,6 +1435,22 @@
     allRow.appendChild(allLabel);
     allRow.addEventListener("click", function (e) {
       e.stopPropagation(); // não deixa o listener global (fecha menus abertos) atrapalhar
+      if (searchActive()) {
+        var vis = visibleOpts();
+        if (vis.length) {
+          var allVisMarked = vis.every(function (o) { return selected.indexOf(o) !== -1; });
+          var nextSel;
+          if (allVisMarked) {
+            nextSel = selected.filter(function (o) { return vis.indexOf(o) === -1; });
+          } else {
+            nextSel = selected.slice();
+            vis.forEach(function (o) { if (nextSel.indexOf(o) === -1) nextSel.push(o); });
+          }
+          setSelected(nextSel);
+          filterRows(searchBox.value); // reaplica a pesquisa (reorderRows mexe no DOM)
+        }
+        return;
+      }
       if (filterDef.todosMarcaTudo) {
         // menu continua aberto: dá pra ver tudo marcado e desmarcar alguma;
         // com tudo já marcado, o clique desmarca todas.

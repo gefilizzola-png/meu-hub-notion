@@ -8160,3 +8160,6 @@ html, body {
   background: #f7f7f5;
 }
 .holerite-btn-lg:hover { background: #eaeae6; }
+
+/* "x" de limpar dentro da busca do dropdown multi-select (buildIconDropdown searchable) */
+.filter-search-wrap .filter-search-clear { right: 4px; }
