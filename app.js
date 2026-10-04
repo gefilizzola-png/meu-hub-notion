@@ -1316,17 +1316,28 @@
           allLabel.textContent = "Todos";
         }
       }
+      var baseIconDisplay = filterDef.emoji ? "none" : "";
       if (!selected.length || allMarked) {
         triggerIcon.className = "ti " + defaultIcon;
         triggerIcon.style.color = "";
+        triggerIcon.style.display = baseIconDisplay;
         triggerLabel.textContent = triggerLabelPrefix + ": " + ((filterDef.todosMarcaTudo && !selected.length) ? "Nenhuma" : "Todos");
       } else if (selected.length === 1) {
         triggerIcon.className = "ti " + (selected[0].icon || defaultIcon);
         triggerIcon.style.color = selected[0].color || "";
-        triggerLabel.textContent = triggerLabelPrefix + ": " + selected[0].label;
+        // opção com emoji próprio (ex: Mercado → Categoria): mostra o emoji
+        // no lugar do ícone ti-* (que só serve de fallback).
+        if (selected[0].emoji && !filterDef.emoji) {
+          triggerIcon.style.display = "none";
+          triggerLabel.textContent = selected[0].emoji + " " + triggerLabelPrefix + ": " + selected[0].label;
+        } else {
+          triggerIcon.style.display = baseIconDisplay;
+          triggerLabel.textContent = triggerLabelPrefix + ": " + selected[0].label;
+        }
       } else {
         triggerIcon.className = "ti " + defaultIcon;
         triggerIcon.style.color = "";
+        triggerIcon.style.display = baseIconDisplay;
         triggerLabel.textContent = triggerLabelPrefix + ": " + selected.length + " selecionados" + (mode === "and" ? " (E)" : "");
       }
     }
@@ -1501,9 +1512,17 @@
     (filterDef.options || []).forEach(function (opt) {
       var row = document.createElement("div");
       row.className = "filter-option";
-      var ic = document.createElement("i");
-      ic.className = "ti " + opt.icon;
-      ic.style.color = opt.color || "";
+      var ic;
+      if (opt.emoji) {
+        // opção com emoji próprio (opcional) — no lugar do ícone ti-*
+        ic = document.createElement("span");
+        ic.className = "filter-option-emoji";
+        ic.textContent = opt.emoji;
+      } else {
+        ic = document.createElement("i");
+        ic.className = "ti " + opt.icon;
+        ic.style.color = opt.color || "";
+      }
       var lbl = document.createElement("span");
       lbl.textContent = opt.label;
       row.appendChild(ic);
@@ -18849,6 +18868,72 @@
       return (cat && meta && meta[cat]) || CAT_FALLBACK_META;
     }
 
+    // ---- compartilhar a lista no WhatsApp (pedido do Georges) ----
+    // emoji por ITEM: casa palavras-chave do nome (sem acento, minúsculas);
+    // sem casamento, cai no emoji da CATEGORIA do item (catMeta).
+    var PRODUTO_EMOJI_RULES = [
+      ["leite", "🥛"], ["queijo", "🧀"], ["requeijao", "🧀"], ["manteiga", "🧈"], ["iogurte", "🥛"], ["ovo", "🥚"],
+      ["pao", "🍞"], ["bolo", "🍰"], ["biscoito", "🍪"], ["bolacha", "🍪"], ["cafe", "☕"], ["cha", "🍵"], ["acucar", "🍬"],
+      ["arroz", "🍚"], ["feijao", "🫘"], ["macarrao", "🍝"], ["massa", "🍝"], ["farinha", "🌾"], ["aveia", "🌾"], ["cereal", "🥣"],
+      ["oleo", "🫒"], ["azeite", "🫒"], ["sal", "🧂"], ["molho", "🍅"], ["extrato", "🍅"], ["tomate", "🍅"],
+      ["cebola", "🧅"], ["alho", "🧄"], ["batata", "🥔"], ["cenoura", "🥕"], ["alface", "🥬"], ["brocolis", "🥦"], ["pepino", "🥒"],
+      ["limao", "🍋"], ["laranja", "🍊"], ["banana", "🍌"], ["maca", "🍎"], ["uva", "🍇"], ["morango", "🍓"], ["melancia", "🍉"],
+      ["abacaxi", "🍍"], ["abacate", "🥑"], ["mamao", "🥭"], ["manga", "🥭"], ["fruta", "🍎"],
+      ["frango", "🍗"], ["carne", "🥩"], ["bife", "🥩"], ["picanha", "🥩"], ["linguica", "🌭"], ["salsicha", "🌭"], ["presunto", "🥓"],
+      ["bacon", "🥓"], ["peixe", "🐟"], ["atum", "🐟"], ["sardinha", "🐟"], ["camarao", "🦐"],
+      ["refrigerante", "🥤"], ["suco", "🧃"], ["agua sanitaria", "🧴"], ["agua", "💧"], ["cerveja", "🍺"], ["vinho", "🍷"],
+      ["sabao", "🧼"], ["detergente", "🧽"], ["amaciante", "🧺"], ["desinfetante", "🧴"], ["esponja", "🧽"],
+      ["papel higienico", "🧻"], ["papel toalha", "🧻"], ["guardanapo", "🧻"], ["lixo", "🗑️"],
+      ["shampoo", "🧴"], ["condicionador", "🧴"], ["sabonete", "🧼"], ["creme dental", "🪥"], ["pasta de dente", "🪥"], ["escova", "🪥"],
+      ["desodorante", "🧴"], ["absorvente", "🩸"], ["fralda", "👶"], ["racao", "🐾"], ["areia", "🐱"],
+      ["chocolate", "🍫"], ["sorvete", "🍨"], ["pipoca", "🍿"], ["salgadinho", "🍟"], ["pizza", "🍕"], ["lasanha", "🍝"],
+      ["remedio", "💊"], ["vitamina", "💊"], ["pilha", "🔋"], ["lampada", "💡"]
+    ];
+    // casa por PALAVRA inteira (com plural simples "s"/"es"), pra "sal" não
+    // casar com "salsicha" nem "cha" com "chocolate".
+    function produtoEmoji(it) {
+      var n = " " + normalize(it.produto || "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ") + " ";
+      for (var i = 0; i < PRODUTO_EMOJI_RULES.length; i++) {
+        var key = PRODUTO_EMOJI_RULES[i][0];
+        if (n.indexOf(" " + key + " ") !== -1 || n.indexOf(" " + key + "s ") !== -1 || n.indexOf(" " + key + "es ") !== -1) {
+          return PRODUTO_EMOJI_RULES[i][1];
+        }
+      }
+      return catMeta(it.categoria).emoji;
+    }
+    // texto da lista "Comprar" pro WhatsApp: separado por categoria
+    // (*negrito* do WhatsApp), um emoji por item, 🔥 nos urgentes.
+    function buildShareText() {
+      var items = state.items.filter(function (it) { return it.providencia === "Comprar"; });
+      if (!items.length) return "";
+      var byCat = {};
+      items.forEach(function (it) {
+        var c = it.categoria || "Sem categoria";
+        (byCat[c] = byCat[c] || []).push(it);
+      });
+      var cats = Object.keys(byCat).sort(function (a, b) {
+        if (a === "Sem categoria") return 1;
+        if (b === "Sem categoria") return -1;
+        return a.localeCompare(b, "pt-BR");
+      });
+      var hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      var lines = ["🛒 *Lista de Mercado* — " + hoje, ""];
+      cats.forEach(function (c) {
+        var meta = catMeta(c === "Sem categoria" ? "" : c);
+        lines.push("*" + meta.emoji + " " + c + "*");
+        byCat[c].sort(function (a, b) {
+          var ua = a.prioridade === "1 - Urgente" ? 0 : 1, ub = b.prioridade === "1 - Urgente" ? 0 : 1;
+          if (ua !== ub) return ua - ub;
+          return (a.produto || "").localeCompare(b.produto || "", "pt-BR");
+        }).forEach(function (it) {
+          lines.push(produtoEmoji(it) + " " + it.produto + (it.prioridade === "1 - Urgente" ? " 🔥" : ""));
+        });
+        lines.push("");
+      });
+      lines.push("Total: " + items.length + " ite" + (items.length === 1 ? "m" : "ns"));
+      return lines.join("\n");
+    }
+
     // ciclo de status por clique (pedido do Georges: "Vamos manter somente
     // 3 opções de status: Comprar, Comprado ou não sinalizado [...] clico
     // em Comprar e sinaliza [...] clico e muda para Comprado [...] clico
@@ -18979,7 +19064,7 @@
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "supermercado-view-btn";
-      btn.textContent = v.label;
+      btn.textContent = (v.emoji ? v.emoji + " " : "") + v.label;
       btn.addEventListener("click", function () {
         state.view = v.id;
         updateTabActive();
@@ -18998,6 +19083,7 @@
       // aba Comprar. situacaoWrap/onlyUrgenteWrap são declarados mais
       // abaixo neste mesmo escopo (var hoisted) — updateTabActive só é
       // CHAMADA depois de tudo montado, então já existem nesse ponto.
+      shareWrap.style.display = state.view === "comprar" ? "" : "none";
       if (typeof situacaoWrap !== "undefined") {
         situacaoWrap.style.display = (state.view === "comprar" || state.view === "comprados") ? "none" : "";
       }
@@ -19006,6 +19092,39 @@
       }
     }
     wrap.appendChild(tabsWrap);
+
+    // ---- compartilhar a lista "Comprar" (só aparece nessa aba) ----
+    var shareWrap = document.createElement("div");
+    shareWrap.className = "supermercado-share";
+    var shareBtn = document.createElement("button");
+    shareBtn.type = "button";
+    shareBtn.className = "supermercado-share-btn whatsapp";
+    shareBtn.innerHTML = '<i class="ti ti-brand-whatsapp"></i> Compartilhar no WhatsApp';
+    shareBtn.title = "Abre o WhatsApp com a lista de Comprar (separada por categoria)";
+    shareBtn.addEventListener("click", function () {
+      var text = buildShareText();
+      if (!text) { window.alert("Não há itens sinalizados como Comprar."); return; }
+      window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+    });
+    var copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "supermercado-share-btn";
+    copyBtn.innerHTML = '<i class="ti ti-copy"></i> Copiar texto';
+    copyBtn.title = "Copia a lista pra colar onde quiser";
+    copyBtn.addEventListener("click", function () {
+      var text = buildShareText();
+      if (!text) { window.alert("Não há itens sinalizados como Comprar."); return; }
+      function done(ok) {
+        copyBtn.innerHTML = ok ? '<i class="ti ti-check"></i> Copiado!' : '<i class="ti ti-x"></i> Não consegui copiar';
+        setTimeout(function () { copyBtn.innerHTML = '<i class="ti ti-copy"></i> Copiar texto'; }, 1800);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+      } else { done(false); }
+    });
+    shareWrap.appendChild(shareBtn);
+    shareWrap.appendChild(copyBtn);
+    wrap.appendChild(shareWrap);
 
     // ---- adicionar item novo (entra direto como "Comprar" — é assim que
     // um item novo normalmente entra na lista: precisa comprar) ----
@@ -19091,7 +19210,7 @@
     // emoji), então o dropdown perde o emoji por categoria — a cor
     // (catMeta.color) continua diferenciando cada opção.
     var catFilterOptions = (fields.categoria && fields.categoria.options || []).map(function (opt) {
-      return { pageId: opt, label: opt, icon: "ti-tag", color: catMeta(opt).color };
+      return { pageId: opt, label: opt, icon: "ti-tag", emoji: catMeta(opt).emoji, color: catMeta(opt).color };
     });
     // wrap próprio (regra permanente de "Limpar filtros", ver instrucoes.md)
     // — permite destruir e remontar o dropdown do zero (buildFiltersBar
@@ -19117,7 +19236,7 @@
     // "Organizar por" (pedido do Georges — agrupamento em qualquer aba).
     var organizeSelect = document.createElement("select");
     organizeSelect.className = "supermercado-filter-select";
-    [["categoria", "Agrupar por categoria"], ["alfabetica", "Ordem alfabética"]].forEach(function (pair) {
+    [["categoria", "🏷️ Agrupar por categoria"], ["alfabetica", "🔤 Ordem alfabética"]].forEach(function (pair) {
       var o = document.createElement("option");
       o.value = pair[0];
       o.textContent = pair[1];
@@ -19167,7 +19286,7 @@
     var clearStatusBtn = document.createElement("button");
     clearStatusBtn.type = "button";
     clearStatusBtn.className = "supermercado-clear-status-btn";
-    clearStatusBtn.textContent = "Limpar situação de todos";
+    clearStatusBtn.textContent = "🧹 Limpar situação de todos";
     clearStatusBtn.addEventListener("click", function () {
       if (!window.confirm("Limpar a situação (Comprar/Comprado) de TODOS os itens da lista? Produtos, categorias e histórico continuam intactos — só a sinalização atual volta pra \"não sinalizado\".")) return;
       clearAllStatus();
@@ -19179,7 +19298,7 @@
     var clearPrioridadeBtn = document.createElement("button");
     clearPrioridadeBtn.type = "button";
     clearPrioridadeBtn.className = "supermercado-clear-status-btn";
-    clearPrioridadeBtn.textContent = "Limpar todas as prioridades";
+    clearPrioridadeBtn.textContent = "🧹 Limpar todas as prioridades";
     clearPrioridadeBtn.addEventListener("click", function () {
       if (!window.confirm("Limpar a Prioridade de TODOS os itens da lista? Produtos, situação e histórico continuam intactos — só a prioridade atual volta pra \"—\".")) return;
       clearAllPrioridades();
@@ -19222,7 +19341,8 @@
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "supermercado-situacao-pill";
-      btn.textContent = opt === "" ? "Não sinalizado" : opt;
+      // emoji = o MESMO do botão de status de cada item (🛒 Comprar / ✅ Comprado)
+      btn.textContent = opt === "" ? "⚪ Não sinalizado" : (statusButtonIcon(opt).emoji || "") + " " + opt;
       btn.addEventListener("click", function () {
         if (state.situacaoFilter.has(opt)) state.situacaoFilter.delete(opt);
         else state.situacaoFilter.add(opt);
@@ -19328,7 +19448,7 @@
         dot.style.background = meta.color;
         row.appendChild(dot);
         var lbl = document.createElement("span");
-        lbl.textContent = label;
+        lbl.textContent = (value ? meta.emoji : "🏷️") + " " + label;
         row.appendChild(lbl);
         var check = document.createElement("i");
         check.className = "ti ti-check filter-option-check";
@@ -24609,10 +24729,120 @@
       });
   }
 
+  // ---------------- Modo "valores escondidos" (privacidade) ----------------
+  // Pedido do Georges: nas páginas com valores/totalizadores (contas,
+  // transações, IRPF, RPC, folha, BI, empréstimos), os valores monetários
+  // abrem BORRADOS (mesmo leiaute, caixinhas e linhas no lugar, só o número
+  // ilegível) — pra mostrar o app a alguém sem expor números. Abre SEMPRE
+  // escondido, toda vez que a página é aberta; a barra no topo tem o botão
+  // "Exibir conteúdo" / "Esconder conteúdo" (sem precisar reabrir o app).
+  //
+  // Como funciona (sem mexer em cada tela): um MutationObserver no #content
+  // envolve em <span class="sv"> todo texto que parece valor monetário
+  // ("R$ 1.234,56", "-R$ 10", "1.234,56" — percentuais não), mesmo o que as
+  // telas desenham depois (tabelas, filtros, abas). O blur é só CSS
+  // (".privacy-hidden .sv") — alternar é instantâneo e não refaz nada. Gráficos
+  // (canvas) também ficam borrados. A barra fica FORA do #content (algumas
+  // telas limpam o #content inteiro ao navegar entre meses).
+  var PRIVACY_RE = /(?:[-−+]\s?)?R\$\s?(?:[-−]\s?)?\d[\d.]*(?:,\d+)?|(?:[-−+]\s?)?\d{1,3}(?:\.\d{3})*,\d{2}(?![\d%]|,\d)/g;
+  var PRIVACY_SKIP = "script, style, textarea, input, select, option, .sv, .privacy-bar";
+  var privacyObserver = null;
+
+  function pageHasValues(page) {
+    return !!(page && (page.financeiroContasMensais || page.transacoes || page.financeiroBI || page.holerite ||
+      page.holeriteBI || page.rpc || page.irpf || page.emprestimos));
+  }
+  // divide um texto em pedaços [{t, sv}] — sv=true quando é valor monetário
+  function privacySplit(text) {
+    var out = [];
+    var last = 0;
+    var re = new RegExp(PRIVACY_RE.source, "g");
+    var m;
+    while ((m = re.exec(text)) !== null) {
+      if (m[0].length === 0) { re.lastIndex++; continue; }
+      // número "colado" em outro (ex: pedaço de 123456,78) não conta
+      if (m.index > 0 && /^[\d]/.test(m[0]) && /[\d.,]/.test(text.charAt(m.index - 1))) continue;
+      if (m.index > last) out.push({ t: text.slice(last, m.index), sv: false });
+      out.push({ t: m[0], sv: true });
+      last = m.index + m[0].length;
+    }
+    if (!out.length) return null;
+    if (last < text.length) out.push({ t: text.slice(last), sv: false });
+    return out;
+  }
+  function privacyWrapTextNode(node) {
+    var parent = node.parentNode;
+    if (!parent || !node.nodeValue) return;
+    if (parent.closest && parent.closest(PRIVACY_SKIP)) return;
+    var parts = privacySplit(node.nodeValue);
+    if (!parts) return;
+    var frag = document.createDocumentFragment();
+    parts.forEach(function (p) {
+      if (p.sv) {
+        var s = document.createElement("span");
+        s.className = "sv";
+        s.textContent = p.t;
+        frag.appendChild(s);
+      } else {
+        frag.appendChild(document.createTextNode(p.t));
+      }
+    });
+    parent.replaceChild(frag, node);
+  }
+  function privacyWalk(root) {
+    if (!root) return;
+    if (root.nodeType === 3) { privacyWrapTextNode(root); return; }
+    if (root.nodeType !== 1) return;
+    if (root.matches && root.matches(PRIVACY_SKIP)) return;
+    if (root.closest && root.closest(".sv, .privacy-bar")) return;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var nodes = [];
+    var n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    nodes.forEach(privacyWrapTextNode);
+  }
+  function teardownPrivacy(container) {
+    if (privacyObserver) { privacyObserver.disconnect(); privacyObserver = null; }
+    var old = document.getElementById("privacyBar");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    if (container) container.classList.remove("privacy-scope", "privacy-hidden");
+  }
+  function setupPrivacy(container) {
+    container.classList.add("privacy-scope", "privacy-hidden");   // sempre abre escondido
+    var bar = document.createElement("div");
+    bar.id = "privacyBar";
+    bar.className = "privacy-bar";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "privacy-toggle";
+    function paint() {
+      var hidden = container.classList.contains("privacy-hidden");
+      btn.innerHTML = hidden ? '<i class="ti ti-eye"></i> Exibir conteúdo' : '<i class="ti ti-eye-off"></i> Esconder conteúdo';
+      btn.title = hidden ? "Os valores estão borrados — clique para exibir" : "Clique para borrar os valores de novo";
+      btn.classList.toggle("revealed", !hidden);
+    }
+    btn.addEventListener("click", function () {
+      container.classList.toggle("privacy-hidden");
+      paint();
+    });
+    paint();
+    bar.appendChild(btn);
+    if (container.parentNode) container.parentNode.insertBefore(bar, container);
+    privacyObserver = new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        if (m.type === "characterData") { privacyWrapTextNode(m.target); return; }
+        for (var i = 0; i < m.addedNodes.length; i++) privacyWalk(m.addedNodes[i]);
+      });
+    });
+    privacyObserver.observe(container, { childList: true, subtree: true, characterData: true });
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
+    teardownPrivacy(container);
+    if (pageHasValues(page)) setupPrivacy(container);
     // sai da Lista de Prioridades (ou recarrega ela) com um timer da
     // "Programação" rodando -> mata o intervalo antigo primeiro (ver
     // comentário de "scheduleTickInterval" lá no topo do arquivo).

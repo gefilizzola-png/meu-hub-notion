@@ -1794,7 +1794,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-04 18:42",
+  appVersion: "2026-10-04 18:49",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2886,10 +2886,12 @@ const APP_CONFIG = {
       // ordenada por comprarCount (worker.js) em vez de alfabética/
       // categoria.
       views: [
-        { id: "produtos", label: "Produtos" },
-        { id: "comprar", label: "Comprar" },
-        { id: "comprados", label: "Comprados" },
-        { id: "favoritos", label: "Favoritos" }
+        // emoji de cada aba: "Comprar"/"Comprados" usam os MESMOS emojis do
+        // botão de status de cada item (🛒 / ✅), pra bater com o texto.
+        { id: "produtos", label: "Produtos", emoji: "📦" },
+        { id: "comprar", label: "Comprar", emoji: "🛒" },
+        { id: "comprados", label: "Comprados", emoji: "✅" },
+        { id: "favoritos", label: "Favoritos", emoji: "⭐" }
       ]
     },
 

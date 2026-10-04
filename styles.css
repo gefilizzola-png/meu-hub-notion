@@ -8456,3 +8456,20 @@ html, body {
 .cal-grp-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 12px; }
 .cal-grp-src { display: flex; align-items: center; gap: 7px; padding: 3px 2px; font-size: 13px; cursor: pointer; }
 .cal-grp-foot { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Mercado — compartilhar lista + emoji em opções de filtro */
+.filter-option-emoji { width: 18px; text-align: center; font-size: 14px; flex: none; }
+.supermercado-share { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 10px; }
+.supermercado-share-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; border: 1px solid #ced4da; background: #fff; font-size: 13px; cursor: pointer; }
+.supermercado-share-btn:hover { background: #f1f3f5; }
+.supermercado-share-btn.whatsapp { background: #25d366; border-color: #25d366; color: #fff; font-weight: 600; }
+.supermercado-share-btn.whatsapp:hover { background: #1ebe5b; }
+
+/* Modo "valores escondidos" (privacidade) — ver setupPrivacy no app.js */
+.privacy-bar { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.privacy-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; border: 1px solid #ced4da; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+.privacy-toggle:hover { background: #f1f3f5; }
+.privacy-toggle.revealed { background: #343a40; border-color: #343a40; color: #fff; }
+.sv { transition: filter .12s; }
+.privacy-hidden .sv { filter: blur(7px); -webkit-user-select: none; user-select: none; }
+.privacy-hidden canvas { filter: blur(12px); }
