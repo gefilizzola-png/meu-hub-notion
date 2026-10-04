@@ -1717,7 +1717,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-04 13:03",
+  appVersion: "2026-10-04 13:20",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3344,11 +3344,31 @@ const APP_CONFIG = {
         { label: "PMF - Folha de Pagamento", type: "page", target: "financeiro_holerite", icon: "file-invoice" },
         { label: "PMF - Folha de Pagamento (BI)", type: "page", target: "financeiro_holerite_bi", icon: "chart-line" },
         { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
+        { label: "RPC", type: "page", target: "financeiro_rpc", icon: "pig-money" },
         { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
         // "Viagens" (pedido do Georges — nova pasta no Notion, mesmo caminho
         // reproduzido aqui: Financeiro->Viagens->Passagens).
         { label: "Viagens", type: "page", target: "financeiro_viagens", icon: "plane-departure" }
       ]
+    },
+
+    // "page.rpc" — RPC (Previdência Complementar FloripaPrev/FUMPRESC): conferência
+    // holerite (rubrica 5585) × extrato, saldo/rendimentos, seguro MAG e projeção até a
+    // aposentadoria. Lê GET /rpc (3 bases Notion, só leitura) + GET /holerite (D1) — ver
+    // renderRpcPage no app.js. Sem Painel do Dia/Calendário; notificação mensal do extrato
+    // fica para a próxima rodada.
+    financeiro_rpc: {
+      title: "RPC",
+      rpc: true,
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "RPC - Contribuições", type: "notion", icon: "notion", url: "https://app.notion.com/p/a9660ba0102b4805bb184df9ac0dad3d" },
+          { label: "RPC - Saldo Mensal", type: "notion", icon: "notion", url: "https://app.notion.com/p/825fb39ce21b441aa3c72611f7f36db5" },
+          { label: "RPC - Coberturas (Seguro MAG)", type: "notion", icon: "notion", url: "https://app.notion.com/p/57563465d2c8470a987f0b39a6bdc3fe" },
+          { label: "PMF - Folha de Pagamento", type: "page", target: "financeiro_holerite", icon: "meuhub" }
+        ] }
+      ],
+      items: []
     },
 
     // "Fiscal" — pasta (pedido do Georges: Financeiro -> Fiscal -> IRPF). Abre

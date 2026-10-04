@@ -8244,3 +8244,7 @@ html, body {
 
 /* IRPF: linhas de tabela com divergência */
 .holerite-bi-table tr.irpf-row-warn td { background: rgba(192,57,43,0.06); }
+
+/* RPC — campos da projeção */
+.rpc-proj-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin: 0 14px 8px 0; }
+.rpc-proj-input { width: 110px; padding: 5px 8px; border: 1px solid var(--border, #d0d7de); border-radius: 6px; background: var(--bg, #fff); color: inherit; font: inherit; }

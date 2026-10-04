@@ -14393,6 +14393,371 @@
     });
   }
 
+  // ---------------- "page.rpc" — RPC / FloripaPrev (Financeiro->RPC; Notion via GET /rpc + holerite via GET /holerite) ----------------
+  // Pedido do Georges: acompanhar a Previdência Complementar (FUMPRESC/FloripaPrev): quanto é
+  // descontado em cada mês (rubrica 5585, 8,5% × (remuneração − teto RGPS)), quanto deveria
+  // cair na conta (desconto × 95% − prêmio básico de risco, + contrapartida igual da PMF),
+  // comparar com o extrato da administradora (bases Notion "RPC - ...") e acompanhar
+  // rendimentos. A rubrica 5598 (seguro adicional MAG) NÃO vai pra conta. SÓ LEITURA do Notion.
+  // <RPC_PURE>
+  var RPC_TAXA_CARREGAMENTO = 0.05;
+  var RPC_PREMIO_BASICO_LADO = 261.41;
+  var RPC_PRIMEIRA_COMP_COM_RISCO = "2026-08";
+  var RPC_COD_DESCONTO = "5585";
+  var RPC_COD_SEGURO_ADICIONAL = "5598";
+  function rpcR2(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+  function rpcCreditoEsperadoLado(desconto, comp) {
+    if (typeof desconto !== "number" || !isFinite(desconto)) return null;
+    var premio = String(comp) >= RPC_PRIMEIRA_COMP_COM_RISCO ? RPC_PREMIO_BASICO_LADO : 0;
+    return rpcR2(desconto * (1 - RPC_TAXA_CARREGAMENTO) - premio);
+  }
+  // soma dos valores de uma rubrica (por código exato) por competência — ignora linhas Total
+  function rpcSomaRubrica(items, codigo) {
+    var out = {};
+    (items || []).forEach(function (it) {
+      if (!it || String(it.codigo || "").trim() !== codigo || it.tipo === "Total") return;
+      if (typeof it.valor !== "number") return;
+      var c = it.competencia;
+      if (!c) return;
+      out[c] = rpcR2((out[c] || 0) + it.valor);
+    });
+    return out;
+  }
+  function rpcLinhas(holeriteDesc, holeriteSeg, contribs, saldos) {
+    var desc = rpcSomaRubrica(holeriteDesc, RPC_COD_DESCONTO);
+    var seg = rpcSomaRubrica(holeriteSeg, RPC_COD_SEGURO_ADICIONAL);
+    var ext = {};
+    (contribs || []).forEach(function (c) {
+      if (!c || !c.competencia || typeof c.valor !== "number") return;
+      if (c.destino && c.destino !== "Conta de aposentadoria") return;
+      var e = ext[c.competencia] || (ext[c.competencia] = { part: 0, patro: 0 });
+      if (c.lado === "Patrocinadora") e.patro = rpcR2(e.patro + c.valor);
+      else e.part = rpcR2(e.part + c.valor);
+    });
+    var sal = {};
+    (saldos || []).forEach(function (s) { if (s && s.competencia) sal[s.competencia] = s; });
+    var set = {};
+    Object.keys(desc).forEach(function (k) { set[k] = 1; });
+    Object.keys(ext).forEach(function (k) { set[k] = 1; });
+    Object.keys(sal).forEach(function (k) { set[k] = 1; });
+    var comps = Object.keys(set).sort();
+    var acum = 0, saldoAnt = null;
+    return comps.map(function (c) {
+      var d = typeof desc[c] === "number" ? desc[c] : null;
+      var esperadoLado = rpcCreditoEsperadoLado(d, c);
+      var esperadoTotal = esperadoLado === null ? null : rpcR2(esperadoLado * 2);
+      var e = ext[c] || null;
+      var extratoTotal = e ? rpcR2(e.part + e.patro) : null;
+      var diff = (extratoTotal !== null && esperadoTotal !== null) ? rpcR2(extratoTotal - esperadoTotal) : null;
+      var aporte = extratoTotal !== null ? extratoTotal : (esperadoTotal !== null ? esperadoTotal : 0);
+      acum = rpcR2(acum + aporte);
+      var s = sal[c] || null;
+      var saldo = s && typeof s.saldoContas === "number" ? s.saldoContas : null;
+      var rend = s && typeof s.rendimentos === "number" ? s.rendimentos : null;
+      var rentab = (rend !== null && saldoAnt !== null && saldoAnt > 0) ? Math.round(rend / saldoAnt * 10000) / 100 : null;
+      var linha = {
+        competencia: c, desconto: d, esperadoLado: esperadoLado, esperadoTotal: esperadoTotal,
+        extratoPart: e ? e.part : null, extratoPatro: e ? e.patro : null, extratoTotal: extratoTotal,
+        diff: diff, seguroAdicional: typeof seg[c] === "number" ? seg[c] : null,
+        aporteAcum: acum, saldo: saldo, rendimentos: rend, rentab: rentab,
+        rendImplicito: saldo !== null ? rpcR2(saldo - acum) : null,
+        status: extratoTotal === null ? "sem-extrato" : (diff !== null && Math.abs(diff) <= 0.05 ? "ok" : (diff === null ? "sem-holerite" : "divergente"))
+      };
+      if (saldo !== null) saldoAnt = saldo;
+      return linha;
+    });
+  }
+  function rpcResumo(linhas, coberturas) {
+    var comSaldo = linhas.filter(function (l) { return l.saldo !== null; });
+    var ult = comSaldo.length ? comSaldo[comSaldo.length - 1] : null;
+    var aportesPart = 0, aportesPatro = 0, descontado = 0, seguro = 0;
+    linhas.forEach(function (l) {
+      if (l.extratoPart !== null) { aportesPart += l.extratoPart; aportesPatro += l.extratoPatro; }
+      else if (l.esperadoLado !== null) { aportesPart += l.esperadoLado; aportesPatro += l.esperadoLado; }
+      if (l.desconto !== null) descontado += l.desconto;
+      if (l.seguroAdicional !== null) seguro += l.seguroAdicional;
+    });
+    aportesPart = rpcR2(aportesPart); aportesPatro = rpcR2(aportesPatro);
+    var rendAcum = ult ? rpcR2(ult.saldo - ult.aporteAcum) : null;
+    var rentabAcum = (ult && ult.aporteAcum > 0) ? Math.round((ult.saldo / ult.aporteAcum - 1) * 10000) / 100 : null;
+    var premioBasico = 0, premioAdicional = 0;
+    (coberturas || []).forEach(function (c) {
+      if (typeof c.premioMensal !== "number") return;
+      if (c.parcela === "Risco adicional") premioAdicional += c.premioMensal; else premioBasico += c.premioMensal;
+    });
+    return {
+      saldoAtual: ult ? ult.saldo : null, competenciaSaldo: ult ? ult.competencia : null,
+      aportesPart: aportesPart, aportesPatro: aportesPatro, aportesTotal: rpcR2(aportesPart + aportesPatro),
+      descontado: rpcR2(descontado), seguroAdicionalPago: rpcR2(seguro),
+      rendAcum: rendAcum, rentabAcum: rentabAcum,
+      premioBasico: rpcR2(premioBasico), premioAdicional: rpcR2(premioAdicional)
+    };
+  }
+  // média geométrica dos rendimentos mensais já lançados (rentab em %, sobre o saldo anterior)
+  function rpcMediaRendimento(linhas) {
+    var rs = (linhas || []).filter(function (l) { return typeof l.rentab === "number"; });
+    if (!rs.length) return { mensal: null, n: 0 };
+    var prod = 1;
+    rs.forEach(function (l) { prod *= (1 + l.rentab / 100); });
+    return { mensal: Math.round((Math.pow(prod, 1 / rs.length) - 1) * 1000000) / 1000000, n: rs.length };
+  }
+  function rpcTaxaMensalDeAnual(aa) { return Math.pow(1 + aa, 1 / 12) - 1; }
+  // projeta o saldo mês a mês: saldo = saldo × (1+i) + aporte (aporte constante, valores nominais)
+  function rpcProjetar(saldoInicial, aporteMensal, taxaMensal, meses, taxaRenda) {
+    var saldo = Number(saldoInicial) || 0, aportes = 0, serie = [];
+    for (var m = 1; m <= meses; m++) {
+      saldo = saldo * (1 + taxaMensal) + aporteMensal;
+      aportes += aporteMensal;
+      if (m % 12 === 0 || m === meses) serie.push({ mes: m, saldo: rpcR2(saldo) });
+    }
+    var inicial = Number(saldoInicial) || 0;
+    return {
+      saldoFinal: rpcR2(saldo), aportes: rpcR2(aportes), rendimentos: rpcR2(saldo - inicial - aportes),
+      beneficioInicial: rpcR2(saldo * (taxaRenda || 0)), serie: serie
+    };
+  }
+  // </RPC_PURE>
+
+  function renderRpcPage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "holerite-bi-block financeiro-bi-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "🏦 RPC — Previdência Complementar (FloripaPrev / FUMPRESC)";
+    wrap.appendChild(title);
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando dados da RPC…";
+    wrap.appendChild(statusEl);
+
+    var kpiWrap = document.createElement("div");
+    kpiWrap.className = "financeiro-bi-kpi-grid";
+    kpiWrap.style.display = "none";
+    wrap.appendChild(kpiWrap);
+    function mkSection() {
+      var s = document.createElement("div");
+      s.className = "financeiro-bi-section";
+      s.style.display = "none";
+      wrap.appendChild(s);
+      return s;
+    }
+    var projSection = mkSection(), planoSection = mkSection(), chartSection = mkSection(), confSection = mkSection(), cobSection = mkSection(), notaSection = mkSection();
+    var charts = {};
+    var sortConf = { col: 0, dir: -1 }, sortCob = { col: 0, dir: 1 };
+    function mkTitle(parent, text) { var h = document.createElement("h4"); h.className = "financeiro-bi-subtitle"; h.textContent = text; parent.appendChild(h); }
+    function mkNote(parent, text) { var p = document.createElement("p"); p.className = "holerite-bi-note"; p.textContent = text; parent.appendChild(p); }
+    function fmtM(v) { return v === null || v === undefined ? "—" : transacoesFmtMoney(v); }
+    function fmtPct(v) { return v === null || v === undefined ? "—" : String(v).replace(".", ",") + "%"; }
+    function fmtDataBR(iso) {
+      if (!iso) return "—";
+      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+      return m ? m[3] + "/" + m[2] + "/" + m[1] : iso;
+    }
+    var state = { data: null, linhas: [], resumo: null, sortProj: { col: 2, dir: -1 }, proj: { meses: 493, aporte: null, taxaAA: 8, renda: 0.5 } };
+
+    function renderKpis() {
+      kpiWrap.innerHTML = ""; kpiWrap.style.display = "";
+      var r = state.resumo;
+      var defs = [
+        { l: "Saldo atual (extrato)", v: fmtM(r.saldoAtual), s: r.competenciaSaldo ? holeriteBiPeriodLabel(r.competenciaSaldo) : "sem extrato" },
+        { l: "Descontado em folha (5585)", v: fmtM(r.descontado), s: "8,5% sobre o que excede o teto RGPS" },
+        { l: "Aportes na conta — você", v: fmtM(r.aportesPart), s: "já líquidos de carregamento e risco" },
+        { l: "Aportes na conta — PMF", v: fmtM(r.aportesPatro), s: "contrapartida igual à sua" },
+        { l: "Rendimentos acumulados", v: fmtM(r.rendAcum), s: r.rentabAcum === null ? "—" : fmtPct(r.rentabAcum) + " sobre os aportes" },
+        { l: "Seguro adicional pago (5598)", v: fmtM(r.seguroAdicionalPago), s: "não vai para a conta" }
+      ];
+      defs.forEach(function (d) {
+        var el = document.createElement("div");
+        el.className = "financeiro-bi-kpi";
+        var lab = document.createElement("span"); lab.className = "financeiro-bi-kpi-label"; lab.textContent = d.l;
+        var val = document.createElement("span"); val.className = "financeiro-bi-kpi-value"; val.textContent = d.v;
+        var sb = document.createElement("span"); sb.className = "holerite-bi-kpi-sub"; sb.textContent = d.s;
+        el.appendChild(lab); el.appendChild(val); el.appendChild(sb);
+        kpiWrap.appendChild(el);
+      });
+    }
+
+    function renderProj() {
+      projSection.innerHTML = ""; projSection.style.display = "";
+      mkTitle(projSection, "🔮 Projeção até a aposentadoria");
+      var r = state.resumo, p = state.proj;
+      var ult = state.linhas.filter(function (l) { return l.esperadoTotal !== null || l.extratoTotal !== null; }).pop();
+      if (p.aporte === null) p.aporte = ult ? (ult.extratoTotal !== null ? ult.extratoTotal : ult.esperadoTotal) : 0;
+      var media = rpcMediaRendimento(state.linhas);
+      var ctl = document.createElement("div");
+      ctl.className = "holerite-bi-filter-row";
+      function mkInput(label, key, step, suffix) {
+        var lab = document.createElement("label");
+        lab.className = "rpc-proj-field";
+        lab.appendChild(document.createTextNode(label + " "));
+        var inp = document.createElement("input");
+        inp.type = "number"; inp.step = step; inp.value = p[key]; inp.className = "rpc-proj-input";
+        inp.addEventListener("change", function () {
+          var v = parseFloat(String(inp.value).replace(",", "."));
+          if (isFinite(v) && v >= 0) { p[key] = v; renderProj(); }
+        });
+        lab.appendChild(inp);
+        if (suffix) lab.appendChild(document.createTextNode(" " + suffix));
+        ctl.appendChild(lab);
+      }
+      mkInput("Meses até aposentar", "meses", "1", "");
+      mkInput("Aporte mensal total (você + PMF), R$", "aporte", "0.01", "");
+      mkInput("Cenário personalizado (% a.a.)", "taxaAA", "0.1", "");
+      mkInput("Renda mensal (% do fundo)", "renda", "0.1", "");
+      projSection.appendChild(ctl);
+      var cen = [];
+      if (media.mensal !== null) cen.push({ label: "Média real do extrato (" + media.n + (media.n === 1 ? " mês" : " meses") + ")", i: media.mensal, cor: "#16a34a" });
+      cen.push({ label: "Promessa (14% a.a.)", i: rpcTaxaMensalDeAnual(0.14), cor: "#3b82f6" });
+      cen.push({ label: "Personalizado (" + String(p.taxaAA).replace(".", ",") + "% a.a.)", i: rpcTaxaMensalDeAnual(p.taxaAA / 100), cor: "#f59e0b" });
+      var saldo0 = r.saldoAtual !== null ? r.saldoAtual : 0;
+      var res = cen.map(function (c) { return { c: c, r: rpcProjetar(saldo0, p.aporte, c.i, Math.round(p.meses), p.renda / 100) }; });
+      var cols = [
+        { label: "Cenário", get: function (x) { return x.c.label; }, text: function (x) { return x.c.label; } },
+        { label: "Rendimento mensal", get: function (x) { return x.c.i; }, text: function (x) { return fmtPct(Math.round(x.c.i * 10000) / 100); }, num: true },
+        { label: "Saldo final projetado", get: function (x) { return x.r.saldoFinal; }, text: function (x) { return fmtM(x.r.saldoFinal); }, num: true },
+        { label: "Total aportado", get: function (x) { return x.r.aportes; }, text: function (x) { return fmtM(x.r.aportes); }, num: true },
+        { label: "Rendimentos", get: function (x) { return x.r.rendimentos; }, text: function (x) { return fmtM(x.r.rendimentos); }, num: true },
+        { label: "Benefício inicial/mês", get: function (x) { return x.r.beneficioInicial; }, text: function (x) { return fmtM(x.r.beneficioInicial); }, num: true }
+      ];
+      irpfSortableTable(projSection, cols, res, state.sortProj, renderProj);
+      if (charts.proj) { charts.proj.destroy(); delete charts.proj; }
+      var box = document.createElement("div");
+      box.className = "financeiro-bi-chart-box holerite-bi-chart-box";
+      var cw = document.createElement("div");
+      cw.className = "financeiro-bi-canvas-wrap financeiro-bi-canvas-wide";
+      var canvas = document.createElement("canvas");
+      cw.appendChild(canvas); box.appendChild(cw); projSection.appendChild(box);
+      var maxLen = 0; res.forEach(function (x) { if (x.r.serie.length > maxLen) maxLen = x.r.serie.length; });
+      var labels = res[0].r.serie.map(function (s) { return s.mes % 12 === 0 ? String(s.mes / 12) + " a" : String(s.mes) + " m"; });
+      charts.proj = new window.Chart(canvas.getContext("2d"), {
+        type: "line",
+        data: { labels: labels, datasets: res.map(function (x) { return { label: x.c.label, data: x.r.serie.map(function (s) { return s.saldo; }), borderColor: x.c.cor, backgroundColor: x.c.cor, borderWidth: 2, pointRadius: 0, tension: 0.15 }; }) },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + fmtM(ctx.parsed.y); } } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: function (v) { return "R$ " + (Number(v) >= 1000000 ? (Number(v) / 1000000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mi" : Number(v).toLocaleString("pt-BR")); } } } } }
+      });
+      mkNote(projSection, "Simulação simples, em valores nominais: aporte constante (sem reajuste salarial), rendimento mensal composto e renda mensal como % do saldo (a informação de 493 meses vem da simulação da MAG, aposentadoria aos 75 anos). A média real usa só os meses já lançados no extrato" + (media.n < 3 ? " — ainda é amostra muito curta, trate como indicativo." : "."));
+    }
+
+    function renderPlano() {
+      planoSection.innerHTML = ""; planoSection.style.display = "";
+      mkTitle(planoSection, "📋 Plano e regras");
+      [
+        "Plano FloripaPrev (contribuição definida) · entidade FUMPRESC · CNPB 2022.0004-47 · adesão em 05/08/2026 · regime tributário ainda não definido.",
+        "Contribuição básica: 8,5% do participante sobre a remuneração acima do teto do RGPS, com contrapartida igual da PMF (rubrica 5585 no holerite).",
+        "Crédito na conta, por lado = desconto × 95% (carregamento de 5%) − R$ " + String(RPC_PREMIO_BASICO_LADO).replace(".", ",") + " de prêmio básico de risco (cobrado a partir de " + holeriteBiPeriodLabel(RPC_PRIMEIRA_COMP_COM_RISCO) + "; em 07/2026 não houve desconto de risco).",
+        "O seguro adicional (rubrica 5598) é pago à MAG Seguros e não entra na conta."
+      ].forEach(function (t) { mkNote(planoSection, t); });
+    }
+
+    function renderChart() {
+      chartSection.innerHTML = ""; chartSection.style.display = "";
+      mkTitle(chartSection, "📈 Aportes por mês × saldo do extrato");
+      if (charts.rpc) { charts.rpc.destroy(); delete charts.rpc; }
+      var rows = state.linhas;
+      var box = document.createElement("div");
+      box.className = "financeiro-bi-chart-box holerite-bi-chart-box";
+      var cw = document.createElement("div");
+      cw.className = "financeiro-bi-canvas-wrap financeiro-bi-canvas-wide";
+      var canvas = document.createElement("canvas");
+      cw.appendChild(canvas); box.appendChild(cw); chartSection.appendChild(box);
+      charts.rpc = new window.Chart(canvas.getContext("2d"), {
+        data: {
+          labels: rows.map(function (r) { return holeriteBiPeriodLabel(r.competencia); }),
+          datasets: [
+            { type: "bar", label: "Aporte você", stack: "a", data: rows.map(function (r) { return r.extratoPart !== null ? r.extratoPart : r.esperadoLado; }), backgroundColor: "#3b82f6", borderRadius: 3, yAxisID: "y" },
+            { type: "bar", label: "Aporte PMF", stack: "a", data: rows.map(function (r) { return r.extratoPatro !== null ? r.extratoPatro : r.esperadoLado; }), backgroundColor: "#8b5cf6", borderRadius: 3, yAxisID: "y" },
+            { type: "line", label: "Saldo do extrato", data: rows.map(function (r) { return r.saldo; }), borderColor: "#16a34a", backgroundColor: "#16a34a", borderWidth: 2, pointRadius: 4, tension: 0.2, yAxisID: "y", spanGaps: true },
+            { type: "line", label: "Aportes acumulados", data: rows.map(function (r) { return r.aporteAcum; }), borderColor: "#f59e0b", backgroundColor: "#f59e0b", borderDash: [5, 4], borderWidth: 2, pointRadius: 3, tension: 0.2, yAxisID: "y" }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + fmtM(ctx.parsed.y); } } } },
+          scales: { x: { stacked: true }, y: { beginAtZero: true, stacked: false, ticks: { callback: function (v) { return "R$ " + Number(v).toLocaleString("pt-BR"); } } } }
+        }
+      });
+    }
+
+    function renderConf() {
+      confSection.innerHTML = ""; confSection.style.display = "";
+      mkTitle(confSection, "✅ Conferência: holerite × extrato da FUMPRESC");
+      var cols = [
+        { label: "Competência", get: function (r) { return r.competencia; }, text: function (r) { return holeriteBiPeriodLabel(r.competencia); } },
+        { label: "Descontado (5585)", get: function (r) { return r.desconto; }, text: function (r) { return fmtM(r.desconto); }, num: true },
+        { label: "Esperado por lado", get: function (r) { return r.esperadoLado; }, text: function (r) { return fmtM(r.esperadoLado); }, num: true },
+        { label: "Extrato — você", get: function (r) { return r.extratoPart; }, text: function (r) { return fmtM(r.extratoPart); }, num: true },
+        { label: "Extrato — PMF", get: function (r) { return r.extratoPatro; }, text: function (r) { return fmtM(r.extratoPatro); }, num: true },
+        { label: "Diferença", get: function (r) { return r.diff; }, text: function (r) { return r.diff === null ? "—" : fmtM(r.diff); }, num: true,
+          cls: function (r) { return r.status === "divergente" ? "holerite-bi-down" : ""; } },
+        { label: "Rendimento do mês", get: function (r) { return r.rendimentos; }, text: function (r) { return fmtM(r.rendimentos); }, num: true },
+        { label: "Rentab. s/ saldo anterior", get: function (r) { return r.rentab; }, text: function (r) { return fmtPct(r.rentab); }, num: true },
+        { label: "Saldo do extrato", get: function (r) { return r.saldo; }, text: function (r) { return fmtM(r.saldo); }, num: true },
+        { label: "Seguro adicional (5598)", get: function (r) { return r.seguroAdicional; }, text: function (r) { return fmtM(r.seguroAdicional); }, num: true },
+        { label: "Situação", get: function (r) { return r.status; }, text: function (r) {
+            return r.status === "ok" ? "Confere" : r.status === "divergente" ? "Divergente" : r.status === "sem-extrato" ? "Sem extrato" : "Sem holerite"; } }
+      ];
+      irpfSortableTable(confSection, cols, state.linhas, sortConf, renderConf,
+        function (r) { return r.status === "divergente" ? "irpf-row-warn" : ""; });
+    }
+
+    function renderCob() {
+      cobSection.innerHTML = ""; cobSection.style.display = "";
+      mkTitle(cobSection, "🛡️ Seguro de risco (MAG Seguros)");
+      var cob = (state.data && state.data.coberturas) || [];
+      if (!cob.length) { mkNote(cobSection, "Nenhuma cobertura cadastrada na base Notion."); return; }
+      var cols = [
+        { label: "Cobertura", get: function (r) { return r.nome; }, text: function (r) { return r.nome || "—"; } },
+        { label: "Parcela", get: function (r) { return r.parcela; }, text: function (r) { return r.parcela || "—"; } },
+        { label: "Evento", get: function (r) { return r.evento; }, text: function (r) { return r.evento || "—"; } },
+        { label: "Pecúlio", get: function (r) { return r.peculio; }, text: function (r) { return fmtM(r.peculio); }, num: true },
+        { label: "Prêmio mensal", get: function (r) { return r.premioMensal; }, text: function (r) { return fmtM(r.premioMensal); }, num: true },
+        { label: "Vigência", get: function (r) { return r.vigenciaInicio; }, text: function (r) { return fmtDataBR(r.vigenciaInicio) + " a " + fmtDataBR(r.vigenciaFim); } },
+        { label: "Pago por", get: function (r) { return r.pagoPor; }, text: function (r) { return r.pagoPor || "—"; } }
+      ];
+      irpfSortableTable(cobSection, cols, cob, sortCob, renderCob);
+      var rs = state.resumo;
+      mkNote(cobSection, "Prêmio mensal total: " + fmtM(rpcR2(rs.premioBasico + rs.premioAdicional)) + " (básico " + fmtM(rs.premioBasico) + " dividido entre você e a PMF + adicional " + fmtM(rs.premioAdicional) + " só seu). Reajuste anual pelo IPCA.");
+    }
+
+    function renderNotas() {
+      notaSection.innerHTML = ""; notaSection.style.display = "";
+      mkTitle(notaSection, "ℹ️ Observações");
+      mkNote(notaSection, "Dados do extrato vêm das bases Notion “RPC - Contribuições”, “RPC - Saldo Mensal” e “RPC - Coberturas”. Esta página só lê; os lançamentos são feitos lá (depois, pelo script de captura da FUMPRESC).");
+      mkNote(notaSection, "O simulador da FUMPRESC calcula um crédito diferente do extrato real (≈ R$ 13,07 a mais por lado em 08/2026). Vale o extrato; o esperado desta página usa a regra que reproduz o extrato ao centavo.");
+    }
+
+    function renderAll() {
+      state.linhas = rpcLinhas(state.holeriteDesc, state.holeriteSeg, state.data.contribuicoes, state.data.saldos);
+      state.resumo = rpcResumo(state.linhas, state.data.coberturas);
+      renderKpis(); renderProj(); renderPlano(); renderChart(); renderConf(); renderCob(); renderNotas();
+    }
+
+    function fetchJson(path, fallback) {
+      return authFetch(cfg.templateWorkerUrl + path).then(function (res) {
+        if (res.status === 401 && window.Auth) { Auth.signOut(); return fallback; }
+        return res.ok ? res.json() : fallback;
+      });
+    }
+    Promise.all([
+      fetchJson("/rpc", null),
+      fetchJson("/holerite?codigo=" + RPC_COD_DESCONTO, { items: [] }),
+      fetchJson("/holerite?codigo=" + RPC_COD_SEGURO_ADICIONAL, { items: [] }),
+      loadChartJs()
+    ]).then(function (r) {
+      if (!r[0]) { statusEl.textContent = "Não foi possível ler as bases da RPC no Notion (verifique se a integração tem acesso a elas)."; return; }
+      state.data = r[0];
+      state.holeriteDesc = (r[1] && r[1].items) || [];
+      state.holeriteSeg = (r[2] && r[2].items) || [];
+      statusEl.style.display = "none";
+      renderAll();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao carregar a RPC: " + (err && err.message ? err.message : "falha ao carregar dados/gráficos");
+    });
+  }
+
   // ---------------- "page.holerite" — PMF - Folha de Pagamento (Financeiro->PMF - Folha de Pagamento, espelho em D1, 100% leitura) ----------------
   // Pedido do Georges: migrar a base Notion "PMF" (linhas de holerite) pra
   // uma tabela D1 ("holerite", banco "meu-hub-visor" — ver GET /holerite e
@@ -22878,6 +23243,16 @@
         container.appendChild(dividerHoleriteBI);
       }
       renderHoleriteBIPage(container, page);
+    }
+
+    // "page.rpc" — RPC / FloripaPrev (Financeiro->RPC). Ver renderRpcPage.
+    if (page.rpc) {
+      if (renderedSomething) {
+        var dividerRpc = document.createElement("hr");
+        dividerRpc.className = "content-divider";
+        container.appendChild(dividerRpc);
+      }
+      renderRpcPage(container, page);
     }
 
     // "page.irpf" — IRPF (Financeiro->Fiscal->IRPF). Ver renderIrpfPage.
