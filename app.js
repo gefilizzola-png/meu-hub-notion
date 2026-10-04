@@ -12661,6 +12661,7 @@
       tipoSelected: [], matriculaSelected: [], folhaSelected: [], lotacaoSelected: [],
       rubricaSelected: [], dataPagamentoFilter: null,
       sortKey: "codigo", sortDir: 1,
+      collapsed: {}, // chave do grupo -> true (card recolhido)
       // "Mostrar todas as colunas" (ver COLS/renderGroupCard mais abaixo) —
       // na tela grande já nasce mostrando tudo (pedido do Georges), no
       // celular nasce só com Código/Rubrica/Valor.
@@ -12698,6 +12699,7 @@
         else if (key === "competencia") { av = a.competencia || ""; bv = b.competencia || ""; }
         else if (key === "matricula") { av = a.matricula || ""; bv = b.matricula || ""; }
         else if (key === "folha") { av = a.folha || ""; bv = b.folha || ""; }
+        else if (key === "nivel") { av = a.nivel || 0; bv = b.nivel || 0; }
         else if (key === "dataPagamento") { av = a.data_pagamento || ""; bv = b.data_pagamento || ""; }
         else { av = a.codigo || ""; bv = b.codigo || ""; }
         if (typeof av === "number") return dir * (av - bv);
@@ -12736,10 +12738,11 @@
         if (state.lotacaoSelected.length && state.lotacaoSelected.indexOf(it.lotacao) === -1) return;
         var key = it.competencia + "|" + it.matricula + "|" + it.folha;
         if (!map[key]) {
-          map[key] = { competencia: it.competencia, matricula: it.matricula, folha: it.folha, totals: {}, rows: [], dataPagamento: null };
+          map[key] = { competencia: it.competencia, matricula: it.matricula, folha: it.folha, totals: {}, rows: [], dataPagamento: null, nivel: null };
           order.push(key);
         }
         var g = map[key];
+        if (it.nivel !== null && it.nivel !== undefined && it.nivel !== "") g.nivel = it.nivel;
         if (it.data_pagamento) g.dataPagamento = it.data_pagamento;
         if (it.tipo === "Total") {
           if (it.codigo === "4000") g.totals.proventos = it.valor;
@@ -12841,14 +12844,24 @@
         { property: "rubrica", type: "select", label: "Rubrica", icon: "ti-receipt", searchable: true, options: buildSimpleOptionsFromItems("rubrica"), default: state.rubricaSelected },
         function (opts) { state.rubricaSelected = opts.map(function (o) { return o.pageId; }); renderBody(); }
       ));
-      // Data de Pagamento (data específica OU período, pedido do Georges) —
-      // client-side sobre g.dataPagamento (ver groupMatchesDataPagamento).
+    }
+
+    // Data de Pagamento (data específica OU período) — montado UMA vez (e
+    // no "Limpar filtros"), NÃO dentro de buildFiltersBar: loadItems()
+    // chama buildFiltersBar a cada consulta e remontar este widget
+    // zerava o texto/inputs enquanto o filtro continuava ativo no state.
+    // O pagamento cai normalmente no mês SEGUINTE à competência, então
+    // com filtro de data ativo loadItems() traz TODAS as competências
+    // (ver effectiveCompetencias) — antes só vinha a competência da tela e
+    // o filtro "não funcionava".
+    function buildDataPagamentoFilter() {
       dataPagamentoFilterWrap.innerHTML = "";
       dataPagamentoFilterWrap.appendChild(buildLocalDateRangeFilter(
         { label: "Data de Pagamento" },
-        function (range) { state.dataPagamentoFilter = range; renderBody(); }
+        function (range) { state.dataPagamentoFilter = range; loadItems(); }
       ));
     }
+    buildDataPagamentoFilter();
 
     var searchInputHolerite = document.createElement("input");
     searchInputHolerite.type = "text";
@@ -12884,6 +12897,7 @@
       state.search = ""; searchInputHolerite.value = "";
       state.tipoSelected = []; state.matriculaSelected = []; state.folhaSelected = []; state.lotacaoSelected = [];
       state.rubricaSelected = []; state.dataPagamentoFilter = null;
+      buildDataPagamentoFilter();
       buildFiltersBar();
       loadItems();
     });
@@ -12959,7 +12973,7 @@
       singleNavWrap.style.display = "none";
       rangeNavWrap.style.display = "";
       buildRangeDropdown();
-      if (state.rangeSelected.length) loadItems(); else renderBody();
+      loadItems(); // sem marcação = todas as competências
     });
     toSingleBtn.addEventListener("click", function () {
       state.mode = "single";
@@ -13027,6 +13041,24 @@
     });
     updateHoleriteColumnsToggleLabel();
     columnsToolbarHolerite.appendChild(columnsToggleBtnHolerite);
+    // expandir/recolher TODAS as divisórias (cards de matrícula) — mesmo
+    // par de ícones pequenos das outras páginas.
+    function setAllHoleriteCollapsed(collapsed) {
+      buildGroups().forEach(function (g) {
+        state.collapsed[g.competencia + "|" + g.matricula + "|" + g.folha] = collapsed;
+      });
+      renderBody();
+    }
+    [["Recolher tudo", "ti-arrows-minimize", true], ["Expandir tudo", "ti-arrows-maximize", false]].forEach(function (d) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "toolbar-icon-btn";
+      b.title = d[0];
+      b.setAttribute("aria-label", d[0]);
+      b.innerHTML = '<i class="ti ' + d[1] + '"></i>';
+      b.addEventListener("click", function () { setAllHoleriteCollapsed(d[2]); });
+      columnsToolbarHolerite.appendChild(b);
+    });
     wrap.insertBefore(columnsToolbarHolerite, body);
 
     function totalBox(label, value, cls) {
@@ -13083,9 +13115,23 @@
       var headTitle = document.createElement("div");
       headTitle.className = "holerite-group-title";
       headTitle.textContent = g.matricula + " — " + g.folha +
-        (state.mode === "range" ? " (" + holeriteCompetenciaLabel(g.competencia) + ")" : "");
+        (g.nivel ? " — Nível " + g.nivel : "");
+      var gKey = g.competencia + "|" + g.matricula + "|" + g.folha;
+      var collapsed = !!state.collapsed[gKey];
+      var toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "toolbar-icon-btn holerite-card-toggle";
+      toggleBtn.title = collapsed ? "Expandir" : "Recolher";
+      toggleBtn.setAttribute("aria-label", toggleBtn.title);
+      toggleBtn.innerHTML = '<i class="ti ' + (collapsed ? "ti-chevron-down" : "ti-chevron-up") + '"></i>';
+      toggleBtn.addEventListener("click", function () {
+        state.collapsed[gKey] = !state.collapsed[gKey];
+        renderBody();
+      });
       head.appendChild(headTitle);
+      head.appendChild(toggleBtn);
       card.appendChild(head);
+      if (collapsed) return card;
 
       var totalsRow = document.createElement("div");
       totalsRow.className = "holerite-totals-row";
@@ -13221,7 +13267,8 @@
     var HOLERITE_RANGE_EXTRA_COLS = [
       { key: "competencia", label: "Competência", sortKey: "competencia" },
       { key: "matricula", label: "Matrícula", sortKey: "matricula" },
-      { key: "folha", label: "Folha", sortKey: "folha" }
+      { key: "folha", label: "Folha", sortKey: "folha" },
+      { key: "nivel", label: "Nível", sortKey: "nivel" }
     ];
     var HOLERITE_RANGE_TAIL_COL = { key: "dataPagamento", label: "Data de Pagamento", sortKey: "dataPagamento" };
 
@@ -13267,6 +13314,7 @@
         var tdComp = document.createElement("td"); tdComp.className = "holerite-col-competencia"; tdComp.textContent = holeriteCompetenciaLabel(it.competencia); row.appendChild(tdComp);
         var tdMat = document.createElement("td"); tdMat.className = "holerite-col-matricula"; tdMat.textContent = it.matricula || "—"; row.appendChild(tdMat);
         var tdFolha = document.createElement("td"); tdFolha.className = "holerite-col-folha"; tdFolha.textContent = it.folha || "—"; row.appendChild(tdFolha);
+        var tdNivel = document.createElement("td"); tdNivel.className = "holerite-col-nivel"; tdNivel.textContent = (it.nivel !== null && it.nivel !== undefined && it.nivel !== "") ? String(it.nivel) : "—"; row.appendChild(tdNivel);
         var tdCodigo = document.createElement("td"); tdCodigo.className = "holerite-col-codigo"; tdCodigo.textContent = it.codigo || "—"; row.appendChild(tdCodigo);
         var tdRubrica = document.createElement("td"); tdRubrica.className = "holerite-col-rubrica"; tdRubrica.appendChild(holeriteRubricaChip(it)); row.appendChild(tdRubrica);
         var tdTipo = document.createElement("td"); tdTipo.className = "holerite-col-tipo"; tdTipo.appendChild(holeriteTipoChip(it.tipo)); row.appendChild(tdTipo);
@@ -13289,13 +13337,6 @@
 
     function renderBody() {
       body.innerHTML = "";
-      if (state.mode === "range" && !state.rangeSelected.length) {
-        var pick = document.createElement("p");
-        pick.className = "empty";
-        pick.textContent = "Escolha 1 ou mais competências acima pra buscar.";
-        body.appendChild(pick);
-        return;
-      }
       var groups = buildGroups();
       if (!groups.length) {
         var empty = document.createElement("p");
@@ -13304,9 +13345,11 @@
         body.appendChild(empty);
         return;
       }
-      if (state.mode === "range") {
-        // intervalo: 1 tabela só (ver renderRangeTable) em vez de 1 card
-        // por grupo — pedido do Georges.
+      var filtCard = renderFilteredTotals(groups);
+      if (filtCard) body.appendChild(filtCard);
+      if (isMultiView()) {
+        // intervalo (ou filtro de data): 1 tabela só (ver renderRangeTable)
+        // em vez de 1 card por grupo — pedido do Georges.
         body.appendChild(renderRangeTable(groups));
         return;
       }
@@ -13315,15 +13358,58 @@
       groups.forEach(function (g) { body.appendChild(renderGroupCard(g)); });
     }
 
+    // Quais competências consultar:
+    //  - filtro de Data de Pagamento ativo → TODAS (o pagamento cai no mês
+    //    seguinte à competência; só a competência da tela não bastava);
+    //  - intervalo com "Todos"/nada marcado → TODAS (antes trazia nada);
+    //  - intervalo com marcação → as marcadas; single → a da tela.
+    function effectiveCompetencias() {
+      if (state.dataPagamentoFilter) return state.allCompetencias.slice();
+      if (state.mode === "range") return state.rangeSelected.length ? state.rangeSelected.slice() : state.allCompetencias.slice();
+      return state.competencia ? [state.competencia] : [];
+    }
+    // tabela única (renderRangeTable) quando é intervalo OU quando o filtro
+    // de data pode misturar várias competências.
+    function isMultiView() { return state.mode === "range" || !!state.dataPagamentoFilter; }
+
+    function hasActiveFilters() {
+      return !!(state.search || state.tipoSelected.length || state.matriculaSelected.length ||
+        state.folhaSelected.length || state.lotacaoSelected.length || state.rubricaSelected.length ||
+        state.dataPagamentoFilter);
+    }
+
+    // Totalizadores do que está FILTRADO (pedido do Georges) — soma as
+    // linhas visíveis (Provento/Desconto; linhas "Total" ficam de fora pra
+    // não dobrar a soma). Só aparece quando há algum filtro/busca ativo.
+    function renderFilteredTotals(groups) {
+      if (!hasActiveFilters()) return null;
+      var prov = 0, desc = 0, n = 0;
+      groups.forEach(function (g) {
+        g.rows.forEach(function (it) {
+          if (it.tipo === "Provento") { prov += it.valor || 0; n++; }
+          else if (it.tipo === "Desconto") { desc += it.valor || 0; n++; }
+        });
+      });
+      var card = document.createElement("div");
+      card.className = "holerite-group-card holerite-filtered-card";
+      var head = document.createElement("div");
+      head.className = "holerite-group-title";
+      head.textContent = "🔎 Total do filtrado — " + n + " rubrica" + (n === 1 ? "" : "s") + " em " + groups.length + " holerite" + (groups.length === 1 ? "" : "s");
+      card.appendChild(head);
+      var row = document.createElement("div");
+      row.className = "holerite-totals-row";
+      row.appendChild(totalBox("Proventos filtrados", prov, "holerite-total-proventos"));
+      row.appendChild(totalBox("Descontos filtrados", desc, "holerite-total-descontos"));
+      row.appendChild(totalBox("Saldo (Prov. − Desc.)", prov - desc, "holerite-total-liquido"));
+      card.appendChild(row);
+      return card;
+    }
+
     function loadItems() {
       var params = [];
-      if (state.mode === "single") {
-        if (!state.competencia) { statusEl.textContent = "Nenhuma competência encontrada."; return; }
-        params.push("competencias=" + encodeURIComponent(state.competencia));
-      } else {
-        if (!state.rangeSelected.length) { renderBody(); return; }
-        params.push("competencias=" + encodeURIComponent(state.rangeSelected.join(",")));
-      }
+      var comps = effectiveCompetencias();
+      if (!comps.length) { statusEl.textContent = "Nenhuma competência encontrada."; return; }
+      params.push("competencias=" + encodeURIComponent(comps.join(",")));
       if (state.matriculaSelected.length) params.push("matricula=" + encodeURIComponent(state.matriculaSelected.join(",")));
       if (state.folhaSelected.length) params.push("folha=" + encodeURIComponent(state.folhaSelected.join(",")));
       if (state.lotacaoSelected.length) params.push("lotacao=" + encodeURIComponent(state.lotacaoSelected.join(",")));

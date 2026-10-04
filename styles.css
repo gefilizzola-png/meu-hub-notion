@@ -8106,7 +8106,15 @@ html, body {
 .holerite-col-competencia,
 .holerite-col-matricula,
 .holerite-col-folha,
+.holerite-col-nivel,
 .holerite-col-dataPagamento { width: 1%; white-space: nowrap; }
+.holerite-card-toggle { flex: 0 0 auto; align-self: center; }
+.holerite-group-head { align-items: center; }
+.holerite-filtered-card {
+  background: linear-gradient(135deg, #eef6ff 0%, #e4f0fd 100%);
+  border-color: #9cc3ef;
+}
+.holerite-filtered-card .holerite-group-title { font-size: 15px; margin-bottom: 8px; }
 /* "Mostrar todas as colunas" (padrão Passagens/Saúde/Prioridades) — por
    padrão só Código/Rubrica/Valor ficam visíveis; Tipo/Qtd/Valor Base/
    Parcela somem até o clique. No modo intervalo, Competência/Matrícula/
