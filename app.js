@@ -23217,6 +23217,1171 @@
       });
   }
 
+  // ---------------- "page.calendar" — Calendário (pedido do Georges: centralizar tudo que tem
+  // data; Mês/Semana/Dia/Agenda; fontes escolhidas por ele — ver CALENDAR_SOURCES no config.js) ----------------
+  // CAL-PURE-BEGIN
+  // Funções PURAS do Calendário (sem DOM/rede) — separadas de propósito pra testar isoladas.
+  // Regra de ouro: toda data "só dia" é tratada como string "YYYY-MM-DD" do fuso de São Paulo
+  // (nunca new Date("YYYY-MM-DD"), que vira meia-noite UTC e "volta um dia" em Brasília).
+  var CAL_TZ = "America/Sao_Paulo";
+  var CAL_MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  var CAL_MONTHS_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  var CAL_DOW_MON_SHORT = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
+  var CAL_DOW_LONG = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+
+  function calPad2(n) { return n < 10 ? "0" + n : "" + n; }
+  function calISO(y, m0, d) { return y + "-" + calPad2(m0 + 1) + "-" + calPad2(d); }
+  function calParseISO(s) { var p = String(s).slice(0, 10).split("-"); return { y: +p[0], m0: +p[1] - 1, d: +p[2] }; }
+  function calToUTC(iso) { var p = calParseISO(iso); return Date.UTC(p.y, p.m0, p.d); }
+  function calAddDays(iso, n) {
+    var t = new Date(calToUTC(iso) + n * 86400000);
+    return calISO(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
+  }
+  function calDiffDays(a, b) { return Math.round((calToUTC(a) - calToUTC(b)) / 86400000); }
+  function calDow(iso) { return new Date(calToUTC(iso)).getUTCDay(); } // 0 = domingo
+  function calMonDow(iso) { return (calDow(iso) + 6) % 7; } // 0 = segunda
+  function calWeekStart(iso) { return calAddDays(iso, -calMonDow(iso)); }
+  function calDaysInMonth(y, m0) { return new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate(); }
+  function calMonthKey(iso) { return String(iso).slice(0, 7); }
+  function calMonthRange(ym) {
+    var y = +ym.slice(0, 4), m0 = +ym.slice(5, 7) - 1;
+    return { first: ym + "-01", last: calISO(y, m0, calDaysInMonth(y, m0)) };
+  }
+  function calAddMonths(iso, n) {
+    var p = calParseISO(iso);
+    var t = p.y * 12 + p.m0 + n;
+    return calISO(Math.floor(t / 12), ((t % 12) + 12) % 12, 1);
+  }
+  function calMonthsBetween(fromISO, toISO) {
+    var out = [];
+    var cur = calMonthKey(fromISO) + "-01";
+    var end = calMonthKey(toISO);
+    var guard = 0;
+    while (calMonthKey(cur) <= end && guard++ < 60) {
+      out.push(calMonthKey(cur));
+      cur = calAddMonths(cur, 1);
+    }
+    return out;
+  }
+  // 42 dias (6 semanas, começando na segunda) cobrindo o mês de "iso"
+  function calMonthGrid(iso) {
+    var p = calParseISO(iso);
+    var start = calWeekStart(calISO(p.y, p.m0, 1));
+    var days = [];
+    for (var i = 0; i < 42; i++) days.push(calAddDays(start, i));
+    return days;
+  }
+  function calFmtBR(iso) {
+    if (!iso) return "";
+    var p = String(iso).slice(0, 10).split("-");
+    return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : String(iso);
+  }
+  function calSpPartsFromDate(dt) {
+    var parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: CAL_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+    }).formatToParts(dt);
+    var o = {};
+    parts.forEach(function (p) { o[p.type] = p.value; });
+    return { date: o.year + "-" + o.month + "-" + o.day, time: o.hour + ":" + o.minute };
+  }
+  function calSpToday() { return calSpPartsFromDate(new Date()).date; }
+  // "2026-10-05" -> {date, time:null}; "2026-10-05T14:00:00.000-03:00" -> hora de São Paulo;
+  // "2026-10-05T14:00" (sem fuso) -> hora como veio.
+  function calParseDateStr(s) {
+    if (!s) return null;
+    s = String(s);
+    if (s.indexOf("T") === -1) return { date: s.slice(0, 10), time: null };
+    if (/(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+      var d = new Date(s);
+      if (!isNaN(d.getTime())) return calSpPartsFromDate(d);
+    }
+    return { date: s.slice(0, 10), time: s.slice(11, 16) };
+  }
+  function calParseNotionDate(dp) {
+    while (Array.isArray(dp)) dp = dp.length ? dp[0] : null;
+    if (!dp || !dp.start) return null;
+    var a = calParseDateStr(dp.start);
+    if (!a) return null;
+    var b = dp.end ? calParseDateStr(dp.end) : null;
+    return { date: a.date, time: a.time, endDate: b ? b.date : null, endTime: b ? b.time : null };
+  }
+  // 1 item do Notion -> 1+ "dias" (intervalo só-data vira 1 por dia, máx. 31)
+  function calEventDays(parsed) {
+    var out = [];
+    if (parsed.endDate && parsed.endDate > parsed.date && !parsed.time) {
+      var n = Math.min(calDiffDays(parsed.endDate, parsed.date), 30);
+      for (var i = 0; i <= n; i++) out.push({ date: calAddDays(parsed.date, i), time: null, endTime: null, multi: true });
+    } else {
+      var endTime = (!parsed.endDate || parsed.endDate === parsed.date) ? parsed.endTime : null;
+      out.push({ date: parsed.date, time: parsed.time, endTime: endTime, multi: false });
+    }
+    return out;
+  }
+  function calMakeEvent(src, o) {
+    return {
+      key: src.id + "::" + o.id + "::" + o.date + "::" + (o.time || ""),
+      id: o.id, sourceId: src.id, title: o.title || "(sem título)",
+      date: o.date, time: o.time || null, endTime: o.endTime || null,
+      url: o.url || null, done: !!o.done, meta: o.meta || [],
+      color: o.color || src.color, icon: o.icon || src.icon, multi: !!o.multi, custom: o.custom || null
+    };
+  }
+  function calNid(s) { return String(s || "").replace(/-/g, "").toLowerCase(); }
+  function calAndamentoDone(ids, doneIds) {
+    if (!Array.isArray(ids)) return false;
+    var set = {};
+    (doneIds || []).forEach(function (x) { set[calNid(x)] = true; });
+    return ids.some(function (x) { return set[calNid(x)]; });
+  }
+  // Dona do item da Central: 1º por Página de Origem, 2º por Formas, 3º "catchAll".
+  // Aniversários (origem própria) sai como { skip: true } — tem fonte/regra à parte.
+  function calClassifyCentral(allSources, aniSrc, origin, formas) {
+    if (aniSrc && Array.isArray(aniSrc.origins) && aniSrc.origins.indexOf(origin) !== -1) return { skip: true };
+    var i, s;
+    for (i = 0; i < allSources.length; i++) {
+      s = allSources[i];
+      if (s.kind === "central" && Array.isArray(s.origins) && s.origins.indexOf(origin) !== -1) return s;
+    }
+    var fset = {};
+    (formas || []).forEach(function (f) { fset[calNid(f)] = true; });
+    for (i = 0; i < allSources.length; i++) {
+      s = allSources[i];
+      if (s.kind === "central" && Array.isArray(s.formasIds) && s.formasIds.some(function (f) { return fset[calNid(f)]; })) return s;
+    }
+    for (i = 0; i < allSources.length; i++) {
+      if (allSources[i].kind === "central" && allSources[i].catchAll) return allSources[i];
+    }
+    return null;
+  }
+  function calCentralEvents(pages, allSources, aniSrc, enabled, doneIds, dateProp) {
+    var out = [];
+    (pages || []).forEach(function (p) {
+      if (!p) return;
+      var ex = p.extra || {};
+      var parsed = calParseNotionDate(ex[dateProp]);
+      if (!parsed) return;
+      var originRaw = ex["📚 Página de Origem"];
+      var origin = originRaw && originRaw.name ? originRaw.name : "";
+      var src = calClassifyCentral(allSources, aniSrc, origin, ex["🖥 Formas"]);
+      if (!src || src.skip || !enabled[src.id]) return;
+      var done = !src.noDone && calAndamentoDone(ex["🧲 Andamento"], doneIds);
+      calEventDays(parsed).forEach(function (d) {
+        out.push(calMakeEvent(src, {
+          id: p.id, title: p.title, date: d.date, time: d.time, endTime: d.endTime,
+          url: p.url, done: done, multi: d.multi, meta: origin ? ["Origem: " + origin] : []
+        }));
+      });
+    });
+    return out;
+  }
+  // Aniversários: recorrência anual a partir da data de nascimento, qualquer ano ("faz N anos").
+  function calAnniversaryEvents(src, people, fromISO, toISO) {
+    var out = [];
+    var y0 = calParseISO(fromISO).y, y1 = calParseISO(toISO).y;
+    (people || []).forEach(function (p) {
+      if (!p || !p.birth) return;
+      var b = calParseISO(p.birth);
+      if (isNaN(b.y) || isNaN(b.m0) || isNaN(b.d)) return;
+      for (var y = y0; y <= y1; y++) {
+        if (y < b.y) continue;
+        var d = Math.min(b.d, calDaysInMonth(y, b.m0)); // 29/02 em ano comum -> 28/02
+        var iso = calISO(y, b.m0, d);
+        if (iso < fromISO || iso > toISO) continue;
+        var age = y - b.y;
+        out.push(calMakeEvent(src, {
+          id: p.id,
+          title: age > 0 ? (p.title + " faz " + age + (age === 1 ? " ano" : " anos")) : (p.title + " — nascimento"),
+          date: iso, url: p.url, meta: ["Nascimento: " + calFmtBR(p.birth)]
+        }));
+      }
+    });
+    return out;
+  }
+  // Empréstimos (KV): "unico" = dataVencimento; "mensal" = diaMensal em cada mês do intervalo.
+  // fns = { isPaid(loan), saldoTxt(loan) } — vêm do app (loanIsPago etc.), pra manter isto puro.
+  function calLoanEvents(src, loans, fromISO, toISO, fns) {
+    var out = [];
+    (loans || []).forEach(function (loan) {
+      if (!loan) return;
+      var paid = fns.isPaid(loan);
+      var verb = loan.direcao === "pagar" ? "Pagar a " : "Receber de ";
+      var title = verb + (loan.pessoa || "?") + " (" + fns.saldoTxt(loan) + ")";
+      var meta = ["Empréstimo" + (loan.formaPagamento ? " — " + loan.formaPagamento : "")];
+      if (loan.formaPagamento === "unico" && loan.dataVencimento) {
+        var iso = String(loan.dataVencimento).slice(0, 10);
+        if (iso >= fromISO && iso <= toISO) out.push(calMakeEvent(src, { id: loan.id, title: title, date: iso, done: paid, meta: meta }));
+      } else if (loan.formaPagamento === "mensal" && !paid) {
+        var dia = Math.min(Math.max(1, loan.diaMensal || 1), 31);
+        calMonthsBetween(fromISO, toISO).forEach(function (ym) {
+          var r = calMonthRange(ym);
+          var p = calParseISO(r.first);
+          var iso2 = calISO(p.y, p.m0, Math.min(dia, calDaysInMonth(p.y, p.m0)));
+          if (iso2 >= fromISO && iso2 <= toISO) out.push(calMakeEvent(src, { id: loan.id, title: title, date: iso2, meta: meta }));
+        });
+      }
+    });
+    return out;
+  }
+  function calBackupEvents(src, fromISO, toISO) {
+    var out = [];
+    var n = calDiffDays(toISO, fromISO);
+    for (var i = 0; i <= n && i < 400; i++) {
+      var iso = calAddDays(fromISO, i);
+      if (calDow(iso) === 0) out.push(calMakeEvent(src, { id: "backup", title: "Fazer backup dos dados", date: iso, time: "20:00", meta: ["Lembrete semanal (domingo 20h)"] }));
+    }
+    return out;
+  }
+  function calPontoEvents(src, fromISO, toISO, diaDoMes) {
+    var out = [];
+    var dia = Math.min(Math.max(1, diaDoMes || 1), 31);
+    calMonthsBetween(fromISO, toISO).forEach(function (ym) {
+      var r = calMonthRange(ym);
+      var p = calParseISO(r.first);
+      var iso = calISO(p.y, p.m0, Math.min(dia, calDaysInMonth(p.y, p.m0)));
+      if (iso < fromISO || iso > toISO) return;
+      var prev = calParseISO(calAddMonths(r.first, -1));
+      out.push(calMakeEvent(src, {
+        id: "ponto-" + ym, title: "Ajustar o ponto de " + CAL_MONTHS[prev.m0] + "/" + prev.y,
+        date: iso, time: "08:00", meta: ["Lembrete mensal (dia " + dia + ")"]
+      }));
+    });
+    return out;
+  }
+  function calTimeToMin(t) { var p = String(t).split(":"); return (+p[0]) * 60 + (+p[1]); }
+  function calSortEvents(list) {
+    return list.slice().sort(function (a, b) {
+      if (!a.time && b.time) return -1;
+      if (a.time && !b.time) return 1;
+      if (a.time !== b.time) return (a.time || "").localeCompare(b.time || "");
+      return (a.title || "").localeCompare(b.title || "");
+    });
+  }
+  function calGroupByDate(events) {
+    var map = {};
+    events.forEach(function (ev) { (map[ev.date] = map[ev.date] || []).push(ev); });
+    Object.keys(map).forEach(function (k) { map[k] = calSortEvents(map[k]); });
+    return map;
+  }
+  function calFilterEvents(events, opts) {
+    var q = opts.query ? opts.normalize(opts.query) : "";
+    return events.filter(function (ev) {
+      if (ev.date < opts.from || ev.date > opts.to) return false;
+      if (opts.hideDone && ev.done) return false;
+      if (opts.hidden && opts.hidden[ev.sourceId]) return false;
+      if (q && opts.normalize(ev.title + " " + (ev.meta || []).join(" ")).indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+  function calDedupe(events) {
+    var seen = {};
+    return events.filter(function (ev) { if (seen[ev.key]) return false; seen[ev.key] = true; return true; });
+  }
+  function calIsPast(ev, now) {
+    if (ev.date < now.date) return true;
+    if (ev.date > now.date) return false;
+    if (!ev.time) return false;
+    return (ev.endTime || ev.time) < now.time;
+  }
+  // Layout dos eventos COM hora num dia: colunas lado a lado quando se sobrepõem.
+  function calLayoutDay(events) {
+    var items = events.filter(function (ev) { return !!ev.time; }).map(function (ev) {
+      var s = calTimeToMin(ev.time);
+      var e = ev.endTime ? calTimeToMin(ev.endTime) : s + 60;
+      if (e < s + 30) e = s + 30;
+      if (e > 1440) e = 1440;
+      return { ev: ev, start: s, end: e, col: 0, cols: 1 };
+    }).sort(function (a, b) { return a.start - b.start || b.end - a.end; });
+    var clusters = [], cur = null, curEnd = -1;
+    items.forEach(function (it) {
+      if (!cur || it.start >= curEnd) { cur = { items: [], cols: [] }; clusters.push(cur); curEnd = -1; }
+      var placed = false;
+      for (var c = 0; c < cur.cols.length; c++) {
+        if (cur.cols[c] <= it.start) { cur.cols[c] = it.end; it.col = c; placed = true; break; }
+      }
+      if (!placed) { it.col = cur.cols.length; cur.cols.push(it.end); }
+      cur.items.push(it);
+      if (it.end > curEnd) curEnd = it.end;
+    });
+    clusters.forEach(function (cl) { cl.items.forEach(function (it) { it.cols = cl.cols.length; }); });
+    return items;
+  }
+  function calVisibleRange(view, cursor) {
+    if (view === "month") { var g = calMonthGrid(cursor); return { from: g[0], to: g[41] }; }
+    if (view === "week") { var ws = calWeekStart(cursor); return { from: ws, to: calAddDays(ws, 6) }; }
+    if (view === "day") return { from: cursor, to: cursor };
+    return { from: cursor, to: calAddDays(cursor, 29) };
+  }
+  function calShiftCursor(view, cursor, dir) {
+    if (view === "month") { var p = calParseISO(cursor); return calAddMonths(calISO(p.y, p.m0, 1), dir); }
+    if (view === "week") return calAddDays(cursor, 7 * dir);
+    if (view === "day") return calAddDays(cursor, dir);
+    return calAddDays(cursor, 30 * dir);
+  }
+  function calRangeTitle(view, cursor) {
+    var p = calParseISO(cursor);
+    if (view === "month") return CAL_MONTHS[p.m0].charAt(0).toUpperCase() + CAL_MONTHS[p.m0].slice(1) + " de " + p.y;
+    if (view === "day") return CAL_DOW_LONG[calDow(cursor)] + ", " + p.d + " de " + CAL_MONTHS[p.m0] + " de " + p.y;
+    var r = calVisibleRange(view, cursor);
+    var a = calParseISO(r.from), b = calParseISO(r.to);
+    var left = a.d + (a.m0 !== b.m0 || a.y !== b.y ? " " + CAL_MONTHS_SHORT[a.m0] : "") + (a.y !== b.y ? " " + a.y : "");
+    return left + " – " + b.d + " " + CAL_MONTHS_SHORT[b.m0] + " " + b.y;
+  }
+  // CAL-PURE-END
+
+  // ---- busca de dados (rede + cache em memória, TTL 5 min; "Atualizar" limpa) ----
+  var calCache = {};
+  var CAL_CACHE_TTL = 5 * 60 * 1000;
+  var CAL_DATE_PROP = "📅 Data/Prazo";
+  function calCached(key, fn) {
+    var c = calCache[key];
+    if (c && Date.now() - c.t < CAL_CACHE_TTL) return c.p;
+    var p = fn();
+    p.catch(function () { delete calCache[key]; });
+    calCache[key] = { t: Date.now(), p: p };
+    return p;
+  }
+  function calClearCache() { calCache = {}; }
+  function calJson(url) {
+    return authFetch(url).then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("401"); }
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    });
+  }
+  function calQuery(dbId, filters, extra, sortProp) {
+    var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(dbId) +
+      "&filters=" + encodeURIComponent(JSON.stringify(filters)) +
+      (sortProp ? "&sorts=" + encodeURIComponent(JSON.stringify([{ property: sortProp, direction: "ascending" }])) : "") +
+      "&extra=" + encodeURIComponent(JSON.stringify(extra));
+    return calJson(url).then(function (d) { return (d && d.pages) || []; });
+  }
+  // intervalo do mês ±1 dia (folga de fuso); o corte exato é feito depois, no cliente
+  function calMonthFilters(prop, ym) {
+    var r = calMonthRange(ym);
+    return [
+      { property: prop, type: "date", condition: "on_or_after", value: calAddDays(r.first, -1) },
+      { property: prop, type: "date", condition: "on_or_before", value: calAddDays(r.last, 1) }
+    ];
+  }
+  function calFetchCentralMonth(ym) {
+    return calCached("central:" + ym, function () {
+      return calQuery(CALENDAR_CENTRAL_DATABASE_ID, calMonthFilters(CAL_DATE_PROP, ym),
+        [CAL_DATE_PROP, "📚 Página de Origem", "🧲 Andamento", "🖥 Formas"], CAL_DATE_PROP);
+    });
+  }
+  function calFetchBirths(src) {
+    return calCached("aniv", function () {
+      return calQuery(CALENDAR_CENTRAL_DATABASE_ID,
+        [{ property: "📚 Página de Origem", type: "select", condition: "equals", value: src.origins[0] }],
+        [src.birthProperty]);
+    });
+  }
+  function calFetchNotionMonth(src, dp, ym) {
+    return calCached("notion:" + src.id + ":" + dp.property + ":" + ym, function () {
+      var extra = [dp.property];
+      if (dp.timeProperty) extra.push(dp.timeProperty);
+      (src.extra || []).forEach(function (x) { if (extra.indexOf(x) === -1) extra.push(x); });
+      return calQuery(src.database_id, calMonthFilters(dp.property, ym), extra, dp.property);
+    });
+  }
+  function calFetchFinanceiroMonth(ym) {
+    return calCached("fin:" + ym, function () {
+      return Promise.all([
+        calJson(cfg.templateWorkerUrl + "/financeiro-contas?month=" + encodeURIComponent(ym)).then(function (d) { return (d && d.items) || []; }),
+        calJson(cfg.templateWorkerUrl + "/financeiro-paid?month=" + encodeURIComponent(ym)).then(function (d) { return (d && d.overrides) || {}; }).catch(function () { return {}; })
+      ]);
+    });
+  }
+  function calFetchLoans() {
+    return calCached("loans", function () { return calJson(cfg.templateWorkerUrl + "/loans").then(function (d) { return (d && d.items) || []; }); });
+  }
+  function calFetchCustom() {
+    return calCached("custom", function () { return calJson(cfg.templateWorkerUrl + "/calendar-events").then(function (d) { return (d && d.items) || []; }); });
+  }
+
+  function calNotionEvents(src, dp, pages) {
+    var out = [];
+    (pages || []).forEach(function (p) {
+      if (!p) return;
+      var ex = p.extra || {};
+      var parsed = calParseNotionDate(ex[dp.property]);
+      if (!parsed) return;
+      if (dp.timeProperty && !parsed.time) {
+        var tp = calParseNotionDate(ex[dp.timeProperty]);
+        if (tp && tp.time) parsed.time = tp.time;
+      }
+      function selName(k) { var v = ex[k]; return v && v.name ? v.name : ""; }
+      var title = p.title;
+      var meta = [];
+      if (src.titleMode === "passagem") {
+        var o = selName("Origem"), d = selName("Destino");
+        title = (o || d ? (o || "?") + " → " + (d || "?") : p.title) + " · " + (dp.suffix || "");
+        if (selName("Companhia")) meta.push("Companhia: " + selName("Companhia"));
+        meta.push(dp.suffix === "volta" ? "Volta" : "Ida");
+      } else if (src.titleMode === "prova") {
+        title = "Prova de " + (selName("Matéria") || p.title);
+      } else {
+        if (selName("Tipo de Evento")) meta.push("Tipo: " + selName("Tipo de Evento"));
+        if (selName("Situação")) meta.push("Situação: " + selName("Situação"));
+      }
+      var done = src.id === "saude" && /realiz|conclu|cancel/i.test(selName("Situação"));
+      calEventDays(parsed).forEach(function (dd) {
+        out.push(calMakeEvent(src, {
+          id: p.id + (dp.suffix ? "-" + dp.suffix : ""), title: title, date: dd.date, time: dd.time,
+          endTime: dd.endTime, url: p.url, done: done, multi: dd.multi, meta: meta
+        }));
+      });
+    });
+    return out;
+  }
+  function calFinanceiroEvents(src, items, overrides) {
+    var out = [];
+    (items || []).forEach(function (it) {
+      if (!it || it.missing) return;
+      var parsed = calParseNotionDate(it.vencimento);
+      if (!parsed) return;
+      var ov = it.id && overrides ? overrides[it.id] : null;
+      var paid = !!it.pagamento || !!(ov && ov.paid);
+      var valor = financeiroDisplayValue(it, { notionPaid: !!it.pagamento });
+      var meta = [];
+      if (typeof valor === "number") meta.push("Valor: " + transacoesFmtMoney(valor));
+      meta.push(paid ? "Situação: paga" : "Situação: em aberto");
+      out.push(calMakeEvent(src, {
+        id: it.id, title: (it.accountLabel || "Conta") + (it.nome ? " — " + it.nome : ""),
+        date: parsed.date, url: it.url, done: paid, meta: meta
+      }));
+    });
+    return out;
+  }
+
+  // Monta TODOS os eventos do intervalo [from,to] das fontes ligadas (enabled[id] === true).
+  function calLoadEvents(from, to, enabled) {
+    var months = calMonthsBetween(calAddDays(from, -1), calAddDays(to, 1));
+    var srcs = (window.CALENDAR_SOURCES || []).filter(function (s) { return enabled[s.id]; });
+    var all = window.CALENDAR_SOURCES || [];
+    var aniSrc = all.filter(function (s) { return s.kind === "aniversarios"; })[0] || null;
+    var errors = [];
+    var jobs = [];
+    function job(label, promise) {
+      jobs.push(promise.catch(function () { if (errors.indexOf(label) === -1) errors.push(label); return []; }));
+    }
+
+    var centralOn = srcs.some(function (s) { return s.kind === "central"; });
+    if (centralOn) {
+      months.forEach(function (ym) {
+        job("Central (reuniões, tarefas…)", calFetchCentralMonth(ym).then(function (pages) {
+          return calCentralEvents(pages, all, aniSrc, enabled, window.CALENDAR_DONE_ANDAMENTO_IDS || [], CAL_DATE_PROP);
+        }));
+      });
+    }
+    srcs.forEach(function (s) {
+      if (s.kind === "aniversarios") {
+        job(s.label, calFetchBirths(s).then(function (pages) {
+          var people = (pages || []).map(function (p) {
+            var b = calParseNotionDate(p.extra && p.extra[s.birthProperty]);
+            return b ? { id: p.id, title: p.title, url: p.url, birth: b.date } : null;
+          }).filter(Boolean);
+          return calAnniversaryEvents(s, people, from, to);
+        }));
+      } else if (s.kind === "notion") {
+        (s.dateProps || []).forEach(function (dp) {
+          months.forEach(function (ym) {
+            job(s.label, calFetchNotionMonth(s, dp, ym).then(function (pages) { return calNotionEvents(s, dp, pages); }));
+          });
+        });
+      } else if (s.kind === "financeiro") {
+        months.forEach(function (ym) {
+          job(s.label, calFetchFinanceiroMonth(ym).then(function (r) { return calFinanceiroEvents(s, r[0], r[1]); }));
+        });
+      } else if (s.kind === "loans") {
+        job(s.label, calFetchLoans().then(function (loans) {
+          return calLoanEvents(s, loans, from, to, {
+            isPaid: loanIsPago,
+            saldoTxt: function (l) { return transacoesFmtMoney(loanSaldoPendente(l)); }
+          });
+        }));
+      } else if (s.kind === "backup") {
+        jobs.push(Promise.resolve(calBackupEvents(s, from, to)));
+      } else if (s.kind === "ponto_mes") {
+        jobs.push(Promise.resolve(calPontoEvents(s, from, to, s.defaultDiaDoMes || 2)));
+      } else if (s.kind === "custom") {
+        job(s.label, calFetchCustom().then(function (items) {
+          return (items || []).filter(function (e) { return e && e.date; }).map(function (e) {
+            return calMakeEvent(s, {
+              id: e.id, title: e.title, date: e.date, time: e.time || null, endTime: e.endTime || null,
+              done: !!e.done, color: e.color || null, meta: e.notes ? [e.notes] : [], custom: e
+            });
+          });
+        }));
+      }
+    });
+
+    return Promise.all(jobs).then(function (lists) {
+      var flat = [];
+      lists.forEach(function (l) { if (Array.isArray(l)) flat = flat.concat(l); });
+      return { events: calDedupe(flat), errors: errors };
+    });
+  }
+
+  // ---------------- tela do Calendário ----------------
+  function renderCalendarioPage(container) {
+    var sources = window.CALENDAR_SOURCES || [];
+    var srcById = {};
+    sources.forEach(function (s) { srcById[s.id] = s; });
+
+    var st = {
+      view: window.innerWidth <= 700 ? "agenda" : "month",
+      cursor: calSpToday(),
+      hideDone: false,
+      query: "",
+      enabled: {},
+      hidden: {},
+      events: [],
+      errors: [],
+      loading: true,
+      token: 0
+    };
+    sources.forEach(function (s) { st.enabled[s.id] = !!s.defaultEnabled; });
+
+    var root = document.createElement("div");
+    root.className = "cal-page";
+    container.appendChild(root);
+
+    // ---------- persistência (KV, merge no Worker) ----------
+    function saveSettings(partial) {
+      authFetch(cfg.templateWorkerUrl + "/calendar-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: partial })
+      }).catch(function () {});
+    }
+    function hiddenToSub() {
+      var o = {};
+      Object.keys(st.hidden).forEach(function (k) { o["hide:" + k] = !!st.hidden[k]; });
+      return o;
+    }
+
+    // ---------- esqueleto ----------
+    var toolbar = document.createElement("div");
+    toolbar.className = "cal-toolbar";
+    var nav = document.createElement("div");
+    nav.className = "cal-nav";
+    var prevBtn = calIconBtn("ti-chevron-left", "Anterior");
+    var nextBtn = calIconBtn("ti-chevron-right", "Próximo");
+    var todayBtn = document.createElement("button");
+    todayBtn.type = "button";
+    todayBtn.className = "cal-today-btn";
+    todayBtn.textContent = "Hoje";
+    var titleEl = document.createElement("h2");
+    titleEl.className = "cal-title";
+    nav.appendChild(prevBtn);
+    nav.appendChild(todayBtn);
+    nav.appendChild(nextBtn);
+    nav.appendChild(titleEl);
+    var views = document.createElement("div");
+    views.className = "cal-views";
+    var viewBtns = {};
+    [["month", "Mês"], ["week", "Semana"], ["day", "Dia"], ["agenda", "Agenda"]].forEach(function (v) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "cal-view-btn";
+      b.textContent = v[1];
+      b.addEventListener("click", function () { setView(v[0]); });
+      viewBtns[v[0]] = b;
+      views.appendChild(b);
+    });
+    var actions = document.createElement("div");
+    actions.className = "cal-actions";
+    var srcBtn = calIconBtn("ti-adjustments-horizontal", "Escolher quais fontes aparecem no Calendário");
+    srcBtn.classList.add("cal-icon-btn-text");
+    srcBtn.appendChild(document.createTextNode(" Fontes"));
+    var refreshBtn = calIconBtn("ti-refresh", "Atualizar (busca de novo no Notion)");
+    actions.appendChild(srcBtn);
+    actions.appendChild(refreshBtn);
+    toolbar.appendChild(nav);
+    toolbar.appendChild(views);
+    toolbar.appendChild(actions);
+    root.appendChild(toolbar);
+
+    // Pesquisar / Filtrar (recolhidos — padrão do app)
+    var searchSec = buildCollapsibleSection("Pesquisar", false);
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "cal-search-input";
+    searchInput.placeholder = "Buscar por título ou origem…";
+    searchInput.addEventListener("input", function () { st.query = searchInput.value; draw(); });
+    searchSec.body.appendChild(withSearchClear(searchInput));
+    root.appendChild(searchSec.section);
+
+    var filterSec = buildCollapsibleSection("Filtrar", false);
+    var filterBody = filterSec.body;
+    root.appendChild(filterSec.section);
+
+    var srcPanel = document.createElement("div");
+    srcPanel.className = "cal-src-panel";
+    srcPanel.style.display = "none";
+    root.appendChild(srcPanel);
+
+    var statusEl = document.createElement("div");
+    statusEl.className = "cal-status";
+    root.appendChild(statusEl);
+
+    var body = document.createElement("div");
+    body.className = "cal-body";
+    root.appendChild(body);
+
+    function calIconBtn(icon, title) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "cal-icon-btn";
+      b.title = title;
+      b.innerHTML = '<i class="ti ' + icon + '"></i>';
+      return b;
+    }
+
+    // ---------- filtros (chips por fonte + ocultar concluídos) ----------
+    function buildFilterBar() {
+      filterBody.innerHTML = "";
+      var row = document.createElement("div");
+      row.className = "cal-chips";
+      sources.forEach(function (s) {
+        if (!st.enabled[s.id]) return;
+        var chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "cal-chip" + (st.hidden[s.id] ? " off" : "");
+        chip.style.setProperty("--cal-c", s.color);
+        chip.title = st.hidden[s.id] ? "Mostrar no Calendário" : "Ocultar do Calendário";
+        chip.textContent = s.icon + " " + s.label;
+        chip.addEventListener("click", function () {
+          st.hidden[s.id] = !st.hidden[s.id];
+          saveSettings({ subToggles: hiddenToSub() });
+          buildFilterBar();
+          draw();
+        });
+        row.appendChild(chip);
+      });
+      filterBody.appendChild(row);
+
+      var row2 = document.createElement("div");
+      row2.className = "cal-chips cal-chips-extra";
+      var doneChip = document.createElement("button");
+      doneChip.type = "button";
+      doneChip.className = "cal-chip cal-chip-neutral" + (st.hideDone ? " on" : "");
+      doneChip.innerHTML = '<i class="ti ti-eye-off"></i> Ocultar concluídos';
+      doneChip.addEventListener("click", function () {
+        st.hideDone = !st.hideDone;
+        saveSettings({ hideDone: st.hideDone });
+        buildFilterBar();
+        draw();
+      });
+      row2.appendChild(doneChip);
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "cal-chip cal-chip-neutral";
+      clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+      clearBtn.addEventListener("click", function () {
+        st.hidden = {};
+        st.hideDone = false;
+        st.query = "";
+        searchInput.value = "";
+        searchInput.dispatchEvent(new Event("input"));
+        saveSettings({ subToggles: hiddenToSub(), hideDone: false });
+        buildFilterBar();
+        draw();
+      });
+      row2.appendChild(clearBtn);
+      filterBody.appendChild(row2);
+    }
+
+    // ---------- tela "Fontes" ----------
+    function buildSourcePanel() {
+      srcPanel.innerHTML = "";
+      var h = document.createElement("div");
+      h.className = "cal-src-head";
+      h.textContent = "Quais fontes aparecem no Calendário";
+      srcPanel.appendChild(h);
+      var hint = document.createElement("p");
+      hint.className = "cal-src-hint";
+      hint.textContent = "Isto decide o que é BUSCADO. (Os chips em “Filtrar” só escondem temporariamente.) Calendário é somente leitura — nada é alterado no Notion.";
+      srcPanel.appendChild(hint);
+      var list = document.createElement("div");
+      list.className = "cal-src-list";
+      sources.forEach(function (s) {
+        var lbl = document.createElement("label");
+        lbl.className = "cal-src-row";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!st.enabled[s.id];
+        cb.addEventListener("change", function () {
+          st.enabled[s.id] = cb.checked;
+          var map = {};
+          sources.forEach(function (x) { map[x.id] = !!st.enabled[x.id]; });
+          saveSettings({ sources: map });
+          buildFilterBar();
+          reload();
+        });
+        var dot = document.createElement("span");
+        dot.className = "cal-src-dot";
+        dot.style.background = s.color;
+        var name = document.createElement("span");
+        name.className = "cal-src-name";
+        name.textContent = s.icon + " " + s.label;
+        var kind = document.createElement("span");
+        kind.className = "cal-src-kind";
+        kind.textContent = calKindLabel(s);
+        lbl.appendChild(cb);
+        lbl.appendChild(dot);
+        lbl.appendChild(name);
+        lbl.appendChild(kind);
+        list.appendChild(lbl);
+      });
+      srcPanel.appendChild(list);
+    }
+    function calKindLabel(s) {
+      if (s.kind === "aniversarios") return "repete todo ano (a partir do nascimento)";
+      if (s.kind === "backup") return "lembrete: domingos 20h";
+      if (s.kind === "ponto_mes") return "lembrete: dia " + (s.defaultDiaDoMes || 2) + " de cada mês";
+      if (s.kind === "custom") return "criar/editar: em breve";
+      if (s.kind === "financeiro") return "1 evento por conta";
+      if (s.kind === "loans") return "vencimentos";
+      if (s.id === "passagens") return "ida e volta";
+      return "";
+    }
+
+    // ---------- navegação ----------
+    function setView(v) {
+      st.view = v;
+      saveSettings({ view: v });
+      reload();
+    }
+    prevBtn.addEventListener("click", function () { st.cursor = calShiftCursor(st.view, st.cursor, -1); reload(); });
+    nextBtn.addEventListener("click", function () { st.cursor = calShiftCursor(st.view, st.cursor, 1); reload(); });
+    todayBtn.addEventListener("click", function () { st.cursor = calSpToday(); reload(); });
+    srcBtn.addEventListener("click", function () {
+      var open = srcPanel.style.display !== "none";
+      srcPanel.style.display = open ? "none" : "block";
+      if (!open) buildSourcePanel();
+    });
+    refreshBtn.addEventListener("click", function () { calClearCache(); reload(); });
+
+    function reload() {
+      var token = ++st.token;
+      st.loading = true;
+      draw();
+      var r = calVisibleRange(st.view, st.cursor);
+      calLoadEvents(r.from, r.to, st.enabled).then(function (res) {
+        if (token !== st.token) return;
+        st.events = res.events;
+        st.errors = res.errors;
+        st.loading = false;
+        draw();
+      }).catch(function () {
+        if (token !== st.token) return;
+        st.events = [];
+        st.errors = ["Falha ao carregar"];
+        st.loading = false;
+        draw();
+      });
+    }
+
+    // ---------- desenho ----------
+    function draw() {
+      titleEl.textContent = calRangeTitle(st.view, st.cursor);
+      Object.keys(viewBtns).forEach(function (k) { viewBtns[k].classList.toggle("active", k === st.view); });
+      var r = calVisibleRange(st.view, st.cursor);
+      var vis = calFilterEvents(st.events, {
+        from: r.from, to: r.to, hideDone: st.hideDone, hidden: st.hidden, query: st.query, normalize: normalize
+      });
+      var byDate = calGroupByDate(vis);
+      var now = calSpPartsFromDate(new Date());
+
+      statusEl.innerHTML = "";
+      if (st.loading) {
+        statusEl.textContent = "Carregando…";
+      } else if (st.errors.length) {
+        statusEl.className = "cal-status cal-status-warn";
+        statusEl.textContent = "Não consegui carregar: " + st.errors.join(", ") + ". Use Atualizar para tentar de novo.";
+      } else {
+        statusEl.className = "cal-status";
+        statusEl.textContent = vis.length + (vis.length === 1 ? " evento" : " eventos") + " neste período";
+      }
+      if (st.errors.length) statusEl.className = "cal-status cal-status-warn";
+
+      body.innerHTML = "";
+      body.classList.toggle("cal-loading", st.loading);
+      if (st.view === "month") drawMonth(byDate, now);
+      else if (st.view === "week") drawTimeGrid(calWeekDays(), byDate, now);
+      else if (st.view === "day") drawTimeGrid([st.cursor], byDate, now);
+      else drawAgenda(r, byDate, now);
+    }
+    function calWeekDays() {
+      var ws = calWeekStart(st.cursor), d = [];
+      for (var i = 0; i < 7; i++) d.push(calAddDays(ws, i));
+      return d;
+    }
+
+    function evClasses(ev, now) {
+      var c = "";
+      if (ev.done) c += " cal-ev-done";
+      else if (calIsPast(ev, now)) c += " cal-ev-past";
+      return c;
+    }
+    function buildChip(ev, now, withTime) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "cal-ev" + evClasses(ev, now);
+      b.style.setProperty("--cal-c", ev.color);
+      b.title = (ev.time ? ev.time + " — " : "") + ev.title;
+      if (withTime && ev.time) {
+        var t = document.createElement("span");
+        t.className = "cal-ev-time";
+        t.textContent = ev.time;
+        b.appendChild(t);
+      }
+      var tx = document.createElement("span");
+      tx.className = "cal-ev-text";
+      tx.textContent = (ev.icon ? ev.icon + " " : "") + ev.title;
+      b.appendChild(tx);
+      b.addEventListener("click", function (e) { e.stopPropagation(); showDetail(ev, now); });
+      return b;
+    }
+    function goDay(iso) { st.cursor = iso; st.view = "day"; saveSettings({ view: "day" }); reload(); }
+
+    function drawMonth(byDate, now) {
+      var narrow = window.innerWidth <= 700;
+      var wrap = document.createElement("div");
+      wrap.className = "cal-month";
+      var head = document.createElement("div");
+      head.className = "cal-month-head";
+      CAL_DOW_MON_SHORT.forEach(function (n) {
+        var c = document.createElement("div");
+        c.textContent = n;
+        head.appendChild(c);
+      });
+      wrap.appendChild(head);
+      var grid = document.createElement("div");
+      grid.className = "cal-month-grid";
+      var curMonth = calParseISO(st.cursor).m0;
+      calMonthGrid(st.cursor).forEach(function (iso) {
+        var cell = document.createElement("div");
+        var p = calParseISO(iso);
+        cell.className = "cal-cell" + (p.m0 !== curMonth ? " other" : "") + (iso === now.date ? " today" : "") + (calMonDow(iso) >= 5 ? " weekend" : "");
+        var num = document.createElement("button");
+        num.type = "button";
+        num.className = "cal-cell-num";
+        num.textContent = p.d === 1 ? p.d + " " + CAL_MONTHS_SHORT[p.m0] : String(p.d);
+        num.addEventListener("click", function () { goDay(iso); });
+        cell.appendChild(num);
+        var evs = byDate[iso] || [];
+        if (narrow) {
+          if (evs.length) {
+            var dots = document.createElement("div");
+            dots.className = "cal-dots";
+            evs.slice(0, 6).forEach(function (ev) {
+              var d = document.createElement("span");
+              d.className = "cal-dot" + evClasses(ev, now);
+              d.style.background = ev.color;
+              dots.appendChild(d);
+            });
+            cell.appendChild(dots);
+          }
+          cell.addEventListener("click", function () { goDay(iso); });
+        } else {
+          var MAX = 3;
+          evs.slice(0, MAX).forEach(function (ev) { cell.appendChild(buildChip(ev, now, true)); });
+          if (evs.length > MAX) {
+            var more = document.createElement("button");
+            more.type = "button";
+            more.className = "cal-more";
+            more.textContent = "+" + (evs.length - MAX) + " mais";
+            more.addEventListener("click", function (e) { e.stopPropagation(); goDay(iso); });
+            cell.appendChild(more);
+          }
+        }
+        grid.appendChild(cell);
+      });
+      wrap.appendChild(grid);
+      body.appendChild(wrap);
+    }
+
+    var CAL_HH = 48; // altura de 1 hora (px) na grade de horas
+    function drawTimeGrid(days, byDate, now) {
+      var wrap = document.createElement("div");
+      wrap.className = "cal-tg" + (days.length === 1 ? " cal-tg-single" : "");
+      // cabeçalho dos dias
+      var head = document.createElement("div");
+      head.className = "cal-tg-row cal-tg-head";
+      head.appendChild(calGutter(""));
+      days.forEach(function (iso) {
+        var c = document.createElement("button");
+        c.type = "button";
+        c.className = "cal-tg-daybtn" + (iso === now.date ? " today" : "");
+        var p = calParseISO(iso);
+        c.innerHTML = "";
+        var a = document.createElement("span");
+        a.className = "cal-tg-dow";
+        a.textContent = CAL_DOW_MON_SHORT[calMonDow(iso)];
+        var b = document.createElement("span");
+        b.className = "cal-tg-dnum";
+        b.textContent = String(p.d);
+        c.appendChild(a);
+        c.appendChild(b);
+        if (days.length > 1) c.addEventListener("click", function () { goDay(iso); });
+        head.appendChild(c);
+      });
+      wrap.appendChild(head);
+      // faixa fixa dos itens sem hora (não ocupam a grade de horas)
+      var anyUntimed = days.some(function (iso) { return (byDate[iso] || []).some(function (e) { return !e.time; }); });
+      var strip = document.createElement("div");
+      strip.className = "cal-tg-row cal-tg-strip";
+      strip.appendChild(calGutter("sem hora"));
+      days.forEach(function (iso) {
+        var col = document.createElement("div");
+        col.className = "cal-tg-stripcol";
+        (byDate[iso] || []).filter(function (e) { return !e.time; }).forEach(function (ev) { col.appendChild(buildChip(ev, now, false)); });
+        strip.appendChild(col);
+      });
+      if (anyUntimed) wrap.appendChild(strip);
+      // grade de horas
+      var scroll = document.createElement("div");
+      scroll.className = "cal-tg-scroll";
+      var inner = document.createElement("div");
+      inner.className = "cal-tg-row cal-tg-hours";
+      var gut = document.createElement("div");
+      gut.className = "cal-tg-gutter";
+      gut.style.height = (24 * CAL_HH) + "px";
+      for (var h = 1; h < 24; h++) {
+        var lab = document.createElement("span");
+        lab.className = "cal-tg-hlabel";
+        lab.style.top = (h * CAL_HH - 7) + "px";
+        lab.textContent = calPad2(h) + ":00";
+        gut.appendChild(lab);
+      }
+      inner.appendChild(gut);
+      var firstMin = 7 * 60;
+      days.forEach(function (iso) {
+        var col = document.createElement("div");
+        col.className = "cal-tg-col" + (iso === now.date ? " today" : "");
+        col.style.height = (24 * CAL_HH) + "px";
+        calLayoutDay(byDate[iso] || []).forEach(function (it) {
+          if (it.start < firstMin) firstMin = it.start;
+          var ev = it.ev;
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "cal-tg-ev" + evClasses(ev, now);
+          b.style.setProperty("--cal-c", ev.color);
+          b.style.top = (it.start / 60 * CAL_HH) + "px";
+          b.style.height = Math.max(20, (it.end - it.start) / 60 * CAL_HH - 2) + "px";
+          b.style.left = (it.col / it.cols * 100) + "%";
+          b.style.width = "calc(" + (100 / it.cols) + "% - 3px)";
+          b.title = ev.time + (ev.endTime ? "–" + ev.endTime : "") + " — " + ev.title;
+          var t = document.createElement("span");
+          t.className = "cal-tg-ev-time";
+          t.textContent = ev.time + (ev.endTime ? "–" + ev.endTime : "");
+          var tx = document.createElement("span");
+          tx.className = "cal-tg-ev-title";
+          tx.textContent = (ev.icon ? ev.icon + " " : "") + ev.title;
+          b.appendChild(t);
+          b.appendChild(tx);
+          b.addEventListener("click", function () { showDetail(ev, now); });
+          col.appendChild(b);
+        });
+        if (iso === now.date) {
+          var nowLine = document.createElement("div");
+          nowLine.className = "cal-now";
+          nowLine.style.top = (calTimeToMin(now.time) / 60 * CAL_HH) + "px";
+          col.appendChild(nowLine);
+        }
+        inner.appendChild(col);
+      });
+      scroll.appendChild(inner);
+      wrap.appendChild(scroll);
+      body.appendChild(wrap);
+      scroll.scrollTop = Math.max(0, (Math.min(firstMin, 8 * 60) - 60) / 60 * CAL_HH);
+    }
+    function calGutter(text) {
+      var g = document.createElement("div");
+      g.className = "cal-tg-gutter-cell";
+      g.textContent = text;
+      return g;
+    }
+
+    function drawAgenda(r, byDate, now) {
+      var wrap = document.createElement("div");
+      wrap.className = "cal-agenda";
+      var any = false;
+      for (var i = 0; i <= calDiffDays(r.to, r.from); i++) {
+        var iso = calAddDays(r.from, i);
+        var evs = byDate[iso] || [];
+        if (!evs.length) continue;
+        any = true;
+        var day = document.createElement("div");
+        day.className = "cal-ag-day" + (iso === now.date ? " today" : "");
+        var dh = document.createElement("button");
+        dh.type = "button";
+        dh.className = "cal-ag-dayhead";
+        var p = calParseISO(iso);
+        dh.textContent = CAL_DOW_LONG[calDow(iso)] + ", " + p.d + " de " + CAL_MONTHS[p.m0] + (iso === now.date ? " — hoje" : "");
+        dh.addEventListener("click", function (d) { return function () { goDay(d); }; }(iso));
+        day.appendChild(dh);
+        evs.forEach(function (ev) {
+          var row = document.createElement("button");
+          row.type = "button";
+          row.className = "cal-ag-row" + evClasses(ev, now);
+          row.style.setProperty("--cal-c", ev.color);
+          var t = document.createElement("span");
+          t.className = "cal-ag-time";
+          t.textContent = ev.time ? ev.time + (ev.endTime ? "–" + ev.endTime : "") : "sem hora";
+          var tx = document.createElement("span");
+          tx.className = "cal-ag-title";
+          tx.textContent = (ev.icon ? ev.icon + " " : "") + ev.title;
+          var sr = document.createElement("span");
+          sr.className = "cal-ag-src";
+          sr.textContent = srcById[ev.sourceId] ? srcById[ev.sourceId].label : "";
+          row.appendChild(t);
+          row.appendChild(tx);
+          row.appendChild(sr);
+          row.addEventListener("click", function () { showDetail(ev, now); });
+          day.appendChild(row);
+        });
+        wrap.appendChild(day);
+      }
+      if (!any) {
+        var empty = document.createElement("p");
+        empty.className = "cal-empty";
+        empty.textContent = st.loading ? "" : "Nada neste período.";
+        wrap.appendChild(empty);
+      }
+      body.appendChild(wrap);
+    }
+
+    // ---------- cartão de detalhe ----------
+    function showDetail(ev, now) {
+      var src = srcById[ev.sourceId] || {};
+      var overlay = document.createElement("div");
+      overlay.className = "cal-detail-overlay";
+      var card = document.createElement("div");
+      card.className = "cal-detail";
+      card.style.setProperty("--cal-c", ev.color);
+      function close() {
+        document.removeEventListener("keydown", onKey);
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      }
+      function onKey(e) { if (e.key === "Escape") close(); }
+      document.addEventListener("keydown", onKey);
+      overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+
+      var top = document.createElement("div");
+      top.className = "cal-detail-top";
+      var badge = document.createElement("span");
+      badge.className = "cal-detail-badge";
+      badge.textContent = (src.icon || "") + " " + (src.label || "");
+      var x = document.createElement("button");
+      x.type = "button";
+      x.className = "cal-icon-btn";
+      x.innerHTML = '<i class="ti ti-x"></i>';
+      x.addEventListener("click", close);
+      top.appendChild(badge);
+      top.appendChild(x);
+      card.appendChild(top);
+
+      var h = document.createElement("h3");
+      h.className = "cal-detail-title";
+      h.textContent = ev.title;
+      card.appendChild(h);
+
+      var when = document.createElement("div");
+      when.className = "cal-detail-line";
+      var p = calParseISO(ev.date);
+      when.textContent = CAL_DOW_LONG[calDow(ev.date)] + ", " + calFmtBR(ev.date) + " · " +
+        (ev.time ? ev.time + (ev.endTime ? "–" + ev.endTime : "") : "sem horário definido");
+      card.appendChild(when);
+
+      var state = ev.done ? "Concluído" : (calIsPast(ev, now) ? "Já passou" : "");
+      if (state) {
+        var s = document.createElement("div");
+        s.className = "cal-detail-state";
+        s.textContent = state;
+        card.appendChild(s);
+      }
+      (ev.meta || []).forEach(function (m) {
+        var l = document.createElement("div");
+        l.className = "cal-detail-line cal-detail-meta";
+        l.textContent = m;
+        card.appendChild(l);
+      });
+
+      var btns = document.createElement("div");
+      btns.className = "cal-detail-btns";
+      if (ev.url) {
+        var a = document.createElement("a");
+        a.className = "cal-detail-btn";
+        a.href = ev.url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.innerHTML = '<i class="ti ti-external-link"></i> Abrir no Notion';
+        btns.appendChild(a);
+      }
+      if (src.target && src.target.type === "page" && cfg.pages[src.target.target]) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "cal-detail-btn";
+        b.innerHTML = '<i class="ti ti-arrow-right"></i> Abrir no app';
+        b.addEventListener("click", function () { close(); navigate(src.target.target); });
+        btns.appendChild(b);
+      }
+      if (st.view !== "day") {
+        var d = document.createElement("button");
+        d.type = "button";
+        d.className = "cal-detail-btn";
+        d.innerHTML = '<i class="ti ti-calendar-event"></i> Ver o dia';
+        d.addEventListener("click", function () { close(); goDay(ev.date); });
+        btns.appendChild(d);
+      }
+      card.appendChild(btns);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+    }
+
+    // redesenha ao trocar entre celular/computador (só enquanto a página existe)
+    var resizeTimer = null;
+    var lastNarrow = window.innerWidth <= 700;
+    function onResize() {
+      if (!root.isConnected) { window.removeEventListener("resize", onResize); return; }
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        var n = window.innerWidth <= 700;
+        if (n !== lastNarrow) { lastNarrow = n; draw(); }
+      }, 150);
+    }
+    window.addEventListener("resize", onResize);
+
+    // ---------- boot: carrega preferências salvas e só então busca os eventos ----------
+    buildFilterBar();
+    draw();
+    authFetch(cfg.templateWorkerUrl + "/calendar-settings")
+      .then(function (res) { return res.ok ? res.json() : { settings: null }; })
+      .catch(function () { return { settings: null }; })
+      .then(function (resp) {
+        var sv = resp && resp.settings;
+        if (sv && typeof sv === "object") {
+          if (sv.sources && typeof sv.sources === "object") {
+            sources.forEach(function (s) { if (typeof sv.sources[s.id] === "boolean") st.enabled[s.id] = sv.sources[s.id]; });
+          }
+          if (sv.subToggles && typeof sv.subToggles === "object") {
+            Object.keys(sv.subToggles).forEach(function (k) {
+              if (k.indexOf("hide:") === 0 && sv.subToggles[k]) st.hidden[k.slice(5)] = true;
+            });
+          }
+          if (typeof sv.hideDone === "boolean") st.hideDone = sv.hideDone;
+          if (typeof sv.view === "string" && viewBtns[sv.view]) st.view = sv.view;
+        }
+        buildFilterBar();
+        reload();
+      });
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
@@ -23276,6 +24441,12 @@
     // no KV, sem base Notion equivalente) — mesmo padrão exclusivo acima.
     if (page.backupPage) {
       renderBackupPage(container);
+      return;
+    }
+
+    // "page.calendar" — Calendário. Ver renderCalendarioPage.
+    if (page.calendar) {
+      renderCalendarioPage(container);
       return;
     }
 

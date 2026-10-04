@@ -1456,6 +1456,73 @@ var NOTIFICATION_SOURCES = [
   }
 ];
 
+// ---------------- Calendário (página própria — pages.calendario) ----------------
+// Registro das FONTES que o Calendário sabe transformar em eventos. O Georges
+// escolhe quais ficam ligadas pela tela "Fontes" do próprio Calendário (salvo
+// em /calendar-settings, KV) — este array só descreve O QUE existe e COMO cada
+// fonte vira evento; defaultEnabled é só o padrão de fábrica de quem nunca
+// configurou. Cada fonte tem uma regra própria ("kind"):
+//   central       — itens da Central (mesma base de Reuniões/Tarefas/...), 1 evento por
+//                   item, pela "📅 Data/Prazo". UMA única consulta por mês cobre todas as
+//                   fontes "central"; o app.js classifica cada item pela "📚 Página de
+//                   Origem" (origins) ou pelas "🖥 Formas" (formasIds). catchAll:true pega
+//                   o que nenhuma outra fonte central reivindicou.
+//   aniversarios  — recorrência ANUAL a partir da data de nascimento (birthProperty), pra
+//                   qualquer ano ("faz N anos"); a "📅 Data/Prazo" só guarda a ocorrência
+//                   deste ano, por isso não serve.
+//   notion        — base própria, 1 evento por dateProps[] (Passagens: ida + volta).
+//   financeiro    — Contas Mensais (rota /financeiro-contas, 1 evento por conta).
+//   loans         — Empréstimos (KV): vencimento "unico" ou "mensal" dentro do intervalo.
+//   backup        — lembrete sintético: todo domingo 20h.
+//   ponto_mes     — lembrete sintético: dia do mês (defaultDiaDoMes) 08h, "ajustar o ponto".
+//   custom        — "Meus eventos" (KV, /calendar-events).
+// "doneAndamento" (central): ids de "🧲 Andamento" que contam como concluído/cancelado
+// (esmaecidos e ocultáveis pelo filtro "ocultar concluídos"). Programação diária e PMF -
+// Folha de Pagamento ficam de fora de propósito (pedido do Georges).
+var CALENDAR_CENTRAL_DATABASE_ID = "2310481486dd80079202fe1eaf5e14c4";
+var CALENDAR_DONE_ANDAMENTO_IDS = ["d228224dee1d43dabb72744097f10028", "2410481486dd80a3a8b0d819542a55c5"];
+var CALENDAR_SOURCES = [
+  { id: "reunioes", label: "Reuniões", icon: "📅", color: "#4a90d9", kind: "central",
+    origins: ["PMF - Reuniões"], target: { type: "page", target: "pmf_ctrl_reunioes" }, defaultEnabled: true },
+  { id: "sessoes", label: "Sessões TAT / JART / COMAT", icon: "⚖️", color: "#8a63d2", kind: "central",
+    origins: ["PMF - TAT - Sessões", "PMF - JART - Sessões", "PMF - COMAT - Reuniões"], target: { type: "page", target: "pmf_col_tat" }, defaultEnabled: true },
+  { id: "processos_tat_jart", label: "Processos TAT / JART", icon: "📁", color: "#7048e8", kind: "central",
+    origins: ["PMF - TAT - Processos", "PMF - JART - Processos"], target: { type: "page", target: "pmf_col_tat" }, defaultEnabled: true },
+  { id: "tarefas", label: "Tarefas e prazos", icon: "✅", color: "#2f9e44", kind: "central",
+    origins: ["PMF - Tarefas", "PMF - Betha - Tarefas", "Pessoal - Tarefas"], target: { type: "page", target: "pmf_ctrl_tarefas" }, defaultEnabled: true },
+  { id: "outros_eventos", label: "Outros eventos", icon: "🗓️", color: "#9c36b5", kind: "central",
+    formasIds: ["24104814-86dd-8086-9dd7-d3541def817b", "23a04814-86dd-808a-8515-edcd72b5ac49"], target: { type: "page", target: "inicio" }, defaultEnabled: true },
+  { id: "central_geral", label: "Demais itens da Central", icon: "📌", color: "#868e96", kind: "central",
+    catchAll: true, target: { type: "page", target: "central" }, defaultEnabled: false },
+  { id: "aniversarios", label: "Aniversários", icon: "🎂", color: "#e64980", kind: "aniversarios",
+    origins: ["Pessoal - Aniversários"], birthProperty: "📅 Data de Conclusão", noDone: true,
+    target: { type: "page", target: "aniversarios" }, defaultEnabled: true },
+  { id: "passagens", label: "Passagens (ida e volta)", icon: "🧳", color: "#1c7ed6", kind: "notion",
+    database_id: PASSAGENS_DATABASE_ID,
+    dateProps: [
+      { property: "Data da Ida", suffix: "ida", timeProperty: "Embarque (Ida)" },
+      { property: "Data da Volta", suffix: "volta", timeProperty: "Embarque (Volta)" }
+    ],
+    extra: ["Origem", "Destino", "Companhia"], titleMode: "passagem",
+    target: { type: "page", target: "financeiro_viagens_passagens" }, defaultEnabled: true },
+  { id: "saude", label: "Consultas e Exames", icon: "🏥", color: "#0c8599", kind: "notion",
+    database_id: SAUDE_DATABASE_ID, dateProps: [{ property: "Data da Consulta" }],
+    extra: ["Tipo de Evento", "Situação"], target: { type: "page", target: "consultas_exames" }, defaultEnabled: true },
+  { id: "provas_vitor", label: "Provas do Vitor", icon: "📝", color: "#f76707", kind: "notion",
+    database_id: PROVAS_VITOR_DATABASE_ID, dateProps: [{ property: "Data" }],
+    extra: ["Matéria"], titleMode: "prova", target: { type: "page", target: "provas_vitor" }, defaultEnabled: true },
+  { id: "financeiro", label: "Contas Mensais", icon: "💳", color: "#f08c00", kind: "financeiro",
+    target: { type: "page", target: "financeiro_contas_mensais" }, defaultEnabled: true },
+  { id: "emprestimos", label: "Empréstimos", icon: "🤝", color: "#0f9b8e", kind: "loans",
+    target: { type: "page", target: "financeiro_emprestimos" }, defaultEnabled: true },
+  { id: "backup_semanal", label: "Backup semanal", icon: "💾", color: "#868e96", kind: "backup",
+    target: { type: "page", target: "backup" }, defaultEnabled: false },
+  { id: "ponto_ajuste_mes", label: "Ponto — ajustar mês anterior", icon: "⏰", color: "#495057", kind: "ponto_mes",
+    defaultDiaDoMes: 2, target: { type: "page", target: "ponto_eletronico" }, defaultEnabled: false },
+  { id: "meus_eventos", label: "Meus eventos", icon: "⭐", color: "#e8590c", kind: "custom",
+    target: null, defaultEnabled: true }
+];
+
 var BUSCA_DATA_PRAZO_FILTER = { property: "📅 Data/Prazo", type: "date", label: "Data/Prazo" };
 var BUSCA_DATA_CONCLUSAO_FILTER = { property: "📅 Data de Conclusão", type: "date", label: "Data de Conclusão" };
 var BUSCA_DATA_CRIACAO_FILTER = { property: "✨ Criado em", type: "created_time", label: "Data de Criação" };
@@ -1717,7 +1784,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-04 17:11",
+  appVersion: "2026-10-04 17:46",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1775,6 +1842,7 @@ const APP_CONFIG = {
   sidebarPinned: [
     { label: "Pastas", target: "entrada", icon: "folder", color: "#495057" },
     { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
+    { label: "Calendário", target: "calendario", icon: "calendar-event", color: "#e8590c" },
     { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
     { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
     { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
@@ -1908,6 +1976,7 @@ const APP_CONFIG = {
       ],
       items: [
         { label: "Painel do Dia", type: "page", target: "inicio", icon: "home", pinnedOnly: true },
+        { label: "Calendário", type: "page", target: "calendario", icon: "calendar-event", pinnedOnly: true },
         { label: "Anotações Rápidas", type: "page", target: "anotacoes", icon: "notes", pinnedOnly: true },
         { label: "Lista de Prioridades", type: "page", target: "prioridades", icon: "list-check", pinnedOnly: true },
         { label: "Criar páginas", type: "page", target: "criar_paginas", icon: "file-plus" },
@@ -1972,6 +2041,16 @@ const APP_CONFIG = {
       title: "Backup dos Dados",
       backupPage: true,
       noTrackVisit: true
+    },
+
+    // "Calendário" — centraliza tudo que tem data (Mês/Semana/Dia/Agenda). "calendar:true"
+    // despacha pra renderCalendarioPage (app.js). As fontes vêm de CALENDAR_SOURCES (acima);
+    // o Georges liga/desliga cada uma pela tela "Fontes" da própria página (KV). Somente
+    // leitura sobre o Notion (nada de arrastar/reagendar). Fica fixo no menu
+    // (sidebarPinned) e na pasta Pastas (pinnedOnly).
+    calendario: {
+      title: "Calendário",
+      calendar: true
     },
 
     // "Resumo dos resumos" — cada seção junta HOJE + AMANHÃ num só lugar
