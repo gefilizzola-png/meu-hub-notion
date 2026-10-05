@@ -13729,6 +13729,18 @@
   // CSS "saude-*" (tabela, chips, hide-<key>).
   var EVENTOS_TIPO_ICON = { "Aniversário": "🎂", "Casamento": "💒", "Evento Escolar": "🎒", "Show": "🎤" };
   function eventosTipoIcon(tipo) { return EVENTOS_TIPO_ICON[tipo] || "🎉"; }
+  // "Descrição" = o que vem DEPOIS da data no nome da página, ex:
+  // "Vitor - Eventos - 2026-10-07 - Evento Escolar - Semana da Criança (CSF) - Brinca Mundi"
+  // -> "Evento Escolar - Semana da Criança (CSF) - Brinca Mundi". Sem data no nome: tira o
+  // prefixo "<Quem> - Eventos - "; sem nenhum dos dois: o próprio nome.
+  function eventosDescricao(nome) {
+    var n = String(nome || "").trim();
+    var m = n.match(/\d{4}-\d{2}-\d{2}\s*-\s*(.+)$/);
+    if (m && m[1].trim()) return m[1].trim();
+    m = n.match(/^[^-]+-\s*Eventos\s*-\s*(.+)$/i);
+    if (m && m[1].trim()) return m[1].trim();
+    return n;
+  }
   function eventosItemFromPage(p) {
     var extra = p.extra || {};
     function sel(key) { var v = extra[key]; if (Array.isArray(v)) v = v[0]; return (v && v.name) ? v.name : null; }
@@ -13741,6 +13753,7 @@
       id: p.id,
       url: p.url,
       nome: p.title || "(sem título)",
+      descricao: eventosDescricao(p.title || ""),
       tipoEvento: sel("Tipo de Evento"),
       destinatario: sel("Destinatário"),
       localizacao: (typeof loc === "string" && loc.trim()) ? loc.trim() : null,
@@ -13787,7 +13800,7 @@
     function matchesFilters(it) {
       if (state.search) {
         var s = normalize(state.search);
-        var hay = normalize([it.nome, it.tipoEvento, it.destinatario, it.localizacao].filter(Boolean).join(" "));
+        var hay = normalize([it.nome, it.descricao, it.tipoEvento, it.destinatario, it.localizacao].filter(Boolean).join(" "));
         if (hay.indexOf(s) === -1) return false;
       }
       if (state.tipoSelected.length && state.tipoSelected.indexOf(it.tipoEvento) === -1) return false;
@@ -13814,6 +13827,7 @@
       arr.sort(function (a, b) {
         var av, bv;
         if (key === "nome") { av = a.nome || ""; bv = b.nome || ""; }
+        else if (key === "descricao") { av = a.descricao || ""; bv = b.descricao || ""; }
         else if (key === "tipoEvento") { av = a.tipoEvento || ""; bv = b.tipoEvento || ""; }
         else if (key === "destinatario") { av = a.destinatario || ""; bv = b.destinatario || ""; }
         else if (key === "localizacao") { av = a.localizacao || ""; bv = b.localizacao || ""; }
@@ -13925,6 +13939,7 @@
 
     // Larguras estáveis (regra 14): colunas curtas = width:1% + nowrap; só "Nome" absorve o resto.
     var COLS = [
+      { key: "descricao", label: "Descrição", cls: "eventos-th-short", sortKey: "descricao" },
       { key: "dataEvento", label: "Data do Evento", cls: "eventos-th-short", sortKey: "dataEvento" },
       { key: "tipoEvento", label: "Tipo de Evento", cls: "eventos-th-short", sortKey: "tipoEvento" },
       { key: "destinatario", label: "Destinatário", cls: "eventos-th-short", sortKey: "destinatario" },
@@ -13936,6 +13951,10 @@
       var cell = document.createElement("td");
       cell.className = "saude-col-" + key;
       switch (key) {
+        case "descricao":
+          if (it.descricao) { cell.title = it.descricao; cell.appendChild(passagensChip(it.descricao)); }
+          else cell.textContent = "—";
+          break;
         case "nome":
           cell.textContent = it.nome || "—";
           if (it.nome) cell.title = it.nome;
