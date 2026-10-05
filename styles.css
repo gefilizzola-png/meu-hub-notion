@@ -8677,3 +8677,23 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .ajustes-icon { border: none; background: transparent; cursor: pointer; color: #868e96; padding: 4px 6px; border-radius: 6px; }
 .ajustes-icon:hover { background: #f1f3f5; color: #343a40; }
 @media (max-width: 700px) { .ajustes-backdrop { padding: 8px; } .ajustes-panel { max-height: calc(100vh - 16px); } }
+
+
+/* ---- seletor de página moderno com busca (editor de Atalhos de Pastas) ---- */
+.page-picker { position: relative; flex: 1; min-width: 0; }
+.page-picker-trigger { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; border: 0.5px solid #dcdcd8; background: #fff; font-size: 13px; cursor: pointer; text-align: left; }
+.page-picker-trigger:hover, .page-picker.open .page-picker-trigger { border-color: #b8b8b2; background: #fafaf8; }
+.page-picker-trigger-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.page-picker-placeholder { flex: 1; color: #999; }
+.page-picker-chevron { color: #999; font-size: 14px; }
+.page-picker-ico { font-size: 16px; color: #666; flex-shrink: 0; }
+.page-picker-panel { position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 4px); background: #fff; border: 0.5px solid #dcdcd8; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.14); padding: 8px; }
+.page-picker-search { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 0.5px solid #dcdcd8; font-size: 13px; }
+.page-picker-list { max-height: 260px; overflow-y: auto; margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.page-picker-option { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: none; background: none; border-radius: 8px; cursor: pointer; text-align: left; width: 100%; }
+.page-picker-option:hover { background: #f4f4f2; }
+.page-picker-option.selected { background: #eaf1fb; }
+.page-picker-option-text { display: flex; flex-direction: column; min-width: 0; }
+.page-picker-option-name { font-size: 13px; font-weight: 500; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-picker-option-path { font-size: 11px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-picker-empty { padding: 14px; text-align: center; color: #999; font-size: 12.5px; }

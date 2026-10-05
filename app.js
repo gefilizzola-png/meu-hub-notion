@@ -17680,13 +17680,22 @@
     totalsRow.style.display = "none";
     wrap.appendChild(totalsRow);
 
+    // Pesquisar/Filtrar recolhíveis (pedido do Georges — Ajustes: "botão de
+    // expandir e recolher a seção de filtros e busca, que por padrão ficam
+    // recolhidos" — regra #15 do Hub). Os elementos continuam os mesmos,
+    // só mudam de pai.
+    var transSearchSec = buildCollapsibleSection("🔎 Pesquisar", false);
+    wrap.appendChild(transSearchSec.section);
+    var transFilterSec = buildCollapsibleSection("🧰 Filtrar", false);
+    wrap.appendChild(transFilterSec.section);
+
     var filterBarWrap = document.createElement("div");
     filterBarWrap.className = "filter-bar";
-    wrap.appendChild(filterBarWrap);
+    transFilterSec.body.appendChild(filterBarWrap);
 
     var searchWrap = document.createElement("div");
     searchWrap.style.margin = "10px 0";
-    wrap.appendChild(searchWrap);
+    transSearchSec.body.appendChild(searchWrap);
 
     var tableWrap = document.createElement("div");
     wrap.appendChild(tableWrap);
@@ -24009,10 +24018,132 @@
     flatIndex.forEach(function (it) {
       if (it.type !== "page" || !it.target || seen[it.target]) return;
       seen[it.target] = true;
-      out.push({ target: it.target, label: it.label, path: it.pathTitles.join(" > ") });
+      out.push({ target: it.target, label: it.label, path: it.pathTitles.join(" > "), icon: it.icon || "ti-folder" });
     });
     out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
     return out;
+  }
+
+  // Seletor de página moderno com busca (pedido do Georges — Ajustes:
+  // "lista de páginas mais moderna, com pesquisa, 'x' pra limpar o texto,
+  // pra achar a página pelo nome"). Substitui o <select> nativo do editor
+  // de Atalhos de Pastas. Devolve um elemento que expõe ".value" (target da
+  // página escolhida, "" se nenhuma) — mesmo contrato do <select> antigo,
+  // então quem lê "r.select.value" não muda. Busca ignora acentos
+  // (normalize) e procura no nome E no caminho (ex: "financeiro").
+  function buildPagePicker(pages, initialTarget) {
+    var current = initialTarget || "";
+    var root = document.createElement("div");
+    root.className = "page-picker";
+
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "page-picker-trigger";
+    root.appendChild(trigger);
+
+    var panel = document.createElement("div");
+    panel.className = "page-picker-panel";
+    panel.style.display = "none";
+    root.appendChild(panel);
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "page-picker-search";
+    searchInput.placeholder = "Pesquisar página…";
+    panel.appendChild(withSearchClear(searchInput));
+
+    var listEl = document.createElement("div");
+    listEl.className = "page-picker-list";
+    panel.appendChild(listEl);
+
+    function findPage(t) { return pages.filter(function (p) { return p.target === t; })[0]; }
+
+    function renderTrigger() {
+      var p = current ? findPage(current) : null;
+      trigger.innerHTML = "";
+      if (p) {
+        var ic = document.createElement("i");
+        ic.className = "ti " + p.icon + " page-picker-ico";
+        trigger.appendChild(ic);
+        var txt = document.createElement("span");
+        txt.className = "page-picker-trigger-text";
+        txt.textContent = p.label;
+        trigger.appendChild(txt);
+      } else {
+        var ph = document.createElement("span");
+        ph.className = "page-picker-placeholder";
+        ph.textContent = "Escolha uma página…";
+        trigger.appendChild(ph);
+      }
+      var ch = document.createElement("i");
+      ch.className = "ti ti-chevron-down page-picker-chevron";
+      trigger.appendChild(ch);
+    }
+
+    function renderList() {
+      var term = normalize(searchInput.value);
+      listEl.innerHTML = "";
+      var shown = 0;
+      pages.forEach(function (p) {
+        if (term && normalize(p.label).indexOf(term) === -1 && normalize(p.path).indexOf(term) === -1) return;
+        shown++;
+        var opt = document.createElement("button");
+        opt.type = "button";
+        opt.className = "page-picker-option" + (p.target === current ? " selected" : "");
+        var ic = document.createElement("i");
+        ic.className = "ti " + p.icon + " page-picker-ico";
+        opt.appendChild(ic);
+        var box = document.createElement("span");
+        box.className = "page-picker-option-text";
+        var nm = document.createElement("span");
+        nm.className = "page-picker-option-name";
+        nm.textContent = p.label;
+        box.appendChild(nm);
+        var pth = document.createElement("span");
+        pth.className = "page-picker-option-path";
+        pth.textContent = p.path;
+        box.appendChild(pth);
+        opt.appendChild(box);
+        opt.addEventListener("click", function () {
+          current = p.target;
+          renderTrigger();
+          close();
+        });
+        listEl.appendChild(opt);
+      });
+      if (!shown) {
+        var empty = document.createElement("div");
+        empty.className = "page-picker-empty";
+        empty.textContent = "Nenhuma página encontrada.";
+        listEl.appendChild(empty);
+      }
+    }
+
+    function open() {
+      panel.style.display = "block";
+      root.classList.add("open");
+      searchInput.value = "";
+      searchInput.dispatchEvent(new Event("input"));
+      renderList();
+      searchInput.focus();
+      setTimeout(function () { document.addEventListener("mousedown", outside, true); }, 0);
+    }
+    function close() {
+      panel.style.display = "none";
+      root.classList.remove("open");
+      document.removeEventListener("mousedown", outside, true);
+    }
+    function outside(e) { if (!root.contains(e.target)) close(); }
+
+    trigger.addEventListener("click", function () {
+      if (panel.style.display === "none") open(); else close();
+    });
+    searchInput.addEventListener("input", renderList);
+    searchInput.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.stopPropagation(); close(); } });
+
+    Object.defineProperty(root, "value", { get: function () { return current; } });
+    renderTrigger();
+    return root;
   }
 
   function renderFolderShortcuts(container) {
@@ -24097,19 +24228,7 @@
       function addLinkRow(link) {
         var row = document.createElement("div");
         row.className = "folder-shortcut-link-row";
-        var select = document.createElement("select");
-        select.className = "folder-shortcut-link-select";
-        var placeholder = document.createElement("option");
-        placeholder.value = "";
-        placeholder.textContent = "Escolha uma página…";
-        select.appendChild(placeholder);
-        pages.forEach(function (p) {
-          var opt = document.createElement("option");
-          opt.value = p.target;
-          opt.textContent = p.label + " — " + p.path;
-          if (link && link.target === p.target) opt.selected = true;
-          select.appendChild(opt);
-        });
+        var select = buildPagePicker(pages, link ? link.target : "");
         row.appendChild(select);
         var removeBtn = document.createElement("button");
         removeBtn.type = "button";
@@ -24325,7 +24444,16 @@
           var a = document.createElement("a");
           a.className = "folder-shortcut-link";
           a.href = "#" + link.target;
-          a.textContent = link.label;
+          // rótulo ao vivo: usa o nome ATUAL da página (flatIndex), pra
+          // renomear uma página (ex: Relatórios → Relatórios — Financeiro)
+          // refletir aqui sem precisar re-salvar o card; cai no rótulo
+          // salvo se a página não existir mais.
+          var liveLabel = link.label;
+          flatIndex.some(function (it) {
+            if (it.type === "page" && it.target === link.target) { liveLabel = it.label; return true; }
+            return false;
+          });
+          a.textContent = liveLabel;
           a.addEventListener("click", function (e) {
             if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
             e.preventDefault();
@@ -25910,12 +26038,15 @@
     var list = (items || []).filter(function (i) { return !onlyPending || i.status !== "feito"; });
     var groups = {};
     list.forEach(function (i) { var k = i.origemLabel || i.origem || "Sem origem"; (groups[k] = groups[k] || []).push(i); });
-    var names = Object.keys(groups).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); });
-    var out = ["# Ajustes do Meu Hub" + (onlyPending ? " (pendentes)" : ""), "", list.length + " ajuste(s) em " + names.length + " página(s).", ""];
+    var PR = ["alta", "media", "baixa"];
+    function rk(p) { var i = PR.indexOf(p); return i === -1 ? PR.length : i; }
+    function best(n) { return Math.min.apply(null, groups[n].map(function (i) { return rk(i.prioridade); })); }
+    var names = Object.keys(groups).sort(function (a, b) { return (best(a) - best(b)) || a.localeCompare(b, "pt-BR"); });
+    var out = ["# Ajustes do Meu Hub" + (onlyPending ? " (pendentes)" : ""), "", list.length + " ajuste(s) em " + names.length + " página(s), do mais urgente para o menos urgente.", ""];
     names.forEach(function (n) {
       out.push("## " + n, "");
-      groups[n].slice().sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); }).forEach(function (i) {
-        var tag = i.tipo ? "[" + i.tipo + "] " : "";
+      groups[n].slice().sort(function (a, b) { return (rk(a.prioridade) - rk(b.prioridade)) || String(a.createdAt).localeCompare(String(b.createdAt)); }).forEach(function (i) {
+        var tag = (i.prioridade ? "[prioridade " + i.prioridade + "] " : "") + (i.tipo ? "[" + i.tipo + "] " : "");
         var d = String(i.createdAt || "").slice(0, 10);
         out.push("- " + (i.status === "feito" ? "[x] " : "[ ] ") + tag + String(i.texto || "").replace(/\n+/g, " / ") + (d ? " (" + d + ")" : ""));
       });
@@ -25925,6 +26056,8 @@
   }
   // AJ_PURE_END
   var ajustes = { items: [], loaded: false, loading: false, filter: "pendente", editingId: null, built: false, el: {} };
+  var AJUSTE_PRIO_UI = [{ k: "", t: "Prioridade (opcional)" }, { k: "alta", t: "🔴 Alta" }, { k: "media", t: "🟠 Média" }, { k: "baixa", t: "🟢 Baixa" }];
+  function ajustesPrioRank(p) { var i = ["alta", "media", "baixa"].indexOf(p); return i === -1 ? 3 : i; }
   var AJUSTE_TIPOS_UI = [{ k: "", t: "Tipo (opcional)" }, { k: "bug", t: "🐞 Bug" }, { k: "melhoria", t: "✨ Melhoria" }, { k: "ideia", t: "💡 Ideia" }];
 
   function ajustesPageOptions() {
@@ -25987,8 +26120,10 @@
     var selO = document.createElement("select"); selO.className = "ajustes-select"; selO.title = "Origem (página do app)";
     var selT = document.createElement("select"); selT.className = "ajustes-select";
     AJUSTE_TIPOS_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; selT.appendChild(o); });
+    var selP = document.createElement("select"); selP.className = "ajustes-select"; selP.title = "Prioridade";
+    AJUSTE_PRIO_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; selP.appendChild(o); });
     var add = document.createElement("button"); add.type = "button"; add.className = "ajustes-add"; add.innerHTML = '<i class="ti ti-plus"></i> Anotar';
-    row.appendChild(selO); row.appendChild(selT); row.appendChild(add);
+    row.appendChild(selO); row.appendChild(selT); row.appendChild(selP); row.appendChild(add);
     var err = document.createElement("div"); err.className = "ajustes-err"; err.style.display = "none";
     form.appendChild(ta); form.appendChild(row); form.appendChild(err);
     panel.appendChild(form);
@@ -25996,8 +26131,8 @@
       var texto = ta.value.trim(); if (!texto) { ta.focus(); return; }
       add.disabled = true; err.style.display = "none";
       ajustesApi("/ajustes", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: texto, origem: selO.value, origemLabel: ajustesOrigemLabel(selO.value), tipo: selT.value }) })
-        .then(function (d) { ta.value = ""; selT.value = ""; if (d && d.item) ajustes.items.unshift(d.item); ajustes.filter = ajustes.filter === "feito" ? "pendente" : ajustes.filter; ajustesRenderList(); ajustesUpdateBadge(); ta.focus(); })
+        body: JSON.stringify({ texto: texto, origem: selO.value, origemLabel: ajustesOrigemLabel(selO.value), tipo: selT.value, prioridade: selP.value }) })
+        .then(function (d) { ta.value = ""; selT.value = ""; selP.value = ""; if (d && d.item) ajustes.items.unshift(d.item); ajustes.filter = ajustes.filter === "feito" ? "pendente" : ajustes.filter; ajustesRenderList(); ajustesUpdateBadge(); ta.focus(); })
         .catch(function (e) { err.textContent = "Não consegui salvar (" + e.message + "). O texto continua aqui — tente de novo."; err.style.display = ""; })
         .then(function () { add.disabled = false; });
     }
@@ -26044,9 +26179,10 @@
     if (!items.length) { var em = document.createElement("p"); em.className = "ajustes-empty"; em.textContent = ajustes.filter === "pendente" ? "Nada pendente. Anote acima o que quiser melhorar." : "Nada aqui."; E.list.appendChild(em); return; }
     var groups = {};
     items.forEach(function (i) { var k = i.origem ? (ajustesOrigemLabel(i.origem) || i.origemLabel || i.origem) : "🌐 Geral"; (groups[k] = groups[k] || []).push(i); });
-    Object.keys(groups).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (name) {
+    function gBest(n) { return Math.min.apply(null, groups[n].map(function (i) { return ajustesPrioRank(i.prioridade); })); }
+    Object.keys(groups).sort(function (a, b) { return (gBest(a) - gBest(b)) || a.localeCompare(b, "pt-BR"); }).forEach(function (name) {
       var gh = document.createElement("div"); gh.className = "ajustes-group"; gh.textContent = name + " · " + groups[name].length; E.list.appendChild(gh);
-      groups[name].sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).forEach(function (it) { E.list.appendChild(ajustesItemEl(it)); });
+      groups[name].sort(function (a, b) { return (ajustesPrioRank(a.prioridade) - ajustesPrioRank(b.prioridade)) || String(b.createdAt).localeCompare(String(a.createdAt)); }).forEach(function (it) { E.list.appendChild(ajustesItemEl(it)); });
     });
   }
 
@@ -26066,22 +26202,25 @@
       var so = document.createElement("select"); so.className = "ajustes-select"; ajustesFillOriginSelect(so, it.origem);
       var st = document.createElement("select"); st.className = "ajustes-select";
       AJUSTE_TIPOS_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; st.appendChild(o); }); st.value = it.tipo || "";
+      var sp = document.createElement("select"); sp.className = "ajustes-select";
+      AJUSTE_PRIO_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; sp.appendChild(o); }); sp.value = it.prioridade || "";
       var ok = document.createElement("button"); ok.type = "button"; ok.className = "ajustes-add"; ok.textContent = "Salvar";
       var cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "ajustes-btn"; cancel.textContent = "Cancelar";
       ok.addEventListener("click", function () {
         var texto = ta.value.trim(); if (!texto) return;
         ajustesApi("/ajustes?id=" + encodeURIComponent(it.id), { method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ texto: texto, origem: so.value, origemLabel: ajustesOrigemLabel(so.value), tipo: st.value }) })
+          body: JSON.stringify({ texto: texto, origem: so.value, origemLabel: ajustesOrigemLabel(so.value), tipo: st.value, prioridade: sp.value }) })
           .then(function (d) { if (d && d.item) Object.assign(it, d.item); ajustes.editingId = null; ajustesRenderList(); });
       });
       cancel.addEventListener("click", function () { ajustes.editingId = null; ajustesRenderList(); });
-      var r = document.createElement("div"); r.className = "ajustes-row"; r.appendChild(so); r.appendChild(st); r.appendChild(ok); r.appendChild(cancel);
+      var r = document.createElement("div"); r.className = "ajustes-row"; r.appendChild(so); r.appendChild(st); r.appendChild(sp); r.appendChild(ok); r.appendChild(cancel);
       main.appendChild(ta); main.appendChild(r);
       return el;
     }
     var tx = document.createElement("div"); tx.className = "ajustes-item-text"; tx.textContent = it.texto; main.appendChild(tx);
     var meta = document.createElement("div"); meta.className = "ajustes-meta";
     var parts = [];
+    if (it.prioridade) { var pp = AJUSTE_PRIO_UI.filter(function (t) { return t.k === it.prioridade; })[0]; if (pp) parts.push(pp.t); }
     if (it.tipo) { var tt = AJUSTE_TIPOS_UI.filter(function (t) { return t.k === it.tipo; })[0]; if (tt) parts.push(tt.t); }
     if (it.createdAt) parts.push(financeiroFormatDate(String(it.createdAt).slice(0, 10)));
     meta.textContent = parts.join(" · "); main.appendChild(meta);
@@ -26330,8 +26469,12 @@
       });
       // celular: os atalhos ("Abrir"/"Criar"...) ocupavam metade da tela —
       // ficam dentro de uma divisória "Atalhos" recolhida (toque pra abrir).
-      if (window.innerWidth <= 700) {
-        var atalhosSec = buildCollapsibleSection("🔗 Atalhos", false);
+      // "page.atalhosToggle" (pedido do Georges — Ajustes: Contas Mensais e
+      // Transações): também no desktop os atalhos ficam numa divisória
+      // "Atalhos" com botão expandir/recolher (nasce EXPANDIDA no desktop,
+      // recolhida no celular como já era).
+      if (window.innerWidth <= 700 || page.atalhosToggle) {
+        var atalhosSec = buildCollapsibleSection("🔗 Atalhos", window.innerWidth > 700);
         atalhosSec.body.appendChild(itemGroupsWrap);
         container.appendChild(atalhosSec.section);
       } else {
@@ -29578,32 +29721,22 @@
   // a home" (Esc, botão voltar, página inicial) — reatribuída aqui, então
   // tudo que já lia "homePageId" antes passa a valer o novo valor sem
   // precisar mexer em mais nada.
+  // ATUALIZADO (pedido do Georges — Ajustes: "a página inicial sempre será
+  // Pastas; o botão de home não define a página inicial, é só um atalho pra
+  // ela"): o botão não grava mais nada em /home-page — só navega pra
+  // homePageId (fixo no config.js: homePage "entrada" = Pastas). O override
+  // salvo na KV por versões antigas é ignorado no boot (ver boot()).
   function updateSetHomeBtn() {
     var btn = document.getElementById("setHomeBtn");
     if (!btn) return;
     var isHome = currentId === homePageId;
     btn.classList.toggle("active", isHome);
-    btn.title = isHome ? "Esta já é a página inicial" : "Definir como página inicial";
+    btn.title = isHome ? "Você está na página inicial (Pastas)" : "Ir para a página inicial (Pastas)";
   }
 
   function setCurrentAsHomePage() {
-    if (currentId === homePageId) return; // já é — nada a fazer
-    var btn = document.getElementById("setHomeBtn");
-    var targetId = currentId;
-    if (btn) btn.disabled = true;
-    authFetch(cfg.templateWorkerUrl + "/home-page", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pageId: targetId })
-    }).then(function (res) {
-      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
-      if (!res.ok) throw new Error("Falha ao salvar a página inicial");
-      homePageId = targetId;
-      updateSetHomeBtn();
-      document.getElementById("backBtn").classList.toggle("hidden", currentId === homePageId);
-    }).catch(function (err) {
-      console.warn(err);
-    }).finally(function () { if (btn) btn.disabled = false; });
+    if (currentId === homePageId) return; // já está lá
+    navigate(homePageId);
   }
 
   var setHomeBtnEl = document.getElementById("setHomeBtn");
@@ -29842,12 +29975,9 @@
     // ter marcado ela como home). Falha de rede/401 aqui NUNCA trava o
     // boot — só cai de volta no "homePage"/"startPage" fixo do config.js,
     // como sempre foi.
-    var homePagePromise = authFetch(cfg.templateWorkerUrl + "/home-page")
-      .then(function (res) { return res.ok ? res.json() : null; })
-      .then(function (data) {
-        if (data && data.homePage && cfg.pages[data.homePage]) homePageId = data.homePage;
-      })
-      .catch(function () {});
+    // (o override de /home-page foi aposentado — ver updateSetHomeBtn: a
+    // página inicial é sempre o homePage fixo do config.js, Pastas.)
+    var homePagePromise = Promise.resolve();
 
     // busca a ordem salva das divisórias do Painel do Dia (ver
     // fetchInicioBlockOrder, escopo global) EM PARALELO com "home-page" —

@@ -1794,7 +1794,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-05 19:08",
+  appVersion: "2026-10-05 19:43",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3430,7 +3430,7 @@ const APP_CONFIG = {
         { label: "Fiscal", type: "page", target: "financeiro_fiscal", icon: "building-bank" },
         { label: "PMF - Folha de Pagamento", type: "page", target: "financeiro_holerite", icon: "file-invoice" },
         { label: "PMF - Folha de Pagamento (BI)", type: "page", target: "financeiro_holerite_bi", icon: "chart-line" },
-        { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "chart-bar" },
+        { label: "Relatórios — Financeiro", type: "page", target: "financeiro_bi", icon: "chart-bar" },
         { label: "RPC", type: "page", target: "financeiro_rpc", icon: "pig-money" },
         { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
         // "Viagens" (pedido do Georges — nova pasta no Notion, mesmo caminho
@@ -3592,6 +3592,7 @@ const APP_CONFIG = {
     financeiro_contas_mensais: {
       title: "Contas Mensais",
       financeiroContasMensais: true,
+      atalhosToggle: true,
       // tags de filtro por conta (pedido do Georges) — ver comentário de
       // FINANCEIRO_ACCOUNT_KEYS acima. Clicar numa (ou mais) troca a
       // tabela do mês atual pra TODAS as competências dessa(s) conta(s)
@@ -3620,11 +3621,12 @@ const APP_CONFIG = {
     financeiro_transacoes: {
       title: "Transações",
       transacoes: true,
+      atalhosToggle: true,
       // botão cruzado pra Contas Mensais e Relatórios (mesma regra #13a de cima).
       itemGroups: [
         { title: "Abrir", items: [
           { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "meuhub" },
-          { label: "Relatórios", type: "page", target: "financeiro_bi", icon: "meuhub" }
+          { label: "Relatórios — Financeiro", type: "page", target: "financeiro_bi", icon: "meuhub" }
         ] }
       ],
       items: []
