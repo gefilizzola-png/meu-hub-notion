@@ -1794,7 +1794,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-05 18:39",
+  appVersion: "2026-10-05 19:08",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1979,6 +1979,7 @@ const APP_CONFIG = {
       // vê ao abrir o app agora (homePage: "entrada").
       quickButtons: [
         { label: "Painel do Dia", target: "inicio", icon: "home", color: "#4a90d9" },
+        { label: "Calendário", target: "calendario", icon: "calendar-event", color: "#e8590c" },
         { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
         { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
         { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },

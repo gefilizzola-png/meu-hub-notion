@@ -468,11 +468,181 @@
   // verdade, mesmo padrão do resto do app (Ctrl/Cmd+clique, clique do
   // meio e "abrir em nova aba" funcionam nativos; clique normal navega
   // client-side). "active" quando currentId bate com o target.
+  // Lista efetiva: o que o Georges salvou pelo editor (KV via /sidebar-pinned)
+  // ou, enquanto nunca salvou nada (ou se a rede falhar), o seed cfg.sidebarPinned
+  // do config.js. Só mostra atalhos cuja página ainda existe em cfg.pages.
+  var sidebarPinnedSaved = null; // null = usar seed
+  function effectiveSidebarPinned() {
+    var base = Array.isArray(sidebarPinnedSaved) ? sidebarPinnedSaved : (cfg.sidebarPinned || []);
+    return base.filter(function (it) { return it && it.target && cfg.pages[it.target]; });
+  }
+  function fetchSidebarPinned() {
+    return authFetch(cfg.templateWorkerUrl + "/sidebar-pinned")
+      .then(handle401Generic)
+      .then(function (r) { return r.json(); })
+      .then(function (resp) {
+        sidebarPinnedSaved = (resp && Array.isArray(resp.pinned)) ? resp.pinned : null;
+        renderSidebarPinned();
+      })
+      .catch(function () { /* mantém o seed */ });
+  }
+  function saveSidebarPinned(list) {
+    return authFetch(cfg.templateWorkerUrl + "/sidebar-pinned", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: list })
+    }).then(handle401Generic).then(function (r) { return r.json(); }).then(function (resp) {
+      sidebarPinnedSaved = (resp && Array.isArray(resp.pinned)) ? resp.pinned : null;
+      renderSidebarPinned();
+    });
+  }
+
+  // Editor (modal simples): uma linha por atalho — cor, ícone (nome Tabler),
+  // página (select com nome + caminho, mesmo seletor dos Atalhos de Pastas),
+  // rótulo, ▲/▼ e excluir. "Restaurar padrão" apaga o registro salvo.
+  function openSidebarPinnedEditor() {
+    var existing = document.getElementById("pinnedEditorOverlay");
+    if (existing) existing.remove();
+    var pages = folderShortcutsPagePicker();
+    var rows = [];
+
+    var overlay = document.createElement("div");
+    overlay.id = "pinnedEditorOverlay";
+    overlay.className = "pinned-editor-overlay";
+    var box = document.createElement("div");
+    box.className = "pinned-editor-box";
+    overlay.appendChild(box);
+    var title = document.createElement("h3");
+    title.className = "pinned-editor-title";
+    title.textContent = "Atalhos fixos do menu";
+    box.appendChild(title);
+    var hint = document.createElement("p");
+    hint.className = "pinned-editor-hint";
+    hint.textContent = "Escolha as páginas que ficam fixas no topo do menu. Ícone: nome do Tabler Icons (ex: home, star, wallet).";
+    box.appendChild(hint);
+    var listEl = document.createElement("div");
+    listEl.className = "pinned-editor-list";
+    box.appendChild(listEl);
+
+    function addRow(item) {
+      var row = document.createElement("div");
+      row.className = "pinned-editor-row";
+      var color = document.createElement("input");
+      color.type = "color";
+      color.className = "pinned-editor-color";
+      color.value = (item && /^#[0-9a-fA-F]{6}$/.test(item.color || "")) ? item.color : "#4a90d9";
+      var icon = document.createElement("input");
+      icon.type = "text";
+      icon.className = "pinned-editor-icon";
+      icon.placeholder = "ícone";
+      icon.value = item ? (item.icon || "") : "star";
+      var sel = document.createElement("select");
+      sel.className = "pinned-editor-select";
+      var ph = document.createElement("option");
+      ph.value = ""; ph.textContent = "Escolha uma página…";
+      sel.appendChild(ph);
+      pages.forEach(function (p) {
+        var o = document.createElement("option");
+        o.value = p.target;
+        o.textContent = p.label + " — " + p.path;
+        if (item && item.target === p.target) o.selected = true;
+        sel.appendChild(o);
+      });
+      var label = document.createElement("input");
+      label.type = "text";
+      label.className = "pinned-editor-label";
+      label.placeholder = "Nome no menu";
+      label.maxLength = 60;
+      label.value = item ? item.label : "";
+      sel.addEventListener("change", function () {
+        if (!label.value.trim()) {
+          var p = pages.filter(function (x) { return x.target === sel.value; })[0];
+          if (p) label.value = p.label;
+        }
+      });
+      function mv(dir) {
+        var i = rows.map(function (r) { return r.row; }).indexOf(row);
+        var j = i + dir;
+        if (i < 0 || j < 0 || j >= rows.length) return;
+        if (dir < 0) listEl.insertBefore(row, rows[j].row); else listEl.insertBefore(rows[j].row, row);
+        var tmp = rows[i]; rows[i] = rows[j]; rows[j] = tmp;
+      }
+      var up = document.createElement("button");
+      up.type = "button"; up.className = "pinned-editor-btn"; up.title = "Mover pra cima";
+      up.innerHTML = '<i class="ti ti-chevron-up"></i>';
+      up.addEventListener("click", function () { mv(-1); });
+      var down = document.createElement("button");
+      down.type = "button"; down.className = "pinned-editor-btn"; down.title = "Mover pra baixo";
+      down.innerHTML = '<i class="ti ti-chevron-down"></i>';
+      down.addEventListener("click", function () { mv(1); });
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "pinned-editor-btn pinned-editor-del"; del.title = "Remover";
+      del.innerHTML = '<i class="ti ti-x"></i>';
+      del.addEventListener("click", function () {
+        row.remove();
+        rows = rows.filter(function (r) { return r.row !== row; });
+      });
+      [color, icon, sel, label, up, down, del].forEach(function (el) { row.appendChild(el); });
+      listEl.appendChild(row);
+      rows.push({ row: row, color: color, icon: icon, sel: sel, label: label, id: item ? (item.id || "") : "" });
+    }
+    effectiveSidebarPinned().forEach(addRow);
+
+    var addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "priorities-clear-btn";
+    addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar atalho';
+    addBtn.addEventListener("click", function () { addRow(null); });
+    box.appendChild(addBtn);
+
+    var err = document.createElement("p");
+    err.className = "priorities-quickfilter-editor-error";
+    err.style.display = "none";
+    box.appendChild(err);
+
+    var actions = document.createElement("div");
+    actions.className = "pinned-editor-actions";
+    var saveBtn = document.createElement("button");
+    saveBtn.type = "button"; saveBtn.className = "notes-add-btn"; saveBtn.textContent = "Salvar";
+    var resetBtn = document.createElement("button");
+    resetBtn.type = "button"; resetBtn.className = "priorities-clear-btn"; resetBtn.textContent = "Restaurar padrão";
+    var cancelBtn = document.createElement("button");
+    cancelBtn.type = "button"; cancelBtn.className = "priorities-clear-btn"; cancelBtn.textContent = "Cancelar";
+    actions.appendChild(saveBtn); actions.appendChild(resetBtn); actions.appendChild(cancelBtn);
+    box.appendChild(actions);
+
+    function close() { overlay.remove(); }
+    function fail() { err.textContent = "Não foi possível salvar agora. Tente de novo em instantes."; err.style.display = "block"; }
+    cancelBtn.addEventListener("click", close);
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+    resetBtn.addEventListener("click", function () {
+      if (!window.confirm("Voltar aos atalhos originais do menu?")) return;
+      saveSidebarPinned(null).then(close).catch(fail);
+    });
+    saveBtn.addEventListener("click", function () {
+      var out = [];
+      rows.forEach(function (r) {
+        if (!r.sel.value) return;
+        var p = pages.filter(function (x) { return x.target === r.sel.value; })[0];
+        out.push({
+          id: r.id || "",
+          label: r.label.value.trim() || (p ? p.label : r.sel.value),
+          target: r.sel.value,
+          icon: (r.icon.value.trim() || "circle").replace(/^ti-/, ""),
+          color: r.color.value
+        });
+      });
+      if (!out.length) { err.textContent = "Escolha ao menos 1 página."; err.style.display = "block"; return; }
+      saveSidebarPinned(out).then(close).catch(fail);
+    });
+    document.body.appendChild(overlay);
+  }
+
   function renderSidebarPinned() {
     var wrap = document.getElementById("sidebarPinned");
     if (!wrap) return;
     wrap.innerHTML = "";
-    (cfg.sidebarPinned || []).forEach(function (item) {
+    effectiveSidebarPinned().forEach(function (item) {
       var link = document.createElement("a");
       link.className = "sidebar-pinned-item" + (item.target === currentId ? " active" : "");
       link.href = "#" + item.target;
@@ -494,6 +664,13 @@
       link.appendChild(lbl);
       wrap.appendChild(link);
     });
+    var editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "sidebar-pinned-edit";
+    editBtn.title = "Editar atalhos fixos do menu";
+    editBtn.innerHTML = '<i class="ti ti-settings"></i> Editar atalhos';
+    editBtn.addEventListener("click", openSidebarPinnedEditor);
+    wrap.appendChild(editBtn);
   }
 
   // ---------------- Recentes (pedido do Georges: "parecido com o que
@@ -508,7 +685,7 @@
   // cai no genérico (calendário pra dynamicQuery, pasta pro resto — mesma
   // regra do ícone da árvore em buildTreeNode).
   function iconForPageId(pageId) {
-    var pinned = (cfg.sidebarPinned || []).filter(function (p) { return p.target === pageId; })[0];
+    var pinned = effectiveSidebarPinned().filter(function (p) { return p.target === pageId; })[0];
     if (pinned) return "ti-" + (pinned.icon || "circle");
     var found = flatIndex.filter(function (e) { return e.target === pageId; })[0];
     if (found && found.icon) return found.icon;
@@ -13082,6 +13259,7 @@
       tipoEvento: sel("Tipo de Evento"),
       tipoConsulta: sel("Tipo de Consulta"),
       tratamento: multi("Tratamento"),
+      procedimento: multi("Procedimento"),
       situacao: sel("Situação"),
       especialidade: sel("Especialidade"),
       local: sel("Local"),
@@ -13095,7 +13273,7 @@
     };
   }
   var SAUDE_EXTRA_FIELDS = [
-    "Tipo de Evento", "Tipo de Consulta", "Tratamento", "Situação", "Especialidade", "Local",
+    "Tipo de Evento", "Tipo de Consulta", "Tratamento", "Procedimento", "Situação", "Especialidade", "Local",
     "Parte do Corpo", "Profissional", "Data da Consulta", "Valor", "NFPS"
   ];
 
@@ -13125,7 +13303,7 @@
     var allSaude = [];
     var state = {
       search: "", sortKey: "dataConsulta", sortDir: 1,
-      tipoEventoSelected: [], situacaoSelected: [], especialidadeSelected: [], localSelected: [], tratamentoSelected: [],
+      tipoEventoSelected: [], situacaoSelected: [], especialidadeSelected: [], localSelected: [], tratamentoSelected: [], procedimentoSelected: [],
       dataFilter: null,
       // "Próximas/Todas/Passadas" — mesma metodologia de Passagens/Provas
       // (botão único de ciclo). Abre em "pending" (próximas) por padrão.
@@ -13139,7 +13317,7 @@
         var s = normalize(state.search);
         var hay = normalize([
           it.nome, it.tipoConsulta, it.especialidade, it.local
-        ].concat(it.parteCorpo || []).concat(it.profissional || []).concat(it.tratamento || []).filter(Boolean).join(" "));
+        ].concat(it.parteCorpo || []).concat(it.profissional || []).concat(it.tratamento || []).concat(it.procedimento || []).filter(Boolean).join(" "));
         if (hay.indexOf(s) === -1) return false;
       }
       if (state.tipoEventoSelected.length && state.tipoEventoSelected.indexOf(it.tipoEvento) === -1) return false;
@@ -13149,6 +13327,10 @@
       if (state.tratamentoSelected.length) {
         var tr = it.tratamento || [];
         if (!state.tratamentoSelected.some(function (t) { return tr.indexOf(t) !== -1; })) return false;
+      }
+      if (state.procedimentoSelected.length) {
+        var pr = it.procedimento || [];
+        if (!state.procedimentoSelected.some(function (t) { return pr.indexOf(t) !== -1; })) return false;
       }
       if (state.statusCycle === "pending") {
         if (it.diasAte !== null && it.diasAte < 0) return false;
@@ -13199,9 +13381,15 @@
     var especialidadeDropdownWrap = document.createElement("div");
     var localDropdownWrap = document.createElement("div");
     var tratamentoDropdownWrap = document.createElement("div");
+    var procedimentoDropdownWrap = document.createElement("div");
     var dataFilterWrap = document.createElement("div");
 
     function buildFiltersBar() {
+      procedimentoDropdownWrap.innerHTML = "";
+      procedimentoDropdownWrap.appendChild(buildIconDropdown(
+        { property: "Procedimento", type: "multi_select", label: "Procedimento", icon: "ti-microscope", searchable: true, options: buildSimpleOptionsFrom("procedimento") },
+        function (opts) { state.procedimentoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      ));
       tratamentoDropdownWrap.innerHTML = "";
       tratamentoDropdownWrap.appendChild(buildIconDropdown(
         { property: "Tratamento", type: "multi_select", label: "Tratamento", icon: "ti-heart-rate-monitor", searchable: true, options: buildSimpleOptionsFrom("tratamento") },
@@ -13277,6 +13465,7 @@
     filterBarWrapSaude.className = "legislacoes-filterbar";
     filterBarWrapSaude.appendChild(tipoEventoDropdownWrap);
     filterBarWrapSaude.appendChild(situacaoDropdownWrap);
+    filterBarWrapSaude.appendChild(procedimentoDropdownWrap);
     filterBarWrapSaude.appendChild(tratamentoDropdownWrap);
     filterBarWrapSaude.appendChild(especialidadeDropdownWrap);
     filterBarWrapSaude.appendChild(localDropdownWrap);
@@ -13290,7 +13479,7 @@
     clearFiltersBtn.addEventListener("click", function () {
       state.search = ""; searchInput.value = "";
       state.tipoEventoSelected = []; state.situacaoSelected = [];
-      state.especialidadeSelected = []; state.localSelected = []; state.tratamentoSelected = [];
+      state.especialidadeSelected = []; state.localSelected = []; state.tratamentoSelected = []; state.procedimentoSelected = [];
       state.dataFilter = null;
       buildFiltersBar();
       applyState();
@@ -13315,6 +13504,7 @@
       { key: "tipoEvento", label: "Tipo de Evento", cls: "saude-th-tipo-evento" },
       { key: "tipoConsulta", label: "Tipo de Consulta", cls: "saude-th-tipo-consulta" },
       { key: "tratamento", label: "Tratamento", cls: "saude-th-tratamento" },
+      { key: "procedimento", label: "Procedimento", cls: "saude-th-procedimento" },
       { key: "dataConsulta", label: "Data da Consulta", cls: "saude-th-data", sortKey: "dataConsulta" },
       { key: "local", label: "Local", cls: "saude-th-local" },
       // ocultas por padrão — reveladas só pelo botão "Mostrar todas as colunas".
@@ -13389,6 +13579,9 @@
           break;
         case "tratamento":
           passagensAppendChipList(cell, it.tratamento);
+          break;
+        case "procedimento":
+          passagensAppendChipList(cell, it.procedimento);
           break;
         case "especialidade":
           cell.textContent = it.especialidade || "—";
@@ -24780,6 +24973,12 @@
     filterBody.appendChild(grpHost);
     root.appendChild(filterSec.section);
 
+    // aviso de filtro ativo (visível mesmo com "Filtrar" recolhido)
+    var filterWarn = document.createElement("div");
+    filterWarn.className = "cal-filter-warn";
+    filterWarn.style.display = "none";
+    root.appendChild(filterWarn);
+
     var srcPanel = document.createElement("div");
     srcPanel.className = "cal-src-panel";
     srcPanel.style.display = "none";
@@ -24823,25 +25022,69 @@
       return "";
     }
     function calChipState(id) { return calSetState([id]); }
-    // ciclo de 3 cliques: padrão -> só este conjunto -> tudo MENOS este conjunto -> padrão
+    // Ciclo de cliques por chip/grupo (com memória, pra dar pra combinar vários):
+    //   1º clique: só este conjunto aparece (guarda foto do estado anterior);
+    //   2º clique: oculta este conjunto e VOLTA ao que estava marcado nos outros (foto);
+    //   3º clique: tudo aparece (marcações limpas) MENOS este conjunto;
+    //   4º clique: volta ao padrão (tudo aparece).
+    function calHiddenSig() {
+      return Object.keys(st.hidden).filter(function (k) { return st.hidden[k]; }).sort().join("|");
+    }
+    st.cyc = null; // { key, phase, snap, sig } — vale só enquanto o estado não for mexido por outra ação
     function calCycleSet(ids) {
       var set = calSetIds(ids);
       if (!set.length) return;
-      var cs = calSetState(ids);
+      var key = set.slice().sort().join(",");
       var inSet = {};
       set.forEach(function (id) { inSet[id] = true; });
       var on = sources.filter(function (x) { return st.enabled[x.id]; });
       var rest = on.length - set.length;
-      st.hidden = {};
-      if (cs === "solo") {
-        if (rest >= 2) set.forEach(function (id) { st.hidden[id] = true; });   // 2º clique
-        // rest < 2: 2º estado seria igual ao "só o outro" -> volta ao padrão
-      } else if (cs === "excl") {
-        st.hidden = {};                                                          // 3º clique
+      var cyc = (st.cyc && st.cyc.key === key && st.cyc.sig === calHiddenSig()) ? st.cyc : null;
+      var phase = cyc ? cyc.phase : 0;
+      var snap = cyc ? cyc.snap : JSON.parse(JSON.stringify(st.hidden));
+      function onlySetHidden() { var h = {}; set.forEach(function (id) { h[id] = true; }); return h; }
+      var next;
+      if (phase === 0) {
+        next = {};
+        on.forEach(function (x) { if (!inSet[x.id]) next[x.id] = true; });
+        snap = JSON.parse(JSON.stringify(st.hidden));
+        st.hidden = next;
+        phase = 1;
+      } else if (phase === 1) {
+        next = JSON.parse(JSON.stringify(snap));
+        set.forEach(function (id) { next[id] = true; });
+        st.hidden = next;
+        phase = 2;
+        // se ficou igual ao "só este oculto", o próximo clique já volta ao padrão
+        if (!rest || calHiddenSig() === Object.keys(onlySetHidden()).sort().join("|")) phase = 3;
+      } else if (phase === 2) {
+        st.hidden = rest >= 1 ? onlySetHidden() : {};
+        phase = 3;
       } else {
-        on.forEach(function (x) { if (!inSet[x.id]) st.hidden[x.id] = true; });  // 1º clique
+        st.hidden = {};
+        phase = 0;
       }
+      st.cyc = phase ? { key: key, phase: phase, snap: snap, sig: calHiddenSig() } : null;
       saveSettings({ subToggles: hiddenToSub() });
+      buildFilterBar();
+      draw();
+    }
+    // lista do que está filtrando agora (pra avisar no topo do Calendário)
+    function calActiveFilterParts() {
+      var parts = [];
+      var hiddenN = sources.filter(function (x) { return st.enabled[x.id] && st.hidden[x.id]; }).length;
+      if (hiddenN) parts.push(hiddenN + (hiddenN === 1 ? " categoria oculta" : " categorias ocultas"));
+      if (st.hideDone) parts.push("concluídos ocultos");
+      if (st.query && st.query.trim()) parts.push("busca “" + st.query.trim() + "”");
+      return parts;
+    }
+    function calClearAllFilters() {
+      st.hidden = {};
+      st.cyc = null;
+      st.hideDone = false;
+      st.query = "";
+      searchInput.value = "";
+      saveSettings({ subToggles: hiddenToSub(), hideDone: false });
       buildFilterBar();
       draw();
     }
@@ -25020,8 +25263,9 @@
         var isSolo = calChipState(s.id) === "solo";
         chip.className = "cal-chip" + (st.hidden[s.id] ? " off" : "") + (isSolo ? " solo" : "");
         chip.style.setProperty("--cal-c", s.color);
-        chip.title = isSolo ? "Só esta aparece — clique para ocultar só esta" :
-          (calChipState(s.id) === "excl" ? "Só esta está oculta — clique para voltar ao padrão" : "Clique para ver só esta");
+        chip.title = isSolo ? "Só esta aparece — clique para ocultar esta (mantendo as outras marcações)" :
+          (calChipState(s.id) === "excl" ? "Só esta está oculta — clique para voltar ao padrão" :
+          (st.hidden[s.id] ? "Oculta — clique para ver só esta" : "Clique para ver só esta"));
         chip.textContent = s.icon + " " + s.label;
         chip.addEventListener("click", function () { calCycleSet([s.id]); });
         row.appendChild(chip);
@@ -25057,16 +25301,7 @@
       clearBtn.type = "button";
       clearBtn.className = "cal-chip cal-chip-neutral";
       clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
-      clearBtn.addEventListener("click", function () {
-        st.hidden = {};
-        st.hideDone = false;
-        st.query = "";
-        searchInput.value = "";
-        searchInput.dispatchEvent(new Event("input"));
-        saveSettings({ subToggles: hiddenToSub(), hideDone: false });
-        buildFilterBar();
-        draw();
-      });
+      clearBtn.addEventListener("click", calClearAllFilters);
       row2.appendChild(clearBtn);
       chipsHost.appendChild(row2);
     }
@@ -25172,6 +25407,27 @@
       });
       var byDate = calGroupByDate(vis);
       var now = calSpPartsFromDate(new Date());
+
+      var fparts = calActiveFilterParts();
+      filterWarn.innerHTML = "";
+      if (fparts.length) {
+        filterWarn.style.display = "flex";
+        var fIcon = document.createElement("i");
+        fIcon.className = "ti ti-filter";
+        var fTxt = document.createElement("span");
+        fTxt.className = "cal-filter-warn-text";
+        fTxt.textContent = "Filtro aplicado — o Calendário pode não mostrar tudo: " + fparts.join(" · ");
+        var fBtn = document.createElement("button");
+        fBtn.type = "button";
+        fBtn.className = "cal-filter-warn-btn";
+        fBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+        fBtn.addEventListener("click", calClearAllFilters);
+        filterWarn.appendChild(fIcon);
+        filterWarn.appendChild(fTxt);
+        filterWarn.appendChild(fBtn);
+      } else {
+        filterWarn.style.display = "none";
+      }
 
       statusEl.innerHTML = "";
       if (st.loading) {
@@ -29576,6 +29832,7 @@
     // páginas visitadas (Recentes/Mais Visitadas) — busca o log salvo 1x no
     // boot; não trava o boot (mesma lógica de refreshNotifications acima).
     Promise.all([fetchPageVisits(), fetchRecentSettings()]).then(function () { renderSidebarRecent(); });
+    fetchSidebarPinned();
 
     // busca o override de "página inicial" salvo na KV (ver /home-page no
     // worker.js — botão #setHomeBtn) ANTES de decidir qual página abrir.

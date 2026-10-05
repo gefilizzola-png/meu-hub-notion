@@ -286,6 +286,47 @@ html, body {
 }
 .sidebar-pinned-icon .ti { font-size: 14px; }
 .sidebar-pinned-label { overflow: hidden; text-overflow: ellipsis; }
+.sidebar-pinned-edit {
+  align-self: flex-start;
+  margin: 2px 0 0 8px;
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: #9a9a94;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 6px;
+  opacity: 0.55;
+}
+.sidebar-pinned-edit:hover { opacity: 1; background: #efefec; color: #2c2c2a; }
+#shell.rail-collapsed .sidebar-pinned-edit { display: none; }
+
+/* editor dos atalhos fixos do menu (modal) */
+.pinned-editor-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.pinned-editor-box {
+  background: #fff; border-radius: 14px; padding: 18px;
+  width: min(760px, 100%); max-height: 88vh; overflow: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+.pinned-editor-title { margin: 0 0 4px; font-size: 16px; }
+.pinned-editor-hint { margin: 0 0 12px; font-size: 12px; color: #77776f; }
+.pinned-editor-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.pinned-editor-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pinned-editor-color { width: 34px; height: 30px; padding: 0; border: 1px solid #ddd; border-radius: 6px; background: none; }
+.pinned-editor-icon { width: 96px; }
+.pinned-editor-select { flex: 1 1 220px; min-width: 0; }
+.pinned-editor-label { flex: 1 1 140px; min-width: 0; }
+.pinned-editor-icon, .pinned-editor-select, .pinned-editor-label {
+  height: 30px; border: 1px solid #ddd; border-radius: 6px; padding: 0 8px; font-size: 13px;
+}
+.pinned-editor-btn { width: 28px; height: 30px; border: 1px solid #ddd; background: #fafaf8; border-radius: 6px; cursor: pointer; }
+.pinned-editor-btn:hover { background: #efefec; }
+.pinned-editor-del:hover { background: #ffe3e3; color: #c92a2a; }
+.pinned-editor-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
 /* ---------- "Recentes" (pedido do Georges: "parecido com o que
    Notion/Linear fazem" - 20 últimas páginas visitadas, mais recente
@@ -6974,6 +7015,7 @@ html, body {
 .saude-th-local,
 .saude-th-tipo-consulta,
 .saude-th-tratamento,
+.saude-th-procedimento,
 .saude-th-especialidade,
 .saude-th-parte-corpo,
 .saude-th-profissional,
@@ -8425,6 +8467,11 @@ html, body {
 .cal-src-kind { color: #868e96; font-size: 11.5px; margin-left: auto; text-align: right; }
 .cal-status { font-size: 12.5px; color: #6b7280; margin: 4px 0 8px; min-height: 16px; }
 .cal-status-warn { color: #c92a2a; }
+.cal-filter-warn { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; padding: 8px 12px; border: 1px solid #ffd43b; background: #fff9db; color: #7c5e00; border-radius: 10px; font-size: 13px; }
+.cal-filter-warn > i { font-size: 16px; }
+.cal-filter-warn-text { flex: 1 1 200px; min-width: 0; }
+.cal-filter-warn-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #f08c00; background: #fff; color: #b35c00; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.cal-filter-warn-btn:hover { background: #fff3bf; }
 .cal-body { transition: opacity .15s; }
 .cal-body.cal-loading { opacity: .55; }
 
