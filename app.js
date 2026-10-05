@@ -12914,10 +12914,19 @@
   function saudeAppendLocalCell(cell, local) {
     if (!local) { cell.textContent = "—"; return; }
     var wrap = document.createElement("span");
-    wrap.className = "saude-local-inline";
+    wrap.className = "saude-local-inline saude-local-card";
+    var pinEl = document.createElement("span");
+    pinEl.className = "saude-local-pin";
+    pinEl.innerHTML = '<i class="ti ti-building-hospital"></i>';
+    wrap.appendChild(pinEl);
     var textSpan = document.createElement("span");
+    textSpan.className = "saude-local-name";
     textSpan.textContent = local;
+    textSpan.title = local;
     wrap.appendChild(textSpan);
+    var actsEl = document.createElement("span");
+    actsEl.className = "saude-local-actions";
+    wrap.appendChild(actsEl);
 
     var mapsBtn = document.createElement("a");
     mapsBtn.className = "saude-local-btn";
@@ -12927,7 +12936,8 @@
     mapsBtn.title = "Abrir no Maps";
     mapsBtn.innerHTML = '<i class="ti ti-map-pin"></i>';
     mapsBtn.addEventListener("click", function (e) { e.stopPropagation(); });
-    wrap.appendChild(mapsBtn);
+    mapsBtn.classList.add("saude-local-btn-maps");
+    actsEl.appendChild(mapsBtn);
 
     var copyBtn = document.createElement("button");
     copyBtn.type = "button";
@@ -12944,7 +12954,7 @@
         }).catch(function () {});
       }
     });
-    wrap.appendChild(copyBtn);
+    actsEl.appendChild(copyBtn);
 
     // Botão "Buscar endereço" (pedido do Georges: buscar o Local no Google e mostrar o
     // endereço pra jogar no Maps/Waze). Consulta o Worker (GET /local-endereco → Google
@@ -12973,7 +12983,10 @@
           var places = (res.data && res.data.places) || [];
           addrBox.textContent = "";
           if (!places.length) { addrBox.textContent = "Nenhum resultado no Google para “" + local + "”."; return; }
-          places.forEach(function (p) {
+          var pIdx = 0;
+          function renderPlace() {
+            addrBox.textContent = "";
+            var p = places[pIdx];
             var item = document.createElement("div");
             item.className = "saude-endereco-item";
             var nm = document.createElement("div");
@@ -12999,15 +13012,15 @@
             var wazeHref = (p.lat != null && p.lng != null)
               ? "https://waze.com/ul?ll=" + p.lat + "%2C" + p.lng + "&navigate=yes"
               : "https://waze.com/ul?q=" + encodeURIComponent(q) + "&navigate=yes";
-            function mkLink(label, icon, href) {
+            function mkLink(label, icon, href, extraCls) {
               var a = document.createElement("a");
-              a.className = "saude-endereco-act";
+              a.className = "saude-endereco-act " + (extraCls || "");
               a.href = href; a.target = "_blank"; a.rel = "noopener";
               a.innerHTML = '<i class="ti ' + icon + '"></i> ' + label;
               actions.appendChild(a);
             }
-            mkLink("Maps", "ti-map-pin", mapsHref);
-            mkLink("Waze", "ti-brand-waze", wazeHref);
+            mkLink("Maps", "ti-map-pin", mapsHref, "saude-endereco-act-maps");
+            mkLink("Waze", "ti-brand-waze", wazeHref, "saude-endereco-act-waze");
             var cp = document.createElement("button");
             cp.type = "button";
             cp.className = "saude-endereco-act";
@@ -13021,23 +13034,44 @@
               }
             });
             actions.appendChild(cp);
+            if (places.length > 1) {
+              var nx = document.createElement("button");
+              nx.type = "button";
+              nx.className = "saude-endereco-act saude-endereco-act-next";
+              nx.title = "Mostrar o próximo resultado do Google";
+              nx.innerHTML = '<i class="ti ti-search"></i> Próximo (' + (pIdx + 1) + '/' + places.length + ')';
+              nx.addEventListener("click", function () {
+                pIdx = (pIdx + 1) % places.length;
+                renderPlace();
+              });
+              actions.appendChild(nx);
+            }
             item.appendChild(actions);
             addrBox.appendChild(item);
-          });
+          }
+          renderPlace();
         })
         .catch(function (err) {
           if (addrBox) addrBox.textContent = "Erro: " + err.message;
         });
     });
-    wrap.appendChild(addrBtn);
+    addrBtn.classList.add("saude-local-btn-addr");
+    actsEl.appendChild(addrBtn);
 
     cell.appendChild(wrap);
   }
 
   function saudeItemFromPage(p) {
     var extra = p.extra || {};
-    function sel(key) { var v = extra[key]; return v ? v.name : null; }
-    function multi(key) { return (extra[key] || []).map(function (o) { return o.name; }); }
+    function sel(key) { var v = extra[key]; if (Array.isArray(v)) v = v[0]; return (v && v.name) ? v.name : null; }
+    // tolerante: aceita multi_select (array) ou select (objeto único) — o Georges já trocou
+    // propriedades de select p/ multi-select no Notion (ex: Tratamento) e o app quebrou.
+    function multi(key) {
+      var v = extra[key];
+      if (!v) return [];
+      if (!Array.isArray(v)) v = [v];
+      return v.map(function (o) { return o && o.name; }).filter(Boolean);
+    }
     function dateStart(key) { var v = extra[key]; return (v && v.start) ? v.start : null; }
     var dataConsultaISO = dateStart("Data da Consulta");
     var profissionalRaw = multi("Profissional");
@@ -13047,7 +13081,7 @@
       nome: p.title || "(sem título)",
       tipoEvento: sel("Tipo de Evento"),
       tipoConsulta: sel("Tipo de Consulta"),
-      tratamento: sel("Tratamento"),
+      tratamento: multi("Tratamento"),
       situacao: sel("Situação"),
       especialidade: sel("Especialidade"),
       local: sel("Local"),
@@ -13091,7 +13125,7 @@
     var allSaude = [];
     var state = {
       search: "", sortKey: "dataConsulta", sortDir: 1,
-      tipoEventoSelected: [], situacaoSelected: [], especialidadeSelected: [], localSelected: [],
+      tipoEventoSelected: [], situacaoSelected: [], especialidadeSelected: [], localSelected: [], tratamentoSelected: [],
       dataFilter: null,
       // "Próximas/Todas/Passadas" — mesma metodologia de Passagens/Provas
       // (botão único de ciclo). Abre em "pending" (próximas) por padrão.
@@ -13105,13 +13139,17 @@
         var s = normalize(state.search);
         var hay = normalize([
           it.nome, it.tipoConsulta, it.especialidade, it.local
-        ].concat(it.parteCorpo || []).concat(it.profissional || []).filter(Boolean).join(" "));
+        ].concat(it.parteCorpo || []).concat(it.profissional || []).concat(it.tratamento || []).filter(Boolean).join(" "));
         if (hay.indexOf(s) === -1) return false;
       }
       if (state.tipoEventoSelected.length && state.tipoEventoSelected.indexOf(it.tipoEvento) === -1) return false;
       if (state.situacaoSelected.length && state.situacaoSelected.indexOf(it.situacao) === -1) return false;
       if (state.especialidadeSelected.length && state.especialidadeSelected.indexOf(it.especialidade) === -1) return false;
       if (state.localSelected.length && state.localSelected.indexOf(it.local) === -1) return false;
+      if (state.tratamentoSelected.length) {
+        var tr = it.tratamento || [];
+        if (!state.tratamentoSelected.some(function (t) { return tr.indexOf(t) !== -1; })) return false;
+      }
       if (state.statusCycle === "pending") {
         if (it.diasAte !== null && it.diasAte < 0) return false;
       } else if (state.statusCycle === "past") {
@@ -13145,10 +13183,12 @@
     function buildSimpleOptionsFrom(key) {
       var seen = {}, out = [];
       allSaude.forEach(function (it) {
-        var v = it[key];
-        if (!v || seen[v]) return;
-        seen[v] = true;
-        out.push({ label: v, pageId: v });
+        var raw = it[key];
+        (Array.isArray(raw) ? raw : [raw]).forEach(function (v) {
+          if (!v || seen[v]) return;
+          seen[v] = true;
+          out.push({ label: v, pageId: v });
+        });
       });
       out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
       return out;
@@ -13158,9 +13198,15 @@
     var situacaoDropdownWrap = document.createElement("div");
     var especialidadeDropdownWrap = document.createElement("div");
     var localDropdownWrap = document.createElement("div");
+    var tratamentoDropdownWrap = document.createElement("div");
     var dataFilterWrap = document.createElement("div");
 
     function buildFiltersBar() {
+      tratamentoDropdownWrap.innerHTML = "";
+      tratamentoDropdownWrap.appendChild(buildIconDropdown(
+        { property: "Tratamento", type: "multi_select", label: "Tratamento", icon: "ti-heart-rate-monitor", searchable: true, options: buildSimpleOptionsFrom("tratamento") },
+        function (opts) { state.tratamentoSelected = opts.map(function (o) { return o.pageId; }); applyState(); }
+      ));
       tipoEventoDropdownWrap.innerHTML = "";
       tipoEventoDropdownWrap.appendChild(buildIconDropdown(
         { property: "Tipo de Evento", type: "select", label: "Tipo de Evento", icon: "ti-stethoscope", options: buildSimpleOptionsFrom("tipoEvento") },
@@ -13231,6 +13277,7 @@
     filterBarWrapSaude.className = "legislacoes-filterbar";
     filterBarWrapSaude.appendChild(tipoEventoDropdownWrap);
     filterBarWrapSaude.appendChild(situacaoDropdownWrap);
+    filterBarWrapSaude.appendChild(tratamentoDropdownWrap);
     filterBarWrapSaude.appendChild(especialidadeDropdownWrap);
     filterBarWrapSaude.appendChild(localDropdownWrap);
     filterBarWrapSaude.appendChild(dataFilterWrap);
@@ -13243,7 +13290,7 @@
     clearFiltersBtn.addEventListener("click", function () {
       state.search = ""; searchInput.value = "";
       state.tipoEventoSelected = []; state.situacaoSelected = [];
-      state.especialidadeSelected = []; state.localSelected = [];
+      state.especialidadeSelected = []; state.localSelected = []; state.tratamentoSelected = [];
       state.dataFilter = null;
       buildFiltersBar();
       applyState();
@@ -13267,11 +13314,11 @@
     var COLS = [
       { key: "tipoEvento", label: "Tipo de Evento", cls: "saude-th-tipo-evento" },
       { key: "tipoConsulta", label: "Tipo de Consulta", cls: "saude-th-tipo-consulta" },
-      { key: "dataConsulta", label: "Data da Consulta", cls: "saude-th-data", sortKey: "dataConsulta" },
       { key: "tratamento", label: "Tratamento", cls: "saude-th-tratamento" },
-      { key: "profissionalNome", label: "Nome do Profissional", cls: "saude-th-profissional-nome" },
+      { key: "dataConsulta", label: "Data da Consulta", cls: "saude-th-data", sortKey: "dataConsulta" },
       { key: "local", label: "Local", cls: "saude-th-local" },
       // ocultas por padrão — reveladas só pelo botão "Mostrar todas as colunas".
+      { key: "profissionalNome", label: "Nome do Profissional", cls: "saude-th-profissional-nome" },
       { key: "nome", label: "Nome", cls: "saude-th-nome", sortKey: "nome" },
       { key: "situacao", label: "Situação", cls: "saude-th-situacao" },
       { key: "especialidade", label: "Especialidade", cls: "saude-th-especialidade" },
@@ -13281,7 +13328,7 @@
       { key: "nfps", label: "NFPS", cls: "saude-th-nfps", sortKey: "nfps" }
     ];
     var allColumnKeys = COLS.map(function (c) { return c.key; });
-    var defaultHiddenKeys = ["nome", "situacao", "especialidade", "parteCorpo", "profissional", "valor", "nfps"];
+    var defaultHiddenKeys = ["profissionalNome", "nome", "situacao", "especialidade", "parteCorpo", "profissional", "valor", "nfps"];
     var columnsExpanded = false;
 
     var columnsToolbar = document.createElement("div");
@@ -13341,7 +13388,7 @@
           cell.textContent = it.tipoConsulta || "—";
           break;
         case "tratamento":
-          if (it.tratamento) { cell.appendChild(passagensChip(it.tratamento)); } else { cell.textContent = "—"; }
+          passagensAppendChipList(cell, it.tratamento);
           break;
         case "especialidade":
           cell.textContent = it.especialidade || "—";

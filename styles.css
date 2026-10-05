@@ -6994,6 +6994,7 @@ html, body {
 
 /* Saúde — recolher/expandir colunas (mesma metodologia de Passagens/
    Prioridades: "hide-<key>" na tabela + "saude-col-<key>" em cada th/td). */
+.saude-table.hide-profissionalNome .saude-col-profissionalNome,
 .saude-table.hide-nome .saude-col-nome,
 .saude-table.hide-situacao .saude-col-situacao,
 .saude-table.hide-especialidade .saude-col-especialidade,
@@ -7034,6 +7035,51 @@ html, body {
   color: #2f2e2a;
 }
 
+/* Local — cartão moderno: ícone em círculo + nome + ações em "pílula" à direita */
+.saude-local-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 4px;
+  background: #f6f5f1;
+  border: 1px solid #e8e6df;
+  border-radius: 999px;
+  max-width: 320px;
+}
+.saude-local-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #e5eefc;
+  color: #2f6fdd;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.saude-local-name {
+  font-weight: 600;
+  color: #2f2e2a;
+  white-space: normal;
+  line-height: 1.2;
+  min-width: 0;
+}
+.saude-local-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid #e0ddd4;
+  flex-shrink: 0;
+}
+.saude-local-card .saude-local-btn { width: 24px; height: 24px; border-radius: 50%; }
+.saude-local-btn-maps { color: #ea4335; }
+.saude-local-btn-maps:hover { background: #fdeceb; color: #ea4335; }
+.saude-local-btn-addr { color: #2f6fdd; }
+.saude-local-btn-addr:hover { background: #e5eefc; color: #2f6fdd; }
+
 /* Endereço do Local (busca no Google Places) */
 .saude-endereco-box {
   margin-top: 6px;
@@ -7071,6 +7117,11 @@ html, body {
   cursor: pointer;
 }
 .saude-endereco-act:hover { background: #eeede9; }
+.saude-endereco-act-maps { border-color: #f1b9b3; }
+.saude-endereco-act-maps i { color: #ea4335; }
+.saude-endereco-act-waze { border-color: #9fe3f7; }
+.saude-endereco-act-waze i { color: #05a8d6; }
+.saude-endereco-act-next { margin-left: auto; color: #5a5850; }
 
 @media (max-width: 640px) {
   .emprestimos-add-input,
