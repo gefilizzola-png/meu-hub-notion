@@ -8704,10 +8704,17 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .sidebar-pinned-edit { align-self: flex-end; margin: 2px 6px 0 0; padding: 3px 5px; font-size: 13px; line-height: 1; opacity: 0.35; }
 .sidebar-pinned-edit:hover { opacity: 0.9; }
 
-/* Eventos/Festas (mesmo modelo de Saúde — reaproveita .saude-*): colunas curtas com largura
-   estável (regra permanente de largura); só "Nome" absorve o resto. */
-.eventos-th-short { width: 1%; white-space: nowrap; }
-.eventos-th-nome { width: 30%; }
-/* Eventos/Festas: com "Nome" oculto, "Descrição" vira a coluna que absorve o espaço restante. */
-.eventos-th-desc { width: 1%; white-space: nowrap; }
-.eventos-table.hide-nome .eventos-th-desc { width: auto; white-space: normal; }
+/* Eventos/Festas — PADRÃO DE LARGURA (vale pra toda tabela nova): a tabela ENCOLHE ao conteúdo
+   (width:auto) em vez de esticar 100%, e NENHUMA célula quebra linha (nowrap). Texto muito longo
+   (Nome, Localização) é cortado com reticências (+ title com o texto completo). Sem coluna
+   "absorvente" — por isso a 1ª coluna não fica gigante quando sobra espaço. */
+.eventos-table { width: auto; max-width: none; }
+.eventos-table th,
+.eventos-table td { white-space: nowrap; }
+.eventos-th-short,
+.eventos-th-desc,
+.eventos-th-nome { width: auto; }
+.eventos-table .saude-col-nome { max-width: 560px; overflow: hidden; text-overflow: ellipsis; }
+.eventos-table .saude-col-descricao { max-width: 520px; overflow: hidden; text-overflow: ellipsis; }
+.eventos-table .saude-local-name { white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.eventos-table-scroll { overflow-x: auto; }

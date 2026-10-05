@@ -13958,6 +13958,7 @@
     columnsToolbar.appendChild(columnsToggleBtn);
     wrap.appendChild(columnsToolbar);
 
+    body.className = "eventos-table-scroll";
     wrap.appendChild(body);
 
     // Larguras estáveis (regra 14): colunas curtas = width:1% + nowrap; só "Nome" absorve o resto.
