@@ -8687,9 +8687,9 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .page-picker-placeholder { flex: 1; color: #999; }
 .page-picker-chevron { color: #999; font-size: 14px; }
 .page-picker-ico { font-size: 16px; color: #666; flex-shrink: 0; }
-.page-picker-panel { position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 4px); background: #fff; border: 0.5px solid #dcdcd8; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.14); padding: 8px; }
+.page-picker-panel { position: fixed; z-index: 3000; display: flex; flex-direction: column; box-sizing: border-box; background: #fff; border: 0.5px solid #dcdcd8; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.14); padding: 8px; }
 .page-picker-search { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 0.5px solid #dcdcd8; font-size: 13px; }
-.page-picker-list { max-height: 260px; overflow-y: auto; margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.page-picker-list { max-height: 260px; min-height: 0; overflow-y: auto; margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
 .page-picker-option { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: none; background: none; border-radius: 8px; cursor: pointer; text-align: left; width: 100%; }
 .page-picker-option:hover { background: #f4f4f2; }
 .page-picker-option.selected { background: #eaf1fb; }
@@ -8697,3 +8697,9 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .page-picker-option-name { font-size: 13px; font-weight: 500; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-picker-option-path { font-size: 11px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-picker-empty { padding: 14px; text-align: center; color: #999; font-size: 12.5px; }
+
+.pinned-editor-select-picker { flex: 1 1 220px; min-width: 200px; }
+.pinned-editor-row .page-picker-trigger { height: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid #ddd; }
+/* engrenagem discreta no canto (menu esquerdo) — só o ícone, sem texto */
+.sidebar-pinned-edit { align-self: flex-end; margin: 2px 6px 0 0; padding: 3px 5px; font-size: 13px; line-height: 1; opacity: 0.35; }
+.sidebar-pinned-edit:hover { opacity: 0.9; }

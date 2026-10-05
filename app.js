@@ -536,30 +536,22 @@
       icon.className = "pinned-editor-icon";
       icon.placeholder = "ícone";
       icon.value = item ? (item.icon || "") : "star";
-      var sel = document.createElement("select");
-      sel.className = "pinned-editor-select";
-      var ph = document.createElement("option");
-      ph.value = ""; ph.textContent = "Escolha uma página…";
-      sel.appendChild(ph);
-      pages.forEach(function (p) {
-        var o = document.createElement("option");
-        o.value = p.target;
-        o.textContent = p.label + " — " + p.path;
-        if (item && item.target === p.target) o.selected = true;
-        sel.appendChild(o);
+      // seletor moderno com busca (mesmo componente do editor de Atalhos
+      // de Pastas — buildPagePicker); preenche "Nome no menu" sozinho ao
+      // escolher uma página, se o nome ainda estiver vazio.
+      var sel = buildPagePicker(pages, item ? item.target : "", function (t) {
+        if (!label.value.trim()) {
+          var p = pages.filter(function (x) { return x.target === t; })[0];
+          if (p) label.value = p.label;
+        }
       });
+      sel.classList.add("pinned-editor-select-picker");
       var label = document.createElement("input");
       label.type = "text";
       label.className = "pinned-editor-label";
       label.placeholder = "Nome no menu";
       label.maxLength = 60;
       label.value = item ? item.label : "";
-      sel.addEventListener("change", function () {
-        if (!label.value.trim()) {
-          var p = pages.filter(function (x) { return x.target === sel.value; })[0];
-          if (p) label.value = p.label;
-        }
-      });
       function mv(dir) {
         var i = rows.map(function (r) { return r.row; }).indexOf(row);
         var j = i + dir;
@@ -668,7 +660,8 @@
     editBtn.type = "button";
     editBtn.className = "sidebar-pinned-edit";
     editBtn.title = "Editar atalhos fixos do menu";
-    editBtn.innerHTML = '<i class="ti ti-settings"></i> Editar atalhos';
+    editBtn.setAttribute("aria-label", "Editar atalhos fixos do menu");
+    editBtn.innerHTML = '<i class="ti ti-settings"></i>';
     editBtn.addEventListener("click", openSidebarPinnedEditor);
     wrap.appendChild(editBtn);
   }
@@ -9000,6 +8993,7 @@
 
     var wrap = document.createElement("div");
     wrap.className = "financeiro-wrap";
+    var contasFiltrarSec = null; // "Filtrar" (chips de conta) — entra logo abaixo de "Pesquisar", ver mais adiante
 
     // tags de conta, em ordem alfabética — sempre no topo, clicáveis a
     // qualquer momento (mesmo já filtrado, pra somar/tirar contas do
@@ -9030,9 +9024,11 @@
         tagsRow.appendChild(tagBtn);
       });
       // "Filtros" recolhível (Rodada 2): os chips de conta ficam atrás do botão; abre sozinho enquanto há conta filtrada.
-      var fSec = buildCollapsibleSection("Filtros", filterActive);
+      // (Ajustes: "Pesquisar" e "Filtrar" ficam JUNTOS, nessa ordem, como em
+      // Passagens — por isso a seção só é anexada logo abaixo de "Pesquisar".)
+      var fSec = buildCollapsibleSection("Filtrar", filterActive);
       fSec.body.appendChild(tagsRow);
-      wrap.appendChild(fSec.section);
+      contasFiltrarSec = fSec;
     }
 
     // "topRow" — modo normal: navegação de mês (esquerda) + 3 totais
@@ -9170,6 +9166,7 @@
     var pSec = buildCollapsibleSection("Pesquisar", false);
     pSec.body.appendChild(searchRow);
     wrap.appendChild(pSec.section);
+    if (contasFiltrarSec) wrap.appendChild(contasFiltrarSec.section);
 
     var status = document.createElement("p");
     status.className = "financeiro-status";
@@ -24031,7 +24028,7 @@
   // página escolhida, "" se nenhuma) — mesmo contrato do <select> antigo,
   // então quem lê "r.select.value" não muda. Busca ignora acentos
   // (normalize) e procura no nome E no caminho (ex: "financeiro").
-  function buildPagePicker(pages, initialTarget) {
+  function buildPagePicker(pages, initialTarget, onChange) {
     var current = initialTarget || "";
     var root = document.createElement("div");
     root.className = "page-picker";
@@ -24056,7 +24053,13 @@
     listEl.className = "page-picker-list";
     panel.appendChild(listEl);
 
-    function findPage(t) { return pages.filter(function (p) { return p.target === t; })[0]; }
+    function findPage(t) {
+      var f = pages.filter(function (p) { return p.target === t; })[0];
+      if (f) return f;
+      // página que existe mas não está no índice de busca (ex: a própria raiz "Pastas")
+      if (t && cfg.pages[t]) return { target: t, label: cfg.pages[t].title || t, path: "", icon: "ti-folder" };
+      return null;
+    }
 
     function renderTrigger() {
       var p = current ? findPage(current) : null;
@@ -24108,6 +24111,7 @@
           current = p.target;
           renderTrigger();
           close();
+          if (onChange) onChange(current);
         });
         listEl.appendChild(opt);
       });
@@ -24119,8 +24123,29 @@
       }
     }
 
+    // painel em position:fixed (calculado a partir do botão) pra NÃO ser
+    // cortado pelo overflow do editor/janela que contém o seletor.
+    function place() {
+      var r = trigger.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      var width = Math.max(r.width, 300);
+      var left = Math.min(r.left, Math.max(8, (window.innerWidth || 1000) - width - 8));
+      var spaceBelow = vh - r.bottom - 12;
+      var spaceAbove = r.top - 12;
+      var openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+      var avail = Math.max(160, openUp ? spaceAbove : spaceBelow);
+      panel.style.left = left + "px";
+      panel.style.width = width + "px";
+      panel.style.maxHeight = Math.min(avail, 380) + "px";
+      listEl.style.maxHeight = Math.max(100, Math.min(avail, 380) - 60) + "px";
+      if (openUp) { panel.style.top = ""; panel.style.bottom = (vh - r.top + 4) + "px"; }
+      else { panel.style.bottom = ""; panel.style.top = (r.bottom + 4) + "px"; }
+    }
     function open() {
       panel.style.display = "block";
+      place();
+      window.addEventListener("resize", place);
+      window.addEventListener("scroll", place, true);
       root.classList.add("open");
       searchInput.value = "";
       searchInput.dispatchEvent(new Event("input"));
@@ -24130,10 +24155,12 @@
     }
     function close() {
       panel.style.display = "none";
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
       root.classList.remove("open");
       document.removeEventListener("mousedown", outside, true);
     }
-    function outside(e) { if (!root.contains(e.target)) close(); }
+    function outside(e) { if (!root.contains(e.target) && !panel.contains(e.target)) close(); }
 
     trigger.addEventListener("click", function () {
       if (panel.style.display === "none") open(); else close();
