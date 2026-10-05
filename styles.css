@@ -8708,3 +8708,6 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
    estável (regra permanente de largura); só "Nome" absorve o resto. */
 .eventos-th-short { width: 1%; white-space: nowrap; }
 .eventos-th-nome { width: 30%; }
+/* Eventos/Festas: com "Nome" oculto, "Descrição" vira a coluna que absorve o espaço restante. */
+.eventos-th-desc { width: 1%; white-space: nowrap; }
+.eventos-table.hide-nome .eventos-th-desc { width: auto; white-space: normal; }

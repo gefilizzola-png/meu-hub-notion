@@ -13935,11 +13935,34 @@
     controls.appendChild(searchSection.section);
     controls.appendChild(filterSection.section);
     wrap.appendChild(controls);
+
+    // "Nome" (texto completo da página) fica oculto por padrão, em qualquer tamanho de tela —
+    // só aparece no botão "Mostrar todas as colunas" (mesmo padrão de Saúde/Passagens).
+    var columnsExpanded = false;
+    var columnsToolbar = document.createElement("div");
+    columnsToolbar.className = "priorities-columns-toolbar";
+    var columnsToggleBtn = document.createElement("button");
+    columnsToggleBtn.type = "button";
+    columnsToggleBtn.className = "priorities-columns-toggle-btn";
+    function updateColumnsToggleBtnLabel() {
+      columnsToggleBtn.innerHTML = columnsExpanded
+        ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
+        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+1)';
+    }
+    columnsToggleBtn.addEventListener("click", function () {
+      columnsExpanded = !columnsExpanded;
+      updateColumnsToggleBtnLabel();
+      renderTable();
+    });
+    updateColumnsToggleBtnLabel();
+    columnsToolbar.appendChild(columnsToggleBtn);
+    wrap.appendChild(columnsToolbar);
+
     wrap.appendChild(body);
 
     // Larguras estáveis (regra 14): colunas curtas = width:1% + nowrap; só "Nome" absorve o resto.
     var COLS = [
-      { key: "descricao", label: "Descrição", cls: "eventos-th-short", sortKey: "descricao" },
+      { key: "descricao", label: "Descrição", cls: "eventos-th-desc", sortKey: "descricao" },
       { key: "dataEvento", label: "Data do Evento", cls: "eventos-th-short", sortKey: "dataEvento" },
       { key: "tipoEvento", label: "Tipo de Evento", cls: "eventos-th-short", sortKey: "tipoEvento" },
       { key: "destinatario", label: "Destinatário", cls: "eventos-th-short", sortKey: "destinatario" },
@@ -14002,6 +14025,7 @@
 
       var table = document.createElement("table");
       table.className = "financeiro-table saude-table eventos-table";
+      table.classList.toggle("hide-nome", !columnsExpanded);
       var thead = document.createElement("thead");
       var headRow = document.createElement("tr");
       COLS.forEach(function (col) {
