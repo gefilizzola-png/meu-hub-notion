@@ -97,6 +97,8 @@
            que desliza da DIREITA (espelho do menu esquerdo). Bolinha vermelha
            (id="notifBellBadge") só aparece quando tem aviso não lido — ver
            refreshNotifications()/toggleNotifPanel() em app.js. -->
+      <!-- Ajustes (pedido do Georges): botão fixo pra anotar melhorias do app, gravando a página atual como Origem — ver ajustesOpen em app.js. -->
+      <button class="notif-bell-btn ajustes-btn-hdr" id="ajustesBtn" type="button" title="Ajustes — anotar algo pra melhorar no app" aria-label="Ajustes" aria-expanded="false"><i class="ti ti-bulb"></i></button>
       <!-- Esconder/exibir valores (pedido do Georges): olho fixo ao lado do sino, em qualquer página. Abre SEMPRE exibindo; clicar borra os valores monetários das páginas financeiras (ver setupPrivacy em app.js). -->
       <button class="notif-bell-btn privacy-eye-btn" id="privacyEyeBtn" type="button" title="Esconder valores" aria-label="Esconder valores" aria-pressed="false"><i class="ti ti-eye"></i></button>
       <button class="notif-bell-btn" id="notifBellBtn" type="button" title="Central de notificações" aria-label="Central de notificações" aria-expanded="false">

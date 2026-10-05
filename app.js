@@ -25511,6 +25511,226 @@
     if (old && old.parentNode) old.parentNode.removeChild(old);
     if (container) container.classList.remove("privacy-scope");
   }
+  // ---------------- Ajustes (anotações de melhoria do próprio app) ----------------
+  // Pedido do Georges: botão FIXO no header (ao lado de sino/olho/home) que abre
+  // um painel rápido pra anotar "ajustes que quero fazer no app", inclusive pelo
+  // celular na rua. Cada ajuste grava, como Origem, a PÁGINA em que ele estava
+  // (editável); depois exporta tudo agrupado por página pra mandar pro Claude.
+  // Dados: KV via /ajustes (worker.js, prefixo "ajuste:").
+  // AJ_PURE_START
+  function ajustesMarkdown(items, onlyPending) {
+    var list = (items || []).filter(function (i) { return !onlyPending || i.status !== "feito"; });
+    var groups = {};
+    list.forEach(function (i) { var k = i.origemLabel || i.origem || "Sem origem"; (groups[k] = groups[k] || []).push(i); });
+    var names = Object.keys(groups).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); });
+    var out = ["# Ajustes do Meu Hub" + (onlyPending ? " (pendentes)" : ""), "", list.length + " ajuste(s) em " + names.length + " página(s).", ""];
+    names.forEach(function (n) {
+      out.push("## " + n, "");
+      groups[n].slice().sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); }).forEach(function (i) {
+        var tag = i.tipo ? "[" + i.tipo + "] " : "";
+        var d = String(i.createdAt || "").slice(0, 10);
+        out.push("- " + (i.status === "feito" ? "[x] " : "[ ] ") + tag + String(i.texto || "").replace(/\n+/g, " / ") + (d ? " (" + d + ")" : ""));
+      });
+      out.push("");
+    });
+    return out.join("\n");
+  }
+  // AJ_PURE_END
+  var ajustes = { items: [], loaded: false, loading: false, filter: "pendente", editingId: null, built: false, el: {} };
+  var AJUSTE_TIPOS_UI = [{ k: "", t: "Tipo (opcional)" }, { k: "bug", t: "🐞 Bug" }, { k: "melhoria", t: "✨ Melhoria" }, { k: "ideia", t: "💡 Ideia" }];
+
+  function ajustesPageOptions() {
+    return Object.keys(cfg.pages || {}).map(function (id) { return { id: id, label: (cfg.pages[id] && cfg.pages[id].title) || id }; })
+      .sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+  }
+  function ajustesFillOriginSelect(sel, value) {
+    sel.innerHTML = "";
+    var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "🌐 Geral (sem página)"; sel.appendChild(o0);
+    ajustesPageOptions().forEach(function (p) { var o = document.createElement("option"); o.value = p.id; o.textContent = p.label; sel.appendChild(o); });
+    sel.value = value || "";
+  }
+  function ajustesOrigemLabel(id) { return id && cfg.pages[id] ? (cfg.pages[id].title || id) : ""; }
+  function ajustesApi(path, opts) {
+    return authFetch(cfg.templateWorkerUrl + path, opts).then(function (r) {
+      if (r.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Sessão expirada"); }
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+  function ajustesLoad() {
+    ajustes.loading = true; ajustesRenderList();
+    return ajustesApi("/ajustes").then(function (d) { ajustes.items = (d && d.items) || []; ajustes.loaded = true; })
+      .catch(function (e) { ajustes.error = e.message; })
+      .then(function () { ajustes.loading = false; ajustesRenderList(); ajustesUpdateBadge(); });
+  }
+  function ajustesUpdateBadge() {
+    var b = document.getElementById("ajustesBtn"); if (!b) return;
+    var n = ajustes.items.filter(function (i) { return i.status !== "feito"; }).length;
+    b.classList.toggle("has-pending", n > 0);
+    b.title = n ? "Ajustes (" + n + " pendente" + (n > 1 ? "s" : "") + ")" : "Ajustes — anotar algo pra melhorar no app";
+  }
+  function ajustesDownloadMd(text) {
+    var url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
+    var a = document.createElement("a"); a.href = url; a.download = "ajustes-meu-hub-" + financeiroTodaySP() + ".md";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  }
+  function ajustesFlash(btn, text) { var old = btn.innerHTML; btn.innerHTML = text; setTimeout(function () { btn.innerHTML = old; }, 1500); }
+
+  function ajustesBuild() {
+    if (ajustes.built) return;
+    ajustes.built = true;
+    var bd = document.createElement("div"); bd.className = "ajustes-backdrop"; bd.id = "ajustesBackdrop"; bd.style.display = "none";
+    var panel = document.createElement("div"); panel.className = "ajustes-panel";
+    bd.appendChild(panel);
+    bd.addEventListener("mousedown", function (e) { if (e.target === bd) ajustesClose(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && bd.style.display !== "none") ajustesClose(); });
+
+    var head = document.createElement("div"); head.className = "ajustes-head";
+    var h = document.createElement("h3"); h.innerHTML = '<i class="ti ti-bulb"></i> Ajustes do app'; head.appendChild(h);
+    var x = document.createElement("button"); x.type = "button"; x.className = "ajustes-x"; x.innerHTML = '<i class="ti ti-x"></i>'; x.title = "Fechar";
+    x.addEventListener("click", ajustesClose); head.appendChild(x);
+    panel.appendChild(head);
+
+    // formulário rápido
+    var form = document.createElement("div"); form.className = "ajustes-form";
+    var ta = document.createElement("textarea"); ta.className = "ajustes-text"; ta.rows = 3; ta.placeholder = "O que você quer ajustar? (ex: botão X maior, mostrar total no topo…)";
+    var row = document.createElement("div"); row.className = "ajustes-row";
+    var selO = document.createElement("select"); selO.className = "ajustes-select"; selO.title = "Origem (página do app)";
+    var selT = document.createElement("select"); selT.className = "ajustes-select";
+    AJUSTE_TIPOS_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; selT.appendChild(o); });
+    var add = document.createElement("button"); add.type = "button"; add.className = "ajustes-add"; add.innerHTML = '<i class="ti ti-plus"></i> Anotar';
+    row.appendChild(selO); row.appendChild(selT); row.appendChild(add);
+    var err = document.createElement("div"); err.className = "ajustes-err"; err.style.display = "none";
+    form.appendChild(ta); form.appendChild(row); form.appendChild(err);
+    panel.appendChild(form);
+    function save() {
+      var texto = ta.value.trim(); if (!texto) { ta.focus(); return; }
+      add.disabled = true; err.style.display = "none";
+      ajustesApi("/ajustes", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto: texto, origem: selO.value, origemLabel: ajustesOrigemLabel(selO.value), tipo: selT.value }) })
+        .then(function (d) { ta.value = ""; selT.value = ""; if (d && d.item) ajustes.items.unshift(d.item); ajustes.filter = ajustes.filter === "feito" ? "pendente" : ajustes.filter; ajustesRenderList(); ajustesUpdateBadge(); ta.focus(); })
+        .catch(function (e) { err.textContent = "Não consegui salvar (" + e.message + "). O texto continua aqui — tente de novo."; err.style.display = ""; })
+        .then(function () { add.disabled = false; });
+    }
+    add.addEventListener("click", save);
+    ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } });
+
+    // filtros + export
+    var bar = document.createElement("div"); bar.className = "ajustes-bar";
+    var pills = document.createElement("div"); pills.className = "ajustes-pills";
+    var exp = document.createElement("div"); exp.className = "ajustes-export";
+    var bCopy = document.createElement("button"); bCopy.type = "button"; bCopy.className = "ajustes-btn"; bCopy.innerHTML = '<i class="ti ti-copy"></i> Copiar pendentes';
+    var bDown = document.createElement("button"); bDown.type = "button"; bDown.className = "ajustes-btn"; bDown.innerHTML = '<i class="ti ti-download"></i> .md';
+    bCopy.addEventListener("click", function () {
+      var md = ajustesMarkdown(ajustes.items, true);
+      financeiroCopyToClipboard(md); ajustesFlash(bCopy, '<i class="ti ti-check"></i> Copiado');
+    });
+    bDown.addEventListener("click", function () { ajustesDownloadMd(ajustesMarkdown(ajustes.items, ajustes.filter !== "todos" && ajustes.filter !== "feito")); });
+    exp.appendChild(bCopy); exp.appendChild(bDown);
+    bar.appendChild(pills); bar.appendChild(exp);
+    panel.appendChild(bar);
+
+    var list = document.createElement("div"); list.className = "ajustes-list";
+    panel.appendChild(list);
+    document.body.appendChild(bd);
+    ajustes.el = { bd: bd, ta: ta, selO: selO, selT: selT, pills: pills, list: list };
+  }
+
+  function ajustesRenderList() {
+    if (!ajustes.built) return;
+    var E = ajustes.el;
+    E.pills.innerHTML = "";
+    var counts = { pendente: 0, feito: 0, todos: ajustes.items.length };
+    ajustes.items.forEach(function (i) { if (i.status === "feito") counts.feito++; else counts.pendente++; });
+    [["pendente", "Pendentes"], ["feito", "Feitos"], ["todos", "Todos"]].forEach(function (p) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "ajustes-pill" + (ajustes.filter === p[0] ? " active" : "");
+      b.textContent = p[1] + " (" + counts[p[0]] + ")";
+      b.addEventListener("click", function () { ajustes.filter = p[0]; ajustesRenderList(); });
+      E.pills.appendChild(b);
+    });
+    E.list.innerHTML = "";
+    if (ajustes.loading && !ajustes.loaded) { var l = document.createElement("p"); l.className = "ajustes-empty"; l.textContent = "Carregando…"; E.list.appendChild(l); return; }
+    if (ajustes.error && !ajustes.loaded) { var er = document.createElement("p"); er.className = "ajustes-empty"; er.textContent = "Erro ao carregar: " + ajustes.error + " (o Worker já foi republicado?)"; E.list.appendChild(er); return; }
+    var items = ajustes.items.filter(function (i) { return ajustes.filter === "todos" || (ajustes.filter === "feito" ? i.status === "feito" : i.status !== "feito"); });
+    if (!items.length) { var em = document.createElement("p"); em.className = "ajustes-empty"; em.textContent = ajustes.filter === "pendente" ? "Nada pendente. Anote acima o que quiser melhorar." : "Nada aqui."; E.list.appendChild(em); return; }
+    var groups = {};
+    items.forEach(function (i) { var k = i.origem ? (ajustesOrigemLabel(i.origem) || i.origemLabel || i.origem) : "🌐 Geral"; (groups[k] = groups[k] || []).push(i); });
+    Object.keys(groups).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (name) {
+      var gh = document.createElement("div"); gh.className = "ajustes-group"; gh.textContent = name + " · " + groups[name].length; E.list.appendChild(gh);
+      groups[name].sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).forEach(function (it) { E.list.appendChild(ajustesItemEl(it)); });
+    });
+  }
+
+  function ajustesItemEl(it) {
+    var el = document.createElement("div"); el.className = "ajustes-item" + (it.status === "feito" ? " done" : "");
+    var chk = document.createElement("input"); chk.type = "checkbox"; chk.checked = it.status === "feito"; chk.title = "Marcar como feito";
+    chk.addEventListener("change", function () {
+      var st = chk.checked ? "feito" : "pendente";
+      ajustesApi("/ajustes?id=" + encodeURIComponent(it.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: st }) })
+        .then(function (d) { if (d && d.item) Object.assign(it, d.item); ajustesRenderList(); ajustesUpdateBadge(); })
+        .catch(function () { chk.checked = !chk.checked; });
+    });
+    el.appendChild(chk);
+    var main = document.createElement("div"); main.className = "ajustes-main"; el.appendChild(main);
+    if (ajustes.editingId === it.id) {
+      var ta = document.createElement("textarea"); ta.className = "ajustes-text"; ta.rows = 3; ta.value = it.texto;
+      var so = document.createElement("select"); so.className = "ajustes-select"; ajustesFillOriginSelect(so, it.origem);
+      var st = document.createElement("select"); st.className = "ajustes-select";
+      AJUSTE_TIPOS_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; st.appendChild(o); }); st.value = it.tipo || "";
+      var ok = document.createElement("button"); ok.type = "button"; ok.className = "ajustes-add"; ok.textContent = "Salvar";
+      var cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "ajustes-btn"; cancel.textContent = "Cancelar";
+      ok.addEventListener("click", function () {
+        var texto = ta.value.trim(); if (!texto) return;
+        ajustesApi("/ajustes?id=" + encodeURIComponent(it.id), { method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texto: texto, origem: so.value, origemLabel: ajustesOrigemLabel(so.value), tipo: st.value }) })
+          .then(function (d) { if (d && d.item) Object.assign(it, d.item); ajustes.editingId = null; ajustesRenderList(); });
+      });
+      cancel.addEventListener("click", function () { ajustes.editingId = null; ajustesRenderList(); });
+      var r = document.createElement("div"); r.className = "ajustes-row"; r.appendChild(so); r.appendChild(st); r.appendChild(ok); r.appendChild(cancel);
+      main.appendChild(ta); main.appendChild(r);
+      return el;
+    }
+    var tx = document.createElement("div"); tx.className = "ajustes-item-text"; tx.textContent = it.texto; main.appendChild(tx);
+    var meta = document.createElement("div"); meta.className = "ajustes-meta";
+    var parts = [];
+    if (it.tipo) { var tt = AJUSTE_TIPOS_UI.filter(function (t) { return t.k === it.tipo; })[0]; if (tt) parts.push(tt.t); }
+    if (it.createdAt) parts.push(financeiroFormatDate(String(it.createdAt).slice(0, 10)));
+    meta.textContent = parts.join(" · "); main.appendChild(meta);
+    var acts = document.createElement("div"); acts.className = "ajustes-acts";
+    var be = document.createElement("button"); be.type = "button"; be.className = "ajustes-icon"; be.title = "Editar"; be.innerHTML = '<i class="ti ti-pencil"></i>';
+    be.addEventListener("click", function () { ajustes.editingId = it.id; ajustesRenderList(); });
+    var bx = document.createElement("button"); bx.type = "button"; bx.className = "ajustes-icon"; bx.title = "Excluir"; bx.innerHTML = '<i class="ti ti-trash"></i>';
+    bx.addEventListener("click", function () {
+      if (!window.confirm("Excluir este ajuste?")) return;
+      ajustesApi("/ajustes?id=" + encodeURIComponent(it.id), { method: "DELETE" }).then(function () {
+        ajustes.items = ajustes.items.filter(function (x) { return x.id !== it.id; }); ajustesRenderList(); ajustesUpdateBadge();
+      });
+    });
+    acts.appendChild(be); acts.appendChild(bx); el.appendChild(acts);
+    return el;
+  }
+
+  function ajustesOpen() {
+    ajustesBuild();
+    var E = ajustes.el;
+    // origem = página em que ele ESTÁ agora (só troca se o campo de texto estiver vazio, pra não bagunçar um rascunho)
+    if (!E.ta.value.trim() || !E.selO.options.length) ajustesFillOriginSelect(E.selO, currentId);
+    E.bd.style.display = "flex";
+    document.getElementById("ajustesBtn").setAttribute("aria-expanded", "true");
+    ajustesLoad();
+    setTimeout(function () { E.ta.focus(); }, 50);
+  }
+  function ajustesClose() {
+    if (!ajustes.built) return;
+    ajustes.el.bd.style.display = "none";
+    var b = document.getElementById("ajustesBtn"); if (b) b.setAttribute("aria-expanded", "false");
+  }
+  (function () {
+    var b = document.getElementById("ajustesBtn");
+    if (b) b.addEventListener("click", function () { if (ajustes.built && ajustes.el.bd.style.display !== "none") ajustesClose(); else ajustesOpen(); });
+  })();
+
   // estado global (só em memória): abre SEMPRE exibindo; o olho do header alterna
   var privacyOn = false;
   function paintPrivacyEye() {
