@@ -7034,6 +7034,44 @@ html, body {
   color: #2f2e2a;
 }
 
+/* Endereço do Local (busca no Google Places) */
+.saude-endereco-box {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #faf9f6;
+  border: 1px solid #e5e3dc;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #4a4842;
+  min-width: 220px;
+  max-width: 340px;
+  white-space: normal;
+  cursor: default;
+}
+.saude-endereco-item + .saude-endereco-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e3dc;
+}
+.saude-endereco-nome { font-weight: 600; color: #2f2e2a; }
+.saude-endereco-end { margin-top: 2px; }
+.saude-endereco-tel { margin-top: 2px; color: #847f73; }
+.saude-endereco-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.saude-endereco-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid #d9d6cc;
+  border-radius: 6px;
+  background: #fff;
+  color: #2f2e2a;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.saude-endereco-act:hover { background: #eeede9; }
+
 @media (max-width: 640px) {
   .emprestimos-add-input,
   .emprestimos-add-select { flex-basis: 100%; }

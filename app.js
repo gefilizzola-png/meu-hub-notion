@@ -12946,6 +12946,91 @@
     });
     wrap.appendChild(copyBtn);
 
+    // Botão "Buscar endereço" (pedido do Georges: buscar o Local no Google e mostrar o
+    // endereço pra jogar no Maps/Waze). Consulta o Worker (GET /local-endereco → Google
+    // Places) A CADA clique — sem cache, porque o endereço pode mudar. Nada é gravado.
+    var addrBox = null;
+    var addrBtn = document.createElement("button");
+    addrBtn.type = "button";
+    addrBtn.className = "saude-local-btn";
+    addrBtn.title = "Buscar endereço no Google";
+    addrBtn.innerHTML = '<i class="ti ti-search"></i>';
+    addrBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (addrBox) { addrBox.remove(); addrBox = null; return; }
+      addrBox = document.createElement("div");
+      addrBox.className = "saude-endereco-box";
+      addrBox.addEventListener("click", function (ev) { ev.stopPropagation(); });
+      addrBox.textContent = "Buscando endereço…";
+      cell.appendChild(addrBox);
+      authFetch(cfg.templateWorkerUrl + "/local-endereco?q=" + encodeURIComponent(local))
+        .then(handle401Generic)
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (!addrBox) return;
+          if (!res.ok) throw new Error((res.data && res.data.error) || "Falha ao buscar endereço");
+          var places = (res.data && res.data.places) || [];
+          addrBox.textContent = "";
+          if (!places.length) { addrBox.textContent = "Nenhum resultado no Google para “" + local + "”."; return; }
+          places.forEach(function (p) {
+            var item = document.createElement("div");
+            item.className = "saude-endereco-item";
+            var nm = document.createElement("div");
+            nm.className = "saude-endereco-nome";
+            nm.textContent = p.nome || local;
+            item.appendChild(nm);
+            var ad = document.createElement("div");
+            ad.className = "saude-endereco-end";
+            ad.textContent = p.endereco || "(sem endereço)";
+            item.appendChild(ad);
+            if (p.telefone) {
+              var tel = document.createElement("div");
+              tel.className = "saude-endereco-tel";
+              tel.textContent = p.telefone;
+              item.appendChild(tel);
+            }
+            var actions = document.createElement("div");
+            actions.className = "saude-endereco-actions";
+            var q = p.endereco || p.nome || local;
+            var mapsHref = (p.lat != null && p.lng != null)
+              ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q)
+              : (p.mapsUrl || "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q));
+            var wazeHref = (p.lat != null && p.lng != null)
+              ? "https://waze.com/ul?ll=" + p.lat + "%2C" + p.lng + "&navigate=yes"
+              : "https://waze.com/ul?q=" + encodeURIComponent(q) + "&navigate=yes";
+            function mkLink(label, icon, href) {
+              var a = document.createElement("a");
+              a.className = "saude-endereco-act";
+              a.href = href; a.target = "_blank"; a.rel = "noopener";
+              a.innerHTML = '<i class="ti ' + icon + '"></i> ' + label;
+              actions.appendChild(a);
+            }
+            mkLink("Maps", "ti-map-pin", mapsHref);
+            mkLink("Waze", "ti-brand-waze", wazeHref);
+            var cp = document.createElement("button");
+            cp.type = "button";
+            cp.className = "saude-endereco-act";
+            cp.innerHTML = '<i class="ti ti-copy"></i> Copiar';
+            cp.addEventListener("click", function () {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(p.endereco || q).then(function () {
+                  cp.innerHTML = '<i class="ti ti-check"></i> Copiado';
+                  setTimeout(function () { cp.innerHTML = '<i class="ti ti-copy"></i> Copiar'; }, 1200);
+                }).catch(function () {});
+              }
+            });
+            actions.appendChild(cp);
+            item.appendChild(actions);
+            addrBox.appendChild(item);
+          });
+        })
+        .catch(function (err) {
+          if (addrBox) addrBox.textContent = "Erro: " + err.message;
+        });
+    });
+    wrap.appendChild(addrBtn);
+
     cell.appendChild(wrap);
   }
 
@@ -26186,6 +26271,17 @@
         container.appendChild(dividerPassagens);
       }
       renderPassagensPage(container, page);
+      renderedSomething = true;
+    }
+
+    // "page.consultasExames" — Saúde / Exames e Consultas. Ver renderSaudePage.
+    if (page.consultasExames) {
+      if (renderedSomething) {
+        var dividerSaude = document.createElement("hr");
+        dividerSaude.className = "content-divider";
+        container.appendChild(dividerSaude);
+      }
+      renderSaudePage(container, page);
       renderedSomething = true;
     }
 
