@@ -2318,6 +2318,8 @@
         if (d1 && d2) sub.push({ text: d1 + " - " + d2 });
         else if (d1) sub.push({ text: d1 });
         else if (d2) sub.push({ text: d2 });
+      } else if (cf.type === "static") {
+        if (cf.text) sub.push({ text: cf.text, color: cf.color || "" });
       } else if (cf.type === "relation" && cf.lookup === "andamento") {
         var opt = findAndamentoOption(raw);
         if (opt) sub.push({ text: opt.label, color: opt.color });
@@ -2760,8 +2762,35 @@
         if (crossExtra.length) url += "&crossExtra=" + encodeURIComponent(JSON.stringify(crossExtra));
       }
 
+      // "qDef.extraSources" (opcional — só "🗓️ Outros eventos" do Painel do Dia usa): bases
+      // Notion ADICIONAIS cujas páginas entram na MESMA lista (depois das da consulta
+      // principal), cada uma com seus próprios baseFilters/sorts/cardFields. Falha numa
+      // fonte extra não derruba a principal (vira lista vazia).
+      function fetchExtraSource(src) {
+        var u = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(src.database_id) +
+          "&filters=" + encodeURIComponent(JSON.stringify(src.baseFilters || []));
+        if (src.sorts && src.sorts.length) u += "&sorts=" + encodeURIComponent(JSON.stringify(src.sorts));
+        var ex = (src.cardFields || []).filter(function (cf) { return cf.property; }).map(function (cf) { return cf.property; });
+        if (ex.length) u += "&extra=" + encodeURIComponent(JSON.stringify(ex));
+        return authFetch(u)
+          .then(function (r) { return r.ok ? r.json() : { pages: [] }; })
+          .then(function (d) {
+            return ((d && d.pages) || []).map(function (pg) { pg._cardFields = src.cardFields; return pg; });
+          })
+          .catch(function () { return []; });
+      }
+
       authFetch(url)
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); })
+        .then(function (result) {
+          if (!result.ok || !qDef.extraSources || !qDef.extraSources.length) return result;
+          return Promise.all(qDef.extraSources.map(fetchExtraSource)).then(function (lists) {
+            var merged = (result.data.pages || []).slice();
+            lists.forEach(function (l) { merged = merged.concat(l); });
+            result.data.pages = merged;
+            return result;
+          });
+        })
         .then(function (result) {
           if (currentId !== ownerPageId) return; // usuário já navegou pra outro lugar enquanto buscava
           resultsWrap.innerHTML = "";
@@ -2811,7 +2840,7 @@
           // uma vez só.
           var relatoriaQueue = [];
           pages.forEach(function (p) {
-            var sub = buildCardSub(qDef.cardFields, p.extra);
+            var sub = buildCardSub(p._cardFields || qDef.cardFields, p.extra || {});
             var el = buildItemEl({ label: p.title, type: "notion", url: p.url, sub: sub }, 100);
             resultsWrap.appendChild(el);
             if (qDef.relatoriaCheck && p.id) relatoriaQueue.push({ p: p, el: el });
@@ -13085,13 +13114,13 @@
   // copiar deixa o nome pronto pra colar em qualquer outro app (Waze
   // inclusive). stopPropagation() nos 2 botões pra não disparar o clique da
   // linha inteira (que abre a página no Notion).
-  function saudeAppendLocalCell(cell, local) {
+  function saudeAppendLocalCell(cell, local, iconCls) {
     if (!local) { cell.textContent = "—"; return; }
     var wrap = document.createElement("span");
     wrap.className = "saude-local-inline saude-local-card";
     var pinEl = document.createElement("span");
     pinEl.className = "saude-local-pin";
-    pinEl.innerHTML = '<i class="ti ti-building-hospital"></i>';
+    pinEl.innerHTML = '<i class="ti ' + (iconCls || 'ti-building-hospital') + '"></i>';
     wrap.appendChild(pinEl);
     var textSpan = document.createElement("span");
     textSpan.className = "saude-local-name";
@@ -13689,6 +13718,330 @@
       applyState();
     }).catch(function (err) {
       statusEl.textContent = "Erro ao buscar consultas e exames: " + err.message;
+    });
+  }
+
+  // ---------------- "page.eventosFestas" — Eventos/Festas (Pessoal, 100% leitura, mesmo modelo de Exames e Consultas) ----------------
+  // Base Notion "Eventos/Festas" (ver EVENTOS_DATABASE_ID em config.js): Nome (title),
+  // Tipo de Evento (select: Aniversário/Casamento/Evento Escolar/Show), Destinatário
+  // (select: Família/Georges/Letícia/Vitor), Localização (TEXTO livre), Data do Evento (date).
+  // Reaproveita o card de Local de Saúde (Maps/Waze/copiar/buscar endereço) e as classes
+  // CSS "saude-*" (tabela, chips, hide-<key>).
+  var EVENTOS_TIPO_ICON = { "Aniversário": "🎂", "Casamento": "💒", "Evento Escolar": "🎒", "Show": "🎤" };
+  function eventosTipoIcon(tipo) { return EVENTOS_TIPO_ICON[tipo] || "🎉"; }
+  function eventosItemFromPage(p) {
+    var extra = p.extra || {};
+    function sel(key) { var v = extra[key]; if (Array.isArray(v)) v = v[0]; return (v && v.name) ? v.name : null; }
+    var dv = extra["Data do Evento"];
+    var startRaw = (dv && dv.start) ? String(dv.start) : null;
+    var dataISO = startRaw ? startRaw.slice(0, 10) : null;
+    var loc = extra["Localização"];
+    if (Array.isArray(loc)) loc = loc.join(" ");
+    return {
+      id: p.id,
+      url: p.url,
+      nome: p.title || "(sem título)",
+      tipoEvento: sel("Tipo de Evento"),
+      destinatario: sel("Destinatário"),
+      localizacao: (typeof loc === "string" && loc.trim()) ? loc.trim() : null,
+      dataEvento: dataISO,
+      // "Data do Evento" pode ter hora (datetime "YYYY-MM-DDTHH:MM...") — vira "HH:MM" tal como escrito no Notion.
+      hora: (startRaw && startRaw.length > 10 && startRaw.charAt(10) === "T") ? startRaw.slice(11, 16) : null,
+      diasAte: provasDiasAte(dataISO)
+    };
+  }
+  var EVENTOS_EXTRA_FIELDS = ["Tipo de Evento", "Destinatário", "Localização", "Data do Evento"];
+
+  function renderEventosPage(container, page) {
+    var ecfg = page.eventosFestas || {};
+    var databaseId = ecfg.database_id;
+
+    var wrap = document.createElement("div");
+    wrap.className = "passagens-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "🎉 Eventos/Festas";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando eventos…";
+    wrap.appendChild(statusEl);
+
+    if (!databaseId) {
+      statusEl.textContent = "Configuração incompleta: falta database_id em page.eventosFestas.";
+      return;
+    }
+
+    var allEv = [];
+    var state = {
+      search: "", sortKey: "dataEvento", sortDir: 1,
+      tipoSelected: [], destSelected: [], localSelected: [],
+      dataFilter: null,
+      statusCycle: "pending"
+    };
+    var body = document.createElement("div");
+
+    function matchesFilters(it) {
+      if (state.search) {
+        var s = normalize(state.search);
+        var hay = normalize([it.nome, it.tipoEvento, it.destinatario, it.localizacao].filter(Boolean).join(" "));
+        if (hay.indexOf(s) === -1) return false;
+      }
+      if (state.tipoSelected.length && state.tipoSelected.indexOf(it.tipoEvento) === -1) return false;
+      if (state.destSelected.length && state.destSelected.indexOf(it.destinatario) === -1) return false;
+      if (state.localSelected.length && state.localSelected.indexOf(it.localizacao) === -1) return false;
+      if (state.statusCycle === "pending") {
+        if (it.diasAte !== null && it.diasAte < 0) return false;
+      } else if (state.statusCycle === "past") {
+        if (it.diasAte === null || it.diasAte >= 0) return false;
+      }
+      if (state.dataFilter) {
+        var df = state.dataFilter;
+        if (!it.dataEvento) return false;
+        if (df.from && df.to) { if (it.dataEvento < df.from || it.dataEvento > df.to) return false; }
+        else if (df.from) { if (it.dataEvento !== df.from) return false; }
+        else if (df.to) { if (it.dataEvento !== df.to) return false; }
+      }
+      return true;
+    }
+
+    function sortEv(list) {
+      var arr = list.slice();
+      var key = state.sortKey, dir = state.sortDir;
+      arr.sort(function (a, b) {
+        var av, bv;
+        if (key === "nome") { av = a.nome || ""; bv = b.nome || ""; }
+        else if (key === "tipoEvento") { av = a.tipoEvento || ""; bv = b.tipoEvento || ""; }
+        else if (key === "destinatario") { av = a.destinatario || ""; bv = b.destinatario || ""; }
+        else if (key === "localizacao") { av = a.localizacao || ""; bv = b.localizacao || ""; }
+        else { av = (a.dataEvento || "9999-99-99") + " " + (a.hora || "00:00"); bv = (b.dataEvento || "9999-99-99") + " " + (b.hora || "00:00"); }
+        return dir * String(av).localeCompare(String(bv), "pt-BR");
+      });
+      return arr;
+    }
+
+    function optionsFrom(key) {
+      var seen = {}, out = [];
+      allEv.forEach(function (it) {
+        var v = it[key];
+        if (!v || seen[v]) return;
+        seen[v] = true;
+        out.push({ label: v, pageId: v });
+      });
+      out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+      return out;
+    }
+
+    var tipoWrap = document.createElement("div");
+    var destWrap = document.createElement("div");
+    var localWrap = document.createElement("div");
+    var dataFilterWrap = document.createElement("div");
+
+    function buildFiltersBar() {
+      tipoWrap.innerHTML = "";
+      tipoWrap.appendChild(buildIconDropdown(
+        { property: "Tipo de Evento", type: "select", label: "Tipo de Evento", icon: "ti-confetti", options: optionsFrom("tipoEvento") },
+        function (opts) { state.tipoSelected = opts.map(function (o) { return o.pageId; }); renderTable(); }
+      ));
+      destWrap.innerHTML = "";
+      destWrap.appendChild(buildIconDropdown(
+        { property: "Destinatário", type: "select", label: "Destinatário", icon: "ti-users", options: optionsFrom("destinatario") },
+        function (opts) { state.destSelected = opts.map(function (o) { return o.pageId; }); renderTable(); }
+      ));
+      localWrap.innerHTML = "";
+      localWrap.appendChild(buildIconDropdown(
+        { property: "Localização", type: "select", label: "Localização", icon: "ti-map-pin", searchable: true, options: optionsFrom("localizacao") },
+        function (opts) { state.localSelected = opts.map(function (o) { return o.pageId; }); renderTable(); }
+      ));
+      dataFilterWrap.innerHTML = "";
+      dataFilterWrap.appendChild(buildLocalDateRangeFilter(
+        { label: "Data do Evento" },
+        function (val) { state.dataFilter = val; renderTable(); }
+      ));
+    }
+
+    var controls = document.createElement("div");
+    controls.className = "legislacoes-controls";
+
+    var CYCLE = ["pending", "all", "past"];
+    var CYCLE_LABEL = { pending: "Próximos", all: "Todos", past: "Passados" };
+    var CYCLE_ICON = { pending: "ti-calendar-event", all: "ti-list", past: "ti-history" };
+    var statusCycleBtn = document.createElement("button");
+    statusCycleBtn.type = "button";
+    function updateStatusCycleBtn() {
+      statusCycleBtn.className = "provas-status-cycle-btn provas-status-cycle-" + state.statusCycle;
+      statusCycleBtn.innerHTML = '<i class="ti ' + CYCLE_ICON[state.statusCycle] + '"></i> ' + CYCLE_LABEL[state.statusCycle];
+      statusCycleBtn.title = "Clique para alternar (Próximos → Todos → Passados)";
+    }
+    statusCycleBtn.addEventListener("click", function () {
+      state.statusCycle = CYCLE[(CYCLE.indexOf(state.statusCycle) + 1) % CYCLE.length];
+      updateStatusCycleBtn();
+      renderTable();
+    });
+    updateStatusCycleBtn();
+    controls.appendChild(statusCycleBtn);
+
+    var searchSection = buildCollapsibleSection("Pesquisar");
+    var filterSection = buildCollapsibleSection("Filtrar");
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Buscar por nome, tipo, destinatário, local…";
+    searchInput.className = "aniversarios-search-input";
+    searchInput.addEventListener("input", function () {
+      state.search = searchInput.value.trim();
+      renderTable();
+    });
+    searchSection.body.appendChild(withSearchClear(searchInput));
+
+    var filterBarWrap = document.createElement("div");
+    filterBarWrap.className = "legislacoes-filterbar";
+    filterBarWrap.appendChild(tipoWrap);
+    filterBarWrap.appendChild(destWrap);
+    filterBarWrap.appendChild(localWrap);
+    filterBarWrap.appendChild(dataFilterWrap);
+    filterSection.body.appendChild(filterBarWrap);
+
+    var clearFiltersBtn = document.createElement("button");
+    clearFiltersBtn.type = "button";
+    clearFiltersBtn.className = "search-clear-btn";
+    clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearFiltersBtn.addEventListener("click", function () {
+      state.search = ""; searchInput.value = "";
+      state.tipoSelected = []; state.destSelected = []; state.localSelected = [];
+      state.dataFilter = null;
+      buildFiltersBar();
+      renderTable();
+    });
+    filterSection.body.appendChild(clearFiltersBtn);
+
+    controls.appendChild(searchSection.section);
+    controls.appendChild(filterSection.section);
+    wrap.appendChild(controls);
+    wrap.appendChild(body);
+
+    // Larguras estáveis (regra 14): colunas curtas = width:1% + nowrap; só "Nome" absorve o resto.
+    var COLS = [
+      { key: "dataEvento", label: "Data do Evento", cls: "eventos-th-short", sortKey: "dataEvento" },
+      { key: "tipoEvento", label: "Tipo de Evento", cls: "eventos-th-short", sortKey: "tipoEvento" },
+      { key: "destinatario", label: "Destinatário", cls: "eventos-th-short", sortKey: "destinatario" },
+      { key: "localizacao", label: "Localização", cls: "eventos-th-short", sortKey: "localizacao" },
+      { key: "nome", label: "Nome", cls: "eventos-th-nome", sortKey: "nome" }
+    ];
+
+    function buildBodyCell(it, key) {
+      var cell = document.createElement("td");
+      cell.className = "saude-col-" + key;
+      switch (key) {
+        case "nome":
+          cell.textContent = it.nome || "—";
+          if (it.nome) cell.title = it.nome;
+          break;
+        case "tipoEvento":
+          if (it.tipoEvento) cell.appendChild(passagensChip(eventosTipoIcon(it.tipoEvento) + " " + it.tipoEvento));
+          else cell.textContent = "—";
+          break;
+        case "destinatario":
+          if (it.destinatario) cell.appendChild(passagensChip(it.destinatario));
+          else cell.textContent = "—";
+          break;
+        case "localizacao":
+          saudeAppendLocalCell(cell, it.localizacao, "ti-map-pin");
+          break;
+        case "dataEvento":
+          var d = document.createElement("div");
+          d.textContent = transacoesFmtDateBR(it.dataEvento) + (it.hora ? " · " + it.hora : "");
+          cell.appendChild(d);
+          if (it.dataEvento && it.diasAte !== null) {
+            var sub = document.createElement("div");
+            sub.className = "provas-subtle";
+            sub.textContent = provasRelativoLabel(it.diasAte);
+            cell.appendChild(sub);
+          }
+          break;
+      }
+      return cell;
+    }
+
+    function renderTable() {
+      body.innerHTML = "";
+      var filtered = sortEv(allEv.filter(matchesFilters));
+      if (!filtered.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Nenhum evento bate com os filtros.";
+        body.appendChild(empty);
+        return;
+      }
+      var count = document.createElement("p");
+      count.className = "aniversarios-count";
+      count.textContent = filtered.length + (filtered.length === 1 ? " evento" : " eventos");
+      body.appendChild(count);
+
+      var table = document.createElement("table");
+      table.className = "financeiro-table saude-table eventos-table";
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      COLS.forEach(function (col) {
+        var th = document.createElement("th");
+        th.className = "financeiro-th saude-col-" + col.key + " " + col.cls + " financeiro-th-sortable";
+        var thLabel = document.createElement("span");
+        thLabel.className = "financeiro-th-label";
+        thLabel.textContent = col.label;
+        th.appendChild(thLabel);
+        var arrow = document.createElement("span");
+        arrow.className = "financeiro-th-arrow";
+        if (state.sortKey === col.sortKey) {
+          th.classList.add("active");
+          arrow.textContent = state.sortDir === 1 ? "▲" : "▼";
+        }
+        th.appendChild(arrow);
+        th.title = "Clique para classificar por " + col.label;
+        th.addEventListener("click", function () {
+          if (state.sortKey === col.sortKey) { state.sortDir = state.sortDir * -1; }
+          else { state.sortKey = col.sortKey; state.sortDir = 1; }
+          renderTable();
+        });
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      filtered.forEach(function (it) {
+        var row = document.createElement("tr");
+        row.className = "financeiro-row saude-row" + (it.diasAte !== null && it.diasAte >= 0 && it.diasAte <= 2 ? " provas-row-soon" : "");
+        if (it.url) {
+          row.classList.add("provas-row-clickable");
+          row.title = "Abrir no Notion";
+          row.addEventListener("click", function () { window.open(it.url, "_blank", "noopener"); });
+        }
+        COLS.forEach(function (col) { row.appendChild(buildBodyCell(it, col.key)); });
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      body.appendChild(table);
+    }
+
+    var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
+      "&filters=" + encodeURIComponent(JSON.stringify([{ property: "Nome", type: "title", condition: "is_not_empty", value: true }])) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Data do Evento", direction: "ascending" }])) +
+      "&extra=" + encodeURIComponent(JSON.stringify(EVENTOS_EXTRA_FIELDS));
+
+    authFetch(queryUrl).then(handle401Generic).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+    }).then(function (result) {
+      if (!result.ok) throw new Error((result.data && result.data.error) || "Falha ao buscar eventos");
+      var pages = (result.data && result.data.pages) || [];
+      allEv = pages.map(eventosItemFromPage);
+      buildFiltersBar();
+      statusEl.style.display = "none";
+      renderTable();
+    }).catch(function (err) {
+      statusEl.textContent = "Erro ao buscar eventos: " + err.message;
     });
   }
 
@@ -24924,6 +25277,11 @@
         meta.push(dp.suffix === "volta" ? "Volta" : "Ida");
       } else if (src.titleMode === "prova") {
         title = "Prova de " + (selName("Matéria") || p.title);
+      } else if (src.titleMode === "evento") {
+        if (selName("Tipo de Evento")) meta.push("Tipo: " + selName("Tipo de Evento"));
+        if (selName("Destinatário")) meta.push("Para: " + selName("Destinatário"));
+        var locEv = ex["Localização"];
+        if (typeof locEv === "string" && locEv.trim()) meta.push("Local: " + locEv.trim());
       } else {
         if (selName("Tipo de Evento")) meta.push("Tipo: " + selName("Tipo de Evento"));
         if (selName("Situação")) meta.push("Situação: " + selName("Situação"));
@@ -26755,6 +27113,17 @@
         container.appendChild(dividerSaude);
       }
       renderSaudePage(container, page);
+      renderedSomething = true;
+    }
+
+    // "page.eventosFestas" — Pessoal / Eventos/Festas. Ver renderEventosPage.
+    if (page.eventosFestas) {
+      if (renderedSomething) {
+        var dividerEventos = document.createElement("hr");
+        dividerEventos.className = "content-divider";
+        container.appendChild(dividerEventos);
+      }
+      renderEventosPage(container, page);
       renderedSomething = true;
     }
 

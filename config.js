@@ -453,6 +453,27 @@ var PASSAGENS_DATABASE_ID = "3eb0481486dd80ec9a4a000b34532907";
 // Passagens (o Georges cadastra direto no Notion). Ver pages.consultas_exames
 // mais abaixo / renderSaudePage no app.js.
 var SAUDE_DATABASE_ID = "3ec0481486dd803c8997fbe2c2ad26dd";
+// Base "Eventos/Festas" (Pessoal > Vitor no Notion): Nome (title), Tipo de Evento
+// (select: Aniversário/Casamento/Evento Escolar/Show), Destinatário (select:
+// Família/Georges/Letícia/Vitor), Localização (texto livre), Data do Evento (date).
+// template_id = template "Vitor - Eventos - Aniversário - " (botão "Criar no Notion").
+var EVENTOS_DATABASE_ID = "1270481486dd8044b41ac116a14d7caf";
+var EVENTOS_TEMPLATE_ID = "12704814-86dd-80b4-a1dd-d665f6d67988";
+var EVENTOS_NOTION_URL = "https://app.notion.com/p/georges-filizzola/1270481486dd8044b41ac116a14d7caf?v=057186310de44c4fa92d20b40db38606&source=copy_link";
+// Fonte extra da divisória "🗓️ Outros eventos" do Painel do Dia (ver "extraSources" em
+// renderDynamicQueryBlockReady/app.js): soma os Eventos/Festas à lista da Central.
+function eventosExtraSource(dateFilters) {
+  return {
+    database_id: EVENTOS_DATABASE_ID,
+    baseFilters: dateFilters,
+    sorts: [{ property: "Data do Evento", direction: "ascending" }],
+    cardFields: [
+      { type: "static", text: "🎉 Eventos/Festas", color: "#9c36b5" },
+      { property: "Tipo de Evento", type: "select" },
+      { property: "Destinatário", type: "select" }
+    ]
+  };
+}
 
 // "Tags" de família da página de Aniversários (botões de filtro rápido,
 // pedido do Georges) — a "tag" principal de cada pessoa vem AUTOMÁTICO do
@@ -1296,6 +1317,21 @@ var NOTIFICATION_SOURCES = [
       { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
     ]
   },
+  // Eventos/Festas (Pessoal) — base Notion normal, mesmo critério de "saude".
+  {
+    id: "eventos_festas",
+    label: "Eventos/Festas",
+    icon: "🎉",
+    database_id: EVENTOS_DATABASE_ID,
+    baseFilters: [],
+    dateProperty: "Data do Evento",
+    target: { type: "page", target: "eventos_festas" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "7d", amount: 7, unit: "days", label: "7 dias antes" },
+      { id: "1d", amount: 1, unit: "days", label: "1 dia antes" }
+    ]
+  },
   // Aniversários (pedido do Georges). "📚 Página de Origem" = "Pessoal -
   // Aniversários" — mesmo valor usado no bloco "🎂 Aniversários" de Início.
   // SEM exclusão de Andamento de propósito (diferente de todas as outras
@@ -1486,7 +1522,7 @@ var CALENDAR_DONE_ANDAMENTO_IDS = ["d228224dee1d43dabb72744097f10028", "24104814
 // substitui este padrão. "sources" = ids de CALENDAR_SOURCES.
 var CALENDAR_DEFAULT_GROUPS = [
   { id: "pmf", label: "PMF", icon: "🏛️", color: "#4a90d9", sources: ["reunioes", "sessoes", "processos_tat_jart", "tarefas"] },
-  { id: "familia", label: "Família", icon: "👨‍👩‍👦", color: "#e64980", sources: ["aniversarios", "saude", "provas_vitor"] },
+  { id: "familia", label: "Família", icon: "👨‍👩‍👦", color: "#e64980", sources: ["aniversarios", "saude", "provas_vitor", "eventos_festas"] },
   { id: "financeiro", label: "Financeiro", icon: "💰", color: "#2f9e44", sources: ["financeiro", "emprestimos"] },
   { id: "viagens", label: "Viagens", icon: "✈️", color: "#1c7ed6", sources: ["passagens"] },
   { id: "outros", label: "Outros", icon: "📌", color: "#868e96", sources: ["meus_eventos"] }
@@ -1518,6 +1554,10 @@ var CALENDAR_SOURCES = [
   { id: "saude", label: "Consultas e Exames", icon: "🏥", color: "#0c8599", kind: "notion",
     database_id: SAUDE_DATABASE_ID, dateProps: [{ property: "Data da Consulta" }],
     extra: ["Tipo de Evento", "Situação"], target: { type: "page", target: "consultas_exames" }, defaultEnabled: true },
+  { id: "eventos_festas", label: "Eventos/Festas", icon: "🎉", color: "#ae3ec9", kind: "notion",
+    database_id: EVENTOS_DATABASE_ID, dateProps: [{ property: "Data do Evento" }],
+    extra: ["Tipo de Evento", "Destinatário", "Localização"], titleMode: "evento",
+    target: { type: "page", target: "eventos_festas" }, defaultEnabled: true },
   { id: "provas_vitor", label: "Provas do Vitor", icon: "📝", color: "#f76707", kind: "notion",
     database_id: PROVAS_VITOR_DATABASE_ID, dateProps: [{ property: "Data" }],
     extra: ["Matéria"], titleMode: "prova", target: { type: "page", target: "provas_vitor" }, defaultEnabled: true },
@@ -1794,7 +1834,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-05 19:53",
+  appVersion: "2026-10-05 20:24",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2244,6 +2284,7 @@ const APP_CONFIG = {
             {
               id: "outros_eventos",
               title: "🗓️ Outros eventos",
+              extraSources: [eventosExtraSource([{ property: "Data do Evento", type: "date", condition: "equals", value: "today" }])],
               collapsible: true,
               bg: "#f3eefc",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -2427,6 +2468,7 @@ const APP_CONFIG = {
             {
               id: "outros_eventos",
               title: "🗓️ Outros eventos",
+              extraSources: [eventosExtraSource([{ property: "Data do Evento", type: "date", condition: "equals", value: "tomorrow" }])],
               collapsible: true,
               bg: "#f3eefc",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -2600,6 +2642,7 @@ const APP_CONFIG = {
             {
               id: "outros_eventos",
               title: "🗓️ Outros eventos",
+              extraSources: [eventosExtraSource([{ property: "Data do Evento", type: "date", condition: "on_or_after", value: "today" }, { property: "Data do Evento", type: "date", condition: "before", value: "next_7_days" }])],
               collapsible: true,
               bg: "#f3eefc",
               database_id: "2310481486dd80079202fe1eaf5e14c4",
@@ -3243,6 +3286,9 @@ const APP_CONFIG = {
     cat_pessoal: {
       title: "Pessoal",
       items: [
+        // "Eventos/Festas" (pedido do Georges) — aniversários/festas/shows/eventos escolares
+        // com Local. Página real: eventos_festas.
+        { label: "Eventos/Festas", type: "page", target: "eventos_festas", icon: "ti-confetti" },
         { label: "Financeiro", type: "page", target: "financeiro", icon: "wallet" },
         // "Listas" (pedido do Georges — "Mova a pasta Lista de
         // Supermercados para Categorias->Pessoal->Listas"). Saiu de
@@ -3543,6 +3589,32 @@ const APP_CONFIG = {
       ],
       consultasExames: {
         database_id: SAUDE_DATABASE_ID
+      }
+    },
+
+    // "page.eventosFestas" (pedido do Georges: "Eventos/Festas, siga o modelo Exames e
+    // Consultas, pois tem local e tudo") — tabela sortable, Pesquisar/Filtrar recolhíveis,
+    // ciclo Próximos/Todos/Passados, card de Local (Maps/Waze/copiar/endereço). Só leitura
+    // + botão "Criar no Notion" (template de Aniversário). Ver renderEventosPage no app.js.
+    eventos_festas: {
+      title: "Eventos/Festas",
+      itemsCompact: true,
+      itemGroups: [
+        {
+          title: "Abrir",
+          items: [
+            { label: "Eventos/Festas", type: "notion", icon: "notion", url: EVENTOS_NOTION_URL }
+          ]
+        },
+        {
+          title: "Criar no Notion",
+          items: [
+            { label: "Evento/Festa", type: "notion-template", icon: "notion", database_id: EVENTOS_DATABASE_ID, template_id: EVENTOS_TEMPLATE_ID }
+          ]
+        }
+      ],
+      eventosFestas: {
+        database_id: EVENTOS_DATABASE_ID
       }
     },
 
