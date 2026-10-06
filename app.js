@@ -25778,6 +25778,7 @@
         saveFormaBtn.disabled = true;
         updateLoan(loan.id, patch).then(function (res) { return res.json(); }).then(function (data) {
           if (data && data.error) { alert(data.error); return; }
+          state.editingId = null;
           loadLoans();
         }).catch(function () {}).finally(function () { saveFormaBtn.disabled = false; });
       });
@@ -25918,7 +25919,7 @@
         detail.appendChild(metaEl);
 
         if (state.editingId === loan.id) detail.appendChild(buildLoanBasicEditor(loan));
-        detail.appendChild(buildFormaPagamentoEditor(loan));
+        if (state.editingId === loan.id) detail.appendChild(buildFormaPagamentoEditor(loan));
 
         var progressWrap = document.createElement("div");
         progressWrap.className = "emprestimos-progress-wrap";
