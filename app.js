@@ -25254,7 +25254,16 @@
   // página escolhida, "" se nenhuma) — mesmo contrato do <select> antigo,
   // então quem lê "r.select.value" não muda. Busca ignora acentos
   // (normalize) e procura no nome E no caminho (ex: "financeiro").
-  function buildPagePicker(pages, initialTarget, onChange) {
+  function buildPagePicker(pages, initialTarget, onChange, popts) {
+    popts = popts || {};
+    if (popts.emptyLabel) pages = [{ target: "", label: popts.emptyLabel, path: "", icon: "ti-world" }].concat(pages);
+    // nomes repetidos (ex: "Tarefas" em várias pastas): mostra a pasta-mãe ao lado pra diferenciar
+    var labelCount = {};
+    pages.forEach(function (p) { labelCount[p.label] = (labelCount[p.label] || 0) + 1; });
+    function dispName(p) {
+      if (labelCount[p.label] > 1 && p.path) return p.label + " (" + p.path.split(" > ").pop() + ")";
+      return p.label;
+    }
     var current = initialTarget || "";
     var root = document.createElement("div");
     root.className = "page-picker";
@@ -25288,7 +25297,7 @@
     }
 
     function renderTrigger() {
-      var p = current ? findPage(current) : null;
+      var p = current ? findPage(current) : (popts.emptyLabel ? pages[0] : null);
       trigger.innerHTML = "";
       if (p) {
         var ic = document.createElement("i");
@@ -25296,7 +25305,7 @@
         trigger.appendChild(ic);
         var txt = document.createElement("span");
         txt.className = "page-picker-trigger-text";
-        txt.textContent = p.label;
+        txt.textContent = dispName(p);
         trigger.appendChild(txt);
       } else {
         var ph = document.createElement("span");
@@ -25326,7 +25335,7 @@
         box.className = "page-picker-option-text";
         var nm = document.createElement("span");
         nm.className = "page-picker-option-name";
-        nm.textContent = p.label;
+        nm.textContent = dispName(p);
         box.appendChild(nm);
         var pth = document.createElement("span");
         pth.className = "page-picker-option-path";
@@ -25395,6 +25404,7 @@
     searchInput.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.stopPropagation(); close(); } });
 
     Object.defineProperty(root, "value", { get: function () { return current; } });
+    root.setValue = function (t) { current = t || ""; renderTrigger(); };
     renderTrigger();
     return root;
   }
@@ -27322,12 +27332,19 @@
     return Object.keys(cfg.pages || {}).map(function (id) { return { id: id, label: (cfg.pages[id] && cfg.pages[id].title) || id }; })
       .sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
   }
-  function ajustesFillOriginSelect(sel, value) {
-    sel.innerHTML = "";
-    var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "🌐 Geral (sem página)"; sel.appendChild(o0);
-    ajustesPageOptions().forEach(function (p) { var o = document.createElement("option"); o.value = p.id; o.textContent = p.label; sel.appendChild(o); });
-    sel.value = value || "";
+  // páginas alcançáveis pelo menu, com o caminho completo (pastas-mãe) pra diferenciar nomes repetidos
+  function ajustesPickerPages() {
+    var out = [];
+    Object.keys(cfg.pages || {}).forEach(function (id) {
+      if (id !== cfg.startPage && !(id in parentOf)) return;
+      var chain = pathToPage(id);
+      var path = chain.slice(0, -1).map(function (x) { return (cfg.pages[x] && cfg.pages[x].title) || x; }).join(" > ");
+      out.push({ target: id, label: (cfg.pages[id] && cfg.pages[id].title) || id, path: path, icon: "ti-file" });
+    });
+    out.sort(function (x, y) { return x.label.localeCompare(y.label, "pt-BR") || x.path.localeCompare(y.path, "pt-BR"); });
+    return out;
   }
+  function ajustesBuildOriginPicker(value) { return buildPagePicker(ajustesPickerPages(), value || "", null, { emptyLabel: "🌐 Geral (sem página)" }); }
   function ajustesOrigemLabel(id) { return id && cfg.pages[id] ? (cfg.pages[id].title || id) : ""; }
   function ajustesApi(path, opts) {
     return authFetch(cfg.templateWorkerUrl + path, opts).then(function (r) {
@@ -27375,7 +27392,7 @@
     var form = document.createElement("div"); form.className = "ajustes-form";
     var ta = document.createElement("textarea"); ta.className = "ajustes-text"; ta.rows = 3; ta.placeholder = "O que você quer ajustar? (ex: botão X maior, mostrar total no topo…)";
     var row = document.createElement("div"); row.className = "ajustes-row";
-    var selO = document.createElement("select"); selO.className = "ajustes-select"; selO.title = "Origem (página do app)";
+    var selO = ajustesBuildOriginPicker(""); selO.classList.add("ajustes-page-picker"); selO.title = "Origem (página do app)";
     var selT = document.createElement("select"); selT.className = "ajustes-select";
     AJUSTE_TIPOS_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; selT.appendChild(o); });
     var selP = document.createElement("select"); selP.className = "ajustes-select"; selP.title = "Prioridade";
@@ -27457,7 +27474,7 @@
     var main = document.createElement("div"); main.className = "ajustes-main"; el.appendChild(main);
     if (ajustes.editingId === it.id) {
       var ta = document.createElement("textarea"); ta.className = "ajustes-text"; ta.rows = 3; ta.value = it.texto;
-      var so = document.createElement("select"); so.className = "ajustes-select"; ajustesFillOriginSelect(so, it.origem);
+      var so = ajustesBuildOriginPicker(it.origem); so.classList.add("ajustes-page-picker");
       var st = document.createElement("select"); st.className = "ajustes-select";
       AJUSTE_TIPOS_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; st.appendChild(o); }); st.value = it.tipo || "";
       var sp = document.createElement("select"); sp.className = "ajustes-select";
@@ -27500,7 +27517,7 @@
     ajustesBuild();
     var E = ajustes.el;
     // origem = página em que ele ESTÁ agora (só troca se o campo de texto estiver vazio, pra não bagunçar um rascunho)
-    if (!E.ta.value.trim() || !E.selO.options.length) ajustesFillOriginSelect(E.selO, currentId);
+    if (!E.ta.value.trim()) E.selO.setValue(currentId);
     E.bd.style.display = "flex";
     document.getElementById("ajustesBtn").setAttribute("aria-expanded", "true");
     ajustesLoad();
