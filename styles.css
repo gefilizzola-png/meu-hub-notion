@@ -8883,3 +8883,20 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .ajustes-filters .ajustes-search { box-sizing: border-box; padding: 7px 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 13px; }
 .ajustes-filters .search-input-clearable-box { flex: 1 1 220px; min-width: 180px; }
 .emprestimos-chip-parcela { background: #e7f5ff; color: #1864ab; }
+
+/* Empréstimos: cards por situação (fundo claro) + botão Novo + filtros */
+.emprestimos-card.pago { background: #ebfbee; border-left: 3px solid #2f9e44; opacity: 1; }
+.emprestimos-card.aberto { background: #e7f5ff; border-left: 3px solid #1c7ed6; }
+.emprestimos-card.atrasado { background: #ffe3e3; border-left: 3px solid #c92a2a; }
+.emprestimos-card.pago .emprestimos-row:hover { background: #d3f9d8; }
+.emprestimos-card.aberto .emprestimos-row:hover { background: #d0ebff; }
+.emprestimos-card.atrasado .emprestimos-row:hover { background: #ffc9c9; }
+.emprestimos-card.pago.expanded .emprestimos-row { background: #d3f9d8; }
+.emprestimos-card.aberto.expanded .emprestimos-row { background: #d0ebff; }
+.emprestimos-card.atrasado.expanded .emprestimos-row { background: #ffc9c9; }
+.emprestimos-new-btn { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 10px; padding: 9px 18px; border: none; border-radius: 10px; background: #1c7ed6; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.emprestimos-new-btn:hover { background: #1971c2; }
+.emprestimos-new-btn.active { background: #868e96; }
+.emprestimos-new-card { margin: 0 0 12px; padding: 14px; border: 0.5px solid #e2e0da; border-radius: 12px; background: #faf9f6; }
+.emprestimos-filters-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.emprestimos-filters-row .emprestimos-field { flex: 1 1 180px; min-width: 150px; }

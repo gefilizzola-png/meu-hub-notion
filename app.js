@@ -25221,10 +25221,32 @@
   // pendente (forma "mensal" não tem um vencimento fixo "perdido" — ela só
   // aponta pro PRÓXIMO dia do mês, sempre no futuro ou hoje; "sem_data"
   // nunca atrasa, por definição, não tem prazo).
+  // nº de vencimentos mensais (dia fixo) já ocorridos até hoje, a partir da
+  // 1ª ocorrência do dia APÓS a data do empréstimo (inclui hoje).
+  function loanVencimentosMensaisAteHoje(loan, hojeISO) {
+    var dia = Math.min(Math.max(1, loan.diaMensal || 1), 31);
+    var d0 = String(loan.data || "").slice(0, 10).split("-").map(Number);
+    var h = String(hojeISO).slice(0, 10).split("-").map(Number);
+    if (d0.length < 3 || !d0[0] || h.length < 3) return 0;
+    var y = d0[0], m = d0[1] - 1, count = 0;
+    for (var guard = 0; guard < 1200; guard++) {
+      var day = Math.min(dia, loanDaysInMonth(y, m));
+      var iso = y + "-" + loanPad2(m + 1) + "-" + loanPad2(day);
+      if (iso > hojeISO) break;
+      if (iso > String(loan.data).slice(0, 10)) count++;
+      m++; if (m > 11) { m = 0; y++; }
+    }
+    return count;
+  }
   function loanSituacao(loan, hojeISO) {
     if (loanIsPago(loan)) return "pago";
     hojeISO = hojeISO || new Date().toISOString().slice(0, 10);
     if (loan.formaPagamento === "unico" && loan.dataVencimento && loan.dataVencimento < hojeISO) return "atrasado";
+    // mensal parcelado: parcela vencida = vencimentos já ocorridos > pagamentos lançados
+    if (loan.formaPagamento === "mensal" && Math.round(Number(loan.parcelas)) >= 2) {
+      var pagas = Array.isArray(loan.pagamentos) ? loan.pagamentos.length : 0;
+      if (loanVencimentosMensaisAteHoje(loan, hojeISO) > pagas) return "atrasado";
+    }
     return "aberto";
   }
   function loanSituacaoLabel(situacao) {
@@ -25275,7 +25297,8 @@
     tabsWrap.className = "emprestimos-tabs";
     var TABS = [
       { id: "receber", label: "A Receber", icon: "ti-arrow-down-circle" },
-      { id: "pagar", label: "A Pagar", icon: "ti-arrow-up-circle" }
+      { id: "pagar", label: "A Pagar", icon: "ti-arrow-up-circle" },
+      { id: "todos", label: "Todos", icon: "ti-list" }
     ];
     var tabButtons = {};
     TABS.forEach(function (t) {
@@ -25317,7 +25340,7 @@
       return f;
     }
 
-    var searchSectionEmp = buildCollapsibleSection("Pesquisar");
+    var searchSectionEmp = buildCollapsibleSection("Filtros");
     var searchWrap = document.createElement("div");
     searchWrap.className = "emprestimos-search";
     var searchInput = document.createElement("input");
@@ -25326,7 +25349,6 @@
     searchInput.className = "emprestimos-search-input";
     searchWrap.appendChild(withSearchClear(searchInput));
     searchSectionEmp.body.appendChild(searchWrap);
-    wrap.appendChild(searchSectionEmp.section);
     searchInput.addEventListener("input", function () { state.search = searchInput.value; renderList(); });
 
     // ---- "Limpar filtros" (mesmo padrão global — instrucoes.md regra 13)
@@ -25336,14 +25358,46 @@
     clearBtn.className = "emprestimos-clear-btn";
     clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
     clearBtn.addEventListener("click", function () {
-      state.search = "";
-      searchInput.value = "";
+      state.search = ""; state.fPessoa = ""; state.fSituacao = ""; state.fDe = ""; state.fAte = "";
+      searchInput.value = ""; fPessoaSel.value = ""; fSitSel.value = ""; fDeInput.value = ""; fAteInput.value = "";
       renderList();
     });
+    // filtros: pessoa, situação, data do empréstimo (de/até)
+    var filtersRow = document.createElement("div");
+    filtersRow.className = "emprestimos-filters-row";
+    var fPessoaSel = document.createElement("select"); fPessoaSel.className = "emprestimos-add-select";
+    fPessoaSel.addEventListener("change", function () { state.fPessoa = fPessoaSel.value; renderList(); });
+    var fSitSel = document.createElement("select"); fSitSel.className = "emprestimos-add-select";
+    [["", "Toda situação"], ["aberto", "Em aberto (parcelas a vencer)"], ["atrasado", "Atrasado (parcela vencida)"], ["pago", "Pago"]].forEach(function (o) {
+      var opt = document.createElement("option"); opt.value = o[0]; opt.textContent = o[1]; fSitSel.appendChild(opt);
+    });
+    fSitSel.addEventListener("change", function () { state.fSituacao = fSitSel.value; renderList(); });
+    var fDeInput = document.createElement("input"); fDeInput.type = "date"; fDeInput.className = "emprestimos-add-input";
+    fDeInput.addEventListener("change", function () { state.fDe = fDeInput.value; renderList(); });
+    var fAteInput = document.createElement("input"); fAteInput.type = "date"; fAteInput.className = "emprestimos-add-input";
+    fAteInput.addEventListener("change", function () { state.fAte = fAteInput.value; renderList(); });
+    filtersRow.appendChild(buildEmprestimosField("Pessoa", fPessoaSel));
+    filtersRow.appendChild(buildEmprestimosField("Situação", fSitSel));
+    filtersRow.appendChild(buildEmprestimosField("Empréstimo de", fDeInput));
+    filtersRow.appendChild(buildEmprestimosField("até", fAteInput));
     searchWrap.appendChild(clearBtn);
+    searchSectionEmp.body.appendChild(filtersRow);
 
     // ---- formulário "novo empréstimo" (dentro da seção recolhível) ----
-    var creationSectionEmp = buildCollapsibleSection("Novo Empréstimo");
+    var newToggleBtn = document.createElement("button");
+    newToggleBtn.type = "button";
+    newToggleBtn.className = "emprestimos-new-btn";
+    newToggleBtn.innerHTML = '<i class="ti ti-plus"></i> Novo empréstimo';
+    var newCard = document.createElement("div");
+    newCard.className = "emprestimos-new-card";
+    newCard.style.display = "none";
+    newToggleBtn.addEventListener("click", function () {
+      var open = newCard.style.display === "none";
+      newCard.style.display = open ? "" : "none";
+      newToggleBtn.classList.toggle("active", open);
+      newToggleBtn.innerHTML = open ? '<i class="ti ti-x"></i> Fechar' : '<i class="ti ti-plus"></i> Novo empréstimo';
+    });
+    var creationSectionEmp = { body: newCard, section: newCard };
     var addWrap = document.createElement("div");
     addWrap.className = "emprestimos-add";
 
@@ -25438,7 +25492,9 @@
     addBtn.className = "notes-add-btn emprestimos-add-btn";
     addBtn.innerHTML = '<i class="ti ti-plus"></i> Criar empréstimo';
     creationSectionEmp.body.appendChild(addBtn);
-    wrap.appendChild(creationSectionEmp.section);
+    wrap.appendChild(newToggleBtn);
+    wrap.appendChild(newCard);
+    wrap.appendChild(searchSectionEmp.section);
 
     function addLoan() {
       var pessoa = addPessoaInput.value.trim();
@@ -25467,6 +25523,7 @@
         addVencimentoInput.value = "";
         addDiaMensalInput.value = "";
         addParcelasInput.value = ""; addParcelasHint.textContent = "";
+        newCard.style.display = "none"; newToggleBtn.classList.remove("active"); newToggleBtn.innerHTML = '<i class="ti ti-plus"></i> Novo empréstimo';
         loadLoans();
       }).catch(function () {
         statusEl.textContent = "Erro ao criar empréstimo.";
@@ -25485,6 +25542,7 @@
       loaded: false,
       search: "",
       tab: (routeTab === "receber" || routeTab === "pagar") ? routeTab : "receber",
+      fPessoa: "", fSituacao: "", fDe: "", fAte: "",
       // qual empréstimo está com o painel de pagamentos expandido (1 por
       // vez, mesmo espírito de outras expansões pontuais do app).
       expandedId: null,
@@ -25866,7 +25924,7 @@
         updateLoan(loan.id, patch).then(function (res) { return res.json(); }).then(function (d) {
           if (d && d.error) { alert(d.error); return; }
           state.editingId = null;
-          if (dir.value !== state.tab) state.tab = dir.value;
+          if (state.tab !== "todos" && dir.value !== state.tab) state.tab = dir.value;
           loadLoans();
         }).catch(function () {}).finally(function () { save.disabled = false; });
       });
@@ -25991,7 +26049,20 @@
       listEl.innerHTML = "";
       renderSummary();
       var q = normalize(state.search.trim());
-      var visible = state.loans.filter(function (l) { return l.direcao === state.tab; });
+      // opções do filtro Pessoa (todas as pessoas, ordem alfabética)
+      var nomes = {}; state.loans.forEach(function (l) { if (l.pessoa) nomes[l.pessoa] = 1; });
+      fPessoaSel.innerHTML = "";
+      var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "Toda pessoa"; fPessoaSel.appendChild(o0);
+      Object.keys(nomes).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (n) {
+        var o = document.createElement("option"); o.value = n; o.textContent = n; fPessoaSel.appendChild(o);
+      });
+      if (!nomes[state.fPessoa]) state.fPessoa = "";
+      fPessoaSel.value = state.fPessoa;
+      var visible = state.loans.filter(function (l) { return state.tab === "todos" || l.direcao === state.tab; });
+      if (state.fPessoa) visible = visible.filter(function (l) { return l.pessoa === state.fPessoa; });
+      if (state.fSituacao) visible = visible.filter(function (l) { return loanSituacao(l) === state.fSituacao; });
+      if (state.fDe) visible = visible.filter(function (l) { return (l.data || "") >= state.fDe; });
+      if (state.fAte) visible = visible.filter(function (l) { return (l.data || "") <= state.fAte; });
       if (q) {
         visible = visible.filter(function (l) {
           return normalize(l.pessoa || "").indexOf(q) !== -1 || normalize(l.objetivo || "").indexOf(q) !== -1;
@@ -26000,7 +26071,7 @@
       if (!visible.length) {
         var empty = document.createElement("p");
         empty.className = "empty";
-        empty.textContent = state.tab === "receber" ? "Nenhum empréstimo a receber cadastrado." : "Nenhum empréstimo a pagar cadastrado.";
+        empty.textContent = state.tab === "receber" ? "Nenhum empréstimo a receber encontrado." : (state.tab === "pagar" ? "Nenhum empréstimo a pagar encontrado." : "Nenhum empréstimo encontrado.");
         listEl.appendChild(empty);
         return;
       }
