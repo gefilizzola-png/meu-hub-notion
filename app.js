@@ -25939,45 +25939,64 @@
     // chips"). Clicar na linha expande os detalhes (forma de pagamento
     // editável + progresso + pagamentos), mesmo espírito de outras
     // expansões pontuais do app (1 por vez — ver state.expandedId).
-    function buildLoanCard(loan) {
+    // ---- tabela: colunas ordenáveis; ordem escolhida fica gravada (localStorage) ----
+    var SORT_KEY = "meuhub_emprestimos_sort";
+    function loadSort() {
+      try { var o = JSON.parse(localStorage.getItem(SORT_KEY) || "null"); if (o && typeof o.col === "string") return o; } catch (e) {}
+      return { col: "data", dir: 1 };
+    }
+    function saveSort() { try { localStorage.setItem(SORT_KEY, JSON.stringify(sortState)); } catch (e) {} }
+    var sortState = loadSort();
+    var SIT_RANK = { atrasado: 0, aberto: 1, pago: 2 };
+    var LOAN_COLS = [
+      { id: "data", label: "Data", short: true, sort: function (l) { return l.data || ""; } },
+      { id: "pessoa", label: "Pessoa", sort: function (l) { return l.pessoa || ""; } },
+      { id: "objetivo", label: "Objetivo", sort: function (l) { return l.objetivo || ""; } },
+      { id: "situacao", label: "Situação", short: true, sort: function (l) { return SIT_RANK[loanSituacao(l)]; } },
+      { id: "parcela", label: "Parcela", short: true, num: true, sort: function (l) { var p = loanParcelaInfo(l); return p && !p.quitado ? p.proxima : null; } },
+      { id: "venc", label: "Próx. venc.", short: true, sort: function (l) { return loanProximoVencimentoISO(l) || ""; } },
+      { id: "valor", label: "Valor", short: true, num: true, sort: function (l) { return typeof l.valor === "number" ? l.valor : 0; } },
+      { id: "saldo", label: "Saldo", short: true, num: true, sort: function (l) { return loanSaldoPendente(l); } },
+      { id: "acoes", label: "", short: true }
+    ];
+
+    function chip(text, cls, icon) {
+      var c = document.createElement("span");
+      c.className = "emprestimos-chip " + (cls || "");
+      if (icon) c.innerHTML = '<i class="ti ' + icon + '"></i> ';
+      c.appendChild(document.createTextNode(text));
+      return c;
+    }
+
+    // devolve [<tr> da linha, <tr> do detalhe (se expandido)]
+    function buildLoanRows(loan) {
       var situacao = loanSituacao(loan);
       var saldo = loanSaldoPendente(loan);
       var total = typeof loan.valor === "number" ? loan.valor : 0;
       var pctPago = total > 0 ? Math.min(100, Math.round(((total - saldo) / total) * 100)) : 100;
       var expanded = state.expandedId === loan.id;
+      var pInfo = loanParcelaInfo(loan);
 
-      var card = document.createElement("div");
-      card.className = "emprestimos-card " + situacao + (expanded ? " expanded" : "");
-
-      var row = document.createElement("div");
-      row.className = "emprestimos-row";
-      row.addEventListener("click", function () {
+      var tr = document.createElement("tr");
+      tr.className = "emprestimos-tr " + situacao + (expanded ? " expanded" : "");
+      tr.addEventListener("click", function () {
         state.expandedId = expanded ? null : loan.id;
         renderList();
       });
-
-      function chip(text, cls, icon) {
-        var c = document.createElement("span");
-        c.className = "emprestimos-chip " + (cls || "");
-        if (icon) c.innerHTML = '<i class="ti ' + icon + '"></i> ';
-        c.appendChild(document.createTextNode(text));
-        return c;
-      }
-
-      row.appendChild(chip(transacoesFmtDateBR(loan.data), "emprestimos-chip-data", "ti-calendar"));
-      row.appendChild(chip(loan.pessoa, "emprestimos-chip-nome"));
-      row.appendChild(chip(loan.objetivo || "—", "emprestimos-chip-objetivo"));
-      var situacaoChip = chip(loanSituacaoLabel(situacao), "emprestimos-chip-situacao " + situacao, loanSituacaoIcon(situacao));
-      row.appendChild(situacaoChip);
-      var pInfo = loanParcelaInfo(loan);
-      if (pInfo && !pInfo.quitado) {
-        row.appendChild(chip(Math.min(pInfo.pagas + 1, pInfo.total) + "/" + pInfo.total + " · " + transacoesFmtMoney(pInfo.proxima), "emprestimos-chip-parcela", "ti-list-numbers"));
-      }
-      row.appendChild(chip(transacoesFmtMoney(saldo), "emprestimos-chip-saldo " + situacao));
-
-      var chevron = document.createElement("i");
-      chevron.className = "ti " + (expanded ? "ti-chevron-up" : "ti-chevron-down") + " emprestimos-row-chevron";
-      row.appendChild(chevron);
+      function td(cls) { var c = document.createElement("td"); if (cls) c.className = cls; tr.appendChild(c); return c; }
+      td("emprestimos-td-short").appendChild(chip(transacoesFmtDateBR(loan.data), "emprestimos-chip-data", "ti-calendar"));
+      td().appendChild(chip(loan.pessoa, "emprestimos-chip-nome"));
+      td().textContent = loan.objetivo || "—";
+      td("emprestimos-td-short").appendChild(chip(loanSituacaoLabel(situacao), "emprestimos-chip-situacao " + situacao, loanSituacaoIcon(situacao)));
+      var tdP = td("emprestimos-td-short");
+      if (pInfo && !pInfo.quitado) tdP.appendChild(chip(Math.min(pInfo.pagas + 1, pInfo.total) + "/" + pInfo.total + " · " + transacoesFmtMoney(pInfo.proxima), "emprestimos-chip-parcela", "ti-list-numbers"));
+      else if (pInfo) tdP.textContent = pInfo.total + "/" + pInfo.total;
+      else tdP.textContent = "—";
+      var venc = loanProximoVencimentoISO(loan);
+      td("emprestimos-td-short").textContent = venc ? transacoesFmtDateBR(venc) : "—";
+      td("emprestimos-td-short emprestimos-td-num").textContent = transacoesFmtMoney(total);
+      td("emprestimos-td-short emprestimos-td-num").appendChild(chip(transacoesFmtMoney(saldo), "emprestimos-chip-saldo " + situacao));
+      var tdA = td("emprestimos-td-short emprestimos-td-acoes");
 
       var editBtn = document.createElement("button");
       editBtn.type = "button";
@@ -25990,19 +26009,18 @@
         else { state.editingId = loan.id; state.expandedId = loan.id; }
         renderList();
       });
-      row.appendChild(editBtn);
-
+      tdA.appendChild(editBtn);
       var delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.className = "emprestimos-row-delete";
       delBtn.title = "Excluir empréstimo";
       delBtn.innerHTML = '<i class="ti ti-trash"></i>';
       delBtn.addEventListener("click", function (e) { e.stopPropagation(); deleteLoan(loan.id); });
-      row.appendChild(delBtn);
+      tdA.appendChild(delBtn);
 
-      card.appendChild(row);
-
+      var out = [tr];
       if (expanded) {
+        var card = document.createElement("div"); // contêiner do detalhe
         var detail = document.createElement("div");
         detail.className = "emprestimos-detail";
 
@@ -26040,9 +26058,15 @@
         detail.appendChild(buildPaymentsPanel(loan));
 
         card.appendChild(detail);
+        var trD = document.createElement("tr");
+        trD.className = "emprestimos-tr-detail " + situacao;
+        var tdD = document.createElement("td");
+        tdD.colSpan = LOAN_COLS.length;
+        tdD.appendChild(card);
+        trD.appendChild(tdD);
+        out.push(trD);
       }
-
-      return card;
+      return out;
     }
 
     function renderList() {
@@ -26078,9 +26102,38 @@
       // ordem por data do empréstimo, do mais antigo pro mais novo (pedido
       // explícito do Georges no redesign do card compacto — substitui a
       // ordenação anterior por situação/vencimento).
-      visible.slice().sort(function (a, b) {
-        return (a.data || "9999-99-99").localeCompare(b.data || "9999-99-99");
-      }).forEach(function (l) { listEl.appendChild(buildLoanCard(l)); });
+      var colDef = LOAN_COLS.filter(function (c) { return c.id === sortState.col; })[0] || LOAN_COLS[0];
+      var sorted = visible.slice().sort(function (a, b) {
+        var av = colDef.sort(a), bv = colDef.sort(b);
+        var ae = av === null || av === undefined || av === "", be = bv === null || bv === undefined || bv === "";
+        if (ae && be) return 0; if (ae) return 1; if (be) return -1;
+        if (typeof av === "number" && typeof bv === "number") return sortState.dir * (av - bv);
+        return sortState.dir * String(av).localeCompare(String(bv), "pt-BR");
+      });
+      var tableWrap = document.createElement("div");
+      tableWrap.className = "emprestimos-table-wrap";
+      var table = document.createElement("table");
+      table.className = "emprestimos-table";
+      var thead = document.createElement("thead"), hr = document.createElement("tr");
+      LOAN_COLS.forEach(function (c) {
+        var th = document.createElement("th");
+        th.className = (c.short ? "emprestimos-th-short " : "") + (c.sort ? "financeiro-th-sortable" : "");
+        th.appendChild(document.createTextNode(c.label + (c.label ? " " : "")));
+        if (c.sort) {
+          var ar = document.createElement("span"); ar.className = "financeiro-th-arrow";
+          ar.textContent = sortState.col === c.id ? (sortState.dir === 1 ? "▲" : "▼") : "";
+          th.appendChild(ar);
+          th.addEventListener("click", function () {
+            if (sortState.col === c.id) sortState.dir = -sortState.dir; else { sortState.col = c.id; sortState.dir = c.num ? -1 : 1; }
+            saveSort(); renderList();
+          });
+        }
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr); table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      sorted.forEach(function (l) { buildLoanRows(l).forEach(function (r) { tbody.appendChild(r); }); });
+      table.appendChild(tbody); tableWrap.appendChild(table); listEl.appendChild(tableWrap);
     }
 
     function loadLoans() {
