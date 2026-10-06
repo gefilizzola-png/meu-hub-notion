@@ -1174,6 +1174,21 @@ var NOTIFICATION_SOURCES = [
       { id: "agora", amount: 0, unit: "hours", label: "Assim que ficar baixo" }
     ]
   },
+  // Tratamentos (Remédios — ajustes 2026-10-06): avisa quando uma dose de um
+  // tratamento em andamento (ex: antibiótico por 7 dias) está na hora ou
+  // atrasada. Fonte 100% KV, item sintético, ver fetchTratamentosNotificationItems.
+  {
+    id: "tratamentos",
+    label: "Remédios — hora da dose",
+    icon: "💊",
+    kind: "tratamentos",
+    dateProperty: "gatilho",
+    target: { type: "page", target: "remedios" },
+    defaultEnabled: true,
+    defaultLeadTimes: [
+      { id: "agora", amount: 0, unit: "hours", label: "Na hora da dose" }
+    ]
+  },
   // Empréstimos (pedido do Georges — "Sim, quero ser avisado" sobre
   // vencimentos). kind PRÓPRIO ("loans"), 100% KV, mesmo espírito de
   // "remedios"/"supermercado" acima — NÃO existe database_id/baseFilters
@@ -1834,7 +1849,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-06 14:00",
+  appVersion: "2026-10-06 16:00",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1962,7 +1977,8 @@ const APP_CONFIG = {
       color: "#0f9b8e",
       links: [
         { id: "listas-supermercado", label: "Supermercado", target: "supermercado" },
-        { id: "listas-remedios", label: "Remédios", target: "remedios" }
+        { id: "listas-remedios", label: "Remédios", target: "remedios" },
+        { id: "listas-churrasco", label: "Churrasco", target: "churrasco" }
       ]
     },
     {
@@ -2954,6 +2970,14 @@ const APP_CONFIG = {
       remedios: true
     },
 
+    // "Lista de Churrasco" (ajustes 2026-10-06) — checklist por grupo (Fogo,
+    // Limpeza, Alimentos...) trazida da página do Notion "Pessoal / Listas /
+    // Churrasco", daqui em diante 100% KV (worker.js, rotas /churrasco).
+    churrasco: {
+      title: "Churrasco",
+      churrasco: true
+    },
+
     // "Ponto Eletrônico" (pedido do Georges — Pessoal->Profissional->PMF):
     // registro MANUAL, dia a dia, das marcações que ele bate no sistema
     // próprio da PMF (sem API nenhuma, 100% digitado aqui) — número
@@ -3346,7 +3370,8 @@ const APP_CONFIG = {
         // "Remédios" (pedido do Georges) — mesmo lugar da Lista de
         // Supermercado, mesmo espírito (lista pessoal trazida do Notion pro
         // Meu Hub).
-        { label: "Remédios", type: "page", target: "remedios", icon: "pill" }
+        { label: "Remédios", type: "page", target: "remedios", icon: "pill" },
+        { label: "Churrasco", type: "page", target: "churrasco", icon: "flame" }
       ]
     },
 

@@ -22108,6 +22108,42 @@
     loadItems();
   }
 
+  // <TRAT_PURE>
+  // Tratamentos (Remédios — controle de consumo). Lógica pura (testada isolada).
+  function tratTotalDoses(t) {
+    var iv = Math.max(1, Number(t.intervaloHoras) || 8);
+    var dias = Math.max(1, Number(t.dias) || 1);
+    return Math.max(1, Math.ceil(dias * 24 / iv));
+  }
+  // Retorna { status: "andamento"|"concluido"|"encerrado", total, feitas, proxima: Date|null }
+  function tratEstado(t) {
+    var total = tratTotalDoses(t);
+    var tomadas = Array.isArray(t.tomadas) ? t.tomadas.slice().sort() : [];
+    var feitas = tomadas.length;
+    if (t.encerrado) return { status: "encerrado", total: total, feitas: feitas, proxima: null };
+    if (feitas >= total) return { status: "concluido", total: total, feitas: feitas, proxima: null };
+    var proxima;
+    if (!feitas) {
+      proxima = new Date(t.inicio);
+    } else {
+      proxima = new Date(new Date(tomadas[feitas - 1]).getTime() + (Math.max(1, Number(t.intervaloHoras) || 8)) * 3600000);
+    }
+    if (isNaN(proxima.getTime())) proxima = null;
+    return { status: "andamento", total: total, feitas: feitas, proxima: proxima };
+  }
+  // "em 2h 10min" / "atrasada há 35min"
+  function tratRelativo(date, nowMs) {
+    var diffMin = Math.round((date.getTime() - nowMs) / 60000);
+    var abs = Math.abs(diffMin);
+    var txt;
+    if (abs < 60) txt = abs + "min";
+    else if (abs < 1440) txt = Math.floor(abs / 60) + "h" + (abs % 60 ? " " + (abs % 60) + "min" : "");
+    else txt = Math.floor(abs / 1440) + "d " + Math.floor((abs % 1440) / 60) + "h";
+    if (abs < 1) return "agora";
+    return diffMin < 0 ? "atrasada há " + txt : "em " + txt;
+  }
+  // </TRAT_PURE>
+
   // ---------------- "page.remedios" — Remédios (100% KV, nunca Notion) ----------------
   // Pedido do Georges: lista do estoque de remédios que ele mantém na
   // mochila, copiada 1x da base do Notion "Pessoal / Listas / Remédios"
@@ -22133,6 +22169,208 @@
     wrap.className = "remedios-wrap";
     wrap.style.display = "none";
     container.appendChild(wrap);
+
+    // ---- Tratamentos (controle de consumo — ajustes 2026-10-06): ex.
+    // antibiótico de 8 em 8h por 7 dias. Marca cada dose tomada; a próxima
+    // dose é calculada a partir da última tomada; a Central de Notificações
+    // avisa na hora (fonte "tratamentos"). 100% KV (/tratamentos). ----
+    var tratSec = buildCollapsibleSection("Tratamentos (controle de doses)", true);
+    tratSec.section.classList.add("trat-section");
+    wrap.appendChild(tratSec.section);
+    var tratState = { items: [], showDone: false };
+
+    var tratForm = document.createElement("div");
+    tratForm.className = "trat-form";
+    function tratField(labelTxt, input) {
+      var lab = document.createElement("label");
+      lab.className = "trat-field";
+      var sp = document.createElement("span");
+      sp.textContent = labelTxt;
+      lab.appendChild(sp);
+      lab.appendChild(input);
+      tratForm.appendChild(lab);
+      return input;
+    }
+    var tNome = document.createElement("input");
+    tNome.type = "text"; tNome.placeholder = "Ex: Amoxicilina"; tNome.className = "trat-input trat-input-nome";
+    var tDose = document.createElement("input");
+    tDose.type = "text"; tDose.placeholder = "Ex: 1 comprimido 500mg"; tDose.className = "trat-input";
+    var tIntervalo = document.createElement("input");
+    tIntervalo.type = "number"; tIntervalo.min = "1"; tIntervalo.max = "168"; tIntervalo.value = "8"; tIntervalo.className = "trat-input trat-input-num";
+    var tDias = document.createElement("input");
+    tDias.type = "number"; tDias.min = "1"; tDias.max = "365"; tDias.value = "7"; tDias.className = "trat-input trat-input-num";
+    var tInicio = document.createElement("input");
+    tInicio.type = "datetime-local"; tInicio.className = "trat-input";
+    function tratNowLocalValue() {
+      var d = new Date();
+      d.setSeconds(0, 0);
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    tInicio.value = tratNowLocalValue();
+    tratField("Remédio", tNome);
+    tratField("Dose", tDose);
+    tratField("A cada (horas)", tIntervalo);
+    tratField("Por (dias)", tDias);
+    tratField("1ª dose", tInicio);
+    var tAddBtn = document.createElement("button");
+    tAddBtn.type = "button";
+    tAddBtn.className = "notes-add-btn";
+    tAddBtn.innerHTML = '<i class="ti ti-player-play"></i> Iniciar tratamento';
+    tratForm.appendChild(tAddBtn);
+    tratSec.body.appendChild(tratForm);
+
+    var tratListEl = document.createElement("div");
+    tratListEl.className = "trat-list";
+    tratSec.body.appendChild(tratListEl);
+
+    function tratFmtDateTime(d) {
+      var hoje = new Date();
+      var same = d.toDateString() === hoje.toDateString();
+      var amanha = new Date(hoje.getTime() + 86400000);
+      var label = same ? "hoje" : (d.toDateString() === amanha.toDateString() ? "amanhã" : pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1));
+      return label + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    function tratCall(path, method, body) {
+      return authFetch(cfg.templateWorkerUrl + path, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(handle401).then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); });
+    }
+    function tratLoad() {
+      tratCall("/tratamentos", "GET").then(function (data) {
+        tratState.items = (data && data.items) || [];
+        tratRender();
+      }).catch(function () {
+        tratListEl.innerHTML = "";
+        var p = document.createElement("p");
+        p.className = "empty";
+        p.textContent = "Erro ao carregar tratamentos (o worker.js foi republicado?).";
+        tratListEl.appendChild(p);
+      });
+    }
+    function tratRender() {
+      tratListEl.innerHTML = "";
+      var now = Date.now();
+      var ativos = [], outros = [];
+      tratState.items.forEach(function (t) {
+        var e = tratEstado(t);
+        (e.status === "andamento" ? ativos : outros).push({ t: t, e: e });
+      });
+      ativos.sort(function (a, b) { return (a.e.proxima ? a.e.proxima.getTime() : 0) - (b.e.proxima ? b.e.proxima.getTime() : 0); });
+      if (!ativos.length) {
+        var p = document.createElement("p");
+        p.className = "empty";
+        p.textContent = "Nenhum tratamento em andamento.";
+        tratListEl.appendChild(p);
+      }
+      ativos.forEach(function (x) { tratListEl.appendChild(tratBuildCard(x.t, x.e, now)); });
+      if (outros.length) {
+        var tg = document.createElement("button");
+        tg.type = "button";
+        tg.className = "trat-toggle-done";
+        tg.textContent = (tratState.showDone ? "Ocultar" : "Mostrar") + " concluídos/encerrados (" + outros.length + ")";
+        tg.addEventListener("click", function () { tratState.showDone = !tratState.showDone; tratRender(); });
+        tratListEl.appendChild(tg);
+        if (tratState.showDone) outros.forEach(function (x) { tratListEl.appendChild(tratBuildCard(x.t, x.e, now)); });
+      }
+    }
+    function tratBuildCard(t, e, now) {
+      var card = document.createElement("div");
+      card.className = "trat-card" + (e.status !== "andamento" ? " trat-card-done" : "");
+      var top = document.createElement("div");
+      top.className = "trat-card-top";
+      var title = document.createElement("div");
+      title.className = "trat-card-title";
+      title.textContent = t.nome + (t.dose ? " — " + t.dose : "");
+      top.appendChild(title);
+      var meta = document.createElement("div");
+      meta.className = "trat-card-meta";
+      meta.textContent = "a cada " + t.intervaloHoras + "h por " + t.dias + " dia(s)";
+      top.appendChild(meta);
+      card.appendChild(top);
+
+      var prog = document.createElement("div");
+      prog.className = "trat-progress";
+      var bar = document.createElement("div");
+      bar.className = "trat-progress-bar";
+      bar.style.width = Math.min(100, Math.round(e.feitas / e.total * 100)) + "%";
+      prog.appendChild(bar);
+      card.appendChild(prog);
+
+      var info = document.createElement("div");
+      info.className = "trat-info";
+      var cnt = document.createElement("span");
+      cnt.textContent = e.feitas + "/" + e.total + " doses";
+      info.appendChild(cnt);
+      var prox = document.createElement("span");
+      if (e.status === "andamento" && e.proxima) {
+        var late = e.proxima.getTime() <= now;
+        prox.className = "trat-next" + (late ? " late" : "");
+        prox.textContent = "Próxima: " + tratFmtDateTime(e.proxima) + " (" + tratRelativo(e.proxima, now) + ")";
+      } else {
+        prox.textContent = e.status === "concluido" ? "Tratamento concluído" : "Encerrado";
+      }
+      info.appendChild(prox);
+      card.appendChild(info);
+
+      var actions = document.createElement("div");
+      actions.className = "trat-actions";
+      function mkBtn(txt, cls, fn) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "trat-btn " + cls;
+        b.innerHTML = txt;
+        b.addEventListener("click", function () { b.disabled = true; fn().then(tratLoad).catch(function () { b.disabled = false; alert("Não foi possível salvar."); }); });
+        actions.appendChild(b);
+      }
+      if (e.status === "andamento") {
+        mkBtn('<i class="ti ti-check"></i> Tomei agora', "primary", function () { return tratCall("/tratamentos-tomar?id=" + encodeURIComponent(t.id), "POST", {}); });
+      }
+      if (e.feitas > 0) {
+        mkBtn('<i class="ti ti-arrow-back-up"></i> Desfazer última', "", function () { return tratCall("/tratamentos-tomar?id=" + encodeURIComponent(t.id) + "&desfazer=1", "POST", {}); });
+      }
+      if (e.status === "andamento") {
+        mkBtn('<i class="ti ti-player-stop"></i> Encerrar', "", function () { return tratCall("/tratamentos?id=" + encodeURIComponent(t.id), "PUT", { encerrado: true }); });
+      } else if (e.status === "encerrado") {
+        mkBtn('<i class="ti ti-player-play"></i> Reabrir', "", function () { return tratCall("/tratamentos?id=" + encodeURIComponent(t.id), "PUT", { encerrado: false }); });
+      }
+      var del = document.createElement("button");
+      del.type = "button";
+      del.className = "trat-btn danger";
+      del.innerHTML = '<i class="ti ti-trash"></i>';
+      del.title = "Excluir tratamento";
+      del.addEventListener("click", function () {
+        if (!confirm("Excluir este tratamento?")) return;
+        tratCall("/tratamentos?id=" + encodeURIComponent(t.id), "DELETE").then(tratLoad).catch(function () {});
+      });
+      actions.appendChild(del);
+      card.appendChild(actions);
+      if (t.tomadas && t.tomadas.length) {
+        var hist = document.createElement("div");
+        hist.className = "trat-hist";
+        hist.textContent = "Tomadas: " + t.tomadas.slice().sort().slice(-6).map(function (iso) { return tratFmtDateTime(new Date(iso)); }).join(" · ") + (t.tomadas.length > 6 ? " …" : "");
+        card.appendChild(hist);
+      }
+      return card;
+    }
+    tAddBtn.addEventListener("click", function () {
+      var nome = tNome.value.trim();
+      if (!nome) { tNome.focus(); return; }
+      var inicio = tInicio.value ? new Date(tInicio.value) : new Date();
+      tAddBtn.disabled = true;
+      tratCall("/tratamentos", "POST", {
+        nome: nome, dose: tDose.value.trim(),
+        intervaloHoras: Number(tIntervalo.value) || 8, dias: Number(tDias.value) || 7,
+        inicio: isNaN(inicio.getTime()) ? new Date().toISOString() : inicio.toISOString()
+      }).then(function () {
+        tNome.value = ""; tDose.value = ""; tInicio.value = tratNowLocalValue();
+        tratLoad();
+      }).catch(function () { alert("Não foi possível iniciar o tratamento (o worker.js foi republicado?)."); })
+        .finally(function () { tAddBtn.disabled = false; });
+    });
+    tNome.addEventListener("keydown", function (e) { if (e.key === "Enter") tAddBtn.click(); });
+    tratLoad();
 
     // ---- "adicionar remédio" — nome + composição (pedido do Georges,
     // rodada 2: "eu devo ter opção para editar a composição ao criar ou
@@ -22460,6 +22698,214 @@
     }
 
     loadItems();
+  }
+
+  // ---------------- "page.churrasco" — Lista de Churrasco (100% KV) ----------------
+  // Ajustes 2026-10-06: trazida da página do Notion "Pessoal / Listas /
+  // Churrasco" (5 grupos de checklist). Daqui em diante 100% KV (worker.js,
+  // rotas /churrasco, carga inicial CHURRASCO_SEED_RAW) — nunca escreve no
+  // Notion. Grupos recolhíveis, checkbox por item, adicionar/renomear/
+  // excluir item, adicionar grupo (digitando um nome novo) e "Desmarcar
+  // tudo" pra começar um churrasco novo.
+  function renderChurrascoPage(container, page) {
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+    var state = { items: [], search: "", collapsed: {}, onlyPending: false };
+    var CHUR_ICONS = { "Fogo": "🔥", "Limpeza": "🧹", "Alimentos": "🥩", "Infraestrutura": "🪑", "Acompanhamentos": "🥗" };
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando…";
+    container.appendChild(statusEl);
+    var wrap = document.createElement("div");
+    wrap.className = "churrasco-wrap";
+    wrap.style.display = "none";
+    container.appendChild(wrap);
+
+    function call(path, method, body) {
+      return authFetch(cfg.templateWorkerUrl + path, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(handle401).then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); });
+    }
+
+    // barra: progresso + só pendentes + desmarcar tudo + recolher/expandir
+    var bar = document.createElement("div");
+    bar.className = "churrasco-bar";
+    var progressEl = document.createElement("div");
+    progressEl.className = "churrasco-progress";
+    bar.appendChild(progressEl);
+    function mkBarBtn(html, title, fn) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "toolbar-icon-btn churrasco-bar-btn";
+      b.innerHTML = html;
+      b.title = title;
+      b.addEventListener("click", fn);
+      bar.appendChild(b);
+      return b;
+    }
+    var pendBtn = mkBarBtn('<i class="ti ti-filter"></i> Só pendentes', "Mostrar só o que falta", function () {
+      state.onlyPending = !state.onlyPending;
+      pendBtn.classList.toggle("active", state.onlyPending);
+      renderAll();
+    });
+    mkBarBtn('<i class="ti ti-arrows-minimize"></i>', "Recolher tudo", function () {
+      groupsOf().forEach(function (g) { state.collapsed[g] = true; });
+      renderAll();
+    });
+    mkBarBtn('<i class="ti ti-arrows-maximize"></i>', "Expandir tudo", function () { state.collapsed = {}; renderAll(); });
+    mkBarBtn('<i class="ti ti-refresh"></i> Desmarcar tudo', "Começar um churrasco novo (desmarca todos os itens)", function () {
+      if (!confirm("Desmarcar todos os itens da lista?")) return;
+      call("/churrasco-reset", "POST", {}).then(load).catch(function () { alert("Erro ao desmarcar."); });
+    });
+    wrap.appendChild(bar);
+
+    // adicionar item
+    var addWrap = document.createElement("div");
+    addWrap.className = "churrasco-add";
+    var addInput = document.createElement("input");
+    addInput.type = "text"; addInput.placeholder = "Novo item…"; addInput.className = "remedios-add-input";
+    var addGroup = document.createElement("input");
+    addGroup.type = "text"; addGroup.placeholder = "Grupo (existente ou novo)"; addGroup.className = "remedios-add-input";
+    addGroup.setAttribute("list", "churrascoGroupsList");
+    var dl = document.createElement("datalist");
+    dl.id = "churrascoGroupsList";
+    var addBtn = document.createElement("button");
+    addBtn.type = "button"; addBtn.className = "notes-add-btn";
+    addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
+    addWrap.appendChild(addInput); addWrap.appendChild(addGroup); addWrap.appendChild(dl); addWrap.appendChild(addBtn);
+    wrap.appendChild(addWrap);
+    function addItem(nome, grupo) {
+      nome = (nome || "").trim(); grupo = (grupo || "").trim();
+      if (!nome || !grupo) return;
+      addBtn.disabled = true;
+      call("/churrasco", "POST", { nome: nome, grupo: grupo }).then(function () {
+        addInput.value = ""; load();
+      }).catch(function () { alert("Erro ao adicionar."); }).finally(function () { addBtn.disabled = false; });
+    }
+    addBtn.addEventListener("click", function () { addItem(addInput.value, addGroup.value); });
+    addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(addInput.value, addGroup.value); });
+
+    // busca
+    var searchWrap = document.createElement("div");
+    searchWrap.className = "remedios-search";
+    var searchInput = document.createElement("input");
+    searchInput.type = "text"; searchInput.placeholder = "Pesquisar item…"; searchInput.className = "remedios-search-input";
+    searchWrap.appendChild(withSearchClear(searchInput));
+    wrap.appendChild(searchWrap);
+    searchInput.addEventListener("input", function () { state.search = searchInput.value; renderAll(); });
+
+    var listEl = document.createElement("div");
+    listEl.className = "churrasco-groups";
+    wrap.appendChild(listEl);
+
+    function groupsOf() {
+      var seen = {}, out = [];
+      state.items.forEach(function (it) { if (!seen[it.grupo]) { seen[it.grupo] = 1; out.push(it.grupo); } });
+      return out;
+    }
+    function setFeito(it, feito) {
+      it.feito = feito;
+      renderAll();
+      call("/churrasco?id=" + encodeURIComponent(it.id), "PUT", { feito: feito }).catch(function () {
+        it.feito = !feito; renderAll(); alert("Não foi possível salvar.");
+      });
+    }
+    function buildItemRow(it) {
+      var row = document.createElement("div");
+      row.className = "churrasco-item" + (it.feito ? " done" : "");
+      var cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = !!it.feito; cb.className = "churrasco-cb";
+      cb.addEventListener("change", function () { setFeito(it, cb.checked); });
+      row.appendChild(cb);
+      var name = document.createElement("span");
+      name.className = "churrasco-item-name";
+      name.textContent = it.nome;
+      name.addEventListener("click", function () { setFeito(it, !it.feito); });
+      row.appendChild(name);
+      var ed = document.createElement("button");
+      ed.type = "button"; ed.className = "churrasco-item-btn"; ed.title = "Renomear";
+      ed.innerHTML = '<i class="ti ti-pencil"></i>';
+      ed.addEventListener("click", function () {
+        var n = prompt("Novo nome do item:", it.nome);
+        if (n === null || !n.trim()) return;
+        call("/churrasco?id=" + encodeURIComponent(it.id), "PUT", { nome: n.trim() }).then(load).catch(function () {});
+      });
+      row.appendChild(ed);
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "churrasco-item-btn"; del.title = "Excluir";
+      del.innerHTML = '<i class="ti ti-trash"></i>';
+      del.addEventListener("click", function () {
+        if (!confirm("Excluir \"" + it.nome + "\"?")) return;
+        call("/churrasco?id=" + encodeURIComponent(it.id), "DELETE").then(load).catch(function () {});
+      });
+      row.appendChild(del);
+      return row;
+    }
+    function renderAll() {
+      listEl.innerHTML = "";
+      var total = state.items.length;
+      var feitos = state.items.filter(function (i) { return i.feito; }).length;
+      progressEl.textContent = feitos + "/" + total + " itens prontos";
+      dl.innerHTML = "";
+      groupsOf().forEach(function (g) { var o = document.createElement("option"); o.value = g; dl.appendChild(o); });
+      var q = normalize(state.search.trim());
+      var any = false;
+      groupsOf().forEach(function (g) {
+        var its = state.items.filter(function (i) {
+          if (i.grupo !== g) return false;
+          if (state.onlyPending && i.feito) return false;
+          return !q || normalize(i.nome).indexOf(q) !== -1;
+        });
+        if (!its.length) return;
+        any = true;
+        var all = state.items.filter(function (i) { return i.grupo === g; });
+        var done = all.filter(function (i) { return i.feito; }).length;
+        var box = document.createElement("div");
+        box.className = "churrasco-group" + (state.collapsed[g] ? " collapsed" : "") + (done === all.length ? " complete" : "");
+        var head = document.createElement("div");
+        head.className = "churrasco-group-head";
+        head.innerHTML = '<i class="ti ' + (state.collapsed[g] ? "ti-chevron-right" : "ti-chevron-down") + '"></i>';
+        var title = document.createElement("span");
+        title.className = "churrasco-group-title";
+        title.textContent = (CHUR_ICONS[g] ? CHUR_ICONS[g] + " " : "") + g;
+        head.appendChild(title);
+        var cnt = document.createElement("span");
+        cnt.className = "churrasco-group-count";
+        cnt.textContent = done + "/" + all.length;
+        head.appendChild(cnt);
+        head.addEventListener("click", function () { state.collapsed[g] = !state.collapsed[g]; renderAll(); });
+        box.appendChild(head);
+        if (!state.collapsed[g]) {
+          var body = document.createElement("div");
+          body.className = "churrasco-group-body";
+          its.forEach(function (it) { body.appendChild(buildItemRow(it)); });
+          box.appendChild(body);
+        }
+        listEl.appendChild(box);
+      });
+      if (!any) {
+        var p = document.createElement("p");
+        p.className = "empty";
+        p.textContent = total ? "Nada encontrado." : "Lista vazia.";
+        listEl.appendChild(p);
+      }
+    }
+    function load() {
+      call("/churrasco", "GET").then(function (data) {
+        state.items = (data && data.items) || [];
+        statusEl.style.display = "none";
+        wrap.style.display = "";
+        renderAll();
+      }).catch(function () {
+        statusEl.textContent = "Erro ao carregar a lista de Churrasco (o worker.js foi republicado?).";
+      });
+    }
+    load();
   }
 
   // ---------------- "page.pontoEletronico" — Ponto Eletrônico (Pessoal->
@@ -27666,6 +28112,12 @@
       return;
     }
 
+    // "Churrasco" (ajustes 2026-10-06) — mesmo padrão exclusivo.
+    if (page.churrasco) {
+      renderChurrascoPage(container, page);
+      return;
+    }
+
     if (page.pontoEletronico) {
       renderPontoEletronicoPage(container, page);
       return;
@@ -28599,6 +29051,37 @@
     }).catch(function () { return []; });
   }
 
+  // Tratamentos (Remédios — hora da dose): item SINTÉTICO por tratamento em
+  // andamento cuja próxima dose já passou ou vence nas próximas 24h. Se
+  // atrasada, gatilho = agora (mesmo truque de Supermercado/Remédios);
+  // senão, gatilho = horário da dose. O id inclui a quantidade de doses
+  // tomadas, então marcar "Tomei agora" faz a notificação seguinte nascer
+  // como nova (não lida).
+  function fetchTratamentosNotificationItems(source) {
+    return authFetch(cfg.templateWorkerUrl + "/tratamentos").then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+      return res.ok ? res.json() : { items: [] };
+    }).then(function (data) {
+      var now = Date.now();
+      var out = [];
+      ((data && data.items) || []).forEach(function (t) {
+        var e = tratEstado(t);
+        if (e.status !== "andamento" || !e.proxima) return;
+        var due = e.proxima.getTime();
+        if (due > now + 86400000) return;
+        var extra = {};
+        extra[source.dateProperty] = { start: new Date(due <= now ? now : due).toISOString() };
+        out.push({
+          id: "tratamento::" + t.id + "::" + e.feitas,
+          title: "Hora do remédio: " + t.nome + (t.dose ? " (" + t.dose + ")" : "") + " — dose " + (e.feitas + 1) + "/" + e.total,
+          url: location.origin + location.pathname + "#remedios",
+          extra: extra
+        });
+      });
+      return out;
+    }).catch(function () { return []; });
+  }
+
   // Backup semanal (kind "backup" — pedido do Georges: "criar tarefa pra
   // fazer backup dos dados do app, todo domingo às 20h"). Sem Notion nem
   // KV — item SINTÉTICO só, recalculado a cada refresh (mesmo espírito de
@@ -28904,6 +29387,7 @@
     if (source.kind === "financeiro") return fetchFinanceiroNotificationItems(source);
     if (source.kind === "supermercado") return fetchSupermercadoNotificationItems(source);
     if (source.kind === "remedios") return fetchRemediosNotificationItems(source);
+    if (source.kind === "tratamentos") return fetchTratamentosNotificationItems(source);
     if (source.kind === "provas") return fetchProvasNotificationItems(source);
     if (source.kind === "backup") return fetchBackupNotificationItems(source);
     if (source.kind === "ponto_mes_ajuste") return fetchPontoAjustarMesNotificationItems(source);
