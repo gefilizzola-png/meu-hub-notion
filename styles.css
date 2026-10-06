@@ -8751,3 +8751,5 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .verif-auto-label{flex:0 0 160px;font-size:.85em;color:#495057}
 .verif-auto-input{flex:1;min-width:200px;padding:5px 8px;border:1px solid var(--border,#ced4da);border-radius:6px;font:inherit}
 .verif-auto-panel .filter-trigger{align-self:flex-start}
+.verif-man-btn{margin-left:6px;vertical-align:middle}
+.verif-man-btn-hot{color:#e8590c}

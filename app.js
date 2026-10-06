@@ -19056,6 +19056,78 @@
     box.appendChild(note);
     return box;
   }
+  // Escolha manual de categoria: o Georges seleciona a categoria e o nome é montado com o prefixo
+  // que o histórico usa pra ela + estabelecimento/pessoa limpo. Terminar com " - " em transferências.
+  function verifManualName(catInfo, merchant) {
+    if (!catInfo) return "";
+    var m = merchant || "";
+    return catInfo.prefix + (m ? " - " + m : "") + (catInfo.transfer && m ? " - " : "");
+  }
+  function verifBuildManualPanel(it, categories) {
+    var box = document.createElement("div");
+    box.className = "verif-auto-panel";
+    var byName = {};
+    categories.forEach(function (c) { byName[c.name] = c; });
+    var dlId = "verif-dl-" + Math.random().toString(36).slice(2, 8);
+    var dl = document.createElement("datalist");
+    dl.id = dlId;
+    categories.forEach(function (c) {
+      var o = document.createElement("option");
+      o.value = c.name;
+      if (c.parent) o.label = c.parent + " › " + c.name;
+      dl.appendChild(o);
+    });
+    box.appendChild(dl);
+    function row(label) {
+      var r = document.createElement("div");
+      r.className = "verif-auto-row";
+      var lb = document.createElement("span");
+      lb.className = "verif-auto-label";
+      lb.textContent = label;
+      r.appendChild(lb);
+      box.appendChild(r);
+      return r;
+    }
+    var rCat = row("Categoria");
+    var catInp = document.createElement("input");
+    catInp.type = "text"; catInp.className = "verif-auto-input";
+    catInp.setAttribute("list", dlId);
+    catInp.placeholder = "Digite para buscar a categoria…";
+    rCat.appendChild(catInp);
+    var rMer = row("Estabelecimento / pessoa");
+    var merInp = document.createElement("input");
+    merInp.type = "text"; merInp.className = "verif-auto-input";
+    merInp.value = it.merchant || "";
+    rMer.appendChild(merInp);
+    var rName = row("Nome");
+    var nameInp = document.createElement("input");
+    nameInp.type = "text"; nameInp.className = "verif-auto-input";
+    nameInp.placeholder = "Escolha a categoria para montar o nome";
+    rName.appendChild(nameInp);
+    rName.appendChild(verifCopyBtn(function () { return nameInp.value; }, "nome"));
+    var autoHolder = document.createElement("div");
+    function rebuild() {
+      var ci = byName[catInp.value.trim()];
+      if (ci) nameInp.value = verifManualName(ci, merInp.value.trim());
+    }
+    catInp.addEventListener("input", rebuild);
+    catInp.addEventListener("change", rebuild);
+    merInp.addEventListener("input", rebuild);
+    var autoBtn = document.createElement("button");
+    autoBtn.type = "button";
+    autoBtn.className = "filter-trigger";
+    autoBtn.innerHTML = '<i class="ti ti-wand"></i><span>Gerar textos da Automação</span>';
+    autoBtn.addEventListener("click", function () {
+      autoHolder.innerHTML = "";
+      autoHolder.appendChild(verifBuildAutomationPanel({
+        description: it.description, category_name: catInp.value.trim() || it.category_name,
+        suggested: catInp.value.trim() || "", suggested_name: nameInp.value || it.description
+      }));
+    });
+    box.appendChild(autoBtn);
+    box.appendChild(autoHolder);
+    return box;
+  }
   function verifInfoIcon(text) {
     var i = document.createElement("i");
     i.className = "ti ti-info-circle verif-info-icon";
@@ -19090,6 +19162,8 @@
     var r0 = transacoesResolvePeriodPreset(state.periodPreset);
     state.start = r0.start; state.end = r0.end;
     var data = null;
+    var allCats = [];
+    var allCats = [];
 
     // página própria de inconsistências: busca e filtros sempre à mostra (pedido do Georges)
     var searchSec = { body: document.createElement("div") };
@@ -19259,6 +19333,24 @@
           sg.title = "Categoria que costuma ser usada para esse nome";
           cat.appendChild(sg);
         }
+        var manBtn = document.createElement("button");
+        manBtn.type = "button";
+        manBtn.className = "verif-copy-btn verif-man-btn" + (it.suggested_name ? "" : " verif-man-btn-hot");
+        manBtn.title = "Escolher a categoria e montar o nome";
+        manBtn.innerHTML = '<i class="ti ti-category-2"></i>';
+        cat.appendChild(manBtn);
+        var manRow = null;
+        manBtn.addEventListener("click", function () {
+          if (manRow) { manRow.parentNode.removeChild(manRow); manRow = null; manBtn.classList.remove("active"); return; }
+          manRow = document.createElement("tr");
+          manRow.className = "verif-auto-row-tr";
+          var mc = document.createElement("td");
+          mc.colSpan = cols.length;
+          mc.appendChild(verifBuildManualPanel(it, allCats));
+          manRow.appendChild(mc);
+          row.parentNode.insertBefore(manRow, row.nextSibling);
+          manBtn.classList.add("active");
+        });
         var vc = td(transacoesFmtMoney(Math.abs(it.amount || 0)), "verif-col-valor");
         if (it.flow_type === "entrada") vc.classList.add("verif-entrada");
         td(it.account_name || "—");
@@ -19361,7 +19453,7 @@
         })
         .then(function (j) {
           if (!j) return;
-          data = j; state.limit = {};
+          data = j; state.limit = {}; allCats = j.categories || [];
           statusEl.style.display = "none";
           renderLists();
         })
