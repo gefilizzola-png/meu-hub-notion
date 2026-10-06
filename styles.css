@@ -8923,3 +8923,9 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .emprestimos-tr-detail td { border: 0.5px solid #e2e0da; border-radius: 10px; padding: 8px 12px; }
 /* botão Novo: compacto */
 .emprestimos-new-btn { padding: 6px 14px; font-size: 13px; border-radius: 8px; margin: 2px 0 8px; align-self: flex-start; width: fit-content; max-width: max-content; }
+.emprestimos-chip-valor { background: #f1f3f5; color: #343a40; font-weight: 600; }
+.emprestimos-chip-venc { background: #fff4e6; color: #d9480f; }
+.emprestimos-chip-venc.atrasado { background: #ffc9c9; color: #c92a2a; font-weight: 600; }
+.emprestimos-chip-venc.pago { background: #d3f9d8; color: #2b8a3e; }
+.emprestimos-chip-vazio { background: #f1f3f5; color: #adb5bd; }
+.emprestimos-tr td { vertical-align: middle; }

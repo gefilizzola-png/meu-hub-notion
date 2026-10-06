@@ -25986,15 +25986,15 @@
       function td(cls) { var c = document.createElement("td"); if (cls) c.className = cls; tr.appendChild(c); return c; }
       td("emprestimos-td-short").appendChild(chip(transacoesFmtDateBR(loan.data), "emprestimos-chip-data", "ti-calendar"));
       td().appendChild(chip(loan.pessoa, "emprestimos-chip-nome"));
-      td().textContent = loan.objetivo || "—";
+      td().appendChild(chip(loan.objetivo || "—", "emprestimos-chip-objetivo"));
       td("emprestimos-td-short").appendChild(chip(loanSituacaoLabel(situacao), "emprestimos-chip-situacao " + situacao, loanSituacaoIcon(situacao)));
       var tdP = td("emprestimos-td-short");
       if (pInfo && !pInfo.quitado) tdP.appendChild(chip(Math.min(pInfo.pagas + 1, pInfo.total) + "/" + pInfo.total + " · " + transacoesFmtMoney(pInfo.proxima), "emprestimos-chip-parcela", "ti-list-numbers"));
-      else if (pInfo) tdP.textContent = pInfo.total + "/" + pInfo.total;
-      else tdP.textContent = "—";
+      else if (pInfo) tdP.appendChild(chip(pInfo.total + "/" + pInfo.total, "emprestimos-chip-parcela", "ti-list-numbers"));
+      else tdP.appendChild(chip("—", "emprestimos-chip-vazio"));
       var venc = loanProximoVencimentoISO(loan);
-      td("emprestimos-td-short").textContent = venc ? transacoesFmtDateBR(venc) : "—";
-      td("emprestimos-td-short emprestimos-td-num").textContent = transacoesFmtMoney(total);
+      td("emprestimos-td-short").appendChild(venc ? chip(transacoesFmtDateBR(venc), "emprestimos-chip-venc " + situacao, "ti-calendar-due") : chip("—", "emprestimos-chip-vazio"));
+      td("emprestimos-td-short emprestimos-td-num").appendChild(chip(transacoesFmtMoney(total), "emprestimos-chip-valor"));
       td("emprestimos-td-short emprestimos-td-num").appendChild(chip(transacoesFmtMoney(saldo), "emprestimos-chip-saldo " + situacao));
       var tdA = td("emprestimos-td-short emprestimos-td-acoes");
 
