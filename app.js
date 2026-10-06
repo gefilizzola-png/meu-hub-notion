@@ -27271,6 +27271,10 @@
   // Lista de páginas travadas fica na KV (GET/PUT /page-locks). Usa o MESMO PIN
   // e o mesmo desbloqueio (20 min) de Transações. Trava de tela no app.
   var pageLocks = [];
+  // o desbloqueio de 20min fica no localStorage e sobreviveria a fechar/abrir o app;
+  // pra páginas com cadeado, exige PIN digitado NESTA abertura do app.
+  var pinUnlockedThisLoad = false;
+  function pageUnlockOk() { return pinUnlockedThisLoad && !!transacoesGetStoredUnlock(); }
   function isPageLocked(id) { return pageLocks.indexOf(id) !== -1; }
   function fetchPageLocks() {
     return authFetch(cfg.templateWorkerUrl + "/page-locks")
@@ -27281,7 +27285,8 @@
   function savePageLocks() {
     return authFetch(cfg.templateWorkerUrl + "/page-locks", {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pages: pageLocks })
-    }).catch(function () {});
+    }).then(function (r) { if (!r.ok) alert("Não consegui salvar o cadeado (erro " + r.status + "). Confira se o Worker foi republicado."); })
+      .catch(function () { alert("Não consegui salvar o cadeado. Confira se o Worker foi republicado."); });
   }
   function updatePageLockBtn() {
     var btn = document.getElementById("pageLockBtn");
@@ -27296,10 +27301,11 @@
       btn.addEventListener("click", function () {
         var id = currentId;
         if (isPageLocked(id)) {
-          if (!transacoesGetStoredUnlock()) { render(id, false); return; } // pede o PIN antes de remover
+          if (!pageUnlockOk()) { render(id, false); return; } // pede o PIN antes de remover
           pageLocks = pageLocks.filter(function (x) { return x !== id; });
         } else {
           pageLocks.push(id);
+          pinUnlockedThisLoad = true; // quem está ligando o cadeado já está presente
         }
         savePageLocks();
         updatePageLockBtn();
@@ -27316,11 +27322,11 @@
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
-    if (isPageLocked(pageId) && !transacoesGetStoredUnlock()) {
+    if (isPageLocked(pageId) && !pageUnlockOk()) {
       var lockWrap = document.createElement("div");
       lockWrap.className = "transacoes-block";
       container.appendChild(lockWrap);
-      renderTransacoesLockScreen(lockWrap, function () { if (currentId === pageId) renderContent(pageId); }, "🔒 " + (page.title || "Página protegida"));
+      renderTransacoesLockScreen(lockWrap, function () { pinUnlockedThisLoad = true; if (currentId === pageId) renderContent(pageId); }, "🔒 " + (page.title || "Página protegida"));
       return;
     }
     teardownPrivacy(container);
