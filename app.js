@@ -25456,7 +25456,8 @@
       tab: (routeTab === "receber" || routeTab === "pagar") ? routeTab : "receber",
       // qual empréstimo está com o painel de pagamentos expandido (1 por
       // vez, mesmo espírito de outras expansões pontuais do app).
-      expandedId: null
+      expandedId: null,
+      editingId: null
     };
     updateTabActive();
 
@@ -25829,6 +25830,7 @@
         save.disabled = true;
         updateLoan(loan.id, patch).then(function (res) { return res.json(); }).then(function (d) {
           if (d && d.error) { alert(d.error); return; }
+          state.editingId = null;
           if (dir.value !== state.tab) state.tab = dir.value;
           loadLoans();
         }).catch(function () {}).finally(function () { save.disabled = false; });
@@ -25880,6 +25882,19 @@
       chevron.className = "ti " + (expanded ? "ti-chevron-up" : "ti-chevron-down") + " emprestimos-row-chevron";
       row.appendChild(chevron);
 
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "emprestimos-row-delete emprestimos-row-edit" + (state.editingId === loan.id ? " active" : "");
+      editBtn.title = "Editar empréstimo";
+      editBtn.innerHTML = '<i class="ti ti-pencil"></i>';
+      editBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (state.editingId === loan.id) { state.editingId = null; }
+        else { state.editingId = loan.id; state.expandedId = loan.id; }
+        renderList();
+      });
+      row.appendChild(editBtn);
+
       var delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.className = "emprestimos-row-delete";
@@ -25902,7 +25917,7 @@
         metaEl.textContent = metaParts.join(" · ");
         detail.appendChild(metaEl);
 
-        detail.appendChild(buildLoanBasicEditor(loan));
+        if (state.editingId === loan.id) detail.appendChild(buildLoanBasicEditor(loan));
         detail.appendChild(buildFormaPagamentoEditor(loan));
 
         var progressWrap = document.createElement("div");
@@ -28293,7 +28308,7 @@
     return out.join("\n");
   }
   // AJ_PURE_END
-  var ajustes = { items: [], loaded: false, loading: false, filter: "pendente", editingId: null, built: false, el: {} };
+  var ajustes = { items: [], loaded: false, loading: false, filter: "pendente", editingId: null, built: false, el: {}, search: "", fPrio: "", fTipo: "", fPag: "", sortBy: "prioridade" };
   var AJUSTE_PRIO_UI = [{ k: "", t: "Prioridade (opcional)" }, { k: "alta", t: "🔴 Alta" }, { k: "media", t: "🟠 Média" }, { k: "baixa", t: "🟢 Baixa" }];
   function ajustesPrioRank(p) { var i = ["alta", "media", "baixa"].indexOf(p); return i === -1 ? 3 : i; }
   var AJUSTE_TIPOS_UI = [{ k: "", t: "Tipo (opcional)" }, { k: "bug", t: "🐞 Bug" }, { k: "melhoria", t: "✨ Melhoria" }, { k: "ideia", t: "💡 Ideia" }];
@@ -28399,10 +28414,34 @@
     bar.appendChild(pills); bar.appendChild(exp);
     panel.appendChild(bar);
 
+    // pesquisa + filtros + classificação
+    var fbar = document.createElement("div"); fbar.className = "ajustes-filters";
+    var sInput = document.createElement("input"); sInput.type = "text"; sInput.className = "ajustes-search"; sInput.placeholder = "Pesquisar ajustes…";
+    sInput.addEventListener("input", function () { ajustes.search = sInput.value; ajustesRenderList(); });
+    fbar.appendChild(withSearchClear(sInput));
+    function mkSel(title, opts, key) {
+      var sel = document.createElement("select"); sel.className = "ajustes-select"; sel.title = title;
+      opts.forEach(function (t) { var o = document.createElement("option"); o.value = t[0]; o.textContent = t[1]; sel.appendChild(o); });
+      sel.value = ajustes[key];
+      sel.addEventListener("change", function () { ajustes[key] = sel.value; ajustesRenderList(); });
+      fbar.appendChild(sel); return sel;
+    }
+    var fP = mkSel("Filtrar por prioridade", [["", "Toda prioridade"], ["alta", "🔴 Alta"], ["media", "🟠 Média"], ["baixa", "🟢 Baixa"], ["_none", "Sem prioridade"]], "fPrio");
+    var fT = mkSel("Filtrar por tipo", [["", "Todo tipo"], ["bug", "🐞 Bug"], ["melhoria", "✨ Melhoria"], ["ideia", "💡 Ideia"], ["_none", "Sem tipo"]], "fTipo");
+    var fG = mkSel("Filtrar por página", [["", "Toda página"]], "fPag");
+    var sB = mkSel("Classificar / agrupar por", [["prioridade", "Classificar: Prioridade"], ["pagina", "Classificar: Página"], ["tipo", "Classificar: Tipo"], ["data", "Classificar: Data"]], "sortBy");
+    var clr = document.createElement("button"); clr.type = "button"; clr.className = "ajustes-btn"; clr.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clr.addEventListener("click", function () {
+      ajustes.search = ""; ajustes.fPrio = ""; ajustes.fTipo = ""; ajustes.fPag = "";
+      sInput.value = ""; fP.value = ""; fT.value = ""; fG.value = ""; ajustesRenderList();
+    });
+    fbar.appendChild(clr);
+    panel.appendChild(fbar);
+
     var list = document.createElement("div"); list.className = "ajustes-list";
     panel.appendChild(list);
     document.body.appendChild(bd);
-    ajustes.el = { bd: bd, ta: ta, selO: selO, selT: selT, pills: pills, list: list };
+    ajustes.el = { bd: bd, ta: ta, selO: selO, selT: selT, pills: pills, list: list, fG: fG };
   }
 
   function ajustesRenderList() {
@@ -28420,15 +28459,49 @@
     E.list.innerHTML = "";
     if (ajustes.loading && !ajustes.loaded) { var l = document.createElement("p"); l.className = "ajustes-empty"; l.textContent = "Carregando…"; E.list.appendChild(l); return; }
     if (ajustes.error && !ajustes.loaded) { var er = document.createElement("p"); er.className = "ajustes-empty"; er.textContent = "Erro ao carregar: " + ajustes.error + " (o Worker já foi republicado?)"; E.list.appendChild(er); return; }
-    var items = ajustes.items.filter(function (i) { return ajustes.filter === "todos" || (ajustes.filter === "feito" ? i.status === "feito" : i.status !== "feito"); });
-    if (!items.length) { var em = document.createElement("p"); em.className = "ajustes-empty"; em.textContent = ajustes.filter === "pendente" ? "Nada pendente. Anote acima o que quiser melhorar." : "Nada aqui."; E.list.appendChild(em); return; }
-    var groups = {};
-    items.forEach(function (i) { var k = i.origem ? (ajustesOrigemLabel(i.origem) || i.origemLabel || i.origem) : "🌐 Geral"; (groups[k] = groups[k] || []).push(i); });
-    function gBest(n) { return Math.min.apply(null, groups[n].map(function (i) { return ajustesPrioRank(i.prioridade); })); }
-    Object.keys(groups).sort(function (a, b) { return (gBest(a) - gBest(b)) || a.localeCompare(b, "pt-BR"); }).forEach(function (name) {
-      var gh = document.createElement("div"); gh.className = "ajustes-group"; gh.textContent = name + " · " + groups[name].length; E.list.appendChild(gh);
-      groups[name].sort(function (a, b) { return (ajustesPrioRank(a.prioridade) - ajustesPrioRank(b.prioridade)) || String(b.createdAt).localeCompare(String(a.createdAt)); }).forEach(function (it) { E.list.appendChild(ajustesItemEl(it)); });
+    function pagLabel(i) { return i.origem ? (ajustesOrigemLabel(i.origem) || i.origemLabel || i.origem) : "🌐 Geral"; }
+    var base = ajustes.items.filter(function (i) { return ajustes.filter === "todos" || (ajustes.filter === "feito" ? i.status === "feito" : i.status !== "feito"); });
+    // opções do filtro de página (a partir dos itens do status atual)
+    var pagNames = {}; base.forEach(function (i) { pagNames[pagLabel(i)] = 1; });
+    var fG = E.fG; if (fG) {
+      var cur = ajustes.fPag; fG.innerHTML = "";
+      var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "Toda página"; fG.appendChild(o0);
+      Object.keys(pagNames).sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }).forEach(function (n) { var o = document.createElement("option"); o.value = n; o.textContent = n; fG.appendChild(o); });
+      fG.value = pagNames[cur] ? cur : ""; if (fG.value !== cur) ajustes.fPag = fG.value;
+    }
+    var q = normalize((ajustes.search || "").trim());
+    var items = base.filter(function (i) {
+      if (ajustes.fPrio && (ajustes.fPrio === "_none" ? !!i.prioridade : i.prioridade !== ajustes.fPrio)) return false;
+      if (ajustes.fTipo && (ajustes.fTipo === "_none" ? !!i.tipo : i.tipo !== ajustes.fTipo)) return false;
+      if (ajustes.fPag && pagLabel(i) !== ajustes.fPag) return false;
+      if (q && normalize(String(i.texto || "") + " " + pagLabel(i) + " " + (i.tipo || "") + " " + (i.prioridade || "")).indexOf(q) === -1) return false;
+      return true;
     });
+    if (!items.length) { var em = document.createElement("p"); em.className = "ajustes-empty"; em.textContent = (q || ajustes.fPrio || ajustes.fTipo || ajustes.fPag) ? "Nenhum ajuste com esses filtros." : (ajustes.filter === "pendente" ? "Nada pendente. Anote acima o que quiser melhorar." : "Nada aqui."); E.list.appendChild(em); return; }
+    function tipoRank(t) { var i = ["bug", "melhoria", "ideia"].indexOf(t); return i === -1 ? 3 : i; }
+    function byPrioDate(a, b) { return (ajustesPrioRank(a.prioridade) - ajustesPrioRank(b.prioridade)) || String(b.createdAt).localeCompare(String(a.createdAt)); }
+    function renderGroups(keyFn, rankFn, innerSort) {
+      var groups = {};
+      items.forEach(function (i) { var k = keyFn(i); (groups[k] = groups[k] || []).push(i); });
+      Object.keys(groups).sort(function (a, b) { return (rankFn(a, groups) - rankFn(b, groups)) || a.localeCompare(b, "pt-BR"); }).forEach(function (name) {
+        var gh = document.createElement("div"); gh.className = "ajustes-group"; gh.textContent = name + " · " + groups[name].length; E.list.appendChild(gh);
+        groups[name].sort(innerSort).forEach(function (it) { E.list.appendChild(ajustesItemEl(it)); });
+      });
+    }
+    var PRIO_NAMES = { alta: "🔴 Alta", media: "🟠 Média", baixa: "🟢 Baixa" };
+    var TIPO_NAMES = { bug: "🐞 Bug", melhoria: "✨ Melhoria", ideia: "💡 Ideia" };
+    if (ajustes.sortBy === "pagina") {
+      renderGroups(pagLabel, function () { return 0; }, byPrioDate);
+    } else if (ajustes.sortBy === "tipo") {
+      renderGroups(function (i) { return TIPO_NAMES[i.tipo] || "Sem tipo"; },
+        function (n) { var k = Object.keys(TIPO_NAMES).filter(function (x) { return TIPO_NAMES[x] === n; })[0]; return tipoRank(k); }, byPrioDate);
+    } else if (ajustes.sortBy === "data") {
+      items.slice().sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).forEach(function (it) { E.list.appendChild(ajustesItemEl(it)); });
+    } else {
+      renderGroups(function (i) { return PRIO_NAMES[i.prioridade] || "Sem prioridade"; },
+        function (n) { var k = Object.keys(PRIO_NAMES).filter(function (x) { return PRIO_NAMES[x] === n; })[0]; return ajustesPrioRank(k); },
+        function (a, b) { return (tipoRank(a.tipo) - tipoRank(b.tipo)) || String(b.createdAt).localeCompare(String(a.createdAt)); });
+    }
   }
 
   function ajustesItemEl(it) {

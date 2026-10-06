@@ -8873,3 +8873,9 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
   padding: 8px 0;
   border-bottom: 0.5px solid #ececea;
 }
+
+.emprestimos-row-edit.active { color: #185fa5; background: #e6f1fb; }
+
+.ajustes-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0 8px; }
+.ajustes-filters .ajustes-search { min-width: 150px; }
+.ajustes-filters .ajustes-select { max-width: 170px; }
