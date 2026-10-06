@@ -8741,3 +8741,13 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .verif-sev-alta{background:#ffe3e3;color:#c92a2a}
 .verif-sev-media{background:#fff4e6;color:#d9480f}
 .verif-sev-baixa{background:#f1f3f5;color:#495057}
+
+.verif-desc-sug{display:flex;align-items:center;gap:4px;margin-top:2px}
+.verif-desc-sug .verif-suggest{margin-left:0}
+.verif-copy-btn{border:none;background:transparent;cursor:pointer;color:#868e96;padding:2px 4px;border-radius:4px;font-size:15px}
+.verif-copy-btn:hover,.verif-copy-btn.active{color:#4a90d9;background:var(--surface-2,#e7f5ff)}
+.verif-auto-panel{display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--surface-2,#f8f9fa);border-radius:8px;white-space:normal;max-width:760px}
+.verif-auto-row{display:flex;align-items:center;gap:8px}
+.verif-auto-label{flex:0 0 160px;font-size:.85em;color:#495057}
+.verif-auto-input{flex:1;min-width:200px;padding:5px 8px;border:1px solid var(--border,#ced4da);border-radius:6px;font:inherit}
+.verif-auto-panel .filter-trigger{align-self:flex-start}

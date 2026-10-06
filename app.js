@@ -18987,6 +18987,75 @@
     (reasons || []).forEach(function (r) { if ((VERIF_SEV_RANK[r.sev] || 0) > VERIF_SEV_RANK[best]) best = r.sev; });
     return best;
   }
+  // Palavra-chave sugerida pra "Quando o nome tiver ..." da Automação do Visor (editável na tela):
+  // PIX -> nome da pessoa; "CAPPTA*VIRADONUMALHO ..." -> trecho depois do "*"; senão a 1ª palavra
+  // (ou as 2 primeiras, se a 1ª for curta/genérica).
+  function verifAutoKeyword(desc) {
+    var t = String(desc || "").replace(/^PIX\s*-\s*(ENVIADO|RECEBIDO)\s*-?\s*/i, "").replace(/\s+BR$/i, "").trim();
+    if (!t) return "";
+    var toks = t.split(/\s+/);
+    var first = toks[0];
+    if (first.indexOf("*") !== -1) { var after = first.split("*").pop(); if (after.length >= 3) return after.toUpperCase(); }
+    var generic = { "DE": 1, "DA": 1, "DO": 1, "COM": 1, "COMERCIO": 1, "LOJA": 1, "SUPER": 1, "POSTO": 1 };
+    if (first.length < 4 || generic[first.toUpperCase()]) return toks.slice(0, 2).join(" ").toUpperCase();
+    return first.toUpperCase();
+  }
+  function verifCopyBtn(getText, label) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "verif-copy-btn";
+    b.title = "Copiar" + (label ? " " + label : "");
+    b.innerHTML = '<i class="ti ti-copy"></i>';
+    b.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      financeiroCopyToClipboard(getText()).then(function () {
+        b.innerHTML = '<i class="ti ti-check"></i>';
+        setTimeout(function () { b.innerHTML = '<i class="ti ti-copy"></i>'; }, 1200);
+      });
+    });
+    return b;
+  }
+  function verifBuildAutomationPanel(it) {
+    var box = document.createElement("div");
+    box.className = "verif-auto-panel";
+    var rawCat = it.suggested || (it.category_name || "");
+    var fields = [
+      { id: "kw", label: "Quando o nome tiver", value: verifAutoKeyword(it.description) },
+      { id: "cat", label: "A categoria vira", value: rawCat },
+      { id: "name", label: "O nome vira", value: it.suggested_name || it.description || "" },
+      { id: "tag", label: "Ganha a tag", value: "Categorizada" },
+    ];
+    var inputs = {};
+    fields.forEach(function (f) {
+      var row = document.createElement("div");
+      row.className = "verif-auto-row";
+      var lb = document.createElement("span");
+      lb.className = "verif-auto-label";
+      lb.textContent = f.label;
+      var inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "verif-auto-input";
+      inp.value = f.value;
+      inputs[f.id] = inp;
+      row.appendChild(lb); row.appendChild(inp);
+      row.appendChild(verifCopyBtn(function () { return inp.value; }, f.label.toLowerCase()));
+      box.appendChild(row);
+    });
+    var allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "filter-trigger";
+    allBtn.innerHTML = '<i class="ti ti-copy"></i><span>Copiar tudo</span>';
+    allBtn.addEventListener("click", function () {
+      var txt = "Quando o nome tiver: " + inputs.kw.value + "\nA categoria vira: " + inputs.cat.value + "\nO nome vira: " + inputs.name.value + "\nGanha a tag: " + inputs.tag.value;
+      financeiroCopyToClipboard(txt).then(function () { allBtn.querySelector("span").textContent = "Copiado!"; setTimeout(function () { allBtn.querySelector("span").textContent = "Copiar tudo"; }, 1200); });
+    });
+    box.appendChild(allBtn);
+    var note = document.createElement("p");
+    note.className = "empty verif-hint";
+    note.textContent = "A palavra-chave é uma sugestão a partir do texto do banco — ajuste se precisar. Confira também se a categoria e as demais tags (ex.: pessoa) estão certas antes de salvar a regra no Visor.";
+    box.appendChild(note);
+    return box;
+  }
   function verifInfoIcon(text) {
     var i = document.createElement("i");
     i.className = "ti ti-info-circle verif-info-icon";
@@ -19136,13 +19205,13 @@
       tw.className = "verif-table-scroll";
       var table = document.createElement("table");
       table.className = "financeiro-table saude-table verif-table";
-      var cols = [["date", "Data"], ["description", "Descrição"], ["category", "Categoria"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Motivo"]];
+      var cols = [["date", "Data"], ["description", "Descrição"], ["category", "Categoria"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Motivo"], ["auto", "Automação"]];
       var thead = document.createElement("thead");
       var tr = document.createElement("tr");
       cols.forEach(function (c) {
         var th = document.createElement("th");
         th.className = "financeiro-th verif-th-" + c[0];
-        if (c[0] === "motivo") { th.textContent = c[1]; tr.appendChild(th); return; }
+        if (c[0] === "motivo" || c[0] === "auto") { th.textContent = c[1]; tr.appendChild(th); return; }
         th.classList.add("financeiro-th-sortable");
         var lb = document.createElement("span");
         lb.className = "financeiro-th-label";
@@ -19166,7 +19235,22 @@
         row.className = "financeiro-row saude-row";
         function td(txt, cls) { var c = document.createElement("td"); c.className = "verif-td" + (cls ? " " + cls : ""); c.textContent = txt; row.appendChild(c); return c; }
         td(transacoesFmtDateBR(it.date));
-        var d = td(it.description || "—", "verif-col-desc"); d.title = it.description || "";
+        var d = td("", "verif-col-desc"); d.title = it.description || "";
+        var dMain = document.createElement("div");
+        dMain.className = "verif-desc-main";
+        dMain.textContent = it.description || "—";
+        d.appendChild(dMain);
+        if (it.suggested_name) {
+          var dSug = document.createElement("div");
+          dSug.className = "verif-desc-sug";
+          var dTxt = document.createElement("span");
+          dTxt.className = "verif-suggest";
+          dTxt.textContent = "→ " + it.suggested_name;
+          dTxt.title = "Nome no padrão (clique no ícone para copiar e colar no Visor)";
+          dSug.appendChild(dTxt);
+          dSug.appendChild(verifCopyBtn(function () { return it.suggested_name; }, "nome sugerido"));
+          d.appendChild(dSug);
+        }
         var cat = td((it.category_name ? transacoesCategoriaIcon(it.category_name) + " " + it.category_name : "— sem categoria —"), "verif-col-cat");
         if (it.suggested) {
           var sg = document.createElement("span");
@@ -19186,7 +19270,27 @@
         chip.textContent = VERIF_SEV_LABEL[sev];
         sc.appendChild(chip); row.appendChild(sc);
         var mt = td(reasonText(it), "verif-col-motivo"); mt.title = reasonText(it);
+        var ac = document.createElement("td");
+        ac.className = "verif-td";
+        var autoBtn = document.createElement("button");
+        autoBtn.type = "button";
+        autoBtn.className = "verif-copy-btn verif-auto-btn";
+        autoBtn.title = "Gerar textos para a Automação de categorização do Visor";
+        autoBtn.innerHTML = '<i class="ti ti-wand"></i>';
+        ac.appendChild(autoBtn); row.appendChild(ac);
         tbody.appendChild(row);
+        var panelRow = null;
+        autoBtn.addEventListener("click", function () {
+          if (panelRow) { panelRow.parentNode.removeChild(panelRow); panelRow = null; autoBtn.classList.remove("active"); return; }
+          panelRow = document.createElement("tr");
+          panelRow.className = "verif-auto-row-tr";
+          var pc = document.createElement("td");
+          pc.colSpan = cols.length;
+          pc.appendChild(verifBuildAutomationPanel(it));
+          panelRow.appendChild(pc);
+          row.parentNode.insertBefore(panelRow, row.nextSibling);
+          autoBtn.classList.add("active");
+        });
       });
       table.appendChild(tbody);
       tw.appendChild(table);
