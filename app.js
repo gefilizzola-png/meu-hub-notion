@@ -18987,6 +18987,14 @@
     (reasons || []).forEach(function (r) { if ((VERIF_SEV_RANK[r.sev] || 0) > VERIF_SEV_RANK[best]) best = r.sev; });
     return best;
   }
+  function verifInfoIcon(text) {
+    var i = document.createElement("i");
+    i.className = "ti ti-info-circle verif-info-icon";
+    i.title = text;
+    i.setAttribute("aria-label", text);
+    i.tabIndex = 0;
+    return i;
+  }
   function renderTransacoesVerificacoesPage(container, page) {
     var wrap = document.createElement("div");
     wrap.className = "transacoes-block verif-block";
@@ -18999,25 +19007,26 @@
   function renderTransacoesVerificacoesUnlocked(wrap, unlockToken) {
     wrap.innerHTML = "";
     var cfg = APP_CONFIG;
+    var titleRow = document.createElement("div");
+    titleRow.className = "verif-title-row";
+    wrap.appendChild(titleRow);
     var title = document.createElement("h3");
     title.className = "group-title";
+    title.style.margin = "0";
     title.textContent = "🧹 Transações — Verificações";
-    wrap.appendChild(title);
-    var intro = document.createElement("p");
-    intro.className = "empty";
-    intro.style.margin = "4px 0 10px";
-    intro.textContent = "Lançamentos que merecem uma olhada no Visor. O padrão de nome (Grupo - Descrição - Estabelecimento) é aprendido do seu histórico inteiro; aqui só entram os do período escolhido. Nada é alterado — é só uma lista.";
-    wrap.appendChild(intro);
+    titleRow.appendChild(title);
+    titleRow.appendChild(verifInfoIcon("Lançamentos que merecem uma olhada no Visor. O padrão de nome (Grupo - Descrição - Estabelecimento) é aprendido do seu histórico inteiro; aqui só entram os do período escolhido. Nada é alterado — é só uma lista."));
 
-    var state = { periodPreset: "60d", start: "", end: "", search: "", sev: "", only: {}, sortKey: "date", sortDir: -1, limit: {} };
+    var state = { periodPreset: "60d", start: "", end: "", search: "", sev: "", only: {}, sortKey: "date", sortDir: -1, limit: {}, expanded: {} };
     var r0 = transacoesResolvePeriodPreset(state.periodPreset);
     state.start = r0.start; state.end = r0.end;
     var data = null;
 
-    var searchSec = buildCollapsibleSection("🔎 Pesquisar", false);
-    wrap.appendChild(searchSec.section);
-    var filterSec = buildCollapsibleSection("🧰 Filtrar", false);
-    wrap.appendChild(filterSec.section);
+    // página própria de inconsistências: busca e filtros sempre à mostra (pedido do Georges)
+    var searchSec = { body: document.createElement("div") };
+    wrap.appendChild(searchSec.body);
+    var filterSec = { body: document.createElement("div") };
+    wrap.appendChild(filterSec.body);
     var statusEl = document.createElement("p");
     statusEl.className = "empty";
     statusEl.textContent = "Analisando transações…";
@@ -19034,7 +19043,7 @@
     searchInput.className = "search-input";
     searchInput.placeholder = "Buscar por descrição, conta, categoria ou motivo…";
     var searchBox = withSearchClear(searchInput);
-    searchBox.style.margin = "10px 0";
+    searchBox.style.margin = "8px 0";
     searchSec.body.appendChild(searchBox);
     searchInput.addEventListener("input", function () { state.search = searchInput.value; renderLists(); });
 
@@ -19074,6 +19083,23 @@
     clearBtn.className = "filter-trigger";
     clearBtn.innerHTML = '<i class="ti ti-filter-off"></i><span>Limpar filtros</span>';
     filterRow.appendChild(clearBtn);
+    var sections = [];
+    var collapseAllBtn = document.createElement("button");
+    collapseAllBtn.type = "button";
+    collapseAllBtn.className = "toolbar-icon-btn";
+    collapseAllBtn.title = "Recolher tudo";
+    collapseAllBtn.setAttribute("aria-label", "Recolher tudo");
+    collapseAllBtn.innerHTML = '<i class="ti ti-arrows-minimize"></i>';
+    collapseAllBtn.addEventListener("click", function () { sections.forEach(function (x) { x.collapse(); }); Object.keys(state.expanded).forEach(function (k) { state.expanded[k] = false; }); });
+    var expandAllBtn = document.createElement("button");
+    expandAllBtn.type = "button";
+    expandAllBtn.className = "toolbar-icon-btn";
+    expandAllBtn.title = "Expandir tudo";
+    expandAllBtn.setAttribute("aria-label", "Expandir tudo");
+    expandAllBtn.innerHTML = '<i class="ti ti-arrows-maximize"></i>';
+    expandAllBtn.addEventListener("click", function () { sections.forEach(function (x) { x.expand(); }); if (data) data.checks.forEach(function (c) { state.expanded[c.id] = true; }); });
+    filterRow.appendChild(collapseAllBtn);
+    filterRow.appendChild(expandAllBtn);
     clearBtn.addEventListener("click", function () {
       state.search = ""; searchInput.value = ""; state.sev = ""; sevSelect.value = ""; state.only = {};
       state.periodPreset = "60d"; periodSelect.value = "60d";
@@ -19109,15 +19135,19 @@
       var tw = document.createElement("div");
       tw.className = "verif-table-scroll";
       var table = document.createElement("table");
-      table.className = "financeiro-table verif-table";
-      var cols = [["date", "Data"], ["description", "Descrição"], ["category", "Categoria"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Por que"]];
+      table.className = "financeiro-table saude-table verif-table";
+      var cols = [["date", "Data"], ["description", "Descrição"], ["category", "Categoria"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Motivo"]];
       var thead = document.createElement("thead");
       var tr = document.createElement("tr");
       cols.forEach(function (c) {
         var th = document.createElement("th");
+        th.className = "financeiro-th verif-th-" + c[0];
         if (c[0] === "motivo") { th.textContent = c[1]; tr.appendChild(th); return; }
-        th.className = "financeiro-th-sortable";
-        th.appendChild(document.createTextNode(c[1] + " "));
+        th.classList.add("financeiro-th-sortable");
+        var lb = document.createElement("span");
+        lb.className = "financeiro-th-label";
+        lb.textContent = c[1];
+        th.appendChild(lb);
         var ar = document.createElement("span");
         ar.className = "financeiro-th-arrow";
         ar.textContent = state.sortKey === c[0] ? (state.sortDir === 1 ? "▲" : "▼") : "";
@@ -19133,7 +19163,8 @@
       var lim = state.limit[check.id] || 100;
       items.slice(0, lim).forEach(function (it) {
         var row = document.createElement("tr");
-        function td(txt, cls) { var c = document.createElement("td"); if (cls) c.className = cls; c.textContent = txt; row.appendChild(c); return c; }
+        row.className = "financeiro-row saude-row";
+        function td(txt, cls) { var c = document.createElement("td"); c.className = "verif-td" + (cls ? " " + cls : ""); c.textContent = txt; row.appendChild(c); return c; }
         td(transacoesFmtDateBR(it.date));
         var d = td(it.description || "—", "verif-col-desc"); d.title = it.description || "";
         var cat = td((it.category_name ? transacoesCategoriaIcon(it.category_name) + " " + it.category_name : "— sem categoria —"), "verif-col-cat");
@@ -19149,6 +19180,7 @@
         td(it.account_name || "—");
         var sev = verifMaxSev(it.reasons);
         var sc = document.createElement("td");
+        sc.className = "verif-td";
         var chip = document.createElement("span");
         chip.className = "verif-sev verif-sev-" + sev;
         chip.textContent = VERIF_SEV_LABEL[sev];
@@ -19163,6 +19195,7 @@
 
     function renderLists() {
       listEl.innerHTML = "";
+      sections.length = 0;
       summaryEl.innerHTML = "";
       if (!data) return;
       // chips
@@ -19183,11 +19216,10 @@
         if (anyOnly2 && !state.only[c.id]) return;
         var items = filteredItems(c);
         total += items.length;
-        var sec = buildCollapsibleSection((VERIF_CHECK_ICON[c.id] || "•") + " " + c.label + " — " + items.length + (items.length !== c.count ? " de " + c.count : ""), items.length > 0 && items.length <= 25);
-        var hint = document.createElement("p");
-        hint.className = "empty verif-hint";
-        hint.textContent = c.hint;
-        sec.body.appendChild(hint);
+        var sec = buildCollapsibleSection((VERIF_CHECK_ICON[c.id] || "•") + " " + c.label + " — " + items.length + (items.length !== c.count ? " de " + c.count : ""), !!state.expanded[c.id], (function (id) { return function (collapsed) { state.expanded[id] = !collapsed; }; })(c.id));
+        sections.push(sec);
+        var secTitle = sec.section.querySelector(".priorities-subsection-title");
+        if (secTitle) secTitle.parentNode.insertBefore(verifInfoIcon(c.hint), secTitle.nextSibling);
         if (!items.length) {
           var em = document.createElement("p"); em.className = "empty"; em.textContent = "Nada a revisar aqui. ✅";
           sec.body.appendChild(em);
