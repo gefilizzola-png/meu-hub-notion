@@ -1174,6 +1174,21 @@ var NOTIFICATION_SOURCES = [
       { id: "agora", amount: 0, unit: "hours", label: "Assim que ficar baixo" }
     ]
   },
+  // Tratamento em andamento (pedido do Georges): aviso FIXO ao final da
+  // lista (defaultPinToEnd) enquanto houver algum tratamento em andamento.
+  {
+    id: "tratamentos_andamento",
+    label: "Remédios — tratamento em andamento",
+    icon: "💊",
+    kind: "tratamentos_andamento",
+    dateProperty: "gatilho",
+    target: { type: "page", target: "remedios" },
+    defaultEnabled: true,
+    defaultPinToEnd: true,
+    defaultLeadTimes: [
+      { id: "agora", amount: 0, unit: "hours", label: "Enquanto estiver em andamento" }
+    ]
+  },
   // Tratamentos (Remédios — ajustes 2026-10-06): avisa quando uma dose de um
   // tratamento em andamento (ex: antibiótico por 7 dias) está na hora ou
   // atrasada. Fonte 100% KV, item sintético, ver fetchTratamentosNotificationItems.
@@ -1849,7 +1864,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-06 18:00",
+  appVersion: "2026-10-06 21:00",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha

@@ -297,7 +297,11 @@
     flatIndex = [];
     var visited = {};
 
-    function walk(pageId, pathIds, pathTitles) {
+    // "Favoritas" só tem atalhos: é varrida por ÚLTIMO, pra nenhuma página
+    // ganhar Favoritas como pai (breadcrumb) quando também existe na árvore real.
+    var favDeferred = null;
+    function walk(pageId, pathIds, pathTitles, late) {
+      if (pageId === "favoritas" && !late) { if (!favDeferred) favDeferred = [pathIds, pathTitles]; return; }
       if (visited[pageId]) return;
       visited[pageId] = true;
       var page = cfg.pages[pageId];
@@ -322,6 +326,7 @@
       });
     }
     walk(cfg.startPage, [cfg.startPage], []);
+    if (favDeferred) walk("favoritas", favDeferred[0], favDeferred[1], true);
   }
 
   function pathToPage(pageId) {
@@ -22142,6 +22147,9 @@
     if (abs < 1) return "agora";
     return diffMin < 0 ? "atrasada há " + txt : "em " + txt;
   }
+  function tratFmtDT(d) {
+    return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear() + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
   // </TRAT_PURE>
 
   // ---------------- "page.remedios" — Remédios (100% KV, nunca Notion) ----------------
@@ -22212,6 +22220,10 @@
     remMkAll("ti-arrows-minimize", "Recolher tudo", true);
     remMkAll("ti-arrows-maximize", "Expandir tudo", false);
     remToolbar.appendChild(remAllWrap);
+    // alerta de tratamento(s) em andamento — sempre visível, em qualquer aba
+    var remAlertEl = document.createElement("div");
+    remAlertEl.className = "trat-alert-wrap";
+    wrap.appendChild(remAlertEl);
     wrap.appendChild(remToolbar);
     ["estoque", "tratamentos", "consumo"].forEach(function (k) { wrap.appendChild(remPanels[k]); });
     function remApplyTab() {
@@ -22357,6 +22369,7 @@
     var tratForm = document.createElement("div");
     tratForm.className = "trat-form";
     var tDosagem = remMkInput("text", "", "Ex: 500mg");
+    var tDescricao = remMkInput("text", "trat-input-nome", "Ex: infecção urinária");
     var tRemedio = remBuildRemedioField(function (it) {
       if (it && !tDosagem.value) tDosagem.value = remDosagemFromComposicao(it.composicao);
     });
@@ -22366,6 +22379,7 @@
     var tIntervalo = remMkInput("number", "trat-input-num", ""); tIntervalo.min = "1"; tIntervalo.max = "168"; tIntervalo.value = "8";
     var tDias = remMkInput("number", "trat-input-num", ""); tDias.min = "1"; tDias.max = "365"; tDias.value = "7";
     var tInicio = remMkInput("datetime-local", "", ""); tInicio.value = remNowLocal();
+    remField(tratForm, "Tratamento (descrição)", tDescricao);
     remField(tratForm, "Remédio", tRemedio.el);
     remField(tratForm, "Pessoa", tPessoa.el);
     remField(tratForm, "Dosagem", tDosagem);
@@ -22405,7 +22419,27 @@
         tratListEl.appendChild(p);
       });
     }
+    function tratRenderAlert() {
+      remAlertEl.innerHTML = "";
+      tratState.items.forEach(function (t) {
+        var e = tratEstado(t);
+        if (e.status !== "andamento") return;
+        var ini = new Date(t.inicio);
+        var fim = new Date(ini.getTime() + (Number(t.dias) || 1) * 86400000);
+        var box = document.createElement("div");
+        box.className = "trat-alert" + (e.proxima && e.proxima.getTime() <= Date.now() ? " late" : "");
+        box.innerHTML = '<i class="ti ti-alert-triangle"></i>';
+        var sp = document.createElement("span");
+        sp.textContent = "Atenção: tratamento em andamento para " + (t.pessoa || "Georges") + " - " + t.nome +
+          (t.descricao ? " (" + t.descricao + ")" : "") +
+          " - Próxima dose: " + (e.proxima ? tratFmtDT(e.proxima) : "—") +
+          " - Início: " + tratFmtDT(ini) + " - Término: " + tratFmtDT(fim);
+        box.appendChild(sp);
+        remAlertEl.appendChild(box);
+      });
+    }
     function tratRender() {
+      tratRenderAlert();
       tratListEl.innerHTML = "";
       var now = Date.now();
       var ativos = [], outros = [];
@@ -22449,6 +22483,12 @@
       meta.textContent = "a cada " + t.intervaloHoras + "h por " + t.dias + " dia(s)";
       top.appendChild(meta);
       card.appendChild(top);
+      if (t.descricao) {
+        var dsc = document.createElement("div");
+        dsc.className = "trat-desc";
+        dsc.textContent = "Tratamento: " + t.descricao;
+        card.appendChild(dsc);
+      }
 
       var prog = document.createElement("div");
       prog.className = "trat-progress";
@@ -22520,12 +22560,12 @@
       var inicio = tInicio.value ? new Date(tInicio.value) : new Date();
       tAddBtn.disabled = true;
       tratCall("/tratamentos", "POST", {
-        nome: nome, remedioId: tRemedio.getId(), pessoa: tPessoa.select.value,
+        nome: nome, remedioId: tRemedio.getId(), pessoa: tPessoa.select.value, descricao: tDescricao.value.trim(),
         dose: tDosagem.value.trim(), comprimidos: Number(tComp.value) || 1,
         intervaloHoras: Number(tIntervalo.value) || 8, dias: Number(tDias.value) || 7,
         inicio: isNaN(inicio.getTime()) ? new Date().toISOString() : inicio.toISOString()
       }).then(function () {
-        tRemedio.reset(); tDosagem.value = ""; tComp.value = "1"; tInicio.value = remNowLocal();
+        tRemedio.reset(); tDosagem.value = ""; tDescricao.value = ""; tComp.value = "1"; tInicio.value = remNowLocal();
         tratLoad();
       }).catch(function () { alert("Não foi possível iniciar o tratamento (o worker.js foi republicado?)."); })
         .finally(function () { tAddBtn.disabled = false; });
@@ -23035,6 +23075,28 @@
     "Infraestrutura": { emoji: "🪑", color: "#7048e8" },
     "Acompanhamentos": { emoji: "🥗", color: "#2f9e44" }
   };
+  // emoji por item (palavra-chave, sem acento); sem correspondência cai no emoji do grupo.
+  var CHURRASCO_ITEM_EMOJIS = [
+    ["oleo", "🫒"], ["carvao", "⚫"], ["papel toalha", "🧻"], ["fosforo", "🔥"], ["grelha", "♨️"],
+    ["secador", "💨"], ["lanterna", "🔦"], ["garfo", "🍴"], ["tabua", "🪵"], ["pegador", "🥢"],
+    ["chaira", "🔪"], ["faca", "🔪"], ["saco", "🗑️"], ["lixo", "🗑️"], ["vassoura", "🧹"], ["rodo", "🧽"],
+    ["pano de prato", "🧼"], ["pano", "🧼"], ["esponja", "🧽"], ["detergente", "🧴"],
+    ["bebida", "🍺"], ["cerveja", "🍺"], ["refrigerante", "🥤"], ["agua", "💧"], ["gelo", "🧊"],
+    ["carne", "🥩"], ["picanha", "🥩"], ["linguica", "🌭"], ["frango", "🍗"], ["costela", "🍖"],
+    ["sal grosso", "🧂"], ["sal", "🧂"], ["farofa", "🥣"], ["pao de alho", "🧄"], ["alho torrado", "🧄"],
+    ["alho", "🧄"], ["queijo", "🧀"], ["cadeira", "🪑"], ["talher", "🍴"], ["copo", "🥛"],
+    ["som", "🔊"], ["bandeja", "🍽️"], ["prato", "🍽️"], ["requeijao", "🥛"],
+    ["salada", "🥗"], ["tomate", "🍅"], ["cebola", "🧅"], ["vinagrete", "🍅"], ["pao frances", "🥖"],
+    ["pao", "🍞"], ["mesa", "🪑"], ["toalha", "🧻"], ["guardanapo", "🧻"], ["farinha", "🌾"], ["mandioca", "🥔"],
+    ["batata", "🥔"], ["milho", "🌽"], ["abacaxi", "🍍"], ["limao", "🍋"], ["maionese", "🥫"], ["molho", "🥫"]
+  ];
+  function churrascoItemEmoji(nome, grupo) {
+    var n = normalize(nome || "");
+    for (var i = 0; i < CHURRASCO_ITEM_EMOJIS.length; i++) {
+      if (n.indexOf(CHURRASCO_ITEM_EMOJIS[i][0]) !== -1) return CHURRASCO_ITEM_EMOJIS[i][1];
+    }
+    return churrascoGrupoMeta(grupo).emoji;
+  }
   function churrascoGrupoMeta(g) { return CHURRASCO_GRUPO_META[g] || { emoji: "📦", color: "#7a7a76" }; }
 
   function renderChurrascoPage(container, page) {
@@ -23214,6 +23276,10 @@
       cb.className = "churrasco-cb";
       cb.addEventListener("change", function () { setFeito(it, cb.checked); });
       row.appendChild(cb);
+      var emo = document.createElement("span");
+      emo.className = "churrasco-row-emoji";
+      emo.textContent = churrascoItemEmoji(it.nome, it.grupo);
+      row.appendChild(emo);
       var name = document.createElement("span");
       name.className = "supermercado-row-name churrasco-row-name";
       name.textContent = it.nome;
@@ -29181,7 +29247,7 @@
   var notifState = { items: [], readIds: [], everReadIds: [], settings: null, sources: [], hiddenSourceIds: [], soloSourceId: null, mode: "unread", view: "list", loaded: false, loading: false, waitingForPage: false, lastUpdatedAt: null };
 
   function leadTimeMs(lt) {
-    return lt.amount * (lt.unit === "hours" ? 3600000 : 86400000);
+    return lt.amount * (lt.unit === "minutes" ? 60000 : lt.unit === "hours" ? 3600000 : 86400000);
   }
 
   // mesmo padrão defensivo de normalizeDateRollup (Legislações) — "extra"
@@ -29474,6 +29540,36 @@
         });
       });
       return out;
+    }).catch(function () { return []; });
+  }
+
+  // Tratamento em andamento: 1 item agregado, fixado ao final (config.js
+  // defaultPinToEnd). id inclui os ids dos tratamentos em andamento, então
+  // um tratamento novo/encerrado gera uma notificação nova.
+  function fetchTratamentosAndamentoNotificationItems(source) {
+    return authFetch(cfg.templateWorkerUrl + "/tratamentos").then(function (res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+      return res.ok ? res.json() : { items: [] };
+    }).then(function (data) {
+      var ativos = [];
+      ((data && data.items) || []).forEach(function (t) {
+        var e = tratEstado(t);
+        if (e.status === "andamento") ativos.push({ t: t, e: e });
+      });
+      if (!ativos.length) return [];
+      ativos.sort(function (a, b) { return a.t.id.localeCompare(b.t.id); });
+      var txt = ativos.map(function (x) {
+        return (x.t.pessoa || "Georges") + " - " + x.t.nome + (x.t.descricao ? " (" + x.t.descricao + ")" : "") +
+          (x.e.proxima ? " - próxima dose " + tratFmtDT(x.e.proxima) : "");
+      }).join("; ");
+      var extra = {};
+      extra[source.dateProperty] = { start: new Date().toISOString() };
+      return [{
+        id: "tratamentos-andamento::" + ativos.map(function (x) { return x.t.id; }).join(","),
+        title: "Tratamento em andamento: " + txt,
+        url: location.origin + location.pathname + "#remedios",
+        extra: extra
+      }];
     }).catch(function () { return []; });
   }
 
@@ -29783,6 +29879,7 @@
     if (source.kind === "supermercado") return fetchSupermercadoNotificationItems(source);
     if (source.kind === "remedios") return fetchRemediosNotificationItems(source);
     if (source.kind === "tratamentos") return fetchTratamentosNotificationItems(source);
+    if (source.kind === "tratamentos_andamento") return fetchTratamentosAndamentoNotificationItems(source);
     if (source.kind === "provas") return fetchProvasNotificationItems(source);
     if (source.kind === "backup") return fetchBackupNotificationItems(source);
     if (source.kind === "ponto_mes_ajuste") return fetchPontoAjustarMesNotificationItems(source);
@@ -30036,7 +30133,9 @@
   function notifLeadTimeLabelFor(lt, source) {
     var label = lt.label;
     if (source && source.notifyAfterEvent && typeof label === "string" && label.indexOf("antes") !== -1 && lt.amount) {
-      var sufixo = lt.unit === "hours"
+      var sufixo = lt.unit === "minutes"
+        ? (lt.amount === 1 ? "minuto depois" : "minutos depois")
+        : lt.unit === "hours"
         ? (lt.amount === 1 ? "hora depois" : "horas depois")
         : (lt.amount === 1 ? "dia depois" : "dias depois");
       label = lt.amount + " " + sufixo;
@@ -30083,7 +30182,7 @@
         // dessa fonte sempre aparecem no FIM da lista de Não lidas/Todas,
         // mesmo com prazo mais próximo que outra notificação). É por FONTE
         // inteira, não por antecedência — desligado por padrão.
-        pinToEnd: !!(s && s.pinToEnd),
+        pinToEnd: (s && s.pinToEnd !== undefined) ? !!s.pinToEnd : !!source.defaultPinToEnd,
         // "Notificação Inteligente" NÃO mora mais aqui (nível de fonte) —
         // pedido do Georges: "Eu que ter opção de Not Inteligente para
         // cada opção de notificação que eu criei", porque cada antecedência
@@ -30944,14 +31043,13 @@
   function addNotifLeadTime(sourceId, amount, unit) {
     var s = findNotifSource(sourceId);
     if (!s || !amount || amount <= 0) return;
-    var id = amount + (unit === "hours" ? "h" : "d");
+    var id = amount + (unit === "minutes" ? "m" : unit === "hours" ? "h" : "d");
     if (s.leadTimes.some(function (lt) { return lt.id === id; })) return; // já existe, ignora silenciosamente
     // "notifyAfterEvent" (Empréstimos) inverte o sentido pra "depois" em vez
     // de "antes" — só rótulo, o cálculo em si já é feito pelo flag em
     // buildNotificationsFromSource.
-    var sufixo = s.notifyAfterEvent
-      ? (unit === "hours" ? (amount === 1 ? "hora depois" : "horas depois") : (amount === 1 ? "dia depois" : "dias depois"))
-      : (unit === "hours" ? (amount === 1 ? "hora antes" : "horas antes") : (amount === 1 ? "dia antes" : "dias antes"));
+    var uWord = unit === "minutes" ? (amount === 1 ? "minuto" : "minutos") : unit === "hours" ? (amount === 1 ? "hora" : "horas") : (amount === 1 ? "dia" : "dias");
+    var sufixo = uWord + (s.notifyAfterEvent ? " depois" : " antes");
     var label = amount + " " + sufixo;
     // channels:[]/repeatWhilePending:false/smartSchedule explícitos — SEM
     // isso o objeto fica com esses campos undefined, e renderNotifSettings
@@ -31282,7 +31380,7 @@
         addInline.appendChild(amountInput);
         var unitSelect = document.createElement("select");
         unitSelect.className = "notif-settings-add-unit";
-        [["days", "dias"], ["hours", "horas"]].forEach(function (opt) {
+        [["days", "dias"], ["hours", "horas"], ["minutes", "minutos"]].forEach(function (opt) {
           var o = document.createElement("option");
           o.value = opt[0];
           o.textContent = opt[1];

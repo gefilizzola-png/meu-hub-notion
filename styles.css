@@ -8846,3 +8846,10 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .consumo-chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #f2f1ec; color: #3b3b38; }
 .consumo-chip.strong { background: #e6f4ea; color: #1f7a38; font-weight: 600; }
 .consumo-obs { font-size: 11px; color: #8a8a85; }
+
+.churrasco-row-emoji { font-size: 18px; flex: none; width: 24px; text-align: center; }
+.trat-desc { font-size: 13px; color: #3b3b38; }
+.trat-alert-wrap { display: flex; flex-direction: column; gap: 6px; }
+.trat-alert { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #fff4e0; border: 0.5px solid #f2c46d; color: #7a4b00; font-size: 13px; line-height: 1.4; }
+.trat-alert.late { background: #fde8ee; border-color: #f0a3b8; color: #8a1c3c; }
+.trat-alert i { font-size: 16px; margin-top: 1px; flex: none; }
