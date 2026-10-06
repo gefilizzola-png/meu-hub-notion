@@ -22170,58 +22170,220 @@
     wrap.style.display = "none";
     container.appendChild(wrap);
 
-    // ---- Tratamentos (controle de consumo — ajustes 2026-10-06): ex.
-    // antibiótico de 8 em 8h por 7 dias. Marca cada dose tomada; a próxima
-    // dose é calculada a partir da última tomada; a Central de Notificações
-    // avisa na hora (fonte "tratamentos"). 100% KV (/tratamentos). ----
-    var tratSec = buildCollapsibleSection("Tratamentos (controle de doses)", true);
-    tratSec.section.classList.add("trat-section");
-    wrap.appendChild(tratSec.section);
-    var tratState = { items: [], showDone: false };
-
-    var tratForm = document.createElement("div");
-    tratForm.className = "trat-form";
-    function tratField(labelTxt, input) {
-      var lab = document.createElement("label");
-      lab.className = "trat-field";
-      var sp = document.createElement("span");
-      sp.textContent = labelTxt;
-      lab.appendChild(sp);
-      lab.appendChild(input);
-      tratForm.appendChild(lab);
-      return input;
+    // ---- Abas (Estoque / Tratamentos / Consumo) + divisórias recolhíveis ----
+    // Pedido do Georges (2026-10-06): Tratamentos como aba (não no topo),
+    // botões de expandir/recolher em cada divisória, registro de remédio
+    // tomado avulso (com dosagem, nº de comprimidos e pessoa) pesquisável.
+    var remTab = "estoque";
+    var remPanels = {};
+    var remSecs = { estoque: [], tratamentos: [], consumo: [] };
+    var remTabBtns = {};
+    var remToolbar = document.createElement("div");
+    remToolbar.className = "remedios-toolbar";
+    var remTabsBar = document.createElement("div");
+    remTabsBar.className = "supermercado-views";
+    [["estoque", "💊 Estoque"], ["tratamentos", "⏱️ Tratamentos"], ["consumo", "📋 Consumo"]].forEach(function (t) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "supermercado-view-btn";
+      b.textContent = t[1];
+      b.addEventListener("click", function () { remTab = t[0]; remApplyTab(); });
+      remTabBtns[t[0]] = b;
+      remTabsBar.appendChild(b);
+      var panel = document.createElement("div");
+      panel.className = "remedios-panel";
+      remPanels[t[0]] = panel;
+    });
+    remToolbar.appendChild(remTabsBar);
+    var remAllWrap = document.createElement("span");
+    remAllWrap.className = "legislacoes-collapseall-toolbar";
+    function remMkAll(icon, title, collapse) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "toolbar-icon-btn";
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      b.innerHTML = '<i class="ti ' + icon + '"></i>';
+      b.addEventListener("click", function () {
+        remSecs[remTab].forEach(function (s) { collapse ? s.collapse() : s.expand(); });
+      });
+      remAllWrap.appendChild(b);
     }
-    var tNome = document.createElement("input");
-    tNome.type = "text"; tNome.placeholder = "Ex: Amoxicilina"; tNome.className = "trat-input trat-input-nome";
-    var tDose = document.createElement("input");
-    tDose.type = "text"; tDose.placeholder = "Ex: 1 comprimido 500mg"; tDose.className = "trat-input";
-    var tIntervalo = document.createElement("input");
-    tIntervalo.type = "number"; tIntervalo.min = "1"; tIntervalo.max = "168"; tIntervalo.value = "8"; tIntervalo.className = "trat-input trat-input-num";
-    var tDias = document.createElement("input");
-    tDias.type = "number"; tDias.min = "1"; tDias.max = "365"; tDias.value = "7"; tDias.className = "trat-input trat-input-num";
-    var tInicio = document.createElement("input");
-    tInicio.type = "datetime-local"; tInicio.className = "trat-input";
-    function tratNowLocalValue() {
+    remMkAll("ti-arrows-minimize", "Recolher tudo", true);
+    remMkAll("ti-arrows-maximize", "Expandir tudo", false);
+    remToolbar.appendChild(remAllWrap);
+    wrap.appendChild(remToolbar);
+    ["estoque", "tratamentos", "consumo"].forEach(function (k) { wrap.appendChild(remPanels[k]); });
+    function remApplyTab() {
+      Object.keys(remPanels).forEach(function (k) {
+        remPanels[k].style.display = k === remTab ? "" : "none";
+        remTabBtns[k].classList.toggle("active", k === remTab);
+      });
+    }
+    remApplyTab();
+    function remSection(panel, title, startExpanded) {
+      var sec = buildCollapsibleSection(title, startExpanded);
+      remSecs[panel].push(sec);
+      remPanels[panel].appendChild(sec.section);
+      return sec;
+    }
+    function remCall(path, method, body) {
+      return authFetch(cfg.templateWorkerUrl + path, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(handle401).then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); });
+    }
+    function remFmtDT(d) {
+      return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear() + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    function remNowLocal() {
       var d = new Date();
       d.setSeconds(0, 0);
       return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
     }
-    tInicio.value = tratNowLocalValue();
-    tratField("Remédio", tNome);
-    tratField("Dose", tDose);
-    tratField("A cada (horas)", tIntervalo);
-    tratField("Por (dias)", tDias);
-    tratField("1ª dose", tInicio);
+    function remField(parent, labelTxt, input, extraCls) {
+      var lab = document.createElement("label");
+      lab.className = "trat-field" + (extraCls ? " " + extraCls : "");
+      var sp = document.createElement("span");
+      sp.textContent = labelTxt;
+      lab.appendChild(sp);
+      lab.appendChild(input);
+      parent.appendChild(lab);
+      return input;
+    }
+    function remMkInput(type, cls, ph) {
+      var i = document.createElement("input");
+      i.type = type; i.className = "trat-input" + (cls ? " " + cls : "");
+      if (ph) i.placeholder = ph;
+      return i;
+    }
+
+    // ---- pessoas (eu, Letícia, Vitor, Bella, Mel… — editável) ----
+    var remPessoas = ["Georges", "Letícia", "Vitor", "Bella", "Mel"];
+    var remPessoaSelects = [];
+    function remFillPessoaSelects(select) {
+      remPessoaSelects.forEach(function (sel) {
+        var cur = sel.value;
+        sel.innerHTML = "";
+        if (sel.dataset.all) {
+          var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "Todas as pessoas"; sel.appendChild(o0);
+        }
+        remPessoas.forEach(function (n) {
+          var o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o);
+        });
+        sel.value = (select && !sel.dataset.all) ? select : cur;
+        if (sel.value !== (select && !sel.dataset.all ? select : cur)) sel.value = sel.dataset.all ? "" : remPessoas[0];
+      });
+    }
+    function remBuildPessoaField(withAdd, allOption) {
+      var box = document.createElement("span");
+      box.className = "trat-pessoa-box";
+      var sel = document.createElement("select");
+      sel.className = "trat-input";
+      if (allOption) sel.dataset.all = "1";
+      remPessoaSelects.push(sel);
+      box.appendChild(sel);
+      if (withAdd) {
+        var add = document.createElement("button");
+        add.type = "button";
+        add.className = "trat-btn trat-pessoa-add";
+        add.title = "Adicionar pessoa/pet à lista";
+        add.innerHTML = '<i class="ti ti-user-plus"></i>';
+        add.addEventListener("click", function () {
+          var n = prompt("Nome da pessoa (ou pet) a adicionar:");
+          if (!n || !n.trim()) return;
+          n = n.trim();
+          if (remPessoas.some(function (x) { return x.toLowerCase() === n.toLowerCase(); })) { remFillPessoaSelects(); return; }
+          var novas = remPessoas.concat([n]);
+          remCall("/remedios-pessoas", "PUT", { pessoas: novas }).then(function (d) {
+            remPessoas = d.pessoas || novas;
+            remFillPessoaSelects(n);
+          }).catch(function () { alert("Não foi possível salvar (o worker.js foi republicado?)."); });
+        });
+        box.appendChild(add);
+      }
+      remFillPessoaSelects();
+      return { el: box, select: sel };
+    }
+    remCall("/remedios-pessoas", "GET").then(function (d) {
+      if (d && d.pessoas && d.pessoas.length) { remPessoas = d.pessoas; remFillPessoaSelects(); }
+    }).catch(function () {});
+
+    // ---- campo "Remédio": escolhe do estoque OU digita outro ----
+    var remRemedioSelects = [];
+    function remFillRemedioSelects() {
+      remRemedioSelects.forEach(function (f) {
+        var cur = f.select.value;
+        f.select.innerHTML = "";
+        var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "Escolher do estoque…"; f.select.appendChild(o0);
+        state.items.slice().sort(function (a, b) { return a.nome.localeCompare(b.nome, "pt-BR"); }).forEach(function (it) {
+          var o = document.createElement("option"); o.value = it.id; o.textContent = it.nome; f.select.appendChild(o);
+        });
+        var oo = document.createElement("option"); oo.value = "__outro"; oo.textContent = "Outro (digitar)…"; f.select.appendChild(oo);
+        f.select.value = cur;
+        if (f.select.value !== cur) f.select.value = "";
+        f.sync();
+      });
+    }
+    function remBuildRemedioField(onPick) {
+      var box = document.createElement("span");
+      box.className = "trat-pessoa-box";
+      var sel = document.createElement("select");
+      sel.className = "trat-input";
+      var txt = remMkInput("text", "trat-input-nome", "Nome do remédio");
+      txt.style.display = "none";
+      box.appendChild(sel); box.appendChild(txt);
+      var f = { el: box, select: sel, text: txt };
+      f.sync = function () { txt.style.display = sel.value === "__outro" ? "" : "none"; };
+      f.getId = function () { return sel.value && sel.value !== "__outro" ? sel.value : ""; };
+      f.getItem = function () { var id = f.getId(); return id ? (state.items.filter(function (i) { return i.id === id; })[0] || null) : null; };
+      f.getNome = function () { var it = f.getItem(); return it ? it.nome : (sel.value === "__outro" ? txt.value.trim() : ""); };
+      f.reset = function () { sel.value = ""; txt.value = ""; f.sync(); };
+      sel.addEventListener("change", function () { f.sync(); if (onPick) onPick(f.getItem()); });
+      remRemedioSelects.push(f);
+      return f;
+    }
+    // "Dipirona monoidratada - 1g" -> "1g" (só quando há 1 princípio ativo)
+    function remDosagemFromComposicao(c) {
+      if (!c || c.indexOf("/") !== -1) return "";
+      var parts = c.split(" - ");
+      return parts.length > 1 ? parts[parts.length - 1].trim() : "";
+    }
+
+    // ---- Tratamentos (aba) ----
+    var tratState = { items: [], showDone: false };
+    var tratFormSec = remSection("tratamentos", "Novo tratamento", false);
+    var tratForm = document.createElement("div");
+    tratForm.className = "trat-form";
+    var tDosagem = remMkInput("text", "", "Ex: 500mg");
+    var tRemedio = remBuildRemedioField(function (it) {
+      if (it && !tDosagem.value) tDosagem.value = remDosagemFromComposicao(it.composicao);
+    });
+    var tPessoa = remBuildPessoaField(true, false);
+    var tComp = remMkInput("number", "trat-input-num", "");
+    tComp.min = "0.25"; tComp.step = "0.25"; tComp.value = "1";
+    var tIntervalo = remMkInput("number", "trat-input-num", ""); tIntervalo.min = "1"; tIntervalo.max = "168"; tIntervalo.value = "8";
+    var tDias = remMkInput("number", "trat-input-num", ""); tDias.min = "1"; tDias.max = "365"; tDias.value = "7";
+    var tInicio = remMkInput("datetime-local", "", ""); tInicio.value = remNowLocal();
+    remField(tratForm, "Remédio", tRemedio.el);
+    remField(tratForm, "Pessoa", tPessoa.el);
+    remField(tratForm, "Dosagem", tDosagem);
+    remField(tratForm, "Comprimidos/dose", tComp);
+    remField(tratForm, "A cada (horas)", tIntervalo);
+    remField(tratForm, "Por (dias)", tDias);
+    remField(tratForm, "1ª dose", tInicio);
     var tAddBtn = document.createElement("button");
     tAddBtn.type = "button";
     tAddBtn.className = "notes-add-btn";
     tAddBtn.innerHTML = '<i class="ti ti-player-play"></i> Iniciar tratamento';
     tratForm.appendChild(tAddBtn);
-    tratSec.body.appendChild(tratForm);
+    tratFormSec.body.appendChild(tratForm);
 
+    var tratListSec = remSection("tratamentos", "Tratamentos em andamento", true);
     var tratListEl = document.createElement("div");
     tratListEl.className = "trat-list";
-    tratSec.body.appendChild(tratListEl);
+    tratListSec.body.appendChild(tratListEl);
 
     function tratFmtDateTime(d) {
       var hoje = new Date();
@@ -22230,13 +22392,7 @@
       var label = same ? "hoje" : (d.toDateString() === amanha.toDateString() ? "amanhã" : pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1));
       return label + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
     }
-    function tratCall(path, method, body) {
-      return authFetch(cfg.templateWorkerUrl + path, {
-        method: method,
-        headers: { "Content-Type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined
-      }).then(handle401).then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); });
-    }
+    function tratCall(path, method, body) { return remCall(path, method, body); }
     function tratLoad() {
       tratCall("/tratamentos", "GET").then(function (data) {
         tratState.items = (data && data.items) || [];
@@ -22282,8 +22438,12 @@
       top.className = "trat-card-top";
       var title = document.createElement("div");
       title.className = "trat-card-title";
-      title.textContent = t.nome + (t.dose ? " — " + t.dose : "");
+      title.textContent = t.nome + (t.dose ? " — " + t.dose : "") + (t.comprimidos && t.comprimidos !== 1 ? " (" + t.comprimidos + " comp.)" : "");
       top.appendChild(title);
+      var pes = document.createElement("span");
+      pes.className = "trat-pessoa-chip";
+      pes.textContent = t.pessoa || "Georges";
+      top.appendChild(pes);
       var meta = document.createElement("div");
       meta.className = "trat-card-meta";
       meta.textContent = "a cada " + t.intervaloHoras + "h por " + t.dias + " dia(s)";
@@ -22321,7 +22481,7 @@
         b.type = "button";
         b.className = "trat-btn " + cls;
         b.innerHTML = txt;
-        b.addEventListener("click", function () { b.disabled = true; fn().then(tratLoad).catch(function () { b.disabled = false; alert("Não foi possível salvar."); }); });
+        b.addEventListener("click", function () { b.disabled = true; fn().then(function () { tratLoad(); consumoLoad(); }).catch(function () { b.disabled = false; alert("Não foi possível salvar."); }); });
         actions.appendChild(b);
       }
       if (e.status === "andamento") {
@@ -22339,7 +22499,7 @@
       del.type = "button";
       del.className = "trat-btn danger";
       del.innerHTML = '<i class="ti ti-trash"></i>';
-      del.title = "Excluir tratamento";
+      del.title = "Excluir tratamento (o histórico de consumo é mantido)";
       del.addEventListener("click", function () {
         if (!confirm("Excluir este tratamento?")) return;
         tratCall("/tratamentos?id=" + encodeURIComponent(t.id), "DELETE").then(tratLoad).catch(function () {});
@@ -22355,22 +22515,179 @@
       return card;
     }
     tAddBtn.addEventListener("click", function () {
-      var nome = tNome.value.trim();
-      if (!nome) { tNome.focus(); return; }
+      var nome = tRemedio.getNome();
+      if (!nome) { alert("Escolha ou digite o remédio."); return; }
       var inicio = tInicio.value ? new Date(tInicio.value) : new Date();
       tAddBtn.disabled = true;
       tratCall("/tratamentos", "POST", {
-        nome: nome, dose: tDose.value.trim(),
+        nome: nome, remedioId: tRemedio.getId(), pessoa: tPessoa.select.value,
+        dose: tDosagem.value.trim(), comprimidos: Number(tComp.value) || 1,
         intervaloHoras: Number(tIntervalo.value) || 8, dias: Number(tDias.value) || 7,
         inicio: isNaN(inicio.getTime()) ? new Date().toISOString() : inicio.toISOString()
       }).then(function () {
-        tNome.value = ""; tDose.value = ""; tInicio.value = tratNowLocalValue();
+        tRemedio.reset(); tDosagem.value = ""; tComp.value = "1"; tInicio.value = remNowLocal();
         tratLoad();
       }).catch(function () { alert("Não foi possível iniciar o tratamento (o worker.js foi republicado?)."); })
         .finally(function () { tAddBtn.disabled = false; });
     });
-    tNome.addEventListener("keydown", function (e) { if (e.key === "Enter") tAddBtn.click(); });
     tratLoad();
+
+    // ---- Consumo (aba): registrar remédio tomado (avulso) + histórico ----
+    var cState = { items: [], search: "", pessoa: "", periodo: "30", sort: { col: 0, dir: -1 } };
+    var cRegSec = remSection("consumo", "Registrar remédio tomado", true);
+    var cForm = document.createElement("div");
+    cForm.className = "trat-form";
+    var cQuando = remMkInput("datetime-local", "", ""); cQuando.value = remNowLocal();
+    var cDosagem = remMkInput("text", "", "Ex: 1g");
+    var cRemedio = remBuildRemedioField(function (it) {
+      if (it) { cDosagem.value = remDosagemFromComposicao(it.composicao); }
+      cDescontaLabel.style.opacity = it ? "1" : "0.5";
+      cDesconta.disabled = !it;
+      if (!it) cDesconta.checked = false;
+    });
+    var cPessoa = remBuildPessoaField(true, false);
+    var cComp = remMkInput("number", "trat-input-num", ""); cComp.min = "0.25"; cComp.step = "0.25"; cComp.value = "1";
+    var cObs = remMkInput("text", "trat-input-nome", "Motivo/observação (opcional)");
+    remField(cForm, "Quando", cQuando);
+    remField(cForm, "Pessoa", cPessoa.el);
+    remField(cForm, "Remédio", cRemedio.el);
+    remField(cForm, "Dosagem", cDosagem);
+    remField(cForm, "Comprimidos", cComp);
+    remField(cForm, "Observação", cObs);
+    var cDescontaLabel = document.createElement("label");
+    cDescontaLabel.className = "trat-check";
+    cDescontaLabel.style.opacity = "0.5";
+    var cDesconta = document.createElement("input");
+    cDesconta.type = "checkbox"; cDesconta.disabled = true;
+    cDescontaLabel.appendChild(cDesconta);
+    cDescontaLabel.appendChild(document.createTextNode(" Descontar do estoque"));
+    cForm.appendChild(cDescontaLabel);
+    var cAddBtn = document.createElement("button");
+    cAddBtn.type = "button";
+    cAddBtn.className = "notes-add-btn";
+    cAddBtn.innerHTML = '<i class="ti ti-plus"></i> Registrar';
+    cForm.appendChild(cAddBtn);
+    cRegSec.body.appendChild(cForm);
+    cAddBtn.addEventListener("click", function () {
+      var nome = cRemedio.getNome();
+      if (!nome) { alert("Escolha ou digite o remédio."); return; }
+      var q = new Date(cQuando.value);
+      cAddBtn.disabled = true;
+      remCall("/consumos", "POST", {
+        nome: nome, remedioId: cRemedio.getId(), pessoa: cPessoa.select.value,
+        dosagem: cDosagem.value.trim(), comprimidos: Number(cComp.value) || 1, obs: cObs.value.trim(),
+        quando: isNaN(q.getTime()) ? new Date().toISOString() : q.toISOString(),
+        descontarEstoque: !!cDesconta.checked
+      }).then(function () {
+        cRemedio.reset(); cDosagem.value = ""; cComp.value = "1"; cObs.value = ""; cQuando.value = remNowLocal();
+        cDesconta.checked = false; cDesconta.disabled = true; cDescontaLabel.style.opacity = "0.5";
+        consumoLoad();
+        loadItems();
+      }).catch(function () { alert("Não foi possível registrar (o worker.js foi republicado?)."); })
+        .finally(function () { cAddBtn.disabled = false; });
+    });
+
+    var cSearchSec = remSection("consumo", "Pesquisar", false);
+    var cSearch = document.createElement("input");
+    cSearch.type = "text"; cSearch.className = "remedios-search-input"; cSearch.placeholder = "Pesquisar por remédio, pessoa, observação…";
+    cSearchSec.body.appendChild(withSearchClear(cSearch));
+    cSearch.addEventListener("input", function () { cState.search = cSearch.value; consumoRender(); });
+
+    var cFilterSec = remSection("consumo", "Filtrar", false);
+    var cFilters = document.createElement("div");
+    cFilters.className = "trat-form";
+    var cfPessoa = remBuildPessoaField(false, true);
+    cfPessoa.select.addEventListener("change", function () { cState.pessoa = cfPessoa.select.value; consumoRender(); });
+    var cfPeriodo = document.createElement("select");
+    cfPeriodo.className = "trat-input";
+    [["1", "Hoje"], ["7", "Últimos 7 dias"], ["30", "Últimos 30 dias"], ["90", "Últimos 90 dias"], ["0", "Todo o período"]].forEach(function (p) {
+      var o = document.createElement("option"); o.value = p[0]; o.textContent = p[1]; cfPeriodo.appendChild(o);
+    });
+    cfPeriodo.value = "30";
+    cfPeriodo.addEventListener("change", function () { cState.periodo = cfPeriodo.value; consumoRender(); });
+    remField(cFilters, "Pessoa", cfPessoa.el);
+    remField(cFilters, "Período", cfPeriodo);
+    var cClear = document.createElement("button");
+    cClear.type = "button";
+    cClear.className = "supermercado-clear-status-btn";
+    cClear.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    cClear.addEventListener("click", function () {
+      cState.search = ""; cSearch.value = ""; cState.pessoa = ""; cfPessoa.select.value = ""; cState.periodo = "30"; cfPeriodo.value = "30";
+      consumoRender();
+    });
+    cFilters.appendChild(cClear);
+    cFilterSec.body.appendChild(cFilters);
+
+    var cHistSec = remSection("consumo", "Histórico de consumo", true);
+    var cSummaryEl = document.createElement("div");
+    cSummaryEl.className = "consumo-summary";
+    cHistSec.body.appendChild(cSummaryEl);
+    var cTableEl = document.createElement("div");
+    cHistSec.body.appendChild(cTableEl);
+
+    function consumoLoad() {
+      remCall("/consumos", "GET").then(function (d) {
+        cState.items = (d && d.items) || [];
+        consumoRender();
+      }).catch(function () {
+        cTableEl.innerHTML = "";
+        var p = document.createElement("p"); p.className = "empty";
+        p.textContent = "Erro ao carregar o consumo (o worker.js foi republicado?).";
+        cTableEl.appendChild(p);
+      });
+    }
+    function consumoFiltered() {
+      var q = normalize(cState.search.trim());
+      var limite = cState.periodo !== "0" ? Date.now() - Number(cState.periodo) * 86400000 : 0;
+      if (cState.periodo === "1") { var h = new Date(); h.setHours(0, 0, 0, 0); limite = h.getTime(); }
+      return cState.items.filter(function (it) {
+        if (cState.pessoa && it.pessoa !== cState.pessoa) return false;
+        if (limite && new Date(it.quando).getTime() < limite) return false;
+        if (q && normalize((it.nome || "") + " " + (it.pessoa || "") + " " + (it.obs || "") + " " + (it.dosagem || "")).indexOf(q) === -1) return false;
+        return true;
+      });
+    }
+    function consumoRender() {
+      var rows = consumoFiltered();
+      cSummaryEl.innerHTML = "";
+      var totalComp = rows.reduce(function (s, r) { return s + (r.comprimidos || 0); }, 0);
+      function chip(txt, cls) { var c = document.createElement("span"); c.className = "consumo-chip" + (cls ? " " + cls : ""); c.textContent = txt; cSummaryEl.appendChild(c); }
+      chip(rows.length + " registro(s)", "strong");
+      chip((Math.round(totalComp * 100) / 100) + " comprimido(s)", "strong");
+      var agg = {};
+      rows.forEach(function (r) {
+        var k = r.nome + (cState.pessoa ? "" : " · " + r.pessoa);
+        if (!agg[k]) agg[k] = { n: 0, c: 0 };
+        agg[k].n++; agg[k].c += r.comprimidos || 0;
+      });
+      Object.keys(agg).sort(function (a, b) { return agg[b].c - agg[a].c; }).slice(0, 12).forEach(function (k) {
+        chip(k + ": " + (Math.round(agg[k].c * 100) / 100) + " comp. (" + agg[k].n + "x)");
+      });
+      cTableEl.innerHTML = "";
+      finSortTable(cTableEl, [
+        { label: "Data/hora", short: true, sort: function (r) { return r.quando; }, text: function (r) { return remFmtDT(new Date(r.quando)); } },
+        { label: "Pessoa", short: true, sort: function (r) { return r.pessoa; }, text: function (r) { return r.pessoa; } },
+        { label: "Remédio", sort: function (r) { return r.nome; }, node: function (r, td) {
+          td.textContent = r.nome;
+          if (r.obs) { var s = document.createElement("div"); s.className = "consumo-obs"; s.textContent = r.obs; td.appendChild(s); }
+        } },
+        { label: "Dosagem", short: true, sort: function (r) { return r.dosagem; }, text: function (r) { return r.dosagem || "—"; } },
+        { label: "Comp.", short: true, num: true, sort: function (r) { return r.comprimidos; }, text: function (r) { return String(r.comprimidos).replace(".", ","); } },
+        { label: "Origem", short: true, sort: function (r) { return r.tratamentoId ? "Tratamento" : "Avulso"; }, text: function (r) { return r.tratamentoId ? "Tratamento" : "Avulso"; } },
+        { label: "", short: true, node: function (r, td) {
+          var d = document.createElement("button");
+          d.type = "button"; d.className = "churrasco-item-btn"; d.style.opacity = "0.7"; d.title = "Excluir registro";
+          d.innerHTML = '<i class="ti ti-trash"></i>';
+          d.addEventListener("click", function () {
+            if (!confirm("Excluir este registro de consumo?" + (r.descontado > 0 ? " O estoque descontado será devolvido." : ""))) return;
+            remCall("/consumos?id=" + encodeURIComponent(r.id), "DELETE").then(function () { consumoLoad(); if (r.descontado > 0) loadItems(); }).catch(function () {});
+          });
+          td.appendChild(d);
+        } }
+      ], rows, cState.sort, consumoRender);
+    }
+    consumoLoad();
+
 
     // ---- "adicionar remédio" — nome + composição (pedido do Georges,
     // rodada 2: "eu devo ter opção para editar a composição ao criar ou
@@ -22393,7 +22710,8 @@
     addBtn.className = "notes-add-btn";
     addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
     addWrap.appendChild(addBtn);
-    wrap.appendChild(addWrap);
+    var eAddSec = remSection("estoque", "Adicionar remédio", false);
+    eAddSec.body.appendChild(addWrap);
 
     // ---- busca (pedido do Georges: "pesquisa pelo nome... pela
     // composição... ou pela informação que pedi para você adicionar
@@ -22406,7 +22724,8 @@
     searchInput.placeholder = "Pesquisar por nome, composição ou finalidade…";
     searchInput.className = "remedios-search-input";
     searchWrap.appendChild(withSearchClear(searchInput));
-    wrap.appendChild(searchWrap);
+    var eSearchSec = remSection("estoque", "Pesquisar", false);
+    eSearchSec.body.appendChild(searchWrap);
     searchInput.addEventListener("input", function () {
       state.search = searchInput.value;
       renderList();
@@ -22414,7 +22733,8 @@
 
     var listEl = document.createElement("div");
     listEl.className = "remedios-list";
-    wrap.appendChild(listEl);
+    var eListSec = remSection("estoque", "Remédios cadastrados", true);
+    eListSec.body.appendChild(listEl);
 
     function addItem() {
       var nome = addInput.value.trim();
@@ -22692,6 +23012,7 @@
         statusEl.style.display = "none";
         wrap.style.display = "";
         renderList();
+        remFillRemedioSelects();
       }).catch(function () {
         statusEl.textContent = "Erro ao carregar remédios.";
       });
@@ -22704,23 +23025,31 @@
   // Ajustes 2026-10-06: trazida da página do Notion "Pessoal / Listas /
   // Churrasco" (5 grupos de checklist). Daqui em diante 100% KV (worker.js,
   // rotas /churrasco, carga inicial CHURRASCO_SEED_RAW) — nunca escreve no
-  // Notion. Grupos recolhíveis, checkbox por item, adicionar/renomear/
-  // excluir item, adicionar grupo (digitando um nome novo) e "Desmarcar
-  // tudo" pra começar um churrasco novo.
+  // Notion. Visual/estrutura idênticos à Lista de Supermercado (divisória
+  // "Adicionar item" recolhida, cabeçalho de grupo colorido clicável,
+  // linhas ".supermercado-row", Recolher/Expandir tudo só ícone).
+  var CHURRASCO_GRUPO_META = {
+    "Fogo": { emoji: "🔥", color: "#e8590c" },
+    "Limpeza": { emoji: "🧹", color: "#1c7ed6" },
+    "Alimentos": { emoji: "🥩", color: "#c92a2a" },
+    "Infraestrutura": { emoji: "🪑", color: "#7048e8" },
+    "Acompanhamentos": { emoji: "🥗", color: "#2f9e44" }
+  };
+  function churrascoGrupoMeta(g) { return CHURRASCO_GRUPO_META[g] || { emoji: "📦", color: "#7a7a76" }; }
+
   function renderChurrascoPage(container, page) {
     function handle401(res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
       return res;
     }
     var state = { items: [], search: "", collapsed: {}, onlyPending: false };
-    var CHUR_ICONS = { "Fogo": "🔥", "Limpeza": "🧹", "Alimentos": "🥩", "Infraestrutura": "🪑", "Acompanhamentos": "🥗" };
 
     var statusEl = document.createElement("p");
     statusEl.className = "empty";
     statusEl.textContent = "Carregando…";
     container.appendChild(statusEl);
     var wrap = document.createElement("div");
-    wrap.className = "churrasco-wrap";
+    wrap.className = "supermercado-wrap";
     wrap.style.display = "none";
     container.appendChild(wrap);
 
@@ -22731,104 +23060,169 @@
         body: body ? JSON.stringify(body) : undefined
       }).then(handle401).then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); });
     }
-
-    // barra: progresso + só pendentes + desmarcar tudo + recolher/expandir
-    var bar = document.createElement("div");
-    bar.className = "churrasco-bar";
-    var progressEl = document.createElement("div");
-    progressEl.className = "churrasco-progress";
-    bar.appendChild(progressEl);
-    function mkBarBtn(html, title, fn) {
-      var b = document.createElement("button");
-      b.type = "button";
-      b.className = "toolbar-icon-btn churrasco-bar-btn";
-      b.innerHTML = html;
-      b.title = title;
-      b.addEventListener("click", fn);
-      bar.appendChild(b);
-      return b;
-    }
-    var pendBtn = mkBarBtn('<i class="ti ti-filter"></i> Só pendentes', "Mostrar só o que falta", function () {
-      state.onlyPending = !state.onlyPending;
-      pendBtn.classList.toggle("active", state.onlyPending);
-      renderAll();
-    });
-    mkBarBtn('<i class="ti ti-arrows-minimize"></i>', "Recolher tudo", function () {
-      groupsOf().forEach(function (g) { state.collapsed[g] = true; });
-      renderAll();
-    });
-    mkBarBtn('<i class="ti ti-arrows-maximize"></i>', "Expandir tudo", function () { state.collapsed = {}; renderAll(); });
-    mkBarBtn('<i class="ti ti-refresh"></i> Desmarcar tudo', "Começar um churrasco novo (desmarca todos os itens)", function () {
-      if (!confirm("Desmarcar todos os itens da lista?")) return;
-      call("/churrasco-reset", "POST", {}).then(load).catch(function () { alert("Erro ao desmarcar."); });
-    });
-    wrap.appendChild(bar);
-
-    // adicionar item
-    var addWrap = document.createElement("div");
-    addWrap.className = "churrasco-add";
-    var addInput = document.createElement("input");
-    addInput.type = "text"; addInput.placeholder = "Novo item…"; addInput.className = "remedios-add-input";
-    var addGroup = document.createElement("input");
-    addGroup.type = "text"; addGroup.placeholder = "Grupo (existente ou novo)"; addGroup.className = "remedios-add-input";
-    addGroup.setAttribute("list", "churrascoGroupsList");
-    var dl = document.createElement("datalist");
-    dl.id = "churrascoGroupsList";
-    var addBtn = document.createElement("button");
-    addBtn.type = "button"; addBtn.className = "notes-add-btn";
-    addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar';
-    addWrap.appendChild(addInput); addWrap.appendChild(addGroup); addWrap.appendChild(dl); addWrap.appendChild(addBtn);
-    wrap.appendChild(addWrap);
-    function addItem(nome, grupo) {
-      nome = (nome || "").trim(); grupo = (grupo || "").trim();
-      if (!nome || !grupo) return;
-      addBtn.disabled = true;
-      call("/churrasco", "POST", { nome: nome, grupo: grupo }).then(function () {
-        addInput.value = ""; load();
-      }).catch(function () { alert("Erro ao adicionar."); }).finally(function () { addBtn.disabled = false; });
-    }
-    addBtn.addEventListener("click", function () { addItem(addInput.value, addGroup.value); });
-    addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(addInput.value, addGroup.value); });
-
-    // busca
-    var searchWrap = document.createElement("div");
-    searchWrap.className = "remedios-search";
-    var searchInput = document.createElement("input");
-    searchInput.type = "text"; searchInput.placeholder = "Pesquisar item…"; searchInput.className = "remedios-search-input";
-    searchWrap.appendChild(withSearchClear(searchInput));
-    wrap.appendChild(searchWrap);
-    searchInput.addEventListener("input", function () { state.search = searchInput.value; renderAll(); });
-
-    var listEl = document.createElement("div");
-    listEl.className = "churrasco-groups";
-    wrap.appendChild(listEl);
-
     function groupsOf() {
       var seen = {}, out = [];
       state.items.forEach(function (it) { if (!seen[it.grupo]) { seen[it.grupo] = 1; out.push(it.grupo); } });
       return out;
     }
+
+    // ---- divisória "Adicionar item" (recolhida por padrão) ----
+    var addSec = buildCollapsibleSection("Adicionar item", false);
+    var addWrap = document.createElement("div");
+    addWrap.className = "supermercado-add";
+    var addInput = document.createElement("input");
+    addInput.type = "text";
+    addInput.className = "supermercado-add-input";
+    addInput.placeholder = "Adicionar item à lista…";
+    var addSelect = document.createElement("select");
+    addSelect.className = "supermercado-filter-select";
+    var addNovoGrupo = document.createElement("input");
+    addNovoGrupo.type = "text";
+    addNovoGrupo.className = "supermercado-add-input";
+    addNovoGrupo.placeholder = "Nome do novo grupo";
+    addNovoGrupo.style.display = "none";
+    addSelect.addEventListener("change", function () {
+      addNovoGrupo.style.display = addSelect.value === "__novo" ? "" : "none";
+      if (addSelect.value === "__novo") addNovoGrupo.focus();
+    });
+    var addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "notes-add-btn";
+    addBtn.textContent = "Adicionar";
+    addWrap.appendChild(addInput);
+    addWrap.appendChild(addSelect);
+    addWrap.appendChild(addNovoGrupo);
+    addWrap.appendChild(addBtn);
+    addSec.body.appendChild(addWrap);
+    wrap.appendChild(addSec.section);
+    function fillAddSelect() {
+      var cur = addSelect.value;
+      addSelect.innerHTML = "";
+      groupsOf().forEach(function (g) {
+        var o = document.createElement("option");
+        o.value = g;
+        o.textContent = churrascoGrupoMeta(g).emoji + " " + g;
+        addSelect.appendChild(o);
+      });
+      var on = document.createElement("option");
+      on.value = "__novo";
+      on.textContent = "➕ Novo grupo…";
+      addSelect.appendChild(on);
+      if (cur) addSelect.value = cur;
+      if (addSelect.value !== cur) addSelect.selectedIndex = 0;
+    }
+    function addItem() {
+      var nome = addInput.value.trim();
+      var grupo = addSelect.value === "__novo" ? addNovoGrupo.value.trim() : addSelect.value;
+      if (!nome || !grupo) return;
+      addBtn.disabled = true;
+      call("/churrasco", "POST", { nome: nome, grupo: grupo }).then(function () {
+        addInput.value = ""; addNovoGrupo.value = "";
+        addInput.focus();
+        load();
+      }).catch(function () { alert("Erro ao adicionar."); }).finally(function () { addBtn.disabled = false; });
+    }
+    addBtn.addEventListener("click", addItem);
+    addInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addItem(); });
+
+    // ---- Pesquisar / Filtrar (padrão: recolhidos) ----
+    var searchSec = buildCollapsibleSection("Pesquisar", false);
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "supermercado-search-input";
+    searchInput.placeholder = "Buscar item…";
+    searchSec.body.appendChild(withSearchClear(searchInput));
+    searchInput.addEventListener("input", function () { state.search = searchInput.value; repaint(); });
+    wrap.appendChild(searchSec.section);
+
+    var filterSec = buildCollapsibleSection("Filtrar", false);
+    var filterRow = document.createElement("div");
+    filterRow.className = "supermercado-filters";
+    var pendBtn = document.createElement("button");
+    pendBtn.type = "button";
+    pendBtn.className = "supermercado-situacao-pill";
+    pendBtn.textContent = "Só o que falta";
+    pendBtn.addEventListener("click", function () {
+      state.onlyPending = !state.onlyPending;
+      pendBtn.classList.toggle("active", state.onlyPending);
+      repaint();
+    });
+    filterRow.appendChild(pendBtn);
+    var clearFilters = document.createElement("button");
+    clearFilters.type = "button";
+    clearFilters.className = "supermercado-clear-status-btn";
+    clearFilters.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearFilters.addEventListener("click", function () {
+      state.search = ""; searchInput.value = ""; state.onlyPending = false; pendBtn.classList.remove("active");
+      repaint();
+    });
+    filterRow.appendChild(clearFilters);
+    filterSec.body.appendChild(filterRow);
+    wrap.appendChild(filterSec.section);
+
+    // ---- barra: progresso + Recolher/Expandir tudo + Desmarcar tudo ----
+    var barRow = document.createElement("div");
+    barRow.className = "churrasco-bar";
+    var progressEl = document.createElement("span");
+    progressEl.className = "churrasco-progress";
+    barRow.appendChild(progressEl);
+    var allWrap = document.createElement("span");
+    allWrap.className = "legislacoes-collapseall-toolbar";
+    function mkIconBtn(icon, title, fn) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "toolbar-icon-btn";
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      b.innerHTML = '<i class="ti ' + icon + '"></i>';
+      b.addEventListener("click", fn);
+      allWrap.appendChild(b);
+    }
+    mkIconBtn("ti-arrows-minimize", "Recolher tudo", function () { groupsOf().forEach(function (g) { state.collapsed[g] = true; }); repaint(); });
+    mkIconBtn("ti-arrows-maximize", "Expandir tudo", function () { state.collapsed = {}; repaint(); });
+    barRow.appendChild(allWrap);
+    var resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "supermercado-clear-status-btn";
+    resetBtn.innerHTML = '<i class="ti ti-refresh"></i> Desmarcar tudo';
+    resetBtn.title = "Começar um churrasco novo (desmarca todos os itens)";
+    resetBtn.addEventListener("click", function () {
+      if (!confirm("Desmarcar todos os itens da lista?")) return;
+      call("/churrasco-reset", "POST", {}).then(load).catch(function () { alert("Erro ao desmarcar."); });
+    });
+    barRow.appendChild(resetBtn);
+    wrap.appendChild(barRow);
+
+    var resultsWrap = document.createElement("div");
+    wrap.appendChild(resultsWrap);
+
     function setFeito(it, feito) {
       it.feito = feito;
-      renderAll();
+      repaint();
       call("/churrasco?id=" + encodeURIComponent(it.id), "PUT", { feito: feito }).catch(function () {
-        it.feito = !feito; renderAll(); alert("Não foi possível salvar.");
+        it.feito = !feito; repaint(); alert("Não foi possível salvar.");
       });
     }
-    function buildItemRow(it) {
+    function buildRow(it) {
+      var meta = churrascoGrupoMeta(it.grupo);
       var row = document.createElement("div");
-      row.className = "churrasco-item" + (it.feito ? " done" : "");
+      row.className = "supermercado-row churrasco-row" + (it.feito ? " done" : "");
+      row.style.setProperty("--cat-color", meta.color);
       var cb = document.createElement("input");
-      cb.type = "checkbox"; cb.checked = !!it.feito; cb.className = "churrasco-cb";
+      cb.type = "checkbox";
+      cb.checked = !!it.feito;
+      cb.className = "churrasco-cb";
       cb.addEventListener("change", function () { setFeito(it, cb.checked); });
       row.appendChild(cb);
       var name = document.createElement("span");
-      name.className = "churrasco-item-name";
+      name.className = "supermercado-row-name churrasco-row-name";
       name.textContent = it.nome;
       name.addEventListener("click", function () { setFeito(it, !it.feito); });
       row.appendChild(name);
       var ed = document.createElement("button");
-      ed.type = "button"; ed.className = "churrasco-item-btn"; ed.title = "Renomear";
+      ed.type = "button";
+      ed.className = "churrasco-item-btn";
+      ed.title = "Renomear";
       ed.innerHTML = '<i class="ti ti-pencil"></i>';
       ed.addEventListener("click", function () {
         var n = prompt("Novo nome do item:", it.nome);
@@ -22837,7 +23231,9 @@
       });
       row.appendChild(ed);
       var del = document.createElement("button");
-      del.type = "button"; del.className = "churrasco-item-btn"; del.title = "Excluir";
+      del.type = "button";
+      del.className = "churrasco-item-btn";
+      del.title = "Excluir";
       del.innerHTML = '<i class="ti ti-trash"></i>';
       del.addEventListener("click", function () {
         if (!confirm("Excluir \"" + it.nome + "\"?")) return;
@@ -22846,53 +23242,52 @@
       row.appendChild(del);
       return row;
     }
-    function renderAll() {
-      listEl.innerHTML = "";
+    function repaint() {
+      resultsWrap.innerHTML = "";
       var total = state.items.length;
       var feitos = state.items.filter(function (i) { return i.feito; }).length;
       progressEl.textContent = feitos + "/" + total + " itens prontos";
-      dl.innerHTML = "";
-      groupsOf().forEach(function (g) { var o = document.createElement("option"); o.value = g; dl.appendChild(o); });
+      fillAddSelect();
       var q = normalize(state.search.trim());
       var any = false;
       groupsOf().forEach(function (g) {
-        var its = state.items.filter(function (i) {
-          if (i.grupo !== g) return false;
+        var all = state.items.filter(function (i) { return i.grupo === g; });
+        var its = all.filter(function (i) {
           if (state.onlyPending && i.feito) return false;
           return !q || normalize(i.nome).indexOf(q) !== -1;
         });
         if (!its.length) return;
         any = true;
-        var all = state.items.filter(function (i) { return i.grupo === g; });
-        var done = all.filter(function (i) { return i.feito; }).length;
-        var box = document.createElement("div");
-        box.className = "churrasco-group" + (state.collapsed[g] ? " collapsed" : "") + (done === all.length ? " complete" : "");
+        var meta = churrascoGrupoMeta(g);
+        var isCollapsed = !!state.collapsed[g];
         var head = document.createElement("div");
-        head.className = "churrasco-group-head";
-        head.innerHTML = '<i class="ti ' + (state.collapsed[g] ? "ti-chevron-right" : "ti-chevron-down") + '"></i>';
-        var title = document.createElement("span");
-        title.className = "churrasco-group-title";
-        title.textContent = (CHUR_ICONS[g] ? CHUR_ICONS[g] + " " : "") + g;
-        head.appendChild(title);
-        var cnt = document.createElement("span");
-        cnt.className = "churrasco-group-count";
-        cnt.textContent = done + "/" + all.length;
-        head.appendChild(cnt);
-        head.addEventListener("click", function () { state.collapsed[g] = !state.collapsed[g]; renderAll(); });
-        box.appendChild(head);
-        if (!state.collapsed[g]) {
-          var body = document.createElement("div");
-          body.className = "churrasco-group-body";
-          its.forEach(function (it) { body.appendChild(buildItemRow(it)); });
-          box.appendChild(body);
+        head.className = "supermercado-group-head" + (isCollapsed ? " collapsed" : "");
+        head.style.setProperty("--cat-color", meta.color);
+        var chevron = document.createElement("i");
+        chevron.className = "ti " + (isCollapsed ? "ti-chevron-right" : "ti-chevron-down") + " supermercado-group-head-chevron";
+        head.appendChild(chevron);
+        var em = document.createElement("span");
+        em.className = "supermercado-group-head-emoji";
+        em.textContent = meta.emoji;
+        head.appendChild(em);
+        var done = all.filter(function (i) { return i.feito; }).length;
+        var tx = document.createElement("span");
+        tx.textContent = g + " (" + done + "/" + all.length + ")";
+        head.appendChild(tx);
+        head.addEventListener("click", function () { state.collapsed[g] = !state.collapsed[g]; repaint(); });
+        resultsWrap.appendChild(head);
+        if (!isCollapsed) {
+          var list = document.createElement("div");
+          list.className = "supermercado-list";
+          its.forEach(function (it) { list.appendChild(buildRow(it)); });
+          resultsWrap.appendChild(list);
         }
-        listEl.appendChild(box);
       });
       if (!any) {
         var p = document.createElement("p");
         p.className = "empty";
         p.textContent = total ? "Nada encontrado." : "Lista vazia.";
-        listEl.appendChild(p);
+        resultsWrap.appendChild(p);
       }
     }
     function load() {
@@ -22900,7 +23295,7 @@
         state.items = (data && data.items) || [];
         statusEl.style.display = "none";
         wrap.style.display = "";
-        renderAll();
+        repaint();
       }).catch(function () {
         statusEl.textContent = "Erro ao carregar a lista de Churrasco (o worker.js foi republicado?).";
       });
@@ -29073,7 +29468,7 @@
         extra[source.dateProperty] = { start: new Date(due <= now ? now : due).toISOString() };
         out.push({
           id: "tratamento::" + t.id + "::" + e.feitas,
-          title: "Hora do remédio: " + t.nome + (t.dose ? " (" + t.dose + ")" : "") + " — dose " + (e.feitas + 1) + "/" + e.total,
+          title: "Hora do remédio" + (t.pessoa && t.pessoa !== "Georges" ? " de " + t.pessoa : "") + ": " + t.nome + (t.dose ? " (" + t.dose + ")" : "") + " — dose " + (e.feitas + 1) + "/" + e.total,
           url: location.origin + location.pathname + "#remedios",
           extra: extra
         });
