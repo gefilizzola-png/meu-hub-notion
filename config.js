@@ -1834,7 +1834,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-05 20:39",
+  appVersion: "2026-10-05 21:30",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3479,6 +3479,7 @@ const APP_CONFIG = {
         { label: "Relatórios — Financeiro", type: "page", target: "financeiro_bi", icon: "chart-bar" },
         { label: "RPC", type: "page", target: "financeiro_rpc", icon: "pig-money" },
         { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "list" },
+        { label: "Transações — Verificações", type: "page", target: "financeiro_transacoes_verificacoes", icon: "list-check" },
         // "Viagens" (pedido do Georges — nova pasta no Notion, mesmo caminho
         // reproduzido aqui: Financeiro->Viagens->Passagens).
         { label: "Viagens", type: "page", target: "financeiro_viagens", icon: "plane-departure" }
@@ -3698,7 +3699,22 @@ const APP_CONFIG = {
       itemGroups: [
         { title: "Abrir", items: [
           { label: "Contas Mensais", type: "page", target: "financeiro_contas_mensais", icon: "meuhub" },
-          { label: "Relatórios — Financeiro", type: "page", target: "financeiro_bi", icon: "meuhub" }
+          { label: "Relatórios — Financeiro", type: "page", target: "financeiro_bi", icon: "meuhub" },
+          { label: "Verificações", type: "page", target: "financeiro_transacoes_verificacoes", icon: "meuhub" }
+        ] }
+      ],
+      items: []
+    },
+
+    // "page.transacoesVerificacoes" — aba de Verificações/Saneamento de Transações
+    // (pedido do Georges). Só leitura: GET /transacoes-verificacoes (worker.js),
+    // mesmo PIN de Transações. Ver renderTransacoesVerificacoesPage no app.js.
+    financeiro_transacoes_verificacoes: {
+      title: "Transações — Verificações",
+      transacoesVerificacoes: true,
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "Transações", type: "page", target: "financeiro_transacoes", icon: "meuhub" }
         ] }
       ],
       items: []

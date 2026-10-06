@@ -18976,6 +18976,264 @@
     };
   }
 
+  // ---------------- Transações: Verificações (Saneamento) ----------------
+  // Pedido do Georges: lista, a partir do D1 (só leitura — NADA é escrito no D1/Visor),
+  // lançamentos pra ele revisar/corrigir no Visor. Regras no worker.js (verifAnalyze).
+  var VERIF_SEV_RANK = { alta: 3, media: 2, baixa: 1 };
+  var VERIF_SEV_LABEL = { alta: "Alta", media: "Média", baixa: "Baixa" };
+  var VERIF_CHECK_ICON = { raiz: "🌳", padrao: "✏️", suspeita: "🔍", duplicada: "👯", legada: "🏚️", valor: "⚖️" };
+  function verifMaxSev(reasons) {
+    var best = "baixa";
+    (reasons || []).forEach(function (r) { if ((VERIF_SEV_RANK[r.sev] || 0) > VERIF_SEV_RANK[best]) best = r.sev; });
+    return best;
+  }
+  function renderTransacoesVerificacoesPage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "transacoes-block verif-block";
+    container.appendChild(wrap);
+    var stored = transacoesGetStoredUnlock();
+    var title = "🧹 Transações — Verificações";
+    if (stored) renderTransacoesVerificacoesUnlocked(wrap, stored.token);
+    else renderTransacoesLockScreen(wrap, function (token) { renderTransacoesVerificacoesUnlocked(wrap, token); }, title);
+  }
+  function renderTransacoesVerificacoesUnlocked(wrap, unlockToken) {
+    wrap.innerHTML = "";
+    var cfg = APP_CONFIG;
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "🧹 Transações — Verificações";
+    wrap.appendChild(title);
+    var intro = document.createElement("p");
+    intro.className = "empty";
+    intro.style.margin = "4px 0 10px";
+    intro.textContent = "Lançamentos que merecem uma olhada no Visor. O padrão de nome (Grupo - Descrição - Estabelecimento) é aprendido do seu histórico inteiro; aqui só entram os do período escolhido. Nada é alterado — é só uma lista.";
+    wrap.appendChild(intro);
+
+    var state = { periodPreset: "60d", start: "", end: "", search: "", sev: "", only: {}, sortKey: "date", sortDir: -1, limit: {} };
+    var r0 = transacoesResolvePeriodPreset(state.periodPreset);
+    state.start = r0.start; state.end = r0.end;
+    var data = null;
+
+    var searchSec = buildCollapsibleSection("🔎 Pesquisar", false);
+    wrap.appendChild(searchSec.section);
+    var filterSec = buildCollapsibleSection("🧰 Filtrar", false);
+    wrap.appendChild(filterSec.section);
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Analisando transações…";
+    wrap.appendChild(statusEl);
+    var summaryEl = document.createElement("div");
+    summaryEl.className = "verif-summary";
+    wrap.appendChild(summaryEl);
+    var listEl = document.createElement("div");
+    wrap.appendChild(listEl);
+
+    // busca (com "x") — acento-insensível
+    var searchInput = document.createElement("input");
+    searchInput.type = "search";
+    searchInput.className = "search-input";
+    searchInput.placeholder = "Buscar por descrição, conta, categoria ou motivo…";
+    var searchBox = withSearchClear(searchInput);
+    searchBox.style.margin = "10px 0";
+    searchSec.body.appendChild(searchBox);
+    searchInput.addEventListener("input", function () { state.search = searchInput.value; renderLists(); });
+
+    // período
+    var filterRow = document.createElement("div");
+    filterRow.className = "filter-bar";
+    filterSec.body.appendChild(filterRow);
+    var periodSelect = document.createElement("select");
+    periodSelect.className = "filter-trigger transacoes-period-select";
+    TRANSACOES_PERIOD_PRESETS.forEach(function (p) {
+      var o = document.createElement("option");
+      o.value = p.id; o.textContent = "📅 " + p.label;
+      periodSelect.appendChild(o);
+    });
+    periodSelect.value = state.periodPreset;
+    filterRow.appendChild(periodSelect);
+    periodSelect.addEventListener("change", function () {
+      state.periodPreset = periodSelect.value;
+      var rg = transacoesResolvePeriodPreset(periodSelect.value);
+      state.start = rg.start; state.end = rg.end;
+      load();
+    });
+    // severidade
+    var sevSelect = document.createElement("select");
+    sevSelect.className = "filter-trigger";
+    [["", "⚠️ Qualquer severidade"], ["alta", "🔴 Só severidade Alta"], ["media", "🟠 Média ou mais"]].forEach(function (a) {
+      var o = document.createElement("option"); o.value = a[0]; o.textContent = a[1]; sevSelect.appendChild(o);
+    });
+    filterRow.appendChild(sevSelect);
+    sevSelect.addEventListener("change", function () { state.sev = sevSelect.value; renderLists(); });
+    // chips de verificações (liga/desliga)
+    var chipRow = document.createElement("div");
+    chipRow.className = "verif-chip-row";
+    filterSec.body.appendChild(chipRow);
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "filter-trigger";
+    clearBtn.innerHTML = '<i class="ti ti-filter-off"></i><span>Limpar filtros</span>';
+    filterRow.appendChild(clearBtn);
+    clearBtn.addEventListener("click", function () {
+      state.search = ""; searchInput.value = ""; state.sev = ""; sevSelect.value = ""; state.only = {};
+      state.periodPreset = "60d"; periodSelect.value = "60d";
+      var rg = transacoesResolvePeriodPreset("60d"); state.start = rg.start; state.end = rg.end;
+      load();
+    });
+
+    function reasonText(it) { return (it.reasons || []).map(function (r) { return r.text; }).join(" · "); }
+    function filteredItems(check) {
+      var term = normalize(state.search);
+      var minRank = state.sev === "alta" ? 3 : state.sev === "media" ? 2 : 0;
+      var items = check.items.filter(function (it) {
+        if (minRank && VERIF_SEV_RANK[verifMaxSev(it.reasons)] < minRank) return false;
+        if (!term) return true;
+        return normalize(it.description).indexOf(term) !== -1 || normalize(it.account_name).indexOf(term) !== -1 ||
+          normalize(it.category_name).indexOf(term) !== -1 || normalize(reasonText(it)).indexOf(term) !== -1;
+      });
+      var key = state.sortKey, dir = state.sortDir;
+      items.sort(function (a, b) {
+        var av, bv;
+        if (key === "amount") { av = Math.abs(a.amount || 0); bv = Math.abs(b.amount || 0); return (av - bv) * dir; }
+        if (key === "sev") { av = VERIF_SEV_RANK[verifMaxSev(a.reasons)]; bv = VERIF_SEV_RANK[verifMaxSev(b.reasons)]; return (av - bv) * dir; }
+        if (key === "category") { av = a.category_name || ""; bv = b.category_name || ""; }
+        else if (key === "description") { av = a.description || ""; bv = b.description || ""; }
+        else if (key === "account") { av = a.account_name || ""; bv = b.account_name || ""; }
+        else { av = a.date || ""; bv = b.date || ""; }
+        return String(av).localeCompare(String(bv), "pt-BR") * dir;
+      });
+      return items;
+    }
+
+    function buildTable(check, items) {
+      var tw = document.createElement("div");
+      tw.className = "verif-table-scroll";
+      var table = document.createElement("table");
+      table.className = "financeiro-table verif-table";
+      var cols = [["date", "Data"], ["description", "Descrição"], ["category", "Categoria"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Por que"]];
+      var thead = document.createElement("thead");
+      var tr = document.createElement("tr");
+      cols.forEach(function (c) {
+        var th = document.createElement("th");
+        if (c[0] === "motivo") { th.textContent = c[1]; tr.appendChild(th); return; }
+        th.className = "financeiro-th-sortable";
+        th.appendChild(document.createTextNode(c[1] + " "));
+        var ar = document.createElement("span");
+        ar.className = "financeiro-th-arrow";
+        ar.textContent = state.sortKey === c[0] ? (state.sortDir === 1 ? "▲" : "▼") : "";
+        th.appendChild(ar);
+        th.addEventListener("click", function () {
+          if (state.sortKey === c[0]) state.sortDir = -state.sortDir; else { state.sortKey = c[0]; state.sortDir = (c[0] === "date" || c[0] === "amount" || c[0] === "sev") ? -1 : 1; }
+          renderLists();
+        });
+        tr.appendChild(th);
+      });
+      thead.appendChild(tr); table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      var lim = state.limit[check.id] || 100;
+      items.slice(0, lim).forEach(function (it) {
+        var row = document.createElement("tr");
+        function td(txt, cls) { var c = document.createElement("td"); if (cls) c.className = cls; c.textContent = txt; row.appendChild(c); return c; }
+        td(transacoesFmtDateBR(it.date));
+        var d = td(it.description || "—", "verif-col-desc"); d.title = it.description || "";
+        var cat = td((it.category_name ? transacoesCategoriaIcon(it.category_name) + " " + it.category_name : "— sem categoria —"), "verif-col-cat");
+        if (it.suggested) {
+          var sg = document.createElement("span");
+          sg.className = "verif-suggest";
+          sg.textContent = "→ " + it.suggested;
+          sg.title = "Categoria que costuma ser usada para esse nome";
+          cat.appendChild(sg);
+        }
+        var vc = td(transacoesFmtMoney(Math.abs(it.amount || 0)), "verif-col-valor");
+        if (it.flow_type === "entrada") vc.classList.add("verif-entrada");
+        td(it.account_name || "—");
+        var sev = verifMaxSev(it.reasons);
+        var sc = document.createElement("td");
+        var chip = document.createElement("span");
+        chip.className = "verif-sev verif-sev-" + sev;
+        chip.textContent = VERIF_SEV_LABEL[sev];
+        sc.appendChild(chip); row.appendChild(sc);
+        var mt = td(reasonText(it), "verif-col-motivo"); mt.title = reasonText(it);
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      tw.appendChild(table);
+      return tw;
+    }
+
+    function renderLists() {
+      listEl.innerHTML = "";
+      summaryEl.innerHTML = "";
+      if (!data) return;
+      // chips
+      chipRow.innerHTML = "";
+      data.checks.forEach(function (c) {
+        var b = document.createElement("button");
+        b.type = "button";
+        var anyOnly = Object.keys(state.only).some(function (k) { return state.only[k]; });
+        var on = !anyOnly || state.only[c.id];
+        b.className = "verif-chip" + (on ? " verif-chip-on" : "");
+        b.textContent = (VERIF_CHECK_ICON[c.id] || "•") + " " + c.label + " (" + c.count + ")";
+        b.addEventListener("click", function () { state.only[c.id] = !state.only[c.id]; renderLists(); });
+        chipRow.appendChild(b);
+      });
+      var anyOnly2 = Object.keys(state.only).some(function (k) { return state.only[k]; });
+      var total = 0;
+      data.checks.forEach(function (c) {
+        if (anyOnly2 && !state.only[c.id]) return;
+        var items = filteredItems(c);
+        total += items.length;
+        var sec = buildCollapsibleSection((VERIF_CHECK_ICON[c.id] || "•") + " " + c.label + " — " + items.length + (items.length !== c.count ? " de " + c.count : ""), items.length > 0 && items.length <= 25);
+        var hint = document.createElement("p");
+        hint.className = "empty verif-hint";
+        hint.textContent = c.hint;
+        sec.body.appendChild(hint);
+        if (!items.length) {
+          var em = document.createElement("p"); em.className = "empty"; em.textContent = "Nada a revisar aqui. ✅";
+          sec.body.appendChild(em);
+        } else {
+          sec.body.appendChild(buildTable(c, items));
+          var lim = state.limit[c.id] || 100;
+          if (items.length > lim) {
+            var more = document.createElement("button");
+            more.type = "button"; more.className = "filter-trigger"; more.style.marginTop = "8px";
+            more.textContent = "Mostrar mais (" + Math.min(100, items.length - lim) + " de " + (items.length - lim) + " restantes)";
+            more.addEventListener("click", function () { state.limit[c.id] = lim + 100; renderLists(); });
+            sec.body.appendChild(more);
+          }
+        }
+        listEl.appendChild(sec.section);
+      });
+      var s = document.createElement("div");
+      s.className = "verif-summary-pill";
+      s.textContent = "Período: " + (state.start ? transacoesFmtDateBR(state.start) : "início") + " a " + (state.end ? transacoesFmtDateBR(state.end) : "hoje") +
+        " · " + data.analyzed + " transações analisadas · " + total + " apontamentos";
+      summaryEl.appendChild(s);
+    }
+
+    function load() {
+      statusEl.style.display = "";
+      statusEl.textContent = "Analisando transações…";
+      var qs = [];
+      if (state.start) qs.push("start=" + encodeURIComponent(state.start));
+      if (state.end) qs.push("end=" + encodeURIComponent(state.end));
+      qs.push("unlock=" + encodeURIComponent(unlockToken));
+      authFetch(cfg.templateWorkerUrl + "/transacoes-verificacoes?" + qs.join("&"))
+        .then(function (res) {
+          if (res.status === 423) { transacoesClearUnlock(); renderTransacoesLockScreen(wrap, function (token) { renderTransacoesVerificacoesUnlocked(wrap, token); }, "🧹 Transações — Verificações"); return null; }
+          return res.json().then(function (j) { if (!res.ok) throw new Error((j && j.error) || ("HTTP " + res.status)); return j; });
+        })
+        .then(function (j) {
+          if (!j) return;
+          data = j; state.limit = {};
+          statusEl.style.display = "none";
+          renderLists();
+        })
+        .catch(function (e) { statusEl.textContent = "Erro ao analisar: " + (e && e.message ? e.message : e); });
+    }
+    load();
+  }
+
   function renderFinanceiroBIPage(container, page) {
     var wrap = document.createElement("div");
     wrap.className = "financeiro-bi-block";
@@ -27181,6 +27439,16 @@
         container.appendChild(dividerTransacoes);
       }
       renderTransacoesPage(container, page);
+      renderedSomething = true;
+    }
+
+    if (page.transacoesVerificacoes) {
+      if (renderedSomething) {
+        var dividerTransVerif = document.createElement("hr");
+        dividerTransVerif.className = "content-divider";
+        container.appendChild(dividerTransVerif);
+      }
+      renderTransacoesVerificacoesPage(container, page);
       renderedSomething = true;
     }
 

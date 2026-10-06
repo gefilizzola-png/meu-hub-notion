@@ -8718,3 +8718,23 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .eventos-table .saude-col-descricao { max-width: 520px; overflow: hidden; text-overflow: ellipsis; }
 .eventos-table .saude-local-name { white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 .eventos-table-scroll { overflow-x: auto; }
+
+/* ---------- Transações — Verificações ---------- */
+.verif-summary-pill{display:inline-block;margin:6px 0 10px;padding:4px 10px;border-radius:999px;background:var(--surface-2,#f1f3f5);font-size:.85em}
+.verif-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.verif-chip{border:1px solid var(--border,#ced4da);background:transparent;border-radius:999px;padding:4px 10px;cursor:pointer;font-size:.85em;opacity:.6}
+.verif-chip-on{opacity:1;background:var(--surface-2,#e7f5ff);border-color:#339af0}
+.verif-hint{margin:2px 0 8px;font-size:.85em}
+.verif-table-scroll{overflow-x:auto}
+.verif-table{width:auto;max-width:none}
+.verif-table th,.verif-table td{white-space:nowrap}
+.verif-col-desc{max-width:380px;overflow:hidden;text-overflow:ellipsis}
+.verif-col-cat{max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.verif-col-motivo{max-width:560px;overflow:hidden;text-overflow:ellipsis}
+.verif-col-valor{text-align:right}
+.verif-entrada{color:#2f9e44}
+.verif-suggest{margin-left:6px;font-size:.8em;color:#e8590c;font-weight:600}
+.verif-sev{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8em;font-weight:600}
+.verif-sev-alta{background:#ffe3e3;color:#c92a2a}
+.verif-sev-media{background:#fff4e6;color:#d9480f}
+.verif-sev-baixa{background:#f1f3f5;color:#495057}
