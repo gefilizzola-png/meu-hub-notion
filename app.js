@@ -25171,6 +25171,20 @@
     return Math.round(saldo * 100) / 100;
   }
 
+  // Parcelamento: valor da próxima parcela = saldo pendente / parcelas restantes
+  // (parcelas - pagamentos já lançados). Pagou a mais/menos -> as vincendas se
+  // reajustam sozinhas, porque o saldo muda e o divisor só diminui 1 por pagamento.
+  function loanParcelaInfo(loan) {
+    var n = Math.round(Number(loan.parcelas));
+    if (!isFinite(n) || n < 2) return null;
+    var pagas = Array.isArray(loan.pagamentos) ? loan.pagamentos.length : 0;
+    var saldo = loanSaldoPendente(loan);
+    var restantes = Math.max(0, n - pagas);
+    var valorBase = Math.round(((typeof loan.valor === "number" ? loan.valor : 0) / n) * 100) / 100;
+    var proxima = saldo <= LOAN_EPSILON ? 0 : Math.round((saldo / Math.max(1, restantes)) * 100) / 100;
+    return { total: n, pagas: Math.min(pagas, n), restantes: restantes, valorBase: valorBase, proxima: proxima, quitado: saldo <= LOAN_EPSILON };
+  }
+
   function loanIsPago(loan) { return loanSaldoPendente(loan) <= LOAN_EPSILON; }
 
   function loanPad2(n) { return n < 10 ? "0" + n : "" + n; }
@@ -25392,7 +25406,22 @@
     addDiaMensalInput.placeholder = "1 a 31";
     addDiaMensalInput.className = "emprestimos-add-input";
     var addDiaMensalField = buildEmprestimosField("Dia do mês", addDiaMensalInput);
+    var addParcelasInput = document.createElement("input");
+    addParcelasInput.type = "number"; addParcelasInput.min = "2"; addParcelasInput.max = "600";
+    addParcelasInput.placeholder = "Opcional";
+    addParcelasInput.className = "emprestimos-add-input";
+    var addParcelasHint = document.createElement("div");
+    addParcelasHint.className = "emprestimos-card-meta";
+    function refreshParcelasHint() {
+      var n = Math.round(Number(addParcelasInput.value)), v = Number(addValorInput.value);
+      addParcelasHint.textContent = (n >= 2 && v > 0) ? n + " parcelas de " + transacoesFmtMoney(Math.round(v / n * 100) / 100) : "";
+    }
+    addParcelasInput.addEventListener("input", refreshParcelasHint);
+    addValorInput.addEventListener("input", refreshParcelasHint);
+    var addParcelasField = buildEmprestimosField("Nº de parcelas", addParcelasInput);
+    addParcelasField.appendChild(addParcelasHint);
     addWrap.appendChild(addDiaMensalField);
+    addWrap.appendChild(addParcelasField);
 
     function refreshAddConditionalFields() {
       var forma = addFormaSelect.value;
@@ -25420,7 +25449,8 @@
         valor: Number(addValorInput.value) || 0,
         data: addDataInput.value || new Date().toISOString().slice(0, 10),
         objetivo: addObjetivoInput.value.trim(),
-        formaPagamento: addFormaSelect.value
+        formaPagamento: addFormaSelect.value,
+        parcelas: Number(addParcelasInput.value) || null
       };
       if (payload.formaPagamento === "unico") payload.dataVencimento = addVencimentoInput.value || null;
       if (payload.formaPagamento === "mensal") payload.diaMensal = Number(addDiaMensalInput.value) || 1;
@@ -25436,6 +25466,7 @@
         addObjetivoInput.value = "";
         addVencimentoInput.value = "";
         addDiaMensalInput.value = "";
+        addParcelasInput.value = ""; addParcelasHint.textContent = "";
         loadLoans();
       }).catch(function () {
         statusEl.textContent = "Erro ao criar empréstimo.";
@@ -25816,7 +25847,10 @@
         if (o[0] === loan.direcao) opt.selected = true;
         dir.appendChild(opt);
       });
-      [pessoa, objetivo, valor, data, dir].forEach(function (el) { row.appendChild(el); });
+      var parc = document.createElement("input");
+      parc.type = "number"; parc.min = "2"; parc.max = "600"; parc.className = "emprestimos-add-input"; parc.placeholder = "Nº parcelas…";
+      parc.title = "Número de parcelas (vazio = sem parcelamento)"; parc.value = loan.parcelas || "";
+      [pessoa, objetivo, valor, data, dir, parc].forEach(function (el) { row.appendChild(el); });
       var save = document.createElement("button");
       save.type = "button";
       save.className = "notes-add-btn emprestimos-add-btn";
@@ -25826,7 +25860,7 @@
         if (!p) { alert("Informe a pessoa."); return; }
         var v = Number(valor.value);
         if (!isFinite(v) || v <= 0) { alert("Informe um valor válido."); return; }
-        var patch = { pessoa: p, objetivo: objetivo.value.trim(), valor: v, direcao: dir.value };
+        var patch = { pessoa: p, objetivo: objetivo.value.trim(), valor: v, direcao: dir.value, parcelas: Number(parc.value) || null };
         if (data.value) patch.data = data.value;
         save.disabled = true;
         updateLoan(loan.id, patch).then(function (res) { return res.json(); }).then(function (d) {
@@ -25877,6 +25911,10 @@
       row.appendChild(chip(loan.objetivo || "—", "emprestimos-chip-objetivo"));
       var situacaoChip = chip(loanSituacaoLabel(situacao), "emprestimos-chip-situacao " + situacao, loanSituacaoIcon(situacao));
       row.appendChild(situacaoChip);
+      var pInfo = loanParcelaInfo(loan);
+      if (pInfo && !pInfo.quitado) {
+        row.appendChild(chip(Math.min(pInfo.pagas + 1, pInfo.total) + "/" + pInfo.total + " · " + transacoesFmtMoney(pInfo.proxima), "emprestimos-chip-parcela", "ti-list-numbers"));
+      }
       row.appendChild(chip(transacoesFmtMoney(saldo), "emprestimos-chip-saldo " + situacao));
 
       var chevron = document.createElement("i");
@@ -25915,6 +25953,10 @@
         var vencimento = loanProximoVencimentoISO(loan);
         var metaParts = ["Emprestado em " + transacoesFmtDateBR(loan.data)];
         if (vencimento) metaParts.push("Próximo vencimento: " + transacoesFmtDateBR(vencimento));
+        if (pInfo) {
+          metaParts.push(pInfo.quitado ? pInfo.total + " parcelas (quitado)" :
+            pInfo.total + " parcelas de " + transacoesFmtMoney(pInfo.valorBase) + " · restam " + pInfo.restantes + " · próxima: " + transacoesFmtMoney(pInfo.proxima) + " (recalculada pelo saldo)");
+        }
         metaEl.textContent = metaParts.join(" · ");
         detail.appendChild(metaEl);
 

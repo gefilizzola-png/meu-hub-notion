@@ -8882,3 +8882,4 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .ajustes-filters { padding: 8px 16px 10px; gap: 8px; border-bottom: 1px solid #f1f3f5; }
 .ajustes-filters .ajustes-search { box-sizing: border-box; padding: 7px 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 13px; }
 .ajustes-filters .search-input-clearable-box { flex: 1 1 220px; min-width: 180px; }
+.emprestimos-chip-parcela { background: #e7f5ff; color: #1864ab; }
