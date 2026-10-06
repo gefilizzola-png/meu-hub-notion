@@ -18993,7 +18993,8 @@
   function verifAutoKeyword(desc) {
     var t = String(desc || "").replace(/^PIX\s*-\s*(ENVIADO|RECEBIDO)\s*-?\s*/i, "").replace(/\s+BR$/i, "").trim();
     if (!t) return "";
-    var toks = t.split(/\s+/);
+    var toks = t.split(/\s+/).filter(function (x) { return !/^\d+([\/:.,-]\d+)*$/.test(x); });
+    if (!toks.length) return "";
     var first = toks[0];
     if (first.indexOf("*") !== -1) { var after = first.split("*").pop(); if (after.length >= 3) return after.toUpperCase(); }
     var generic = { "DE": 1, "DA": 1, "DO": 1, "COM": 1, "COMERCIO": 1, "LOJA": 1, "SUPER": 1, "POSTO": 1 };
@@ -19015,9 +19016,34 @@
     });
     return b;
   }
-  function verifBuildAutomationPanel(it) {
+  // casca visual dos cards (Automação / escolha de categoria): faixa de cor, título e "x" no canto superior esquerdo
+  function verifCardShell(title, icon, variant, onClose) {
     var box = document.createElement("div");
-    box.className = "verif-auto-panel";
+    box.className = "verif-card verif-card-" + variant;
+    var head = document.createElement("div");
+    head.className = "verif-card-head";
+    var x = document.createElement("button");
+    x.type = "button";
+    x.className = "verif-card-close";
+    x.title = "Fechar";
+    x.setAttribute("aria-label", "Fechar");
+    x.innerHTML = '<i class="ti ti-x"></i>';
+    x.addEventListener("click", function (ev) { ev.stopPropagation(); if (onClose) onClose(); });
+    head.appendChild(x);
+    var tt = document.createElement("span");
+    tt.className = "verif-card-title";
+    tt.innerHTML = '<i class="ti ti-' + icon + '"></i> ';
+    tt.appendChild(document.createTextNode(title));
+    head.appendChild(tt);
+    box.appendChild(head);
+    var body = document.createElement("div");
+    body.className = "verif-card-body";
+    box.appendChild(body);
+    return { box: box, body: body };
+  }
+  function verifBuildAutomationPanel(it, onClose) {
+    var shell = verifCardShell("Automação de categorização — textos para o Visor", "wand", "auto", onClose);
+    var box = shell.body;
     var rawCat = it.suggested || (it.category_name || "");
     var fields = [
       { id: "kw", label: "Quando o nome tiver", value: verifAutoKeyword(it.description) },
@@ -19051,10 +19077,10 @@
     });
     box.appendChild(allBtn);
     var note = document.createElement("p");
-    note.className = "empty verif-hint";
+    note.className = "verif-card-note";
     note.textContent = "A palavra-chave é uma sugestão a partir do texto do banco — ajuste se precisar. Confira também se a categoria e as demais tags (ex.: pessoa) estão certas antes de salvar a regra no Visor.";
     box.appendChild(note);
-    return box;
+    return shell.box;
   }
   // Escolha manual de categoria: o Georges seleciona a categoria e o nome é montado com o prefixo
   // que o histórico usa pra ela + estabelecimento/pessoa limpo. Terminar com " - " em transferências.
@@ -19063,9 +19089,9 @@
     var m = merchant || "";
     return catInfo.prefix + (m ? " - " + m : "") + (catInfo.transfer && m ? " - " : "");
   }
-  function verifBuildManualPanel(it, categories) {
-    var box = document.createElement("div");
-    box.className = "verif-auto-panel";
+  function verifBuildManualPanel(it, categories, onClose) {
+    var shell = verifCardShell("Escolher categoria e montar o nome", "category-2", "manual", onClose);
+    var box = shell.body;
     var byName = {};
     categories.forEach(function (c) { byName[c.name] = c; });
     var dlId = "verif-dl-" + Math.random().toString(36).slice(2, 8);
@@ -19122,11 +19148,11 @@
       autoHolder.appendChild(verifBuildAutomationPanel({
         description: it.description, category_name: catInp.value.trim() || it.category_name,
         suggested: catInp.value.trim() || "", suggested_name: nameInp.value || it.description
-      }));
+      }, function () { autoHolder.innerHTML = ""; }));
     });
     box.appendChild(autoBtn);
     box.appendChild(autoHolder);
-    return box;
+    return shell.box;
   }
   function verifInfoIcon(text) {
     var i = document.createElement("i");
@@ -19346,7 +19372,7 @@
           manRow.className = "verif-auto-row-tr";
           var mc = document.createElement("td");
           mc.colSpan = cols.length;
-          mc.appendChild(verifBuildManualPanel(it, allCats));
+          mc.appendChild(verifBuildManualPanel(it, allCats, function () { manBtn.click(); }));
           manRow.appendChild(mc);
           row.parentNode.insertBefore(manRow, row.nextSibling);
           manBtn.classList.add("active");
@@ -19378,7 +19404,7 @@
           panelRow.className = "verif-auto-row-tr";
           var pc = document.createElement("td");
           pc.colSpan = cols.length;
-          pc.appendChild(verifBuildAutomationPanel(it));
+          pc.appendChild(verifBuildAutomationPanel(it, function () { autoBtn.click(); }));
           panelRow.appendChild(pc);
           row.parentNode.insertBefore(panelRow, row.nextSibling);
           autoBtn.classList.add("active");
