@@ -27291,29 +27291,30 @@
   function updatePageLockBtn() {
     var btn = document.getElementById("pageLockBtn");
     if (!btn) {
-      var home = document.getElementById("setHomeBtn");
-      if (!home || !home.parentNode) return;
+      var eye = document.getElementById("privacyEyeBtn");
+      if (!eye || !eye.parentNode) return;
       btn = document.createElement("button");
       btn.id = "pageLockBtn";
       btn.type = "button";
-      btn.className = "set-home-btn";
-      home.parentNode.insertBefore(btn, home.nextSibling);
+      btn.className = "notif-bell-btn privacy-eye-btn";
+      eye.parentNode.insertBefore(btn, eye);
       btn.addEventListener("click", function () {
         var id = currentId;
         if (isPageLocked(id)) {
           if (!pageUnlockOk()) { render(id, false); return; } // pede o PIN antes de remover
           pageLocks = pageLocks.filter(function (x) { return x !== id; });
         } else {
+          // só marca a página; NÃO libera nada: a tela atual continua aberta e o PIN
+          // passa a ser exigido ao voltar a ela (não conta como desbloqueio das demais)
           pageLocks.push(id);
-          pinUnlockedThisLoad = true; // quem está ligando o cadeado já está presente
         }
         savePageLocks();
         updatePageLockBtn();
-        renderContent(id);
+        if (!isPageLocked(id)) renderContent(id);
       });
     }
     var locked = isPageLocked(currentId);
-    btn.classList.toggle("active", locked);
+    btn.classList.toggle("privacy-eye-active", locked);
     btn.title = locked ? "Esta página tem PIN (clique para remover)" : "Proteger esta página com PIN";
     btn.innerHTML = '<i class="ti ti-' + (locked ? "lock" : "lock-open") + '"></i>';
   }
