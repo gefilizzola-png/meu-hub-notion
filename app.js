@@ -14236,6 +14236,23 @@
     });
     return list;
   }
+  // séries "base 100": salário (rows ordenadas por competência, só folha mensal) × inflação acumulada
+  // rates: [{ym:"2024-01", v:0.42}] (% no mês). Inflação começa em 100 na competência-base (a do 1º ponto).
+  function holeriteBiInflacaoSeries(rows, key, rates) {
+    var base = rows.length ? Number(rows[0][key]) : 0;
+    var map = {};
+    (rates || []).forEach(function (r) { map[r.ym] = r.v; });
+    var sal = [], infl = [], acc = 100, broken = false;
+    rows.forEach(function (r, i) {
+      sal.push(base ? Math.round(Number(r[key]) / base * 10000) / 100 : null);
+      if (i === 0) { infl.push(100); return; }
+      var rate = map[String(r.competencia).slice(0, 7)];
+      if (broken || rate === undefined) { broken = true; infl.push(null); return; }
+      acc = acc * (1 + rate / 100);
+      infl.push(Math.round(acc * 100) / 100);
+    });
+    return { sal: sal, infl: infl };
+  }
   // </HOLERITE_BI_PURE>
 
   // <HOLERITE_BI2_PURE>
@@ -14554,6 +14571,26 @@
     return bar;
   }
 
+  var indicesCache = null;
+  function fetchIndicesEconomicos() {
+    if (indicesCache) return Promise.resolve(indicesCache);
+    function direct() {
+      var codes = { ipca: 433, inpc: 188, igpm: 189 };
+      var out = {};
+      return Promise.all(Object.keys(codes).map(function (k) {
+        return fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs." + codes[k] + "/dados?formato=json&dataInicial=01/01/2010")
+          .then(function (r) { return r.json(); })
+          .then(function (arr) { out[k] = arr.map(function (x) { var p = String(x.data).split("/"); return { ym: p[2] + "-" + p[1], v: Number(x.valor) }; }); })
+          .catch(function () { out[k] = []; });
+      })).then(function () { return out; });
+    }
+    return authFetch(cfg.templateWorkerUrl + "/indices-economicos")
+      .then(function (r) { if (!r.ok) throw new Error("x"); return r.json(); })
+      .then(function (d) { return d.series; })
+      .catch(direct)
+      .then(function (s) { indicesCache = s; return s; });
+  }
+
   function renderHoleriteBIPage(container, page) {
     var wrap = document.createElement("div");
     wrap.className = "holerite-bi-block financeiro-bi-block";
@@ -14594,6 +14631,7 @@
     var annualSection = mkSection();
     var monthlySection = mkSection();
     var compareSection = mkSection();
+    var inflSection = mkSection();
     var rankSection = mkSection();
     var rubricaSection = mkSection();
     var nivelSection = mkSection();
@@ -14608,13 +14646,13 @@
     var matSection = mkSection();
     var eventosSection = mkSection();
 
-    var allBiSections = [annualSection, monthlySection, compareSection, rankSection, rubricaSection, nivelSection, composicaoSection, yoySection, tipoFolhaSection, jetonSection, cargosSection, incSection, tetoSection, finSection, matSection, eventosSection];
+    var allBiSections = [annualSection, monthlySection, compareSection, inflSection, rankSection, rubricaSection, nivelSection, composicaoSection, yoySection, tipoFolhaSection, jetonSection, cargosSection, incSection, tetoSection, finSection, matSection, eventosSection];
     var state = {
       items: [],
       anos: [], matriculas: [], folhas: [],
       rankTipo: "Provento",
       rubricaKeys: ["0020|VENCIMENTO ESTATUTARIO"],
-      rubricaGran: "ano",
+      rubricaGran: "ano", inflMetric: "venc",
       yoyMetric: "liq", incMode: "competencia", incA: null, incB: null, incSearch: "", incStatus: [], eventosMax: 15
     };
     var charts = {};
@@ -14776,6 +14814,72 @@
       });
       mkNote(compareSection, "A linha tracejada (eixo direito) mostra quanto do bruto sobra no líquido a cada mês.");
     }
+
+    var inflToken = 0;
+    var INFL_DEFS = [
+      { k: "ipca", label: "IPCA", color: "#e8590c" },
+      { k: "inpc", label: "INPC", color: "#0b7285" },
+      { k: "igpm", label: "IGP-M", color: "#862e9c" }
+    ];
+    function renderInflacao(totals) {
+      destroyChart("holeriteBiInflacao");
+      inflSection.innerHTML = ""; inflSection.style.display = "";
+      mkTitle(inflSection, "📉 Salário × inflação (base 100 no 1º mês do período)");
+      mkToggle(inflSection, [{ value: "venc", label: "Vencimento estatutário" }, { value: "prov", label: "Proventos" }, { value: "liq", label: "Líquido" }], state.inflMetric,
+        function (v) { state.inflMetric = v; renderInflacao(totals); });
+      var rows = holeriteBiByCompetencia(totals.filter(function (t) { return t.folha === "Mensal" && !holeriteBiIs13(t.competencia); }));
+      if (rows.length < 2) { mkNote(inflSection, "Selecione um período com pelo menos 2 meses de folha mensal."); return; }
+      var loading = mkNoteEl("Carregando índices do Banco Central…");
+      var my = ++inflToken;
+      fetchIndicesEconomicos().then(function (series) {
+        if (my !== inflToken) return;
+        if (loading.parentNode) loading.parentNode.removeChild(loading);
+        var key = state.inflMetric;
+        var labels = rows.map(function (r) { return holeriteBiPeriodLabel(r.competencia); });
+        var salSeries = null, lines = [];
+        INFL_DEFS.forEach(function (d) {
+          var s = holeriteBiInflacaoSeries(rows, key, (series && series[d.k]) || []);
+          salSeries = s.sal;
+          lines.push({ def: d, data: s.infl });
+        });
+        var canvas = mkChartBox(inflSection, "holeriteBiInflacao", true);
+        var datasets = [{ label: "Seu salário", data: salSeries, borderColor: "#2f9e44", backgroundColor: "#2f9e44", borderWidth: 3, pointRadius: rows.length > 60 ? 0 : 3, tension: 0.2 }];
+        lines.forEach(function (l) {
+          datasets.push({ label: l.def.label + " acumulado", data: l.data, borderColor: l.def.color, backgroundColor: l.def.color, borderWidth: 2, borderDash: [6, 4], pointRadius: 0, tension: 0.2, spanGaps: false });
+        });
+        charts.holeriteBiInflacao = new window.Chart(canvas.getContext("2d"), {
+          type: "line",
+          data: { labels: labels, datasets: datasets },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + (ctx.parsed.y == null ? "—" : String(ctx.parsed.y.toFixed(1)).replace(".", ",")); } } } },
+            scales: { y: { ticks: { callback: function (v) { return String(v).replace(".", ","); } }, grid: { color: "rgba(0,0,0,0.06)" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } } }
+          }
+        });
+        // resumo: variação acumulada e ganho/perda real
+        function lastVal(a) { for (var i = a.length - 1; i >= 0; i--) if (a[i] != null) return { v: a[i], i: i }; return null; }
+        var salV = salSeries[salSeries.length - 1];
+        var tbl = document.createElement("table");
+        tbl.className = "financeiro-table saude-table";
+        tbl.innerHTML = "<thead><tr><th>Índice</th><th>Inflação acumulada</th><th>Salário no mesmo período</th><th>Ganho/perda real</th></tr></thead>";
+        var tb = document.createElement("tbody");
+        function fmtPct(x) { return (x >= 0 ? "+" : "") + x.toFixed(1).replace(".", ",") + "%"; }
+        lines.forEach(function (l) {
+          var lv = lastVal(l.data);
+          var tr = document.createElement("tr");
+          if (!lv) { tr.innerHTML = "<td>" + l.def.label + "</td><td colspan='3'>sem dados</td>"; tb.appendChild(tr); return; }
+          var salAt = salSeries[lv.i];
+          var real = (salAt / lv.v - 1) * 100;
+          tr.innerHTML = "<td>" + l.def.label + " (até " + labels[lv.i] + ")</td><td>" + fmtPct(lv.v - 100) + "</td><td>" + fmtPct(salAt - 100) + "</td><td style='font-weight:600;color:" + (real >= 0 ? "#2f9e44" : "#c0392b") + "'>" + fmtPct(real) + "</td>";
+          tb.appendChild(tr);
+        });
+        tbl.appendChild(tb);
+        inflSection.appendChild(tbl);
+        mkNote(inflSection, "Só folha mensal (sem 13º/suplementar). Linha verde acima das tracejadas = o salário ganhou da inflação; abaixo = perdeu poder de compra. Índices do Banco Central (IPCA, INPC, IGP-M, variação mensal encadeada). Meses ainda sem índice divulgado interrompem a linha.");
+      }).catch(function () { if (my === inflToken) { loading.textContent = "Não consegui carregar os índices de inflação."; } });
+    }
+    function mkNoteEl(text) { var p = document.createElement("p"); p.className = "holerite-bi-note"; p.textContent = text; inflSection.appendChild(p); return p; }
 
     function renderRank(items) {
       destroyChart("holeriteBiRank");
@@ -15281,6 +15385,7 @@
       renderAnnual(totals);
       renderMonthly(byComp);
       renderCompare(totals);
+      renderInflacao(totals);
       renderRank(items);
       renderRubricaEvo(items);
       renderNivel(totals);
