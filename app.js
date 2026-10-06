@@ -18981,7 +18981,7 @@
   // lançamentos pra ele revisar/corrigir no Visor. Regras no worker.js (verifAnalyze).
   var VERIF_SEV_RANK = { alta: 3, media: 2, baixa: 1 };
   var VERIF_SEV_LABEL = { alta: "Alta", media: "Média", baixa: "Baixa" };
-  var VERIF_CHECK_ICON = { raiz: "🌳", padrao: "✏️", suspeita: "🔍", duplicada: "👯", legada: "🏚️", valor: "⚖️" };
+  var VERIF_CHECK_ICON = { generica: "🚫", raiz: "🌳", padrao: "✏️", suspeita: "🔍", duplicada: "👯", legada: "🏚️", valor: "⚖️" };
   function verifMaxSev(reasons) {
     var best = "baixa";
     (reasons || []).forEach(function (r) { if ((VERIF_SEV_RANK[r.sev] || 0) > VERIF_SEV_RANK[best]) best = r.sev; });
