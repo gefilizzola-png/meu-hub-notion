@@ -8777,3 +8777,10 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .verif-card-note{margin:2px 0 0;padding:8px 12px;border-radius:10px;background:#fff8e6;color:#8a6d1d;font-size:.82em;line-height:1.4}
 .verif-card .verif-card{margin-top:6px;box-shadow:none;border-style:dashed}
 @media (max-width:640px){.verif-card .verif-auto-row{flex-wrap:wrap}.verif-card .verif-auto-label{flex:1 0 100%}}
+
+/* IRPF: visualizações recolhíveis */
+.irpf-title-row{display:flex;align-items:center;gap:6px}
+.irpf-title-row .financeiro-bi-subtitle{margin:0;cursor:pointer;user-select:none;flex:1}
+.irpf-collapsed > :not(.irpf-title-row){display:none !important}
+/* Verificações: botão de ocultar filtros */
+.verif-filters-toggle.active{background:var(--accent-soft,rgba(80,120,255,.15))}

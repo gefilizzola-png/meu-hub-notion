@@ -15565,7 +15565,31 @@
       if (Math.abs(n) >= 1000) return "R$ " + (n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil";
       return "R$ " + n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
     }
-    function mkTitle(parent, text) { var h = document.createElement("h4"); h.className = "financeiro-bi-subtitle"; h.textContent = text; parent.appendChild(h); }
+    // título recolhível: chevron + nome clicáveis; estado lembrado por título entre re-renders
+    var irpfCollapsed = {};
+    function mkTitle(parent, text) {
+      var row = document.createElement("div");
+      row.className = "irpf-title-row";
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "toolbar-icon-btn irpf-title-toggle";
+      var h = document.createElement("h4");
+      h.className = "financeiro-bi-subtitle irpf-title-text";
+      h.textContent = text;
+      function apply() {
+        var c = !!irpfCollapsed[text];
+        parent.classList.toggle("irpf-collapsed", c);
+        btn.title = c ? "Expandir" : "Recolher";
+        btn.setAttribute("aria-label", btn.title);
+        btn.innerHTML = '<i class="ti ti-chevron-' + (c ? "right" : "down") + '"></i>';
+      }
+      function toggle() { irpfCollapsed[text] = !irpfCollapsed[text]; apply(); }
+      btn.addEventListener("click", toggle);
+      h.addEventListener("click", toggle);
+      row.appendChild(btn); row.appendChild(h);
+      parent.appendChild(row);
+      apply();
+    }
     function mkNote(parent, text) { var p = document.createElement("p"); p.className = "holerite-bi-note"; p.textContent = text; parent.appendChild(p); }
     function mkChartBox(parent, canvasId) {
       var box = document.createElement("div");
@@ -19196,6 +19220,22 @@
     wrap.appendChild(searchSec.body);
     var filterSec = { body: document.createElement("div") };
     wrap.appendChild(filterSec.body);
+    // botão para ocultar/mostrar busca + filtros (padrão: visíveis)
+    var filtersToggle = document.createElement("button");
+    filtersToggle.type = "button";
+    filtersToggle.className = "toolbar-icon-btn verif-filters-toggle";
+    function applyFiltersVisibility(hidden) {
+      searchSec.body.style.display = hidden ? "none" : "";
+      filterSec.body.style.display = hidden ? "none" : "";
+      filtersToggle.title = hidden ? "Mostrar busca e filtros" : "Ocultar busca e filtros";
+      filtersToggle.setAttribute("aria-label", filtersToggle.title);
+      filtersToggle.innerHTML = '<i class="ti ti-' + (hidden ? "filter" : "filter-off") + '"></i>';
+      filtersToggle.classList.toggle("active", !!hidden);
+    }
+    var filtersHidden = false;
+    filtersToggle.addEventListener("click", function () { filtersHidden = !filtersHidden; applyFiltersVisibility(filtersHidden); });
+    applyFiltersVisibility(false);
+    titleRow.appendChild(filtersToggle);
     var statusEl = document.createElement("p");
     statusEl.className = "empty";
     statusEl.textContent = "Analisando transações…";
@@ -19305,7 +19345,7 @@
       tw.className = "verif-table-scroll";
       var table = document.createElement("table");
       table.className = "financeiro-table saude-table verif-table";
-      var cols = [["date", "Data"], ["description", "Descrição"], ["category", "Categoria"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Motivo"], ["auto", "Automação"]];
+      var cols = [["date", "Data"], ["description", "Descrição"], ["category", "Categoria"], ["auto", "Automação"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Motivo"]];
       var thead = document.createElement("thead");
       var tr = document.createElement("tr");
       cols.forEach(function (c) {
@@ -19377,6 +19417,14 @@
           row.parentNode.insertBefore(manRow, row.nextSibling);
           manBtn.classList.add("active");
         });
+        var ac = document.createElement("td");
+        ac.className = "verif-td";
+        var autoBtn = document.createElement("button");
+        autoBtn.type = "button";
+        autoBtn.className = "verif-copy-btn verif-auto-btn";
+        autoBtn.title = "Gerar textos para a Automação de categorização do Visor";
+        autoBtn.innerHTML = '<i class="ti ti-wand"></i>';
+        ac.appendChild(autoBtn); row.appendChild(ac);
         var vc = td(transacoesFmtMoney(Math.abs(it.amount || 0)), "verif-col-valor");
         if (it.flow_type === "entrada") vc.classList.add("verif-entrada");
         td(it.account_name || "—");
@@ -19388,14 +19436,6 @@
         chip.textContent = VERIF_SEV_LABEL[sev];
         sc.appendChild(chip); row.appendChild(sc);
         var mt = td(reasonText(it), "verif-col-motivo"); mt.title = reasonText(it);
-        var ac = document.createElement("td");
-        ac.className = "verif-td";
-        var autoBtn = document.createElement("button");
-        autoBtn.type = "button";
-        autoBtn.className = "verif-copy-btn verif-auto-btn";
-        autoBtn.title = "Gerar textos para a Automação de categorização do Visor";
-        autoBtn.innerHTML = '<i class="ti ti-wand"></i>';
-        ac.appendChild(autoBtn); row.appendChild(ac);
         tbody.appendChild(row);
         var panelRow = null;
         autoBtn.addEventListener("click", function () {
@@ -27227,10 +27267,62 @@
     privacyObserver.observe(container, { childList: true, subtree: true, characterData: true });
   }
 
+  // ---------------- PIN configurável por página ----------------
+  // Lista de páginas travadas fica na KV (GET/PUT /page-locks). Usa o MESMO PIN
+  // e o mesmo desbloqueio (20 min) de Transações. Trava de tela no app.
+  var pageLocks = [];
+  function isPageLocked(id) { return pageLocks.indexOf(id) !== -1; }
+  function fetchPageLocks() {
+    return authFetch(cfg.templateWorkerUrl + "/page-locks")
+      .then(function (r) { return r.ok ? r.json() : { pages: [] }; })
+      .then(function (d) { pageLocks = (d && d.pages) || []; })
+      .catch(function () {});
+  }
+  function savePageLocks() {
+    return authFetch(cfg.templateWorkerUrl + "/page-locks", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pages: pageLocks })
+    }).catch(function () {});
+  }
+  function updatePageLockBtn() {
+    var btn = document.getElementById("pageLockBtn");
+    if (!btn) {
+      var home = document.getElementById("setHomeBtn");
+      if (!home || !home.parentNode) return;
+      btn = document.createElement("button");
+      btn.id = "pageLockBtn";
+      btn.type = "button";
+      btn.className = "set-home-btn";
+      home.parentNode.insertBefore(btn, home.nextSibling);
+      btn.addEventListener("click", function () {
+        var id = currentId;
+        if (isPageLocked(id)) {
+          if (!transacoesGetStoredUnlock()) { render(id, false); return; } // pede o PIN antes de remover
+          pageLocks = pageLocks.filter(function (x) { return x !== id; });
+        } else {
+          pageLocks.push(id);
+        }
+        savePageLocks();
+        updatePageLockBtn();
+        renderContent(id);
+      });
+    }
+    var locked = isPageLocked(currentId);
+    btn.classList.toggle("active", locked);
+    btn.title = locked ? "Esta página tem PIN (clique para remover)" : "Proteger esta página com PIN";
+    btn.innerHTML = '<i class="ti ti-' + (locked ? "lock" : "lock-open") + '"></i>';
+  }
+
   function renderContent(pageId) {
     var page = cfg.pages[pageId];
     var container = document.getElementById("content");
     container.innerHTML = "";
+    if (isPageLocked(pageId) && !transacoesGetStoredUnlock()) {
+      var lockWrap = document.createElement("div");
+      lockWrap.className = "transacoes-block";
+      container.appendChild(lockWrap);
+      renderTransacoesLockScreen(lockWrap, function () { if (currentId === pageId) renderContent(pageId); }, "🔒 " + (page.title || "Página protegida"));
+      return;
+    }
     teardownPrivacy(container);
     if (pageHasValues(page)) setupPrivacy(container);
     // sai da Lista de Prioridades (ou recarrega ela) com um timer da
@@ -30670,6 +30762,7 @@
     }
     renderSidePanel(pageId);
     updateSetHomeBtn();
+    updatePageLockBtn();
 
     if (push) history.pushState({ pageId: rawPageId }, "", "#" + rawPageId);
   }
@@ -30945,7 +31038,7 @@
     // fetchInicioBlockOrder, escopo global) EM PARALELO com "home-page" —
     // precisa estar pronta ANTES do 1º render() pra renderBody() (dentro de
     // renderTabs) já aplicar a ordem certa de cara, sem "pular" depois.
-    Promise.all([homePagePromise, fetchInicioBlockOrder()]).finally(function () {
+    Promise.all([homePagePromise, fetchInicioBlockOrder(), fetchPageLocks()]).finally(function () {
       var initial = location.hash.replace("#", "") || homePageId;
       history.replaceState({ pageId: initial }, "", "#" + initial);
       render(initial, false);
