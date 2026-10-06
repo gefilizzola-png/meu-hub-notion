@@ -14253,6 +14253,40 @@
     });
     return { sal: sal, infl: infl };
   }
+  // composição de uma competência (folha mensal) comparada à anterior; ordenada pela maior variação absoluta
+  function holeriteBiInflacaoDetalhe(items, metric, comp, prev) {
+    function collect(c) {
+      var out = {};
+      (items || []).forEach(function (it) {
+        if (it.competencia !== c || it.folha !== "Mensal") return;
+        var cod = String(it.codigo || "");
+        if (cod === HOLERITE_BI_COD_PROV || cod === HOLERITE_BI_COD_DESC || cod === HOLERITE_BI_COD_LIQ) return;
+        var isProv = it.tipo === "Provento", isDesc = it.tipo === "Desconto";
+        var sinal = 1, rot = it.rubrica + " (" + cod + ")";
+        if (metric === "venc") {
+          if (cod !== HOLERITE_BI_COD_VENC) return;
+          rot = it.rubrica + " — mat. " + (it.matricula || "?");
+        } else if (metric === "prov") {
+          if (!isProv) return;
+        } else {
+          if (!isProv && !isDesc) return;
+          if (isDesc) sinal = -1;
+        }
+        var k = (metric === "venc" ? (it.matricula || "") + "|" : "") + cod + "|" + sinal;
+        var r = out[k] || (out[k] = { rotulo: rot, sinal: sinal, valor: 0 });
+        r.valor += Number(it.valor) || 0;
+      });
+      return out;
+    }
+    var cur = collect(comp), old = prev ? collect(prev) : {};
+    var keys = {};
+    Object.keys(cur).forEach(function (k) { keys[k] = true; });
+    Object.keys(old).forEach(function (k) { keys[k] = true; });
+    return Object.keys(keys).map(function (k) {
+      var c = cur[k], o = old[k];
+      return { rotulo: (c || o).rotulo, sinal: (c || o).sinal, valor: holeriteBiR2(c ? c.valor : 0), anterior: holeriteBiR2(o ? o.valor : 0) };
+    }).sort(function (x, y) { return Math.abs(y.sinal * (y.valor - y.anterior)) - Math.abs(x.sinal * (x.valor - x.anterior)) || y.valor - x.valor; });
+  }
   // </HOLERITE_BI_PURE>
 
   // <HOLERITE_BI2_PURE>
@@ -14652,7 +14686,7 @@
       anos: [], matriculas: [], folhas: [],
       rankTipo: "Provento",
       rubricaKeys: ["0020|VENCIMENTO ESTATUTARIO"],
-      rubricaGran: "ano", inflMetric: "venc",
+      rubricaGran: "ano", inflMetric: "venc", inflSel: null,
       yoyMetric: "liq", incMode: "competencia", incA: null, incB: null, incSearch: "", incStatus: [], eventosMax: 15
     };
     var charts = {};
@@ -14821,12 +14855,12 @@
       { k: "inpc", label: "INPC", color: "#0b7285" },
       { k: "igpm", label: "IGP-M", color: "#862e9c" }
     ];
-    function renderInflacao(totals) {
+    function renderInflacao(totals, items) {
       destroyChart("holeriteBiInflacao");
       inflSection.innerHTML = ""; inflSection.style.display = "";
       mkTitle(inflSection, "📉 Salário × inflação (base 100 no 1º mês do período)");
       mkToggle(inflSection, [{ value: "venc", label: "Vencimento estatutário" }, { value: "prov", label: "Proventos" }, { value: "liq", label: "Líquido" }], state.inflMetric,
-        function (v) { state.inflMetric = v; renderInflacao(totals); });
+        function (v) { state.inflMetric = v; renderInflacao(totals, items); });
       var rows = holeriteBiByCompetencia(totals.filter(function (t) { return t.folha === "Mensal" && !holeriteBiIs13(t.competencia); }));
       if (rows.length < 2) { mkNote(inflSection, "Selecione um período com pelo menos 2 meses de folha mensal."); return; }
       var loading = mkNoteEl("Carregando índices do Banco Central…");
@@ -14853,6 +14887,13 @@
           options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: "index", intersect: false },
+            onClick: function (evt, els, chart) {
+              var pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, true);
+              if (!pts.length) return;
+              state.inflSel = rows[pts[0].index].competencia;
+              showInflDetail();
+            },
+            onHover: function (evt, els, chart) { evt.native && (evt.native.target.style.cursor = "pointer"); },
             plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + (ctx.parsed.y == null ? "—" : String(ctx.parsed.y.toFixed(1)).replace(".", ",")); } } } },
             scales: { y: { ticks: { callback: function (v) { return String(v).replace(".", ","); } }, grid: { color: "rgba(0,0,0,0.06)" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } } }
           }
@@ -14876,7 +14917,45 @@
         });
         tbl.appendChild(tb);
         inflSection.appendChild(tbl);
-        mkNote(inflSection, "Só folha mensal (sem 13º/suplementar). Linha verde acima das tracejadas = o salário ganhou da inflação; abaixo = perdeu poder de compra. Índices do Banco Central (IPCA, INPC, IGP-M, variação mensal encadeada). Meses ainda sem índice divulgado interrompem a linha.");
+        var detailEl = document.createElement("div");
+        detailEl.className = "infl-detail";
+        inflSection.appendChild(detailEl);
+        function showInflDetail() {
+          detailEl.innerHTML = "";
+          var comp = state.inflSel;
+          var idx = -1;
+          rows.forEach(function (r, i) { if (r.competencia === comp) idx = i; });
+          if (idx < 0) { return; }
+          var prev = idx > 0 ? rows[idx - 1].competencia : null;
+          var lines = holeriteBiInflacaoDetalhe(items, state.inflMetric, comp, prev);
+          var head = document.createElement("h5");
+          head.style.margin = "14px 0 6px";
+          var mlabel = state.inflMetric === "venc" ? "vencimento estatutário" : state.inflMetric === "prov" ? "proventos" : "líquido";
+          head.textContent = "🔎 Composição de " + mlabel + " em " + holeriteBiPeriodLabel(comp) + (prev ? " (comparando com " + holeriteBiPeriodLabel(prev) + ")" : "");
+          detailEl.appendChild(head);
+          if (!lines.length) { var e = document.createElement("p"); e.className = "holerite-bi-note"; e.textContent = "Sem rubricas nesta competência."; detailEl.appendChild(e); return; }
+          var t = document.createElement("table");
+          t.className = "financeiro-table saude-table";
+          t.innerHTML = "<thead><tr><th>Rubrica</th><th>Valor</th><th>Mês anterior</th><th>Variação</th></tr></thead>";
+          var b = document.createElement("tbody");
+          var tot = 0, totPrev = 0;
+          lines.slice(0, 40).forEach(function (l) {
+            var tr = document.createElement("tr");
+            var sign = l.sinal < 0 ? -1 : 1;
+            tot += sign * l.valor; totPrev += sign * l.anterior;
+            var dif = sign * (l.valor - l.anterior);
+            tr.innerHTML = "<td>" + (l.sinal < 0 ? "➖ " : "") + escapeHtml(l.rotulo) + "</td><td>" + transacoesFmtMoney(l.valor) + "</td><td>" + (prev ? transacoesFmtMoney(l.anterior) : "—") + "</td><td style='font-weight:600;color:" + (!prev || !dif ? "inherit" : dif > 0 ? "#2f9e44" : "#c0392b") + "'>" + (prev ? (dif > 0 ? "+" : "") + transacoesFmtMoney(dif) : "—") + "</td>";
+            b.appendChild(tr);
+          });
+          var trT = document.createElement("tr");
+          trT.innerHTML = "<td><b>Total</b></td><td><b>" + transacoesFmtMoney(tot) + "</b></td><td><b>" + (prev ? transacoesFmtMoney(totPrev) : "—") + "</b></td><td><b>" + (prev ? (tot - totPrev > 0 ? "+" : "") + transacoesFmtMoney(tot - totPrev) : "—") + "</b></td>";
+          b.appendChild(trT);
+          t.appendChild(b);
+          detailEl.appendChild(t);
+          if (lines.length > 40) { var m = document.createElement("p"); m.className = "holerite-bi-note"; m.textContent = "Mostrando as 40 rubricas de maior variação (de " + lines.length + ")."; detailEl.appendChild(m); }
+        }
+        if (state.inflSel) showInflDetail();
+        mkNote(inflSection, "Clique em um ponto do gráfico para ver a composição daquela competência (ordenada pelo que mais mudou em relação ao mês anterior). Só folha mensal (sem 13º/suplementar). Linha verde acima das tracejadas = o salário ganhou da inflação; abaixo = perdeu poder de compra. Índices do Banco Central (IPCA, INPC, IGP-M, variação mensal encadeada). Meses ainda sem índice divulgado interrompem a linha.");
       }).catch(function () { if (my === inflToken) { loading.textContent = "Não consegui carregar os índices de inflação."; } });
     }
     function mkNoteEl(text) { var p = document.createElement("p"); p.className = "holerite-bi-note"; p.textContent = text; inflSection.appendChild(p); return p; }
@@ -15385,7 +15464,7 @@
       renderAnnual(totals);
       renderMonthly(byComp);
       renderCompare(totals);
-      renderInflacao(totals);
+      renderInflacao(totals, items);
       renderRank(items);
       renderRubricaEvo(items);
       renderNivel(totals);
