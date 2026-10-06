@@ -14503,6 +14503,57 @@
   }
   // </HOLERITE_BI2_PURE>
 
+  // ---- títulos recolhíveis + botões "Recolher tudo / Expandir tudo" (IRPF e BI da Folha) ----
+  // store: { _all: undefined|true|false, [título]: bool } — sobrevive aos re-renders das seções;
+  // reg: título -> função apply() da instância atual do título.
+  function biToggleTitle(parent, text, store, reg) {
+    var row = document.createElement("div");
+    row.className = "irpf-title-row";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "toolbar-icon-btn irpf-title-toggle";
+    var h = document.createElement("h4");
+    h.className = "financeiro-bi-subtitle irpf-title-text";
+    h.textContent = text;
+    function isC() { return text in store ? !!store[text] : !!store._all; }
+    function apply() {
+      var c = isC();
+      parent.classList.toggle("irpf-collapsed", c);
+      btn.title = c ? "Expandir" : "Recolher";
+      btn.setAttribute("aria-label", btn.title);
+      btn.innerHTML = '<i class="ti ti-chevron-' + (c ? "right" : "down") + '"></i>';
+    }
+    function toggle() { store[text] = !isC(); apply(); }
+    btn.addEventListener("click", toggle);
+    h.addEventListener("click", toggle);
+    row.appendChild(btn); row.appendChild(h);
+    parent.appendChild(row);
+    reg[text] = apply;
+    apply();
+    return h;
+  }
+  function biCollapseToolbar(store, reg) {
+    var bar = document.createElement("div");
+    bar.className = "irpf-toolbar";
+    function mk(icon, title, val) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "toolbar-icon-btn";
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      b.innerHTML = '<i class="ti ti-' + icon + '"></i>';
+      b.addEventListener("click", function () {
+        Object.keys(store).forEach(function (k) { delete store[k]; });
+        store._all = val;
+        Object.keys(reg).forEach(function (k) { try { reg[k](); } catch (e) {} });
+      });
+      bar.appendChild(b);
+    }
+    mk("arrows-minimize", "Recolher tudo", true);
+    mk("arrows-maximize", "Expandir tudo", false);
+    return bar;
+  }
+
   function renderHoleriteBIPage(container, page) {
     var wrap = document.createElement("div");
     wrap.className = "holerite-bi-block financeiro-bi-block";
@@ -14573,13 +14624,9 @@
       if (Math.abs(n) >= 1000) return "R$ " + (n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil";
       return "R$ " + n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
     }
-    function mkTitle(parent, text) {
-      var h = document.createElement("h4");
-      h.className = "financeiro-bi-subtitle";
-      h.textContent = text;
-      parent.appendChild(h);
-      return h;
-    }
+    var biCollapsed = {}, biReg = {};
+    wrap.insertBefore(biCollapseToolbar(biCollapsed, biReg), statusEl);
+    function mkTitle(parent, text) { return biToggleTitle(parent, text, biCollapsed, biReg); }
     function mkNote(parent, text) {
       var p = document.createElement("p");
       p.className = "holerite-bi-note";
@@ -15565,31 +15612,9 @@
       if (Math.abs(n) >= 1000) return "R$ " + (n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil";
       return "R$ " + n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
     }
-    // título recolhível: chevron + nome clicáveis; estado lembrado por título entre re-renders
-    var irpfCollapsed = {};
-    function mkTitle(parent, text) {
-      var row = document.createElement("div");
-      row.className = "irpf-title-row";
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "toolbar-icon-btn irpf-title-toggle";
-      var h = document.createElement("h4");
-      h.className = "financeiro-bi-subtitle irpf-title-text";
-      h.textContent = text;
-      function apply() {
-        var c = !!irpfCollapsed[text];
-        parent.classList.toggle("irpf-collapsed", c);
-        btn.title = c ? "Expandir" : "Recolher";
-        btn.setAttribute("aria-label", btn.title);
-        btn.innerHTML = '<i class="ti ti-chevron-' + (c ? "right" : "down") + '"></i>';
-      }
-      function toggle() { irpfCollapsed[text] = !irpfCollapsed[text]; apply(); }
-      btn.addEventListener("click", toggle);
-      h.addEventListener("click", toggle);
-      row.appendChild(btn); row.appendChild(h);
-      parent.appendChild(row);
-      apply();
-    }
+    var irpfCollapsed = {}, irpfReg = {};
+    wrap.insertBefore(biCollapseToolbar(irpfCollapsed, irpfReg), statusEl);
+    function mkTitle(parent, text) { return biToggleTitle(parent, text, irpfCollapsed, irpfReg); }
     function mkNote(parent, text) { var p = document.createElement("p"); p.className = "holerite-bi-note"; p.textContent = text; parent.appendChild(p); }
     function mkChartBox(parent, canvasId) {
       var box = document.createElement("div");

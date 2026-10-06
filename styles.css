@@ -8784,3 +8784,4 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .irpf-collapsed > :not(.irpf-title-row){display:none !important}
 /* Verificações: botão de ocultar filtros */
 .verif-filters-toggle.active{background:var(--accent-soft,rgba(80,120,255,.15))}
+.irpf-toolbar{display:flex;gap:6px;margin:4px 0 8px}
