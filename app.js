@@ -21344,6 +21344,12 @@
         onlyUrgenteWrap.style.display = state.view === "comprar" ? "" : "none";
       }
     }
+    // abas Comprar/Comprados sempre visíveis ao rolar (sticky logo abaixo do header)
+    tabsWrap.classList.add("supermercado-views-sticky");
+    (function () {
+      var hdr = document.querySelector(".main-header");
+      if (hdr && hdr.offsetHeight) tabsWrap.style.top = hdr.offsetHeight + "px";
+    })();
     wrap.appendChild(tabsWrap);
 
     // ---- compartilhar a lista "Comprar" (só aparece nessa aba) ----
@@ -21466,7 +21472,11 @@
     searchInput.type = "text";
     searchInput.className = "supermercado-search-input";
     searchInput.placeholder = "Buscar produto…";
-    filterWrap.appendChild(withSearchClear(searchInput));
+    // Pesquisar: seção recolhida por padrão (pedido do Georges — "botao para
+    // ocultar e expandir aba de pesquisa, que abrira fechada por padrao")
+    var superSearchSec = buildCollapsibleSection("Pesquisar", false);
+    superSearchSec.body.appendChild(withSearchClear(searchInput));
+    wrap.appendChild(superSearchSec.section);
 
     // filtro de Categoria (pedido do Georges, rodada 4 — "use aquele mesmo
     // padrão que usamos em outros filtros para permitir multi_select e
@@ -25331,7 +25341,7 @@
 
     var addDirecaoSelect = document.createElement("select");
     addDirecaoSelect.className = "emprestimos-add-select";
-    [{ value: "receber", label: "A Receber (empresquei)" }, { value: "pagar", label: "A Pagar (peguei)" }].forEach(function (o) {
+    [{ value: "receber", label: "A Receber (emprestei)" }, { value: "pagar", label: "A Pagar (peguei emprestado)" }].forEach(function (o) {
       var opt = document.createElement("option");
       opt.value = o.value; opt.textContent = o.label;
       addDirecaoSelect.appendChild(opt);
@@ -25776,6 +25786,58 @@
       return wrap2;
     }
 
+    // Edição dos dados básicos de um empréstimo já criado (pessoa, objetivo,
+    // valor, data, direção) — Worker handleLoansUpdate já aceita esses campos.
+    function buildLoanBasicEditor(loan) {
+      var box = document.createElement("div");
+      box.className = "emprestimos-box emprestimos-forma-editor";
+      var lbl = document.createElement("div");
+      lbl.className = "emprestimos-box-label";
+      lbl.innerHTML = '<i class="ti ti-edit"></i> Editar empréstimo';
+      box.appendChild(lbl);
+      var row = document.createElement("div");
+      row.className = "emprestimos-forma-editor-row";
+      var pessoa = document.createElement("input");
+      pessoa.type = "text"; pessoa.className = "emprestimos-add-input"; pessoa.placeholder = "Pessoa…"; pessoa.value = loan.pessoa || "";
+      var objetivo = document.createElement("input");
+      objetivo.type = "text"; objetivo.className = "emprestimos-add-input"; objetivo.placeholder = "Objetivo…"; objetivo.value = loan.objetivo || "";
+      var valor = document.createElement("input");
+      valor.type = "number"; valor.step = "0.01"; valor.min = "0"; valor.className = "emprestimos-add-input"; valor.placeholder = "Valor…";
+      valor.value = typeof loan.valor === "number" ? loan.valor : "";
+      var data = document.createElement("input");
+      data.type = "date"; data.className = "emprestimos-add-input"; data.value = loan.data || "";
+      var dir = document.createElement("select");
+      dir.className = "emprestimos-add-select";
+      [["receber", "A Receber (emprestei)"], ["pagar", "A Pagar (peguei emprestado)"]].forEach(function (o) {
+        var opt = document.createElement("option");
+        opt.value = o[0]; opt.textContent = o[1];
+        if (o[0] === loan.direcao) opt.selected = true;
+        dir.appendChild(opt);
+      });
+      [pessoa, objetivo, valor, data, dir].forEach(function (el) { row.appendChild(el); });
+      var save = document.createElement("button");
+      save.type = "button";
+      save.className = "notes-add-btn emprestimos-add-btn";
+      save.innerHTML = '<i class="ti ti-check"></i> Salvar';
+      save.addEventListener("click", function () {
+        var p = pessoa.value.trim();
+        if (!p) { alert("Informe a pessoa."); return; }
+        var v = Number(valor.value);
+        if (!isFinite(v) || v <= 0) { alert("Informe um valor válido."); return; }
+        var patch = { pessoa: p, objetivo: objetivo.value.trim(), valor: v, direcao: dir.value };
+        if (data.value) patch.data = data.value;
+        save.disabled = true;
+        updateLoan(loan.id, patch).then(function (res) { return res.json(); }).then(function (d) {
+          if (d && d.error) { alert(d.error); return; }
+          if (dir.value !== state.tab) state.tab = dir.value;
+          loadLoans();
+        }).catch(function () {}).finally(function () { save.disabled = false; });
+      });
+      row.appendChild(save);
+      box.appendChild(row);
+      return box;
+    }
+
     // Card compacto em 1 linha (pedido do Georges: "diminua a altura e
     // largura do card... está ocupando muito espaço... Data - Nome -
     // Objetivo - Situação - Saldo, dando um visual mais bonito... usando
@@ -25840,6 +25902,7 @@
         metaEl.textContent = metaParts.join(" · ");
         detail.appendChild(metaEl);
 
+        detail.appendChild(buildLoanBasicEditor(loan));
         detail.appendChild(buildFormaPagamentoEditor(loan));
 
         var progressWrap = document.createElement("div");
@@ -29543,9 +29606,8 @@
     }).catch(function () { return []; });
   }
 
-  // Tratamento em andamento: 1 item agregado, fixado ao final (config.js
-  // defaultPinToEnd). id inclui os ids dos tratamentos em andamento, então
-  // um tratamento novo/encerrado gera uma notificação nova.
+  // Tratamento em andamento: 1 item por tratamento, fixado ao final (config.js
+  // defaultPinToEnd).
   function fetchTratamentosAndamentoNotificationItems(source) {
     return authFetch(cfg.templateWorkerUrl + "/tratamentos").then(function (res) {
       if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
@@ -29558,18 +29620,19 @@
       });
       if (!ativos.length) return [];
       ativos.sort(function (a, b) { return a.t.id.localeCompare(b.t.id); });
-      var txt = ativos.map(function (x) {
-        return (x.t.pessoa || "Georges") + " - " + x.t.nome + (x.t.descricao ? " (" + x.t.descricao + ")" : "") +
-          (x.e.proxima ? " - próxima dose " + tratFmtDT(x.e.proxima) : "");
-      }).join("; ");
-      var extra = {};
-      extra[source.dateProperty] = { start: new Date().toISOString() };
-      return [{
-        id: "tratamentos-andamento::" + ativos.map(function (x) { return x.t.id; }).join(","),
-        title: "Tratamento em andamento: " + txt,
-        url: location.origin + location.pathname + "#remedios",
-        extra: extra
-      }];
+      // 1 notificação por tratamento em andamento (fixadas ao final)
+      return ativos.map(function (x) {
+        var extra = {};
+        extra[source.dateProperty] = { start: new Date().toISOString() };
+        return {
+          id: "tratamento-andamento::" + x.t.id,
+          title: "Tratamento em andamento: " + (x.t.pessoa || "Georges") + " - " + x.t.nome +
+            (x.t.descricao ? " (" + x.t.descricao + ")" : "") +
+            (x.e.proxima ? " - próxima dose " + tratFmtDT(x.e.proxima) : ""),
+          url: location.origin + location.pathname + "#remedios",
+          extra: extra
+        };
+      });
     }).catch(function () { return []; });
   }
 

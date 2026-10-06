@@ -8863,3 +8863,13 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .trat-info { gap: 18px; align-items: center; }
 .trat-next { font-size: 14px; font-weight: 700; padding: 3px 10px; border-radius: 8px; background: #e7f0fb; color: #1c5fa8; white-space: nowrap; }
 .trat-next.late { background: #fde8ee; color: #c2255c; }
+
+/* Supermercado: abas sempre visíveis ao rolar */
+.supermercado-views-sticky {
+  position: sticky;
+  top: 64px;
+  z-index: 4;
+  background: #ffffff;
+  padding: 8px 0;
+  border-bottom: 0.5px solid #ececea;
+}
