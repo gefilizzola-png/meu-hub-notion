@@ -8853,3 +8853,13 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .trat-alert { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #fff4e0; border: 0.5px solid #f2c46d; color: #7a4b00; font-size: 13px; line-height: 1.4; }
 .trat-alert.late { background: #fde8ee; border-color: #f0a3b8; color: #8a1c3c; }
 .trat-alert i { font-size: 16px; margin-top: 1px; flex: none; }
+
+/* card de tratamento compacto + destaque da próxima dose (ajuste 2026-10-06) */
+.trat-list { align-items: flex-start; }
+.trat-card { width: fit-content; min-width: 340px; max-width: 100%; }
+.trat-card-top { flex-wrap: nowrap; gap: 14px; }
+.trat-card-title { white-space: nowrap; }
+.trat-card-meta { white-space: nowrap; }
+.trat-info { gap: 18px; align-items: center; }
+.trat-next { font-size: 14px; font-weight: 700; padding: 3px 10px; border-radius: 8px; background: #e7f0fb; color: #1c5fa8; white-space: nowrap; }
+.trat-next.late { background: #fde8ee; color: #c2255c; }
