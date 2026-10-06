@@ -14287,6 +14287,28 @@
       return { rotulo: (c || o).rotulo, sinal: (c || o).sinal, valor: holeriteBiR2(c ? c.valor : 0), anterior: holeriteBiR2(o ? o.valor : 0) };
     }).sort(function (x, y) { return Math.abs(y.sinal * (y.valor - y.anterior)) - Math.abs(x.sinal * (x.valor - x.anterior)) || y.valor - x.valor; });
   }
+  // "desconsiderar 13º": tira a folha 13 e as rubricas de 13º (adiantamento ou normal, que também caem na folha mensal)
+  function holeriteBiIsRubrica13(it) {
+    var cod = String(it.codigo || "");
+    if (cod === HOLERITE_BI_COD_PROV || cod === HOLERITE_BI_COD_DESC || cod === HOLERITE_BI_COD_LIQ) return false;
+    return /(?:^|[^0-9])13\s*[.\u00ba\u00b0o]?\s*SAL|13[\u00ba\u00b0]|D[E\u00c9]CIMO\s*TERC|ADIANT\w*\s*13/i.test(String(it.rubrica || ""));
+  }
+  function holeriteBiSem13(items) {
+    var kept = (items || []).filter(function (it) { return !holeriteBiIs13(it.competencia); });
+    var totals = holeriteBiTotals(kept);
+    var map = {};
+    totals.forEach(function (t) { map[t.competencia + "|" + t.matricula + "|" + t.folha] = t; });
+    kept.forEach(function (it) {
+      if (!holeriteBiIsRubrica13(it)) return;
+      var t = map[it.competencia + "|" + it.matricula + "|" + it.folha];
+      if (!t) return;
+      var v = Number(it.valor) || 0;
+      if (it.tipo === "Provento") { t.prov -= v; t.liq -= v; }
+      else if (it.tipo === "Desconto") { t.desc -= v; t.liq += v; }
+    });
+    totals.forEach(function (t) { t.prov = holeriteBiR2(t.prov); t.desc = holeriteBiR2(t.desc); t.liq = holeriteBiR2(t.liq); });
+    return { items: kept.filter(function (it) { return !holeriteBiIsRubrica13(it); }), totals: totals };
+  }
   // </HOLERITE_BI_PURE>
 
   // <HOLERITE_BI2_PURE>
@@ -14686,7 +14708,7 @@
       anos: [], matriculas: [], folhas: [],
       rankTipo: "Provento",
       rubricaKeys: ["0020|VENCIMENTO ESTATUTARIO"],
-      rubricaGran: "ano", inflMetric: "venc", inflSel: null,
+      rubricaGran: "ano", inflMetric: "venc", inflSel: null, sem13: false,
       yoyMetric: "liq", incMode: "competencia", incA: null, incB: null, incSearch: "", incStatus: [], eventosMax: 15
     };
     var charts = {};
@@ -14698,7 +14720,20 @@
     }
     var biCollapsed = {}, biReg = {};
     wrap.insertBefore(biCollapseToolbar(biCollapsed, biReg), statusEl);
-    function mkTitle(parent, text) { return biToggleTitle(parent, text, biCollapsed, biReg); }
+    function mkTitle(parent, text) {
+      var h = biToggleTitle(parent, text, biCollapsed, biReg);
+      if (text.indexOf("13º") === -1) {
+        // atalho 13º: 1 clique liga/desliga em TODOS os gráficos (padrão: 13º considerado)
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "infl-13-btn" + (state.sem13 ? " active" : "");
+        b.innerHTML = '<i class="ti ti-gift' + (state.sem13 ? "-off" : "") + '"></i> ' + (state.sem13 ? "Sem 13º" : "Com 13º");
+        b.title = state.sem13 ? "13º desconsiderado — clique para voltar a considerar" : "13º considerado — clique para desconsiderar (vale para todos os gráficos)";
+        b.addEventListener("click", function () { state.sem13 = !state.sem13; buildFilters(); renderAll(); });
+        h.parentNode.appendChild(b);
+      }
+      return h;
+    }
     function mkNote(parent, text) {
       var p = document.createElement("p");
       p.className = "holerite-bi-note";
@@ -14902,8 +14937,8 @@
         function lastVal(a) { for (var i = a.length - 1; i >= 0; i--) if (a[i] != null) return { v: a[i], i: i }; return null; }
         var salV = salSeries[salSeries.length - 1];
         var tbl = document.createElement("table");
-        tbl.className = "financeiro-table saude-table";
-        tbl.innerHTML = "<thead><tr><th>Índice</th><th>Inflação acumulada</th><th>Salário no mesmo período</th><th>Ganho/perda real</th></tr></thead>";
+        tbl.className = "infl-table";
+        tbl.innerHTML = "<thead><tr><th>Índice</th><th class='n'>Inflação acumulada</th><th class='n'>Salário no período</th><th class='n'>Ganho/perda real</th></tr></thead>";
         var tb = document.createElement("tbody");
         function fmtPct(x) { return (x >= 0 ? "+" : "") + x.toFixed(1).replace(".", ",") + "%"; }
         lines.forEach(function (l) {
@@ -14912,7 +14947,7 @@
           if (!lv) { tr.innerHTML = "<td>" + l.def.label + "</td><td colspan='3'>sem dados</td>"; tb.appendChild(tr); return; }
           var salAt = salSeries[lv.i];
           var real = (salAt / lv.v - 1) * 100;
-          tr.innerHTML = "<td>" + l.def.label + " (até " + labels[lv.i] + ")</td><td>" + fmtPct(lv.v - 100) + "</td><td>" + fmtPct(salAt - 100) + "</td><td style='font-weight:600;color:" + (real >= 0 ? "#2f9e44" : "#c0392b") + "'>" + fmtPct(real) + "</td>";
+          tr.innerHTML = "<td>" + l.def.label + " (até " + labels[lv.i] + ")</td><td class='n'>" + fmtPct(lv.v - 100) + "</td><td class='n'>" + fmtPct(salAt - 100) + "</td><td class='n' style='font-weight:600;color:" + (real >= 0 ? "#2f9e44" : "#c0392b") + "'>" + fmtPct(real) + "</td>";
           tb.appendChild(tr);
         });
         tbl.appendChild(tb);
@@ -14935,20 +14970,21 @@
           detailEl.appendChild(head);
           if (!lines.length) { var e = document.createElement("p"); e.className = "holerite-bi-note"; e.textContent = "Sem rubricas nesta competência."; detailEl.appendChild(e); return; }
           var t = document.createElement("table");
-          t.className = "financeiro-table saude-table";
-          t.innerHTML = "<thead><tr><th>Rubrica</th><th>Valor</th><th>Mês anterior</th><th>Variação</th></tr></thead>";
+          t.className = "infl-table";
+          t.innerHTML = "<thead><tr><th>Rubrica</th><th class='n'>Valor</th><th class='n'>Mês anterior</th><th class='n'>Variação</th></tr></thead>";
           var b = document.createElement("tbody");
           var tot = 0, totPrev = 0;
           lines.slice(0, 40).forEach(function (l) {
             var tr = document.createElement("tr");
             var sign = l.sinal < 0 ? -1 : 1;
             tot += sign * l.valor; totPrev += sign * l.anterior;
-            var dif = sign * (l.valor - l.anterior);
-            tr.innerHTML = "<td>" + (l.sinal < 0 ? "➖ " : "") + escapeHtml(l.rotulo) + "</td><td>" + transacoesFmtMoney(l.valor) + "</td><td>" + (prev ? transacoesFmtMoney(l.anterior) : "—") + "</td><td style='font-weight:600;color:" + (!prev || !dif ? "inherit" : dif > 0 ? "#2f9e44" : "#c0392b") + "'>" + (prev ? (dif > 0 ? "+" : "") + transacoesFmtMoney(dif) : "—") + "</td>";
+            var dif = holeriteBiR2(sign * (l.valor - l.anterior)) || 0;
+            tr.innerHTML = "<td>" + (l.sinal < 0 ? "<span class='infl-neg'>−</span> " : "") + escapeHtml(l.rotulo) + "</td><td class='n'>" + transacoesFmtMoney(l.valor) + "</td><td class='n'>" + (prev ? transacoesFmtMoney(l.anterior) : "—") + "</td><td class='n' style='font-weight:600;color:" + (!prev || !dif ? "inherit" : dif > 0 ? "#2f9e44" : "#c0392b") + "'>" + (prev ? (dif > 0 ? "+" : "") + transacoesFmtMoney(dif) : "—") + "</td>";
             b.appendChild(tr);
           });
           var trT = document.createElement("tr");
-          trT.innerHTML = "<td><b>Total</b></td><td><b>" + transacoesFmtMoney(tot) + "</b></td><td><b>" + (prev ? transacoesFmtMoney(totPrev) : "—") + "</b></td><td><b>" + (prev ? (tot - totPrev > 0 ? "+" : "") + transacoesFmtMoney(tot - totPrev) : "—") + "</b></td>";
+          trT.className = "infl-total";
+          trT.innerHTML = "<td><b>Total</b></td><td class='n'><b>" + transacoesFmtMoney(tot) + "</b></td><td class='n'><b>" + (prev ? transacoesFmtMoney(totPrev) : "—") + "</b></td><td class='n'><b>" + (prev ? (tot - totPrev > 0 ? "+" : "") + transacoesFmtMoney(tot - totPrev) : "—") + "</b></td>";
           b.appendChild(trT);
           t.appendChild(b);
           detailEl.appendChild(t);
@@ -15451,7 +15487,9 @@
 
     function renderAll() {
       var items = holeriteBiFilterItems(state.items, currentFilters());
-      var totals = holeriteBiTotals(items);
+      var totals;
+      if (state.sem13) { var s13 = holeriteBiSem13(items); items = s13.items; totals = s13.totals; }
+      else totals = holeriteBiTotals(items);
       if (!totals.length) {
         kpiWrap.style.display = "none";
         allBiSections.forEach(function (s) { s.style.display = "none"; });
@@ -15497,12 +15535,19 @@
         function (o) { state.matriculas = o.map(function (x) { return x.pageId; }); renderAll(); }));
       filterRow.appendChild(buildIconDropdown({ property: "Folha", type: "select", label: "Folha", emoji: "📄", icon: "ti-file", options: opts(folhas, "ti-file") },
         function (o) { state.folhas = o.map(function (x) { return x.pageId; }); renderAll(); }));
+      var sem13Btn = document.createElement("button");
+      sem13Btn.type = "button";
+      sem13Btn.className = "search-clear-btn" + (state.sem13 ? " active" : "");
+      sem13Btn.innerHTML = '<i class="ti ti-gift-off"></i> Desconsiderar 13º';
+      sem13Btn.title = "Tira a folha de 13º e as rubricas de 13º (adiantamento ou normal) de todos os gráficos";
+      sem13Btn.addEventListener("click", function () { state.sem13 = !state.sem13; sem13Btn.classList.toggle("active", state.sem13); renderAll(); });
+      filterRow.appendChild(sem13Btn);
       var clearBtn = document.createElement("button");
       clearBtn.type = "button";
       clearBtn.className = "search-clear-btn";
       clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
       clearBtn.addEventListener("click", function () {
-        state.anos = []; state.matriculas = []; state.folhas = [];
+        state.anos = []; state.matriculas = []; state.folhas = []; state.sem13 = false;
         buildFilters();
         renderAll();
       });
