@@ -8800,3 +8800,4 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .infl-13-btn{border:1px solid rgba(0,0,0,.15);background:#f3f4f6;border-radius:999px;padding:3px 11px;font-size:.78rem;cursor:pointer;white-space:nowrap;color:#374151}
 .infl-13-btn:hover{background:#e5e7eb}
 .infl-13-btn.active{background:#343a40;color:#fff;border-color:#343a40}
+.irpf-title-row .infl-13-btn{margin-left:6px}

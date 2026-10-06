@@ -14293,13 +14293,21 @@
     if (cod === HOLERITE_BI_COD_PROV || cod === HOLERITE_BI_COD_DESC || cod === HOLERITE_BI_COD_LIQ) return false;
     return /(?:^|[^0-9])13\s*[.\u00ba\u00b0o]?\s*SAL|13[\u00ba\u00b0]|D[E\u00c9]CIMO\s*TERC|ADIANT\w*\s*13/i.test(String(it.rubrica || ""));
   }
-  function holeriteBiSem13(items) {
-    var kept = (items || []).filter(function (it) { return !holeriteBiIs13(it.competencia); });
+  function holeriteBiIsRubricaFerias(it) {
+    var cod = String(it.codigo || "");
+    if (cod === HOLERITE_BI_COD_PROV || cod === HOLERITE_BI_COD_DESC || cod === HOLERITE_BI_COD_LIQ) return false;
+    return /F[E\u00c9]RIAS/i.test(String(it.rubrica || ""));
+  }
+  // exclui 13º e/ou rubricas de férias (gratificação, 1/3, abono...) recalculando proventos/descontos/líquido
+  function holeriteBiExcluirRubricas(items, opts) {
+    opts = opts || {};
+    var kept = (items || []).filter(function (it) { return !(opts.sem13 && holeriteBiIs13(it.competencia)); });
+    function isOut(it) { return (opts.sem13 && holeriteBiIsRubrica13(it)) || (opts.semFerias && holeriteBiIsRubricaFerias(it)); }
     var totals = holeriteBiTotals(kept);
     var map = {};
     totals.forEach(function (t) { map[t.competencia + "|" + t.matricula + "|" + t.folha] = t; });
     kept.forEach(function (it) {
-      if (!holeriteBiIsRubrica13(it)) return;
+      if (!isOut(it)) return;
       var t = map[it.competencia + "|" + it.matricula + "|" + it.folha];
       if (!t) return;
       var v = Number(it.valor) || 0;
@@ -14307,8 +14315,9 @@
       else if (it.tipo === "Desconto") { t.desc -= v; t.liq += v; }
     });
     totals.forEach(function (t) { t.prov = holeriteBiR2(t.prov); t.desc = holeriteBiR2(t.desc); t.liq = holeriteBiR2(t.liq); });
-    return { items: kept.filter(function (it) { return !holeriteBiIsRubrica13(it); }), totals: totals };
+    return { items: kept.filter(function (it) { return !isOut(it); }), totals: totals };
   }
+  function holeriteBiSem13(items) { return holeriteBiExcluirRubricas(items, { sem13: true }); }
   // </HOLERITE_BI_PURE>
 
   // <HOLERITE_BI2_PURE>
@@ -14708,7 +14717,7 @@
       anos: [], matriculas: [], folhas: [],
       rankTipo: "Provento",
       rubricaKeys: ["0020|VENCIMENTO ESTATUTARIO"],
-      rubricaGran: "ano", inflMetric: "venc", inflSel: null, sem13: false,
+      rubricaGran: "ano", inflMetric: "venc", inflSel: null, sem13: false, semFerias: false,
       yoyMetric: "liq", incMode: "competencia", incA: null, incB: null, incSearch: "", incStatus: [], eventosMax: 15
     };
     var charts = {};
@@ -14731,6 +14740,13 @@
         b.title = state.sem13 ? "13º desconsiderado — clique para voltar a considerar" : "13º considerado — clique para desconsiderar (vale para todos os gráficos)";
         b.addEventListener("click", function () { state.sem13 = !state.sem13; buildFilters(); renderAll(); });
         h.parentNode.appendChild(b);
+        var f = document.createElement("button");
+        f.type = "button";
+        f.className = "infl-13-btn" + (state.semFerias ? " active" : "");
+        f.innerHTML = '<i class="ti ti-beach"></i> ' + (state.semFerias ? "Sem férias" : "Com férias");
+        f.title = state.semFerias ? "Férias desconsideradas — clique para voltar a considerar" : "Férias consideradas — clique para desconsiderar a gratificação/1/3 de férias (vale para todos os gráficos)";
+        f.addEventListener("click", function () { state.semFerias = !state.semFerias; buildFilters(); renderAll(); });
+        h.parentNode.appendChild(f);
       }
       return h;
     }
@@ -15488,7 +15504,7 @@
     function renderAll() {
       var items = holeriteBiFilterItems(state.items, currentFilters());
       var totals;
-      if (state.sem13) { var s13 = holeriteBiSem13(items); items = s13.items; totals = s13.totals; }
+      if (state.sem13 || state.semFerias) { var s13 = holeriteBiExcluirRubricas(items, { sem13: state.sem13, semFerias: state.semFerias }); items = s13.items; totals = s13.totals; }
       else totals = holeriteBiTotals(items);
       if (!totals.length) {
         kpiWrap.style.display = "none";
@@ -15542,12 +15558,19 @@
       sem13Btn.title = "Tira a folha de 13º e as rubricas de 13º (adiantamento ou normal) de todos os gráficos";
       sem13Btn.addEventListener("click", function () { state.sem13 = !state.sem13; sem13Btn.classList.toggle("active", state.sem13); renderAll(); });
       filterRow.appendChild(sem13Btn);
+      var semFeriasBtn = document.createElement("button");
+      semFeriasBtn.type = "button";
+      semFeriasBtn.className = "search-clear-btn" + (state.semFerias ? " active" : "");
+      semFeriasBtn.innerHTML = '<i class="ti ti-beach"></i> Desconsiderar férias';
+      semFeriasBtn.title = "Tira as rubricas de férias (gratificação, 1/3 constitucional, abono) de todos os gráficos";
+      semFeriasBtn.addEventListener("click", function () { state.semFerias = !state.semFerias; semFeriasBtn.classList.toggle("active", state.semFerias); renderAll(); });
+      filterRow.appendChild(semFeriasBtn);
       var clearBtn = document.createElement("button");
       clearBtn.type = "button";
       clearBtn.className = "search-clear-btn";
       clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
       clearBtn.addEventListener("click", function () {
-        state.anos = []; state.matriculas = []; state.folhas = []; state.sem13 = false;
+        state.anos = []; state.matriculas = []; state.folhas = []; state.sem13 = false; state.semFerias = false;
         buildFilters();
         renderAll();
       });
