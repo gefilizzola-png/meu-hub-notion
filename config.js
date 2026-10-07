@@ -1306,7 +1306,7 @@ var NOTIFICATION_SOURCES = [
   // Passagens para eu definir os dias de antecedência"). Fonte 100% Notion
   // (kind "notion", o padrão — nada de especial aqui), igual a Reuniões/
   // Provas/Aniversários: baseFilters vazio (não precisa restringir nada,
-  // base pequena e só do Georges) + dateProperty "Data da Ida" (avisa pela
+  // base pequena e só do Georges) + dateProperty "Data do Vôo" (avisa pela
   // DATA DE IDA da viagem, não pela volta ou pela compra). O Georges
   // configura os dias de antecedência que quiser direto na Central de
   // Notificações (editor de gestão) — defaultLeadTimes abaixo é só o seed
@@ -1318,7 +1318,7 @@ var NOTIFICATION_SOURCES = [
     icon: "🧳",
     database_id: PASSAGENS_DATABASE_ID,
     baseFilters: [],
-    dateProperty: "Data da Ida",
+    dateProperty: "Data do Vôo",
     target: { type: "page", target: "financeiro_viagens_passagens" },
     defaultEnabled: true,
     defaultLeadTimes: [
@@ -1573,11 +1573,10 @@ var CALENDAR_SOURCES = [
   { id: "aniversarios", label: "Aniversários", icon: "🎂", color: "#e64980", kind: "aniversarios",
     origins: ["Pessoal - Aniversários"], birthProperty: "📅 Data de Conclusão", noDone: true,
     target: { type: "page", target: "aniversarios" }, defaultEnabled: true },
-  { id: "passagens", label: "Passagens (ida e volta)", icon: "🧳", color: "#1c7ed6", kind: "notion",
+  { id: "passagens", label: "Passagens", icon: "🧳", color: "#1c7ed6", kind: "notion",
     database_id: PASSAGENS_DATABASE_ID,
     dateProps: [
-      { property: "Data da Ida", suffix: "ida", timeProperty: "Embarque (Ida)" },
-      { property: "Data da Volta", suffix: "volta", timeProperty: "Embarque (Volta)" }
+      { property: "Data do Vôo", timeProperty: "Embarque" }
     ],
     extra: ["Origem", "Destino", "Companhia"], titleMode: "passagem",
     target: { type: "page", target: "financeiro_viagens_passagens" }, defaultEnabled: true },
@@ -1864,7 +1863,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-06 23:30",
+  appVersion: "2026-10-07 09:00",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2369,7 +2368,7 @@ const APP_CONFIG = {
             // trazer Passagens e outras páginas relacionadas a viagens que
             // farei futuramente, como Hospedagens"). Por ora só Passagens
             // alimenta esta divisória (PASSAGENS_DATABASE_ID, filtro por
-            // "Data da Ida") — quando Hospedagens (ou outra base de viagem)
+            // "Data do Vôo") — quando Hospedagens (ou outra base de viagem)
             // existir, este bloco pode virar múltiplos dynamicQueries dentro
             // do mesmo título, ou ganhar orPairs, sem mudar o conceito da
             // divisória única.
@@ -2381,9 +2380,9 @@ const APP_CONFIG = {
               bg: "#e3f2fd",
               database_id: PASSAGENS_DATABASE_ID,
               baseFilters: [
-                { property: "Data da Ida", type: "date", condition: "equals", value: "today" }
+                { property: "Data do Vôo", type: "date", condition: "equals", value: "today" }
               ],
-              sorts: [{ property: "Data da Ida", direction: "ascending" }],
+              sorts: [{ property: "Data do Vôo", direction: "ascending" }],
               cardFields: [
                 { property: "Companhia", type: "select" },
                 { property: "Destino", type: "select" }
@@ -2549,9 +2548,9 @@ const APP_CONFIG = {
               bg: "#e3f2fd",
               database_id: PASSAGENS_DATABASE_ID,
               baseFilters: [
-                { property: "Data da Ida", type: "date", condition: "equals", value: "tomorrow" }
+                { property: "Data do Vôo", type: "date", condition: "equals", value: "tomorrow" }
               ],
-              sorts: [{ property: "Data da Ida", direction: "ascending" }],
+              sorts: [{ property: "Data do Vôo", direction: "ascending" }],
               cardFields: [
                 { property: "Companhia", type: "select" },
                 { property: "Destino", type: "select" }
@@ -2725,10 +2724,10 @@ const APP_CONFIG = {
               bg: "#e3f2fd",
               database_id: PASSAGENS_DATABASE_ID,
               baseFilters: [
-                { property: "Data da Ida", type: "date", condition: "on_or_after", value: "today" },
-                { property: "Data da Ida", type: "date", condition: "before", value: "next_7_days" }
+                { property: "Data do Vôo", type: "date", condition: "on_or_after", value: "today" },
+                { property: "Data do Vôo", type: "date", condition: "before", value: "next_7_days" }
               ],
-              sorts: [{ property: "Data da Ida", direction: "ascending" }],
+              sorts: [{ property: "Data do Vôo", direction: "ascending" }],
               cardFields: [
                 { property: "Companhia", type: "select" },
                 { property: "Destino", type: "select" }
@@ -3586,7 +3585,7 @@ const APP_CONFIG = {
     // exibição, pesquisa e controle") — tabela sortable com busca
     // acento-insensível + botão x, filtros multi-select (Tipo de
     // Transporte/Companhia/Origem/Destino/Objetivo/Passageiros) e filtro de
-    // data (Data da Ida), botão cíclico Próximas/Todas/Passadas (mesma
+    // data (Data do Vôo), botão cíclico Próximas/Todas/Passadas (mesma
     // metodologia de Provas/Supermercado), botão "Limpar filtros", clique na
     // linha abre a passagem no Notion. Só leitura — sem "Criar no Notion"
     // (ver comentário de PASSAGENS_DATABASE_ID acima). Ver

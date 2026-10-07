@@ -12332,10 +12332,10 @@
   // controle". Schema real da base Notion (ver PASSAGENS_DATABASE_ID em
   // config.js): Nome (title), Tipo de Transporte/Companhia/Origem/Destino/
   // Cabine/Objetivo (select), Forma de Pagamento/Passageiros (Nome) (multi_
-  // select), Data da Ida/Data da Volta/Data da Compra/Embarque (Ida)/
-  // Chegada (Ida)/Embarque (Volta)/Chegada (Volta) (date), Localizador/Vôo/
+  // select), Data do Vôo/Data da Compra/Embarque/
+  // Chegada (date), Localizador/Vôo/
   // Valor Bilhetes (text), Passageiros/Taxa de Embarque (number), Duração
-  // (Ida)/Duração (Volta) (formula, string).
+  // (formula, string).
   var PASSAGENS_TIPO_ICON = { "Aéreo": "✈️", "Rodoviário": "🚌" };
   function passagensTipoIcon(tipo) { return PASSAGENS_TIPO_ICON[tipo] || "🧳"; }
   // "Florianópolis - FLN → São Paulo - CGH" — label do trecho, reaproveitado
@@ -12366,7 +12366,7 @@
     return { code: code, bg: "#8a8a82" };
   }
   // "HH:MM" da parte de hora de um ISO de data/hora do Notion (volta null
-  // se o campo só tem data, sem hora marcada ainda — ex: Embarque (Ida)
+  // se o campo só tem data, sem hora marcada ainda — ex: Embarque
   // antes do check-in, pedido do Georges: "a hora prevista de embarque,
   // que vai aparecer depois do checkin").
   function passagensFmtHora(iso) {
@@ -12379,7 +12379,7 @@
   }
   // célula de data que também mostra a hora (linha pequena embaixo,
   // reaproveitando ".provas-subtle") quando o campo tiver horário —
-  // Embarque (Ida)/(Volta) e Chegada (Ida)/(Volta).
+  // Embarque e Chegada.
   function passagensAppendDateHora(cell, iso) {
     if (!iso) { cell.textContent = "—"; return; }
     var top = document.createElement("div");
@@ -12393,7 +12393,7 @@
       cell.appendChild(sub);
     }
   }
-  // dias até a Data da Ida (hoje = 0) — mesma lógica de provasDiasAte,
+  // dias até a Data do Vôo (hoje = 0) — mesma lógica de provasDiasAte,
   // reaproveitada direto (função pura, sem nada específico de Provas).
   function passagensDiasAte(dataISO) { return provasDiasAte(dataISO); }
 
@@ -12457,7 +12457,7 @@
     function sel(key) { var v = extra[key]; return v ? v.name : null; }
     function multi(key) { return (extra[key] || []).map(function (o) { return o.name; }); }
     function dateStart(key) { var v = extra[key]; return (v && v.start) ? v.start : null; }
-    var dataIdaISO = dateStart("Data da Ida");
+    var dataVooISO = dateStart("Data do Vôo");
     return {
       id: p.id,
       url: p.url,
@@ -12471,30 +12471,24 @@
       formaPagamentoReal: sel("Forma Pagamento (Real)"),
       formaPagamento: multi("Forma de Pagamento"),
       passageirosNomes: multi("Passageiros (Nome)"),
-      dataIda: dataIdaISO,
-      dataVolta: dateStart("Data da Volta"),
+      dataVoo: dataVooISO,
       dataCompra: dateStart("Data da Compra"),
-      embarqueIda: dateStart("Embarque (Ida)"),
-      chegadaIda: dateStart("Chegada (Ida)"),
-      embarqueVolta: dateStart("Embarque (Volta)"),
-      chegadaVolta: dateStart("Chegada (Volta)"),
+      embarque: dateStart("Embarque"),
+      chegada: dateStart("Chegada"),
       localizador: extra["Localizador"] || "",
       voo: extra["Vôo"] || "",
       valorBilhetes: extra["Valor Bilhetes"] || "",
       passageiros: (typeof extra["Passageiros"] === "number") ? extra["Passageiros"] : null,
       taxaEmbarque: (typeof extra["Taxa de Embarque"] === "number") ? extra["Taxa de Embarque"] : null,
-      duracaoIda: (typeof extra["Duração (Ida)"] === "string") ? extra["Duração (Ida)"] : "",
-      duracaoVolta: (typeof extra["Duração (Volta)"] === "string") ? extra["Duração (Volta)"] : "",
-      diasAte: passagensDiasAte(dataIdaISO)
+      duracao: (typeof extra["Duração"] === "string") ? extra["Duração"] : (typeof extra["Duração"] === "number" ? String(extra["Duração"]) : ""),
+      diasAte: passagensDiasAte(dataVooISO)
     };
   }
   var PASSAGENS_EXTRA_FIELDS = [
     "Tipo de Transporte", "Companhia", "Origem", "Destino", "Cabine", "Objetivo",
     "Forma Pagamento (Real)", "Forma de Pagamento", "Passageiros (Nome)",
-    "Data da Ida", "Data da Volta", "Data da Compra",
-    "Embarque (Ida)", "Chegada (Ida)", "Embarque (Volta)", "Chegada (Volta)",
-    "Localizador", "Vôo", "Valor Bilhetes", "Passageiros", "Taxa de Embarque",
-    "Duração (Ida)", "Duração (Volta)"
+    "Data do Vôo", "Data da Compra",
+    "Embarque", "Chegada", "Localizador", "Vôo", "Valor Bilhetes", "Passageiros", "Taxa de Embarque"
   ];
 
   function renderPassagensPage(container, page) {
@@ -12522,7 +12516,7 @@
 
     var allPassagens = [];
     var state = {
-      search: "", sortKey: "dataIda", sortDir: 1,
+      search: "", sortKey: "dataVoo", sortDir: 1,
       tipoSelected: [], companhiaSelected: [], origemSelected: [], destinoSelected: [],
       objetivoSelected: [], passageirosSelected: [], dataFilter: null,
       // "Próximas/Todas/Passadas" — mesma metodologia de Provas/Supermercado
@@ -12557,10 +12551,10 @@
       }
       if (state.dataFilter) {
         var df = state.dataFilter;
-        if (!it.dataIda) return false;
-        if (df.from && df.to) { if (it.dataIda < df.from || it.dataIda > df.to) return false; }
-        else if (df.from) { if (it.dataIda !== df.from) return false; }
-        else if (df.to) { if (it.dataIda !== df.to) return false; }
+        if (!it.dataVoo) return false;
+        if (df.from && df.to) { if (it.dataVoo < df.from || it.dataVoo > df.to) return false; }
+        else if (df.from) { if (it.dataVoo !== df.from) return false; }
+        else if (df.to) { if (it.dataVoo !== df.to) return false; }
       }
       return true;
     }
@@ -12568,7 +12562,7 @@
     // chaves de data/hora que podem ser ordenadas por comparação direta de
     // string ISO (funciona mesmo com hora incluída) — inclui as 4 colunas
     // novas de Embarque/Chegada e a Data da Compra.
-    var PASSAGENS_DATE_SORT_KEYS = ["dataIda", "dataVolta", "dataCompra", "embarqueIda", "embarqueVolta", "chegadaIda", "chegadaVolta"];
+    var PASSAGENS_DATE_SORT_KEYS = ["dataVoo", "dataCompra", "embarque", "chegada"];
     function sortPassagens(list) {
       var arr = list.slice();
       var key = state.sortKey, dir = state.sortDir;
@@ -12578,7 +12572,7 @@
         else if (key === "companhia") { av = a.companhia || ""; bv = b.companhia || ""; }
         else if (key === "taxaEmbarque") { av = (a.taxaEmbarque === null ? -Infinity : a.taxaEmbarque); bv = (b.taxaEmbarque === null ? -Infinity : b.taxaEmbarque); }
         else if (PASSAGENS_DATE_SORT_KEYS.indexOf(key) !== -1) { av = a[key] || "9999-99-99"; bv = b[key] || "9999-99-99"; }
-        else { av = a.dataIda || "9999-99-99"; bv = b.dataIda || "9999-99-99"; }
+        else { av = a.dataVoo || "9999-99-99"; bv = b.dataVoo || "9999-99-99"; }
         if (typeof av === "number") return dir * (av - bv);
         return dir * String(av).localeCompare(String(bv), "pt-BR");
       });
@@ -12659,7 +12653,7 @@
       ));
       dataFilterWrap.innerHTML = "";
       dataFilterWrap.appendChild(buildLocalDateRangeFilter(
-        { label: "Data da Ida" },
+        { label: "Data do Vôo" },
         function (val) { state.dataFilter = val; applyState(); }
       ));
     }
@@ -12759,19 +12753,15 @@
       { key: "localizador", label: "Localizador", cls: "passagens-th-localizador" },
       { key: "companhia", label: "Cia. Aérea", cls: "passagens-th-companhia", sortKey: "companhia" },
       { key: "trecho", label: "Trecho", cls: "passagens-th-trecho" },
-      { key: "dataIda", label: "Data da Ida", cls: "passagens-th-data", sortKey: "dataIda" },
-      { key: "embarqueIda", label: "Embarque (Ida)", cls: "passagens-th-embarque", sortKey: "embarqueIda" },
-      { key: "dataVolta", label: "Data da Volta", cls: "passagens-th-data", sortKey: "dataVolta" },
-      { key: "embarqueVolta", label: "Embarque (Volta)", cls: "passagens-th-embarque", sortKey: "embarqueVolta" },
+      { key: "dataVoo", label: "Data do Vôo", cls: "passagens-th-data", sortKey: "dataVoo" },
+      { key: "embarque", label: "Embarque", cls: "passagens-th-embarque", sortKey: "embarque" },
       // ocultas por padrão (pedido do Georges) — reveladas só pelo botão
       // "Mostrar todas as colunas".
       { key: "nome", label: "Nome", cls: "passagens-th-nome", sortKey: "nome" },
       { key: "tipo", label: "Tipo", cls: "passagens-th-tipo" },
       { key: "voo", label: "Vôo", cls: "passagens-th-voo" },
-      { key: "chegadaIda", label: "Chegada (Ida)", cls: "passagens-th-embarque", sortKey: "chegadaIda" },
-      { key: "duracaoIda", label: "Duração (Ida)", cls: "passagens-th-duracao" },
-      { key: "chegadaVolta", label: "Chegada (Volta)", cls: "passagens-th-embarque", sortKey: "chegadaVolta" },
-      { key: "duracaoVolta", label: "Duração (Volta)", cls: "passagens-th-duracao" },
+      { key: "chegada", label: "Chegada", cls: "passagens-th-embarque", sortKey: "chegada" },
+      { key: "duracao", label: "Duração", cls: "passagens-th-duracao" },
       { key: "passageiros", label: "Passageiros", cls: "passagens-th-passageiros" },
       { key: "dataCompra", label: "Data da Compra", cls: "passagens-th-data", sortKey: "dataCompra" },
       { key: "formaPagamento", label: "Forma de Pagamento", cls: "passagens-th-pagamento" },
@@ -12781,7 +12771,7 @@
     ];
     var allColumnKeys = COLS.map(function (c) { return c.key; });
     var defaultHiddenKeys = [
-      "nome", "tipo", "voo", "chegadaIda", "duracaoIda", "chegadaVolta", "duracaoVolta",
+      "nome", "tipo", "voo", "chegada", "duracao",
       "passageiros", "dataCompra", "formaPagamento", "valorBilhetes", "taxaEmbarque", "formaPagamentoReal"
     ];
     var columnsExpanded = false;
@@ -12918,31 +12908,22 @@
         case "trecho":
           passagensAppendTrechoChips(cell, it.origem, it.destino);
           break;
-        case "dataIda":
+        case "dataVoo":
           var idaInner = document.createElement("div");
-          idaInner.textContent = transacoesFmtDateBR(it.dataIda);
+          idaInner.textContent = transacoesFmtDateBR(it.dataVoo);
           cell.appendChild(idaInner);
-          if (it.dataIda && it.diasAte !== null) {
+          if (it.dataVoo && it.diasAte !== null) {
             var idaSub = document.createElement("div");
             idaSub.className = "provas-subtle";
             idaSub.textContent = provasRelativoLabel(it.diasAte);
             cell.appendChild(idaSub);
           }
           break;
-        case "dataVolta":
-          cell.textContent = transacoesFmtDateBR(it.dataVolta);
+        case "embarque":
+          passagensAppendDateHora(cell, it.embarque);
           break;
-        case "embarqueIda":
-          passagensAppendDateHora(cell, it.embarqueIda);
-          break;
-        case "embarqueVolta":
-          passagensAppendDateHora(cell, it.embarqueVolta);
-          break;
-        case "chegadaIda":
-          passagensAppendDateHora(cell, it.chegadaIda);
-          break;
-        case "chegadaVolta":
-          passagensAppendDateHora(cell, it.chegadaVolta);
+        case "chegada":
+          passagensAppendDateHora(cell, it.chegada);
           break;
         case "dataCompra":
           cell.textContent = transacoesFmtDateBR(it.dataCompra);
@@ -12964,11 +12945,8 @@
         case "voo":
           cell.textContent = it.voo || "—";
           break;
-        case "duracaoIda":
-          cell.textContent = it.duracaoIda || "—";
-          break;
-        case "duracaoVolta":
-          cell.textContent = it.duracaoVolta || "—";
+        case "duracao":
+          cell.textContent = it.duracao || "—";
           break;
         case "passageiros":
           passagensAppendChipList(cell, it.passageirosNomes);
@@ -13069,7 +13047,7 @@
 
     var queryUrl = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(databaseId) +
       "&filters=" + encodeURIComponent(JSON.stringify([{ property: "Nome", type: "title", condition: "is_not_empty", value: true }])) +
-      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Data da Ida", direction: "ascending" }])) +
+      "&sorts=" + encodeURIComponent(JSON.stringify([{ property: "Data do Vôo", direction: "ascending" }])) +
       "&extra=" + encodeURIComponent(JSON.stringify(PASSAGENS_EXTRA_FIELDS));
 
     authFetch(queryUrl).then(handle401Generic).then(function (r) {
@@ -27307,9 +27285,9 @@
       var meta = [];
       if (src.titleMode === "passagem") {
         var o = selName("Origem"), d = selName("Destino");
-        title = (o || d ? (o || "?") + " → " + (d || "?") : p.title) + " · " + (dp.suffix || "");
+        title = (o || d ? (o || "?") + " → " + (d || "?") : p.title) + (dp.suffix ? " · " + dp.suffix : "");
         if (selName("Companhia")) meta.push("Companhia: " + selName("Companhia"));
-        meta.push(dp.suffix === "volta" ? "Volta" : "Ida");
+        if (dp.suffix) meta.push(dp.suffix === "volta" ? "Volta" : "Ida");
       } else if (src.titleMode === "prova") {
         title = "Prova de " + (selName("Matéria") || p.title);
       } else if (src.titleMode === "evento") {
