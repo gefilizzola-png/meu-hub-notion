@@ -1863,7 +1863,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-07 09:00",
+  appVersion: "2026-10-07 11:15",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -2984,6 +2984,14 @@ const APP_CONFIG = {
       remedios: true
     },
 
+    // "Odômetro" (pedido do Georges) — foto do painel do carro → km lida por
+    // OCR no navegador (ou digitada) + data/hora + veículo, numa tabela.
+    // 100% KV (worker.js, rotas /odometro e /odometro-veiculos).
+    odometro: {
+      title: "Odômetro",
+      odometro: true
+    },
+
     // "Lista de Churrasco" (ajustes 2026-10-06) — checklist por grupo (Fogo,
     // Limpeza, Alimentos...) trazida da página do Notion "Pessoal / Listas /
     // Churrasco", daqui em diante 100% KV (worker.js, rotas /churrasco).
@@ -3332,6 +3340,9 @@ const APP_CONFIG = {
         // Supermercados para Categorias->Pessoal->Listas"). Saiu de
         // "entrada.items" (pasta "Pastas", raiz do menu) pra morar aqui.
         { label: "Listas", type: "page", target: "cat_pessoal_listas", icon: "list" },
+        // "Veículos > Odômetro" — página "Veículos" (relação de veículos)
+        // virá depois; por ora só o Odômetro, direto em Pessoal.
+        { label: "Odômetro", type: "page", target: "odometro", icon: "ti-gauge" },
         // "Profissional" (pedido do Georges — "Pessoal -> Profissional ->
         // PMF -> Ponto Eletrônico": páginas relativas às questões
         // FUNCIONAIS/pessoais dele na PMF, por isso mora dentro de
@@ -3549,8 +3560,17 @@ const APP_CONFIG = {
     financeiro_fiscal: {
       title: "Fiscal",
       items: [
+        { label: "Captura via QR Code", type: "page", target: "financeiro_fiscal_qr", icon: "ti-qrcode" },
         { label: "IRPF", type: "page", target: "financeiro_fiscal_irpf", icon: "receipt-tax" }
       ]
+    },
+
+    // "Captura via QR Code" (pedido do Georges) — lê QR Code com a câmera
+    // e guarda a string (100% KV, rotas /qrcapturas no worker.js). Sem
+    // notificação/Painel do Dia/Calendário por ora.
+    financeiro_fiscal_qr: {
+      title: "Captura via QR Code",
+      qrCaptura: true
     },
 
     // "page.irpf" — IRPF: IR retido (rubrica 6000) por ano/competência, alíquota

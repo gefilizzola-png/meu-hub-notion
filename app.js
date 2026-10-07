@@ -22140,6 +22140,553 @@
   }
   // </TRAT_PURE>
 
+  // ---------------- "page.qrCaptura" — Fiscal > Captura via QR Code (100% KV) ----------------
+  // Lê QR Code com a câmera (BarcodeDetector nativo; jsQR sob demanda como
+  // alternativa, ex.: iPhone) ou de uma imagem da galeria, e guarda a string
+  // lida. Se a string tiver uma chave de acesso de NF-e/NFC-e (44 dígitos),
+  // ela é destacada. KV "qrcap:<id>" (worker.js, rota /qrcapturas).
+  var qrJsQrPromise = null;
+  function qrLoadJsQR() {
+    if (window.jsQR) return Promise.resolve(window.jsQR);
+    if (qrJsQrPromise) return qrJsQrPromise;
+    qrJsQrPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+      s.onload = function () { resolve(window.jsQR); };
+      s.onerror = function () { qrJsQrPromise = null; reject(new Error("Não consegui carregar o leitor de QR (sem internet?).")); };
+      document.head.appendChild(s);
+    });
+    return qrJsQrPromise;
+  }
+  // Decodifica um frame (video/img/canvas) -> string | null
+  var qrDetector = null;
+  function qrDecode(source, w, h) {
+    if (qrDetector === null) {
+      try { qrDetector = ("BarcodeDetector" in window) ? new window.BarcodeDetector({ formats: ["qr_code"] }) : false; } catch (e) { qrDetector = false; }
+    }
+    if (qrDetector) {
+      return qrDetector.detect(source).then(function (r) { return r && r.length ? r[0].rawValue : null; }).catch(function () { return null; });
+    }
+    return qrLoadJsQR().then(function (jsQR) {
+      var c = document.createElement("canvas");
+      var sc = Math.min(1, 900 / Math.max(w, h));
+      c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+      var ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(source, 0, 0, c.width, c.height);
+      var d = ctx.getImageData(0, 0, c.width, c.height);
+      var r = jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" });
+      return r ? r.data : null;
+    }).catch(function () { return null; });
+  }
+  function qrChaveAcesso(str) {
+    var m = /(?:chNFe=|[?&]p=|\b)(\d{44})(?!\d)/.exec(String(str || "").replace(/\s/g, ""));
+    return m ? m[1] : "";
+  }
+  function renderQrCapturaPage(container, page) {
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+    function call(path, method, body) {
+      return authFetch(cfg.templateWorkerUrl + path, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(handle401).then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); });
+    }
+    function fmtDT(iso) {
+      var d = new Date(iso);
+      return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear() + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    function mkChip(text, cls, icon) {
+      var s = document.createElement("span");
+      s.className = "odo-chip " + (cls || "");
+      if (icon) { var i = document.createElement("i"); i.className = "ti " + icon; s.appendChild(i); }
+      s.appendChild(document.createTextNode(text));
+      return s;
+    }
+    function copyText(t, btn) {
+      var done = function () { if (btn) { var o = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check"></i>'; setTimeout(function () { btn.innerHTML = o; }, 1200); } };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { window.prompt("Copie:", t); });
+      else window.prompt("Copie:", t);
+    }
+
+    var state = { items: [], search: "", fTipo: [], fDe: "", fAte: "" };
+    var sortState = { col: 0, dir: -1 };
+    var stream = null, scanning = false;
+
+    var statusEl = document.createElement("p"); statusEl.className = "empty"; statusEl.textContent = "Carregando…";
+    container.appendChild(statusEl);
+    var wrap = document.createElement("div"); wrap.className = "odo-wrap"; wrap.style.display = "none";
+    container.appendChild(wrap);
+
+    // ---- Capturar ----
+    var capSec = buildCollapsibleSection("Capturar QR Code", true);
+    wrap.appendChild(capSec.section);
+    var form = document.createElement("div"); form.className = "odo-form";
+    var scanBtn = document.createElement("button"); scanBtn.type = "button"; scanBtn.className = "odo-btn primary"; scanBtn.innerHTML = '<i class="ti ti-qrcode"></i> Escanear com a câmera';
+    var galBtn = document.createElement("button"); galBtn.type = "button"; galBtn.className = "odo-btn"; galBtn.innerHTML = '<i class="ti ti-photo"></i> Imagem da galeria';
+    var galInput = document.createElement("input"); galInput.type = "file"; galInput.accept = "image/*"; galInput.style.display = "none";
+    var btnRow = document.createElement("div"); btnRow.className = "odo-row";
+    [scanBtn, galBtn, galInput].forEach(function (e) { btnRow.appendChild(e); });
+    var video = document.createElement("video"); video.className = "odo-preview qr-video"; video.setAttribute("playsinline", ""); video.muted = true; video.style.display = "none";
+    var stopBtn = document.createElement("button"); stopBtn.type = "button"; stopBtn.className = "odo-btn"; stopBtn.innerHTML = '<i class="ti ti-player-stop"></i> Parar câmera'; stopBtn.style.display = "none";
+    var scanMsg = document.createElement("div"); scanMsg.className = "odo-ocr-status";
+    var strArea = document.createElement("textarea"); strArea.className = "odo-input qr-string"; strArea.rows = 3; strArea.placeholder = "A string lida aparece aqui (ou cole/digite manualmente)";
+    var noteInput = document.createElement("input"); noteInput.type = "text"; noteInput.className = "odo-input"; noteInput.placeholder = "Observação (opcional)";
+    var saveBtn = document.createElement("button"); saveBtn.type = "button"; saveBtn.className = "odo-btn primary"; saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar captura';
+    var msgEl = document.createElement("div"); msgEl.className = "odo-ocr-status";
+    [btnRow, video, stopBtn, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    capSec.body.appendChild(form);
+
+    function stopCam() {
+      scanning = false;
+      if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+      video.srcObject = null; video.style.display = "none"; stopBtn.style.display = "none";
+    }
+    function gotString(s) {
+      strArea.value = s;
+      var ch = qrChaveAcesso(s);
+      scanMsg.textContent = "✅ QR lido" + (ch ? " — chave de acesso " + ch : "") + ". Confira e salve.";
+      if (navigator.vibrate) navigator.vibrate(80);
+    }
+    function loop() {
+      if (!scanning) return;
+      if (video.readyState >= 2 && video.videoWidth) {
+        qrDecode(video, video.videoWidth, video.videoHeight).then(function (r) {
+          if (!scanning) return;
+          if (r) { stopCam(); gotString(r); } else setTimeout(function () { requestAnimationFrame(loop); }, 150);
+        });
+      } else requestAnimationFrame(loop);
+    }
+    scanBtn.addEventListener("click", function () {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scanMsg.textContent = "Este navegador não permite acessar a câmera."; return; }
+      stopCam();
+      scanMsg.textContent = "Abrindo câmera…";
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function (st) {
+        stream = st; video.srcObject = st; video.style.display = ""; stopBtn.style.display = "";
+        return video.play();
+      }).then(function () {
+        scanMsg.textContent = "Aponte para o QR Code…";
+        scanning = true; loop();
+      }).catch(function (e) { stopCam(); scanMsg.textContent = "Não consegui abrir a câmera (" + ((e && e.name) || "erro") + "). Permita o acesso ou use a galeria."; });
+    });
+    stopBtn.addEventListener("click", function () { stopCam(); scanMsg.textContent = ""; });
+    galBtn.addEventListener("click", function () { galInput.click(); });
+    galInput.addEventListener("change", function () {
+      var f = galInput.files[0]; galInput.value = "";
+      if (!f) return;
+      scanMsg.textContent = "Lendo imagem…";
+      var url = URL.createObjectURL(f), img = new Image();
+      img.onload = function () {
+        qrDecode(img, img.width, img.height).then(function (r) {
+          if (r) gotString(r); else scanMsg.textContent = "Não encontrei QR Code nessa imagem.";
+        });
+      };
+      img.src = url;
+    });
+    saveBtn.addEventListener("click", function () {
+      var s = strArea.value.trim();
+      if (!s) { msgEl.textContent = "Nada para salvar."; return; }
+      saveBtn.disabled = true;
+      call("/qrcapturas", "POST", { conteudo: s, nota: noteInput.value.trim() }).then(function (d) {
+        state.items.unshift(d.item);
+        strArea.value = ""; noteInput.value = ""; scanMsg.textContent = ""; msgEl.textContent = "✅ Captura salva.";
+        rebuildFilter(); renderTable();
+      }).catch(function (e) { msgEl.textContent = "Erro: " + e.message; }).then(function () { saveBtn.disabled = false; });
+    });
+
+    // ---- Pesquisar / Filtrar ----
+    var searchSec = buildCollapsibleSection("Pesquisar", false);
+    var filterSec = buildCollapsibleSection("Filtrar", false);
+    wrap.appendChild(searchSec.section); wrap.appendChild(filterSec.section);
+    var searchInput = document.createElement("input"); searchInput.type = "text"; searchInput.placeholder = "Buscar no conteúdo ou observação…"; searchInput.className = "odo-input";
+    searchSec.body.appendChild(withSearchClear(searchInput));
+    searchInput.addEventListener("input", function () { state.search = searchInput.value; renderTable(); });
+    var filterBar = document.createElement("div"); filterBar.className = "odo-filterbar";
+    var deInput = document.createElement("input"); deInput.type = "date"; deInput.className = "odo-input";
+    var ateInput = document.createElement("input"); ateInput.type = "date"; ateInput.className = "odo-input";
+    deInput.addEventListener("change", function () { state.fDe = deInput.value; renderTable(); });
+    ateInput.addEventListener("change", function () { state.fAte = ateInput.value; renderTable(); });
+    var clearBtn = document.createElement("button"); clearBtn.type = "button"; clearBtn.className = "odo-btn"; clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearBtn.addEventListener("click", function () {
+      state.fTipo = []; state.fDe = ""; state.fAte = ""; state.search = "";
+      deInput.value = ""; ateInput.value = ""; searchInput.value = "";
+      rebuildFilter(); renderTable();
+    });
+    function tipoOf(it) { return qrChaveAcesso(it.conteudo) ? "NF-e/NFC-e" : (/^https?:\/\//i.test(it.conteudo) ? "Link" : "Texto"); }
+    function rebuildFilter() {
+      filterBar.innerHTML = ""; state.fTipo = [];
+      filterBar.appendChild(buildIconDropdown({
+        label: "Tipo", icon: "ti-tag",
+        options: ["NF-e/NFC-e", "Link", "Texto"].map(function (t) { return { label: t, pageId: t }; })
+      }, function (opts) { state.fTipo = opts.map(function (o) { return o.pageId; }); renderTable(); }));
+      var l1 = document.createElement("label"); l1.className = "odo-lbl"; l1.textContent = "De "; l1.appendChild(deInput);
+      var l2 = document.createElement("label"); l2.className = "odo-lbl"; l2.textContent = "Até "; l2.appendChild(ateInput);
+      filterBar.appendChild(l1); filterBar.appendChild(l2); filterBar.appendChild(clearBtn);
+    }
+    filterSec.body.appendChild(filterBar);
+
+    // ---- Tabela ----
+    var tableHost = document.createElement("div"); wrap.appendChild(tableHost);
+    function localDay(iso) { var d = new Date(iso); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+    function visibleItems() {
+      var q = normalize(state.search);
+      return state.items.filter(function (it) {
+        if (state.fTipo.length && state.fTipo.indexOf(tipoOf(it)) < 0) return false;
+        if (state.fDe && localDay(it.quando) < state.fDe) return false;
+        if (state.fAte && localDay(it.quando) > state.fAte) return false;
+        if (q && normalize(it.conteudo + " " + (it.nota || "")).indexOf(q) < 0) return false;
+        return true;
+      });
+    }
+    function renderTable() {
+      tableHost.innerHTML = "";
+      var rows = visibleItems();
+      var cols = [
+        { label: "Data/hora", sort: function (r) { return r.quando; }, node: function (r, td) { td.appendChild(mkChip(fmtDT(r.quando), "odo-chip-data", "ti-calendar")); } },
+        { label: "Tipo", sort: function (r) { return tipoOf(r); }, node: function (r, td) { var t = tipoOf(r); td.appendChild(mkChip(t, t === "NF-e/NFC-e" ? "odo-chip-km" : (t === "Link" ? "odo-chip-delta" : "odo-chip-vazio"), t === "Link" ? "ti-link" : "ti-file-text")); } },
+        { label: "Conteúdo", sort: function (r) { return r.conteudo; }, node: function (r, td) {
+            var ch = qrChaveAcesso(r.conteudo);
+            var txt = ch ? ch : r.conteudo;
+            var s = mkChip(txt.length > 60 ? txt.slice(0, 57) + "…" : txt, "odo-chip-veic qr-content");
+            s.title = r.conteudo; td.appendChild(s);
+          } },
+        { label: "Observação", sort: function (r) { return r.nota || ""; }, node: function (r, td) { td.appendChild(mkChip(r.nota || "—", r.nota ? "" : "odo-chip-vazio")); } },
+        { label: "", node: function (r, td) {
+            var c = document.createElement("button"); c.type = "button"; c.className = "odo-icon-btn"; c.title = "Copiar string"; c.innerHTML = '<i class="ti ti-copy"></i>';
+            c.addEventListener("click", function () { copyText(r.conteudo, c); });
+            td.appendChild(c);
+            if (/^https?:\/\//i.test(r.conteudo)) {
+              var o = document.createElement("a"); o.className = "odo-icon-btn"; o.title = "Abrir link"; o.href = r.conteudo; o.target = "_blank"; o.rel = "noopener"; o.innerHTML = '<i class="ti ti-external-link"></i>';
+              td.appendChild(o);
+            }
+            var d = document.createElement("button"); d.type = "button"; d.className = "odo-icon-btn"; d.title = "Excluir"; d.innerHTML = '<i class="ti ti-trash"></i>';
+            d.addEventListener("click", function () {
+              if (!window.confirm("Excluir esta captura?")) return;
+              call("/qrcapturas?id=" + encodeURIComponent(r.id), "DELETE").then(function () { state.items = state.items.filter(function (x) { return x.id !== r.id; }); renderTable(); }).catch(function (er) { window.alert("Erro: " + er.message); });
+            });
+            td.appendChild(d);
+          } }
+      ];
+      var info = document.createElement("div"); info.className = "odo-count"; info.textContent = rows.length + " captura(s)";
+      tableHost.appendChild(info);
+      finSortTable(tableHost, cols, rows, sortState, renderTable);
+    }
+
+    call("/qrcapturas", "GET").then(function (r) {
+      state.items = r.items || [];
+      rebuildFilter(); renderTable();
+      statusEl.style.display = "none"; wrap.style.display = "";
+    }).catch(function (e) { statusEl.textContent = "Erro ao carregar: " + e.message; });
+  }
+
+  // ---------------- "page.odometro" — Odômetro (100% KV, nunca Notion) ----------------
+  // Pedido do Georges: foto do painel do carro → lê a km (OCR gratuito no
+  // navegador, Tesseract.js carregado sob demanda) OU digita; guarda km +
+  // data/hora (editável) + veículo numa tabela. A foto NÃO é guardada.
+  // Lista de veículos: KV "odometro_veiculos" (provisória, até existir a
+  // página de veículos).
+  var odometroTesseractPromise = null;
+  function odometroLoadTesseract() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (odometroTesseractPromise) return odometroTesseractPromise;
+    odometroTesseractPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      s.onload = function () { resolve(window.Tesseract); };
+      s.onerror = function () { odometroTesseractPromise = null; reject(new Error("Não consegui carregar o leitor de OCR (sem internet?).")); };
+      document.head.appendChild(s);
+    });
+    return odometroTesseractPromise;
+  }
+  // Redimensiona + escala de cinza + contraste; "invert" gera a variante
+  // negativa (painéis com números claros em fundo escuro).
+  function odometroPrepCanvas(img, invert) {
+    var max = 1400, sc = Math.min(1, max / Math.max(img.width, img.height));
+    var c = document.createElement("canvas");
+    c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+    var ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    var d = ctx.getImageData(0, 0, c.width, c.height), p = d.data, lo = 255, hi = 0, i, g;
+    for (i = 0; i < p.length; i += 4) { g = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; p[i] = g; if (g < lo) lo = g; if (g > hi) hi = g; }
+    var rng = Math.max(1, hi - lo);
+    for (i = 0; i < p.length; i += 4) {
+      g = (p[i] - lo) * 255 / rng;
+      if (invert) g = 255 - g;
+      p[i] = p[i + 1] = p[i + 2] = g;
+    }
+    ctx.putImageData(d, 0, 0);
+    return c;
+  }
+  // candidatos: sequências de 4–7 dígitos; prioriza 5–6 dígitos e maior confiança.
+  function odometroCandidatos(results) {
+    var map = {};
+    results.forEach(function (data) {
+      (data.words || []).forEach(function (w) {
+        var t = (w.text || "").replace(/[^0-9]/g, "");
+        if (t.length < 4 || t.length > 7) return;
+        var sc = (w.confidence || 0) + (t.length >= 5 && t.length <= 6 ? 30 : 0);
+        if (!map[t] || map[t] < sc) map[t] = sc;
+      });
+    });
+    return Object.keys(map).sort(function (a, b) { return map[b] - map[a]; }).slice(0, 6);
+  }
+  function odometroFmtKm(n) {
+    return Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  }
+  function renderOdometroPage(container, page) {
+    function handle401(res) {
+      if (res.status === 401 && window.Auth) { Auth.signOut(); throw new Error("Faça login de novo pra continuar."); }
+      return res;
+    }
+    function call(path, method, body) {
+      return authFetch(cfg.templateWorkerUrl + path, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(handle401).then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); });
+    }
+    function nowLocal() {
+      var d = new Date(); d.setSeconds(0, 0);
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    function isoToLocal(iso) {
+      var d = new Date(iso);
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    function fmtDT(iso) {
+      var d = new Date(iso);
+      return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear() + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    function mkChip(text, cls, icon) {
+      var s = document.createElement("span");
+      s.className = "odo-chip " + (cls || "");
+      if (icon) { var i = document.createElement("i"); i.className = "ti " + icon; s.appendChild(i); }
+      s.appendChild(document.createTextNode(text));
+      return s;
+    }
+
+    var state = { items: [], veiculos: [], search: "", fVeic: [], fDe: "", fAte: "" };
+    var sortState = { col: 0, dir: -1 };
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando…";
+    container.appendChild(statusEl);
+    var wrap = document.createElement("div");
+    wrap.className = "odo-wrap";
+    wrap.style.display = "none";
+    container.appendChild(wrap);
+
+    // ---- Novo registro ----
+    var newSec = buildCollapsibleSection("Novo registro", true);
+    wrap.appendChild(newSec.section);
+    var form = document.createElement("div"); form.className = "odo-form";
+    var veicSel = document.createElement("select"); veicSel.className = "odo-input";
+    var addVeicBtn = document.createElement("button"); addVeicBtn.type = "button"; addVeicBtn.className = "odo-btn"; addVeicBtn.innerHTML = '<i class="ti ti-plus"></i> Veículo';
+    var veicRow = document.createElement("div"); veicRow.className = "odo-row";
+    veicRow.appendChild(veicSel); veicRow.appendChild(addVeicBtn);
+
+    var fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.setAttribute("capture", "environment"); fileInput.style.display = "none";
+    var fileInputGal = document.createElement("input"); fileInputGal.type = "file"; fileInputGal.accept = "image/*"; fileInputGal.style.display = "none";
+    var camBtn = document.createElement("button"); camBtn.type = "button"; camBtn.className = "odo-btn primary"; camBtn.innerHTML = '<i class="ti ti-camera"></i> Tirar foto';
+    var galBtn = document.createElement("button"); galBtn.type = "button"; galBtn.className = "odo-btn"; galBtn.innerHTML = '<i class="ti ti-photo"></i> Galeria';
+    camBtn.addEventListener("click", function () { fileInput.click(); });
+    galBtn.addEventListener("click", function () { fileInputGal.click(); });
+    var photoRow = document.createElement("div"); photoRow.className = "odo-row";
+    photoRow.appendChild(camBtn); photoRow.appendChild(galBtn); photoRow.appendChild(fileInput); photoRow.appendChild(fileInputGal);
+
+    var preview = document.createElement("img"); preview.className = "odo-preview"; preview.style.display = "none";
+    var ocrStatus = document.createElement("div"); ocrStatus.className = "odo-ocr-status";
+    var candRow = document.createElement("div"); candRow.className = "odo-row odo-cands";
+
+    var kmInput = document.createElement("input"); kmInput.type = "text"; kmInput.inputMode = "decimal"; kmInput.placeholder = "Km (ex.: 45230)"; kmInput.className = "odo-input odo-km-input";
+    var quandoInput = document.createElement("input"); quandoInput.type = "datetime-local"; quandoInput.className = "odo-input"; quandoInput.value = nowLocal();
+    var valRow = document.createElement("div"); valRow.className = "odo-row";
+    valRow.appendChild(kmInput); valRow.appendChild(quandoInput);
+
+    var saveBtn = document.createElement("button"); saveBtn.type = "button"; saveBtn.className = "odo-btn primary"; saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar registro';
+    var msgEl = document.createElement("div"); msgEl.className = "odo-ocr-status";
+    var usedOcr = false;
+
+    [veicRow, photoRow, preview, ocrStatus, candRow, valRow, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    newSec.body.appendChild(form);
+
+    function fillVeicSel() {
+      var cur = veicSel.value;
+      veicSel.innerHTML = "";
+      if (!state.veiculos.length) { var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "— cadastre um veículo —"; veicSel.appendChild(o0); }
+      state.veiculos.forEach(function (v) { var o = document.createElement("option"); o.value = v; o.textContent = v; veicSel.appendChild(o); });
+      if (cur && state.veiculos.indexOf(cur) >= 0) veicSel.value = cur;
+    }
+    addVeicBtn.addEventListener("click", function () {
+      var nome = window.prompt("Nome do veículo (ex.: Corolla, Moto):");
+      if (!nome || !nome.trim()) return;
+      var novos = state.veiculos.concat([nome.trim()]);
+      call("/odometro-veiculos", "PUT", { veiculos: novos }).then(function (d) {
+        state.veiculos = d.veiculos; fillVeicSel(); veicSel.value = nome.trim(); rebuildFilter();
+      }).catch(function (e) { msgEl.textContent = "Erro: " + e.message; });
+    });
+
+    function handleFile(file) {
+      if (!file) return;
+      candRow.innerHTML = "";
+      var url = URL.createObjectURL(file);
+      preview.src = url; preview.style.display = "";
+      ocrStatus.textContent = "Carregando leitor de OCR…";
+      var img = new Image();
+      img.onload = function () {
+        odometroLoadTesseract().then(function (T) {
+          ocrStatus.textContent = "Lendo a km da foto…";
+          return T.createWorker("eng").then(function (worker) {
+            return worker.setParameters({ tessedit_char_whitelist: "0123456789", tessedit_pageseg_mode: "11" }).then(function () {
+              return worker.recognize(odometroPrepCanvas(img, false));
+            }).then(function (r1) {
+              return worker.recognize(odometroPrepCanvas(img, true)).then(function (r2) { return [r1.data, r2.data]; });
+            }).then(function (res) { worker.terminate(); return res; });
+          });
+        }).then(function (results) {
+          var cands = odometroCandidatos(results);
+          if (!cands.length) { ocrStatus.textContent = "Não consegui ler a km. Digite manualmente."; return; }
+          ocrStatus.textContent = "Toque na km correta (ou digite):";
+          cands.forEach(function (c, idx) {
+            var b = document.createElement("button"); b.type = "button"; b.className = "odo-cand";
+            b.textContent = odometroFmtKm(Number(c));
+            b.addEventListener("click", function () { kmInput.value = c; usedOcr = true; Array.prototype.forEach.call(candRow.children, function (x) { x.classList.remove("active"); }); b.classList.add("active"); });
+            candRow.appendChild(b);
+            if (idx === 0) { kmInput.value = c; usedOcr = true; b.classList.add("active"); }
+          });
+        }).catch(function (e) { ocrStatus.textContent = (e && e.message) || "Falha na leitura. Digite manualmente."; });
+      };
+      img.src = url;
+    }
+    fileInput.addEventListener("change", function () { handleFile(fileInput.files[0]); fileInput.value = ""; });
+    fileInputGal.addEventListener("change", function () { handleFile(fileInputGal.files[0]); fileInputGal.value = ""; });
+
+    saveBtn.addEventListener("click", function () {
+      var km = kmInput.value.trim().replace(/\./g, "").replace(",", ".");
+      if (!veicSel.value) { msgEl.textContent = "Escolha (ou cadastre) o veículo."; return; }
+      if (!km || isNaN(Number(km))) { msgEl.textContent = "Informe a km."; return; }
+      saveBtn.disabled = true;
+      call("/odometro", "POST", { veiculo: veicSel.value, km: Number(km), quando: new Date(quandoInput.value).toISOString(), origem: usedOcr ? "ocr" : "manual" }).then(function (d) {
+        state.items.unshift(d.item);
+        kmInput.value = ""; quandoInput.value = nowLocal(); preview.style.display = "none"; ocrStatus.textContent = ""; candRow.innerHTML = ""; usedOcr = false;
+        msgEl.textContent = "✅ Registro salvo.";
+        renderTable();
+      }).catch(function (e) { msgEl.textContent = "Erro: " + e.message; }).then(function () { saveBtn.disabled = false; });
+    });
+
+    // ---- Pesquisar / Filtrar ----
+    var searchSec = buildCollapsibleSection("Pesquisar", false);
+    var filterSec = buildCollapsibleSection("Filtrar", false);
+    wrap.appendChild(searchSec.section); wrap.appendChild(filterSec.section);
+    var searchInput = document.createElement("input"); searchInput.type = "text"; searchInput.placeholder = "Buscar veículo ou km…"; searchInput.className = "odo-input";
+    searchSec.body.appendChild(withSearchClear(searchInput));
+    searchInput.addEventListener("input", function () { state.search = searchInput.value; renderTable(); });
+
+    var filterBar = document.createElement("div"); filterBar.className = "odo-filterbar";
+    var deInput = document.createElement("input"); deInput.type = "date"; deInput.className = "odo-input";
+    var ateInput = document.createElement("input"); ateInput.type = "date"; ateInput.className = "odo-input";
+    deInput.addEventListener("change", function () { state.fDe = deInput.value; renderTable(); });
+    ateInput.addEventListener("change", function () { state.fAte = ateInput.value; renderTable(); });
+    var clearBtn = document.createElement("button"); clearBtn.type = "button"; clearBtn.className = "odo-btn"; clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearBtn.addEventListener("click", function () {
+      state.fVeic = []; state.fDe = ""; state.fAte = ""; state.search = "";
+      deInput.value = ""; ateInput.value = ""; searchInput.value = "";
+      rebuildFilter(); renderTable();
+    });
+    function rebuildFilter() {
+      filterBar.innerHTML = "";
+      state.fVeic = [];
+      if (state.veiculos.length) {
+        filterBar.appendChild(buildIconDropdown({
+          label: "Veículo", icon: "ti-car", searchable: true,
+          options: state.veiculos.map(function (v) { return { label: v, pageId: v }; })
+        }, function (opts) { state.fVeic = opts.map(function (o) { return o.pageId; }); renderTable(); }));
+      }
+      var l1 = document.createElement("label"); l1.className = "odo-lbl"; l1.textContent = "De "; l1.appendChild(deInput);
+      var l2 = document.createElement("label"); l2.className = "odo-lbl"; l2.textContent = "Até "; l2.appendChild(ateInput);
+      filterBar.appendChild(l1); filterBar.appendChild(l2); filterBar.appendChild(clearBtn);
+    }
+    filterSec.body.appendChild(filterBar);
+
+    // ---- Tabela ----
+    var tableHost = document.createElement("div");
+    wrap.appendChild(tableHost);
+
+    function computeDeltas() {
+      // Δ km e dias vs. registro anterior do MESMO veículo (por data)
+      var by = {};
+      state.items.forEach(function (it) { (by[it.veiculo] = by[it.veiculo] || []).push(it); });
+      Object.keys(by).forEach(function (v) {
+        by[v].sort(function (a, b) { return (a.quando || "").localeCompare(b.quando || ""); });
+        by[v].forEach(function (it, i) {
+          var prev = by[v][i - 1];
+          it._dkm = prev ? it.km - prev.km : null;
+          it._dias = prev ? Math.round((new Date(it.quando) - new Date(prev.quando)) / 86400000 * 10) / 10 : null;
+        });
+      });
+    }
+    function visibleItems() {
+      var q = normalize(state.search);
+      return state.items.filter(function (it) {
+        if (state.fVeic.length && state.fVeic.indexOf(it.veiculo) < 0) return false;
+        if (state.fDe && isoToLocal(it.quando).slice(0, 10) < state.fDe) return false;
+        if (state.fAte && isoToLocal(it.quando).slice(0, 10) > state.fAte) return false;
+        if (q && normalize(it.veiculo + " " + it.km + " " + odometroFmtKm(it.km)).indexOf(q) < 0) return false;
+        return true;
+      });
+    }
+    function startEdit(it, tr) {
+      var td = tr.children[0];
+      var kmI = document.createElement("input"); kmI.className = "odo-input"; kmI.value = it.km;
+      var dtI = document.createElement("input"); dtI.type = "datetime-local"; dtI.className = "odo-input"; dtI.value = isoToLocal(it.quando);
+      var ok = document.createElement("button"); ok.type = "button"; ok.className = "odo-btn primary"; ok.textContent = "Salvar";
+      var ca = document.createElement("button"); ca.type = "button"; ca.className = "odo-btn"; ca.textContent = "Cancelar";
+      tr.innerHTML = ""; var c = document.createElement("td"); c.colSpan = 6; c.className = "odo-edit-cell";
+      [dtI, kmI, ok, ca].forEach(function (e) { c.appendChild(e); });
+      tr.appendChild(c);
+      ca.addEventListener("click", renderTable);
+      ok.addEventListener("click", function () {
+        call("/odometro?id=" + encodeURIComponent(it.id), "PUT", { km: Number(String(kmI.value).replace(",", ".")), quando: new Date(dtI.value).toISOString() }).then(function (d) {
+          Object.assign(it, d.item); renderTable();
+        }).catch(function (e) { window.alert("Erro: " + e.message); });
+      });
+    }
+    function renderTable() {
+      computeDeltas();
+      tableHost.innerHTML = "";
+      var rows = visibleItems();
+      var cols = [
+        { label: "Data/hora", sort: function (r) { return r.quando; }, node: function (r, td) { td.appendChild(mkChip(fmtDT(r.quando), "odo-chip-data", "ti-calendar")); } },
+        { label: "Veículo", sort: function (r) { return r.veiculo; }, node: function (r, td) { td.appendChild(mkChip(r.veiculo, "odo-chip-veic", "ti-car")); } },
+        { label: "Km", num: true, sort: function (r) { return r.km; }, node: function (r, td) { td.appendChild(mkChip(odometroFmtKm(r.km) + " km", "odo-chip-km", "ti-gauge")); if (r.origem === "ocr") td.title = "Lida por OCR"; } },
+        { label: "Δ Km", num: true, sort: function (r) { return r._dkm; }, node: function (r, td) { if (r._dkm === null) td.appendChild(mkChip("—", "odo-chip-vazio")); else td.appendChild(mkChip((r._dkm >= 0 ? "+" : "") + odometroFmtKm(r._dkm), r._dkm < 0 ? "odo-chip-neg" : "odo-chip-delta")); } },
+        { label: "Dias", num: true, sort: function (r) { return r._dias; }, node: function (r, td) { td.appendChild(mkChip(r._dias === null ? "—" : String(r._dias).replace(".", ","), "odo-chip-vazio")); } },
+        { label: "", node: function (r, td) {
+            var e = document.createElement("button"); e.type = "button"; e.className = "odo-icon-btn"; e.title = "Editar"; e.innerHTML = '<i class="ti ti-pencil"></i>';
+            e.addEventListener("click", function () { startEdit(r, td.parentNode); });
+            var d = document.createElement("button"); d.type = "button"; d.className = "odo-icon-btn"; d.title = "Excluir"; d.innerHTML = '<i class="ti ti-trash"></i>';
+            d.addEventListener("click", function () {
+              if (!window.confirm("Excluir este registro de km?")) return;
+              call("/odometro?id=" + encodeURIComponent(r.id), "DELETE").then(function () { state.items = state.items.filter(function (x) { return x.id !== r.id; }); renderTable(); }).catch(function (er) { window.alert("Erro: " + er.message); });
+            });
+            td.appendChild(e); td.appendChild(d);
+          } }
+      ];
+      var info = document.createElement("div"); info.className = "odo-count"; info.textContent = rows.length + " registro(s)";
+      tableHost.appendChild(info);
+      finSortTable(tableHost, cols, rows, sortState, renderTable);
+    }
+
+    Promise.all([call("/odometro", "GET"), call("/odometro-veiculos", "GET")]).then(function (r) {
+      state.items = r[0].items || []; state.veiculos = r[1].veiculos || [];
+      fillVeicSel(); rebuildFilter(); renderTable();
+      statusEl.style.display = "none"; wrap.style.display = "";
+    }).catch(function (e) { statusEl.textContent = "Erro ao carregar: " + e.message; });
+  }
+
   // ---------------- "page.remedios" — Remédios (100% KV, nunca Notion) ----------------
   // Pedido do Georges: lista do estoque de remédios que ele mantém na
   // mochila, copiada 1x da base do Notion "Pessoal / Listas / Remédios"
@@ -28851,6 +29398,17 @@
     // "Remédios" (pedido do Georges) — mesmo padrão exclusivo acima.
     if (page.remedios) {
       renderRemediosPage(container, page);
+      return;
+    }
+
+    if (page.qrCaptura) {
+      renderQrCapturaPage(container, page);
+      return;
+    }
+
+    // "Odômetro" — mesmo padrão exclusivo.
+    if (page.odometro) {
+      renderOdometroPage(container, page);
       return;
     }
 

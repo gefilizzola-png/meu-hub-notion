@@ -8927,3 +8927,32 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .emprestimos-chip-venc.pago { background: #d3f9d8; color: #2b8a3e; }
 .emprestimos-chip-vazio { background: #f1f3f5; color: #adb5bd; }
 .emprestimos-tr td { vertical-align: middle; }
+
+/* ---------- Odômetro (página KV) ---------- */
+.odo-wrap { display: flex; flex-direction: column; gap: 10px; }
+.odo-form { display: flex; flex-direction: column; gap: 10px; padding: 8px 2px; max-width: 520px; }
+.odo-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.odo-input { padding: 8px 10px; border: 1px solid var(--border, #d0d5dd); border-radius: 8px; font-size: 14px; background: var(--surface, #fff); color: inherit; min-width: 0; }
+.odo-km-input { flex: 1 1 140px; font-size: 18px; font-weight: 600; }
+.odo-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--border, #d0d5dd); border-radius: 999px; background: var(--surface, #fff); cursor: pointer; font-size: 14px; color: inherit; }
+.odo-btn.primary { background: #0f9b8e; border-color: #0f9b8e; color: #fff; }
+.odo-btn:disabled { opacity: .6; cursor: default; }
+.odo-preview { max-width: 100%; max-height: 220px; object-fit: contain; border-radius: 10px; border: 1px solid var(--border, #d0d5dd); align-self: flex-start; }
+.odo-ocr-status { font-size: 13px; opacity: .8; }
+.odo-cand { padding: 8px 14px; border-radius: 999px; border: 1px solid #0f9b8e; background: transparent; font-size: 16px; font-weight: 600; cursor: pointer; color: inherit; }
+.odo-cand.active { background: #0f9b8e; color: #fff; }
+.odo-filterbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.odo-lbl { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.odo-count { font-size: 12px; opacity: .7; margin: 4px 0; }
+.odo-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 13px; white-space: nowrap; background: rgba(0,0,0,.06); }
+.odo-chip-data { background: #e7f0ff; }
+.odo-chip-veic { background: #ece8ff; }
+.odo-chip-km { background: #dff5ea; font-weight: 600; }
+.odo-chip-delta { background: #e3f4fb; }
+.odo-chip-neg { background: #fde4e1; }
+.odo-chip-vazio { opacity: .6; }
+.odo-icon-btn { border: none; background: transparent; cursor: pointer; padding: 4px 6px; font-size: 16px; color: inherit; }
+.odo-edit-cell { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.qr-video { width: 100%; max-width: 420px; max-height: 320px; background: #000; }
+.qr-string { width: 100%; box-sizing: border-box; font-family: monospace; resize: vertical; }
+.qr-content { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
