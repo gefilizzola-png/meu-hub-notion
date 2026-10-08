@@ -19606,7 +19606,7 @@
       tw.className = "verif-table-scroll";
       var table = document.createElement("table");
       table.className = "financeiro-table saude-table verif-table";
-      var cols = [["date", "Data"], ["description", "Descrição"], ["category", "Categoria"], ["auto", "Automação"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Motivo"]];
+      var cols = [["date", "Data"], ["description", "Descrição"], ["auto", "Ações"], ["category", "Categoria"], ["amount", "Valor"], ["account", "Conta"], ["sev", "Severidade"], ["motivo", "Motivo"]];
       var thead = document.createElement("thead");
       var tr = document.createElement("tr");
       cols.forEach(function (c) {
@@ -19652,6 +19652,12 @@
           dSug.appendChild(verifCopyBtn(function () { return it.suggested_name; }, "nome sugerido"));
           d.appendChild(dSug);
         }
+        var actTd = document.createElement("td");
+        actTd.className = "verif-td verif-col-actions";
+        var actWrap = document.createElement("div");
+        actWrap.className = "verif-actions";
+        actTd.appendChild(actWrap);
+        row.appendChild(actTd);
         var cat = td((it.category_name ? transacoesCategoriaIcon(it.category_name) + " " + it.category_name : "— sem categoria —"), "verif-col-cat");
         if (it.suggested) {
           var sg = document.createElement("span");
@@ -19665,7 +19671,7 @@
         manBtn.className = "verif-copy-btn verif-man-btn" + (it.suggested_name ? "" : " verif-man-btn-hot");
         manBtn.title = "Escolher a categoria e montar o nome";
         manBtn.innerHTML = '<i class="ti ti-category-2"></i>';
-        cat.appendChild(manBtn);
+        actWrap.appendChild(manBtn);
         var manRow = null;
         manBtn.addEventListener("click", function () {
           if (manRow) { manRow.parentNode.removeChild(manRow); manRow = null; manBtn.classList.remove("active"); return; }
@@ -19678,14 +19684,12 @@
           row.parentNode.insertBefore(manRow, row.nextSibling);
           manBtn.classList.add("active");
         });
-        var ac = document.createElement("td");
-        ac.className = "verif-td";
         var autoBtn = document.createElement("button");
         autoBtn.type = "button";
         autoBtn.className = "verif-copy-btn verif-auto-btn";
         autoBtn.title = "Gerar textos para a Automação de categorização do Visor";
         autoBtn.innerHTML = '<i class="ti ti-wand"></i>';
-        ac.appendChild(autoBtn); row.appendChild(ac);
+        actWrap.appendChild(autoBtn);
         var vc = td(transacoesFmtMoney(Math.abs(it.amount || 0)), "verif-col-valor");
         if (it.flow_type === "entrada") vc.classList.add("verif-entrada");
         td(it.account_name || "—");
@@ -19709,7 +19713,7 @@
             .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); load(); })
             .catch(function () { ajBtn.disabled = false; });
         });
-        mt.appendChild(ajBtn);
+        actWrap.appendChild(ajBtn);
         tbody.appendChild(row);
         var panelRow = null;
         autoBtn.addEventListener("click", function () {
@@ -22254,9 +22258,17 @@
       } catch (e) { /* sem áudio: ignora */ }
     }
 
+    // já existe captura igual? (mesma string OU mesma chave de acesso de NF-e)
+    function findDup(code) {
+      var ch = qrChaveAcesso(code), c0 = String(code || "").trim();
+      return state.items.filter(function (it) {
+        if (String(it.conteudo || "").trim() === c0) return true;
+        return ch && qrChaveAcesso(it.conteudo) === ch;
+      })[0] || null;
+    }
     var statusEl = document.createElement("p"); statusEl.className = "empty"; statusEl.textContent = "Carregando…";
     container.appendChild(statusEl);
-    var wrap = document.createElement("div"); wrap.className = "odo-wrap"; wrap.style.display = "none";
+    var wrap = document.createElement("div"); wrap.className = "odo-wrap qr-modern"; wrap.style.display = "none";
     container.appendChild(wrap);
 
     // ---- Capturar ----
@@ -22277,27 +22289,43 @@
     var noteInput = document.createElement("input"); noteInput.type = "text"; noteInput.className = "odo-input"; noteInput.placeholder = "Observação (opcional)";
     var saveBtn = document.createElement("button"); saveBtn.type = "button"; saveBtn.className = "odo-btn primary"; saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar captura';
     var msgEl = document.createElement("div"); msgEl.className = "odo-ocr-status";
-    [btnRow, video, massCounter, stopBtn, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    var vf = document.createElement("div"); vf.className = "qr-viewfinder"; vf.appendChild(video);
+    ["tl", "tr", "bl", "br"].forEach(function (k) { var c = document.createElement("span"); c.className = "qr-corner qr-corner-" + k; vf.appendChild(c); });
+    var hero = document.createElement("div"); hero.className = "qr-hero";
+    hero.innerHTML = '<i class="ti ti-qrcode"></i><div><b>Captura de QR Code</b><span>Aponte a câmera, use o modo massivo para várias notas ou leia de uma imagem. Repetidos são ignorados.</span></div>';
+    form.insertBefore(hero, form.firstChild);
+    [btnRow, vf, massCounter, stopBtn, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    btnRow.classList.add("qr-btn-grid");
     capSec.body.appendChild(form);
 
     function stopCam() {
       scanning = false;
       massive = false; massCounter.style.display = "none"; massBtn.classList.remove("primary");
       if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-      video.srcObject = null; video.style.display = "none"; stopBtn.style.display = "none";
+      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); stopBtn.style.display = "none";
     }
     function gotString(s) {
       strArea.value = s;
       var ch = qrChaveAcesso(s);
-      scanMsg.textContent = "✅ QR lido" + (ch ? " — chave de acesso " + ch : "") + ". Confira e salve.";
+      var dup = findDup(s);
+      scanMsg.textContent = dup ? "↩️ Este QR já foi capturado em " + fmtDT(dup.quando) + " — não será salvo de novo." : "✅ QR lido" + (ch ? " — chave de acesso " + ch : "") + ". Confira e salve.";
       if (navigator.vibrate) navigator.vibrate(80);
     }
+    var massDup = 0;
     function massSave(code) {
+      var dup = findDup(code);
+      if (dup) {
+        massDup++;
+        massCounter.textContent = "↩️ Já capturado em " + fmtDT(dup.quando) + " — ignorado (" + massDup + " repetido(s)). ✅ " + massCount + " novo(s).";
+        massCounter.classList.add("flash"); setTimeout(function () { massCounter.classList.remove("flash"); }, 350);
+        if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
+        return Promise.resolve();
+      }
       massBusy = true;
       return call("/qrcapturas", "POST", { conteudo: code, nota: "", modo: "massiva", lote: massLote }).then(function (d) {
         state.items.unshift(d.item);
         massCount++;
-        massCounter.textContent = "✅ " + massCount + " capturado(s) — último: " + (code.length > 40 ? code.slice(0, 37) + "…" : code);
+        massCounter.textContent = "✅ " + massCount + " capturado(s)" + (massDup ? " · ↩️ " + massDup + " repetido(s) ignorado(s)" : "") + " — último: " + (code.length > 40 ? code.slice(0, 37) + "…" : code);
         massCounter.classList.add("flash");
         setTimeout(function () { massCounter.classList.remove("flash"); }, 350);
         beep(); if (navigator.vibrate) navigator.vibrate(60);
@@ -22330,9 +22358,9 @@
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scanMsg.textContent = "Este navegador não permite acessar a câmera."; return; }
       stopCam();
       scanMsg.textContent = "Abrindo câmera…";
-      if (isMassive) { massive = true; massCount = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = "Captura massiva ativa — aponte para cada QR."; }
+      if (isMassive) { massive = true; massCount = 0; massDup = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = "Captura massiva ativa — aponte para cada QR."; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function (st) {
-        stream = st; video.srcObject = st; video.style.display = ""; stopBtn.style.display = "";
+        stream = st; video.srcObject = st; video.style.display = ""; vf.classList.add("on"); stopBtn.style.display = "";
         return video.play();
       }).then(function () {
         scanMsg.textContent = isMassive ? "Cada QR lido é salvo sozinho. Toque em “Parar câmera” ao terminar." : "Aponte para o QR Code…";
@@ -22344,7 +22372,7 @@
     stopBtn.addEventListener("click", function () {
       var n = massCount, was = massive;
       stopCam();
-      scanMsg.textContent = was ? "Captura massiva encerrada: " + n + " QR(s) salvo(s)." : "";
+      scanMsg.textContent = was ? "Captura massiva encerrada: " + n + " QR(s) salvo(s)" + (massDup ? ", " + massDup + " repetido(s) ignorado(s)." : ".") : "";
       if (was) { rebuildFilter(); renderTable(); }
     });
     galBtn.addEventListener("click", function () { galInput.click(); });
@@ -22363,6 +22391,8 @@
     saveBtn.addEventListener("click", function () {
       var s = strArea.value.trim();
       if (!s) { msgEl.textContent = "Nada para salvar."; return; }
+      var dupS = findDup(s);
+      if (dupS) { msgEl.textContent = "↩️ Já existe uma captura igual (" + fmtDT(dupS.quando) + ") — desconsiderada."; strArea.value = ""; noteInput.value = ""; return; }
       saveBtn.disabled = true;
       call("/qrcapturas", "POST", { conteudo: s, nota: noteInput.value.trim() }).then(function (d) {
         state.items.unshift(d.item);
@@ -23032,7 +23062,17 @@
     function tratCall(path, method, body) { return remCall(path, method, body); }
     function tratLoad() {
       tratCall("/tratamentos", "GET").then(function (data) {
-        tratState.items = (data && data.items) || [];
+        // KV list() é eventualmente consistente: reconcilia com o que acabamos de criar/excluir.
+        var srv = (data && data.items) || [];
+        var nowMs = Date.now();
+        tratState.recent = (tratState.recent || []).filter(function (r) { return nowMs - r.ts < 120000; });
+        tratState.gone = (tratState.gone || []).filter(function (r) { return nowMs - r.ts < 120000; });
+        var goneIds = tratState.gone.map(function (r) { return r.id; });
+        srv = srv.filter(function (t) { return goneIds.indexOf(t.id) === -1; });
+        tratState.recent.forEach(function (r) {
+          if (!srv.some(function (t) { return t.id === r.item.id; }) && goneIds.indexOf(r.item.id) === -1) srv.push(r.item);
+        });
+        tratState.items = srv;
         tratRender();
       }).catch(function () {
         tratListEl.innerHTML = "";
@@ -23087,23 +23127,38 @@
           setTimeout(function () { hit.scrollIntoView({ behavior: "smooth", block: "center" }); }, 150);
         }
       }
-      if (outros.length) {
-        var doneSec = buildCollapsibleSection("Concluídos / encerrados (" + outros.length + ")", !!tratState.doneOpen, function (collapsed) { tratState.doneOpen = !collapsed; });
-        tratListEl.appendChild(doneSec.section);
-        var rows = outros.map(function (x) {
-          var ini = new Date(x.t.inicio);
-          var fim = new Date(ini.getTime() + (Number(x.t.dias) || 1) * 86400000);
-          return { t: x.t, e: x.e, ini: ini, fim: fim };
+      tratRenderDone(outros);
+    }
+    // ---- Concluídos / encerrados: divisória própria (abaixo), tabela moderna + Pesquisar/Filtrar ----
+    var tratDoneSec = remSection("tratamentos", "✅ Tratamentos concluídos / encerrados", false);
+    var tratDoneBody = document.createElement("div");
+    tratDoneSec.body.appendChild(tratDoneBody);
+    var tratDoneF = { search: "", pessoas: [], status: [], sort: { col: 3, dir: -1 }, barBuilt: false };
+    function tratRenderDone(outros) {
+      tratDoneBody.innerHTML = "";
+      if (!outros.length) { var em = document.createElement("p"); em.className = "empty"; em.textContent = "Nenhum tratamento concluído ou encerrado ainda."; tratDoneBody.appendChild(em); return; }
+      var rowsAll = outros.map(function (x) {
+        var ini = new Date(x.t.inicio);
+        return { t: x.t, e: x.e, ini: ini, fim: new Date(ini.getTime() + (Number(x.t.dias) || 1) * 86400000) };
+      });
+      var tableHost = document.createElement("div");
+      function drawTable() {
+        tableHost.innerHTML = "";
+        var q = normalize(tratDoneF.search.trim());
+        var rows = rowsAll.filter(function (r) {
+          if (tratDoneF.pessoas.length && tratDoneF.pessoas.indexOf(r.t.pessoa || "Georges") === -1) return false;
+          if (tratDoneF.status.length && tratDoneF.status.indexOf(r.e.status) === -1) return false;
+          if (q && normalize((r.t.nome || "") + " " + (r.t.descricao || "") + " " + (r.t.pessoa || "Georges") + " " + (r.t.dose || "")).indexOf(q) === -1) return false;
+          return true;
         });
-        tratState.doneSort = tratState.doneSort || { col: 3, dir: -1 };
         var cols = [
-          { label: "Pessoa", sort: function (r) { return r.t.pessoa || "Georges"; }, node: function (r, td) { var c = document.createElement("span"); c.className = "trat-pessoa-chip"; c.textContent = r.t.pessoa || "Georges"; td.appendChild(c); } },
-          { label: "Remédio", sort: function (r) { return r.t.nome || ""; }, text: function (r) { return r.t.nome + (r.t.dose ? " — " + r.t.dose : ""); } },
-          { label: "Tratamento", sort: function (r) { return r.t.descricao || ""; }, text: function (r) { return r.t.descricao || "—"; } },
-          { label: "Início", num: true, sort: function (r) { return r.ini.getTime(); }, text: function (r) { return tratFmtDT(r.ini); } },
-          { label: "Término", num: true, sort: function (r) { return r.fim.getTime(); }, text: function (r) { return tratFmtDT(r.fim); } },
+          { label: "👤 Pessoa", sort: function (r) { return r.t.pessoa || "Georges"; }, node: function (r, td) { var c = document.createElement("span"); c.className = "trat-pessoa-chip"; c.textContent = r.t.pessoa || "Georges"; td.appendChild(c); } },
+          { label: "💊 Remédio", sort: function (r) { return r.t.nome || ""; }, text: function (r) { return r.t.nome + (r.t.dose ? " — " + r.t.dose : ""); } },
+          { label: "🩺 Tratamento", sort: function (r) { return r.t.descricao || ""; }, text: function (r) { return r.t.descricao || "—"; } },
+          { label: "📅 Início", num: true, sort: function (r) { return r.ini.getTime(); }, text: function (r) { return tratFmtDT(r.ini); } },
+          { label: "🏁 Término", num: true, sort: function (r) { return r.fim.getTime(); }, text: function (r) { return tratFmtDT(r.fim); } },
           { label: "Doses", num: true, sort: function (r) { return r.e.total ? r.e.feitas / r.e.total : 0; }, text: function (r) { return r.e.feitas + "/" + r.e.total; } },
-          { label: "Status", sort: function (r) { return r.e.status; }, text: function (r) { return r.e.status === "concluido" ? "✅ Concluído" : "⏹ Encerrado"; } },
+          { label: "Status", sort: function (r) { return r.e.status; }, node: function (r, td) { var c = document.createElement("span"); c.className = "trat-status-chip " + r.e.status; c.textContent = r.e.status === "concluido" ? "✅ Concluído" : "⏹ Encerrado"; td.appendChild(c); } },
           { label: "", node: function (r, td) {
             if (r.e.status === "encerrado") {
               var b = document.createElement("button"); b.type = "button"; b.className = "trat-btn"; b.innerHTML = '<i class="ti ti-player-play"></i>'; b.title = "Reabrir";
@@ -23111,12 +23166,33 @@
               td.appendChild(b);
             }
             var d = document.createElement("button"); d.type = "button"; d.className = "trat-btn danger"; d.innerHTML = '<i class="ti ti-trash"></i>'; d.title = "Excluir tratamento (o histórico de consumo é mantido)";
-            d.addEventListener("click", function () { if (!confirm("Excluir este tratamento?")) return; tratCall("/tratamentos?id=" + encodeURIComponent(r.t.id), "DELETE").then(tratLoad).catch(function () {}); });
+            d.addEventListener("click", function () { if (!confirm("Excluir este tratamento?")) return; tratCall("/tratamentos?id=" + encodeURIComponent(r.t.id), "DELETE").then(function () { tratState.gone = (tratState.gone || []).concat([{ id: r.t.id, ts: Date.now() }]); tratLoad(); }).catch(function () {}); });
             td.appendChild(d);
           } }
         ];
-        finSortTable(doneSec.body, cols, rows, tratState.doneSort, function () { tratRender(); }, { onRow: null });
+        finSortTable(tableHost, cols, rows, tratDoneF.sort, drawTable, {});
       }
+      var pessoas = {}; rowsAll.forEach(function (r) { pessoas[r.t.pessoa || "Georges"] = 1; });
+      var searchSec = buildCollapsibleSection("🔎 Pesquisar", false);
+      var inp = document.createElement("input"); inp.type = "text"; inp.className = "ajustes-search"; inp.placeholder = "Pesquisar remédio, pessoa, tratamento…"; inp.value = tratDoneF.search;
+      inp.addEventListener("input", function () { tratDoneF.search = inp.value; drawTable(); });
+      searchSec.body.appendChild(withSearchClear(inp));
+      var filtSec = buildCollapsibleSection("🧰 Filtrar", false);
+      var bar = document.createElement("div"); bar.className = "trat-done-filters";
+      function buildBar() {
+        bar.innerHTML = "";
+        bar.appendChild(buildIconDropdown({ label: "Pessoa", icon: "ti-user", options: Object.keys(pessoas).sort().map(function (p) { return { label: p, pageId: p }; }) }, function (o) { tratDoneF.pessoas = o.map(function (x) { return x.pageId; }); drawTable(); }));
+        bar.appendChild(buildIconDropdown({ label: "Status", icon: "ti-circle-check", options: [{ label: "Concluído", pageId: "concluido", emoji: "✅" }, { label: "Encerrado", pageId: "encerrado", emoji: "⏹" }] }, function (o) { tratDoneF.status = o.map(function (x) { return x.pageId; }); drawTable(); }));
+        var clr = document.createElement("button"); clr.type = "button"; clr.className = "filter-trigger"; clr.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+        clr.addEventListener("click", function () { tratDoneF.search = ""; inp.value = ""; tratDoneF.pessoas = []; tratDoneF.status = []; buildBar(); drawTable(); });
+        bar.appendChild(clr);
+      }
+      buildBar();
+      filtSec.body.appendChild(bar);
+      tratDoneBody.appendChild(searchSec.section);
+      tratDoneBody.appendChild(filtSec.section);
+      tratDoneBody.appendChild(tableHost);
+      drawTable();
     }
     function tratBuildCard(t, e, now) {
       var card = document.createElement("div");
@@ -23196,7 +23272,7 @@
       del.title = "Excluir tratamento (o histórico de consumo é mantido)";
       del.addEventListener("click", function () {
         if (!confirm("Excluir este tratamento?")) return;
-        tratCall("/tratamentos?id=" + encodeURIComponent(t.id), "DELETE").then(tratLoad).catch(function () {});
+        tratCall("/tratamentos?id=" + encodeURIComponent(t.id), "DELETE").then(function () { tratState.gone = (tratState.gone || []).concat([{ id: t.id, ts: Date.now() }]); tratLoad(); }).catch(function () {});
       });
       actions.appendChild(del);
       card.appendChild(actions);
@@ -23218,7 +23294,8 @@
         dose: tDosagem.value.trim(), comprimidos: Number(tComp.value) || 1,
         intervaloHoras: Number(tIntervalo.value) || 8, dias: Number(tDias.value) || 7,
         inicio: isNaN(inicio.getTime()) ? new Date().toISOString() : inicio.toISOString()
-      }).then(function () {
+      }).then(function (resp) {
+        if (resp && resp.item) { tratState.recent = (tratState.recent || []).concat([{ item: resp.item, ts: Date.now() }]); }
         tRemedio.reset(); tDosagem.value = ""; tDescricao.value = ""; tComp.value = "1"; tInicio.value = remNowLocal();
         tratLoad();
       }).catch(function () { alert("Não foi possível iniciar o tratamento (o worker.js foi republicado?)."); })
@@ -29138,7 +29215,7 @@
       groups[n].slice().sort(function (a, b) { return (rk(a.prioridade) - rk(b.prioridade)) || String(a.createdAt).localeCompare(String(b.createdAt)); }).forEach(function (i) {
         var tag = (i.prioridade ? "[prioridade " + i.prioridade + "] " : "") + (i.tipo ? "[" + i.tipo + "] " : "");
         var d = String(i.createdAt || "").slice(0, 10);
-        out.push("- " + (i.status === "feito" ? "[x] " : i.status === "implantado" ? "[~] (implantado, aguardando confirmação) " : "[ ] ") + tag + String(i.texto || "").replace(/\n+/g, " / ") + (d ? " (" + d + ")" : ""));
+        out.push("- `" + String(i.id || "").slice(0, 8) + "` " + (i.status === "feito" ? "[x] " : i.status === "implantado" ? "[~] (implantado, aguardando confirmação) " : "[ ] ") + tag + String(i.texto || "").replace(/\n+/g, " / ") + (d ? " (" + d + ")" : ""));
       });
       out.push("");
     });
@@ -29275,7 +29352,16 @@
       financeiroCopyToClipboard(md); ajustesFlash(bCopy, '<i class="ti ti-check"></i> Copiado');
     });
     bDown.addEventListener("click", function () { ajustesDownloadMd(ajustesMarkdown(ajustes.items, ajustes.filter !== "todos" && ajustes.filter !== "feito" && ajustes.filter !== "implantado")); });
-    exp.appendChild(bCopy); exp.appendChild(bDown);
+    var bImpl = document.createElement("button"); bImpl.type = "button"; bImpl.className = "ajustes-btn"; bImpl.innerHTML = '<i class="ti ti-rocket"></i> Marcar implantados'; bImpl.title = "Cole os ids (8 caracteres) que o Claude informou como implantados";
+    bImpl.addEventListener("click", function () {
+      var txt = window.prompt("Cole os ids implantados (separados por vírgula ou espaço):");
+      if (!txt) return;
+      var ids = txt.split(/[\s,;]+/).map(function (s) { return s.replace(/`/g, "").trim(); }).filter(Boolean);
+      var alvo = ajustes.items.filter(function (it) { return it.status !== "feito" && ids.some(function (p) { return it.id.indexOf(p) === 0; }); });
+      Promise.all(alvo.map(function (it) { return ajustesApi("/ajustes?id=" + encodeURIComponent(it.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "implantado" }) }).then(function (d) { if (d && d.item) Object.assign(it, d.item); }); }))
+        .then(function () { ajustesRenderList(); ajustesUpdateBadge(); ajustesFlash(bImpl, '<i class="ti ti-check"></i> ' + alvo.length + ' marcado(s)'); });
+    });
+    exp.appendChild(bCopy); exp.appendChild(bDown); exp.appendChild(bImpl);
     bar.appendChild(pills); bar.appendChild(exp);
     panel.appendChild(bar);
 
@@ -29426,6 +29512,7 @@
     var tx = document.createElement("div"); tx.className = "ajustes-item-text"; tx.textContent = it.texto; main.appendChild(tx);
     var meta = document.createElement("div"); meta.className = "ajustes-meta";
     var parts = [];
+    if (ajustes.sortBy !== "pagina") parts.push(it.origem ? (ajustesOrigemLabel(it.origem) || it.origemLabel || it.origem) : "🌐 Geral");
     if (it.prioridade) { var pp = AJUSTE_PRIO_UI.filter(function (t) { return t.k === it.prioridade; })[0]; if (pp) parts.push(pp.t); }
     if (it.tipo) { var tt = AJUSTE_TIPOS_UI.filter(function (t) { return t.k === it.tipo; })[0]; if (tt) parts.push(tt.t); }
     if (it.createdAt) parts.push(financeiroFormatDate(String(it.createdAt).slice(0, 10)));
