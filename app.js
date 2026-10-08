@@ -22203,7 +22203,33 @@
   var qrDetector = null;
   // tenta: BarcodeDetector (rápido) -> jsQR em 1280px -> (deep) jsQR em alta resolução com
   // contraste ampliado e recortes. "deep" = foto parada / galeria / a cada N quadros.
-  function qrJsPass(jsQR, source, w, h, maxDim, stretch, crop) {
+  // filtros para impressão fraca (tinta cinza/pontilhada): "blur" funde os pontinhos,
+  // "adapt" binariza pela média local (ignora sombra/manchas), "blurAdapt" faz os dois.
+  function qrBoxMean(g, w, h, r) {
+    var W = w + 1, I = new Float64Array(W * (h + 1)), x, y, row;
+    for (y = 0; y < h; y++) { row = 0; for (x = 0; x < w; x++) { row += g[y * w + x]; I[(y + 1) * W + x + 1] = I[y * W + x + 1] + row; } }
+    var out = new Float32Array(w * h), x0, x1, y0, y1, n;
+    for (y = 0; y < h; y++) {
+      y0 = Math.max(0, y - r); y1 = Math.min(h, y + r + 1);
+      for (x = 0; x < w; x++) {
+        x0 = Math.max(0, x - r); x1 = Math.min(w, x + r + 1); n = (x1 - x0) * (y1 - y0);
+        out[y * w + x] = (I[y1 * W + x1] - I[y0 * W + x1] - I[y1 * W + x0] + I[y0 * W + x0]) / n;
+      }
+    }
+    return out;
+  }
+  function qrFilter(p, w, h, mode) {
+    var n = w * h, g = new Float32Array(n), i;
+    for (i = 0; i < n; i++) g[i] = p[i * 4];
+    if (mode === "blur" || mode === "blurAdapt") g = qrBoxMean(g, w, h, Math.max(1, Math.round(Math.max(w, h) / 900)));
+    if (mode === "adapt" || mode === "blurAdapt") {
+      var m = qrBoxMean(g, w, h, Math.max(8, Math.round(Math.max(w, h) / 40)));
+      for (i = 0; i < n; i++) { var v = g[i] < m[i] - 6 ? 0 : 255; p[i * 4] = p[i * 4 + 1] = p[i * 4 + 2] = v; }
+    } else {
+      for (i = 0; i < n; i++) { p[i * 4] = p[i * 4 + 1] = p[i * 4 + 2] = g[i]; }
+    }
+  }
+  function qrJsPass(jsQR, source, w, h, maxDim, stretch, crop, mode) {
     var sx = 0, sy = 0, sw = w, sh = h;
     if (crop) { sw = Math.round(w * crop); sh = Math.round(h * crop); sx = Math.round((w - sw) / 2); sy = Math.round((h - sh) / 2); }
     var sc = Math.min(maxDim / Math.max(sw, sh), 2.5);
@@ -22218,6 +22244,7 @@
       var rng = Math.max(1, hi - lo);
       for (i = 0; i < p.length; i += 4) { g = (0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2] - lo) * 255 / rng; p[i] = p[i + 1] = p[i + 2] = g; }
     }
+    if (mode) qrFilter(p, d.width, d.height, mode);
     var r = jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" });
     return r ? r.data : null;
   }
@@ -22231,12 +22258,18 @@
     return first.then(function (val) {
       if (val) return val;
       return qrLoadJsQR().then(function (jsQR) {
-        var tries = deep
+        // deep: true = leve (ao vivo, a cada N quadros); "mid" = + filtros p/ tinta fraca (ao vivo, mais raro);
+        // "max" = tudo (foto parada, galeria, leitura de apoio)
+        var tries = deep === "max"
+          ? [[1280, false, 0], [1920, true, 0], [1920, true, 0.7], [2200, true, 0.5], [1600, true, 0, "blur"], [1600, true, 0, "adapt"], [1600, true, 0, "blurAdapt"], [2000, true, 0.7, "blurAdapt"], [2000, true, 0.5, "adapt"]]
+          : deep === "mid"
+          ? [[1280, false, 0], [1280, true, 0, "adapt"], [1280, true, 0, "blur"]]
+          : deep
           ? [[1280, false, 0], [1920, true, 0], [1920, true, 0.7], [2200, true, 0.5]]
           : [[1100, false, 0]];
         for (var k = 0; k < tries.length; k++) {
           var out = null;
-          try { out = qrJsPass(jsQR, source, w, h, tries[k][0], tries[k][1], tries[k][2]); } catch (e) { out = null; }
+          try { out = qrJsPass(jsQR, source, w, h, tries[k][0], tries[k][1], tries[k][2], tries[k][3]); } catch (e) { out = null; }
           if (out) return out;
         }
         return null;
@@ -22441,7 +22474,7 @@
       if (!scanning) return;
       if (video.readyState >= 2 && video.videoWidth) {
         frameN++;
-        qrDecode(video, video.videoWidth, video.videoHeight, frameN % 4 === 0).then(function (r) {
+        qrDecode(video, video.videoWidth, video.videoHeight, frameN % 12 === 0 ? "mid" : frameN % 4 === 0).then(function (r) {
           if (!scanning) return;
           if (!r) { if (massive && Date.now() - massLast.t < 6000) { /* acabou de salvar: sem dica */ } else updateHint(); }
           if (massive) {
@@ -22500,7 +22533,7 @@
       assisting = true; lastAssist = Date.now();
       var c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
       c.getContext("2d").drawImage(video, 0, 0);
-      qrDecode(c, c.width, c.height, true).then(function (r) {
+      qrDecode(c, c.width, c.height, "max").then(function (r) {
         assisting = false; scanStartedAt = Date.now();
         if (!stream) return;
         if (r) handleRead(r);
@@ -22519,7 +22552,7 @@
       scanMsg.textContent = "Lendo imagem…";
       var url = URL.createObjectURL(f), img = new Image();
       img.onload = function () {
-        qrDecode(img, img.width, img.height, true).then(function (r) {
+        qrDecode(img, img.width, img.height, "max").then(function (r) {
           if (r) gotString(r); else scanMsg.textContent = "Não encontrei QR Code nessa imagem.";
         });
       };
