@@ -22286,13 +22286,19 @@
     var stream = null, scanning = false;
     var massive = false, massCount = 0, massLote = "", massLast = { code: "", t: 0 }, massBusy = false;
     var audioCtx = null;
-    function beep() {
+    function unlockAudio() {
       try {
         audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+      } catch (e) {}
+    }
+    function beep(freq) {
+      try {
+        unlockAudio();
         var o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        o.frequency.value = 1000; g.gain.value = 0.08;
+        o.frequency.value = freq || 1000; g.gain.value = 0.2;
         o.connect(g); g.connect(audioCtx.destination);
-        o.start(); o.stop(audioCtx.currentTime + 0.09);
+        o.start(); o.stop(audioCtx.currentTime + 0.12);
       } catch (e) { /* sem áudio: ignora */ }
     }
 
@@ -22334,9 +22340,7 @@
     var hero = document.createElement("div"); hero.className = "qr-hero";
     hero.innerHTML = '<i class="ti ti-qrcode"></i><div><b>Captura de QR Code</b><span>Aponte a câmera, use o modo massivo para várias notas ou leia de uma imagem. Repetidos são ignorados.</span></div>';
     form.insertBefore(hero, form.firstChild);
-    var timerBtn = document.createElement("button"); timerBtn.type = "button"; timerBtn.className = "odo-btn"; timerBtn.innerHTML = '<i class="ti ti-camera"></i> Foto com contagem (3s)';
-    btnRow.insertBefore(timerBtn, galBtn);
-    [btnRow, vf, hintEl, massCounter, stopBtn, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    [btnRow, hintEl, massCounter, scanMsg, vf, stopBtn, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
     btnRow.classList.add("qr-btn-grid");
     capSec.body.appendChild(form);
 
@@ -22344,7 +22348,7 @@
       scanning = false;
       massive = false; massCounter.style.display = "none"; massBtn.classList.remove("primary");
       if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); hintEl.style.display = "none"; nfBtn.style.display = "none"; countEl.style.display = "none"; if (countTimer) { clearInterval(countTimer); countTimer = null; } stopBtn.style.display = "none";
+      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); hintEl.style.display = "none"; nfBtn.style.display = "none"; countEl.style.display = "none"; if (countTimer) { clearInterval(countTimer); countTimer = null; } assisting = false; stopBtn.style.display = "none";
     }
     function gotString(s) {
       strArea.value = s;
@@ -22361,8 +22365,9 @@
       if (s < 4) msg = "📐 Enquadre o QR no centro da moldura";
       else if (s < 8) msg = "🔍 Aproxime o papel (cerca de 20–30 cm) e segure firme";
       else if (s < 12) msg = "💡 Melhore a luz e evite reflexo no papel";
-      else msg = "📸 Difícil de ler? Use “Foto com contagem” e segure o papel parado";
-      hintEl.textContent = msg;
+      else msg = "📸 Difícil de ler? Segure o papel parado e firme";
+      if (!assisting) hintEl.textContent = msg;
+      if (s >= 10 && !assisting) assist();
     }
     var nfBtn = document.createElement("button"); nfBtn.type = "button"; nfBtn.className = "odo-btn"; nfBtn.style.display = "none"; nfBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar este QR mesmo assim';
     massCounter.parentNode ? massCounter.parentNode.insertBefore(nfBtn, massCounter.nextSibling) : null;
@@ -22378,7 +22383,7 @@
         if (!nfBtn.parentNode && massCounter.parentNode) massCounter.parentNode.insertBefore(nfBtn, massCounter.nextSibling);
         nfBtn.style.display = "";
         massCounter.textContent = "⚠️ Este QR parece NÃO ser fiscal (pode ser outro QR da nota). Aponte para o correto — ou toque em “Salvar este QR mesmo assim”. ✅ " + massCount + " salvo(s).";
-        if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+        beep(450); if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
         return Promise.resolve();
       }
       var dup = findDup(code);
@@ -22386,7 +22391,7 @@
         massDup++;
         massCounter.textContent = "↩️ Já capturado em " + fmtDT(dup.quando) + " — ignorado (" + massDup + " repetido(s)). ✅ " + massCount + " novo(s).";
         massCounter.classList.add("flash"); setTimeout(function () { massCounter.classList.remove("flash"); }, 350);
-        if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
+        beep(650); if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
         return Promise.resolve();
       }
       massBusy = true;
@@ -22420,13 +22425,14 @@
             setTimeout(function () { requestAnimationFrame(loop); }, 120);
             return;
           }
-          if (r) { stopCam(); gotString(r); } else setTimeout(function () { requestAnimationFrame(loop); }, 150);
+          if (r) { beep(); if (navigator.vibrate) navigator.vibrate(60); stopCam(); gotString(r); } else setTimeout(function () { requestAnimationFrame(loop); }, 150);
         });
       } else requestAnimationFrame(loop);
     }
     function startCam(isMassive) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scanMsg.textContent = "Este navegador não permite acessar a câmera."; return; }
       stopCam();
+      unlockAudio(); // precisa nascer dentro do toque do usuário, senão o celular deixa o bip mudo
       scanMsg.textContent = "Abrindo câmera…";
       if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = "Captura massiva ativa — aponte para cada QR."; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function (st) {
@@ -22445,32 +22451,37 @@
       scanMsg.textContent = was ? "Captura massiva encerrada: " + n + " QR(s) salvo(s)" + (massDup ? ", " + massDup + " repetido(s) ignorado(s)." : ".") : "";
       if (was) { rebuildFilter(); renderTable(); }
     });
-    function snapAndDecode() {
-      scanMsg.textContent = "Lendo a foto…";
-      var c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
-      c.getContext("2d").drawImage(video, 0, 0);
-      qrDecode(c, c.width, c.height, true).then(function (r) {
-        if (r) { stopCam(); gotString(r); }
-        else { scanMsg.textContent = "Não achei o QR nessa foto. Ajuste a distância/luz e toque em “Foto com contagem” de novo."; hintEl.style.display = ""; hintEl.textContent = "↔️ Tente aproximar ou afastar um pouco"; }
-      });
+    // Assistente (pedido do Georges — vale para captura normal E massiva, sem botão/modo
+    // próprio): se nada foi lido por ~10s, mostra "Segure parado 3…2…1" e tenta uma
+    // leitura em resolução cheia da imagem parada.
+    var assisting = false;
+    function handleRead(r) {
+      if (massive) {
+        var now = Date.now();
+        if (!massBusy && !(r === massLast.code && now - massLast.t < 4000)) { massLast = { code: r, t: now }; scanStartedAt = now; massSave(r); }
+      } else { beep(); if (navigator.vibrate) navigator.vibrate(60); stopCam(); gotString(r); }
     }
-    timerBtn.addEventListener("click", function () {
-      var go = function () {
-        if (countTimer) clearInterval(countTimer);
-        var n = 3;
-        hintEl.style.display = ""; hintEl.textContent = "🤚 Segure o papel parado…";
-        countEl.style.display = ""; countEl.textContent = String(n);
-        countTimer = setInterval(function () {
-          n--;
-          if (n <= 0) { clearInterval(countTimer); countTimer = null; countEl.style.display = "none"; snapAndDecode(); }
-          else countEl.textContent = String(n);
-        }, 1000);
-      };
-      if (stream && video.readyState >= 2) { scanning = false; go(); return; }
-      startCam(false);
-      var wait = setInterval(function () { if (stream && video.readyState >= 2) { clearInterval(wait); scanning = false; go(); } }, 200);
-      setTimeout(function () { clearInterval(wait); }, 8000);
-    });
+    function assist() {
+      if (assisting || !stream || !(video.readyState >= 2)) return;
+      assisting = true;
+      var n = 3;
+      hintEl.style.display = ""; hintEl.textContent = "🤚 Segure o papel parado…";
+      countEl.style.display = ""; countEl.textContent = String(n);
+      countTimer = setInterval(function () {
+        n--;
+        if (n > 0) { countEl.textContent = String(n); return; }
+        clearInterval(countTimer); countTimer = null; countEl.style.display = "none";
+        if (!stream || !video.videoWidth) { assisting = false; return; }
+        var c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
+        c.getContext("2d").drawImage(video, 0, 0);
+        qrDecode(c, c.width, c.height, true).then(function (r) {
+          assisting = false; scanStartedAt = Date.now();
+          if (!stream) return;
+          if (r) handleRead(r);
+          else { hintEl.style.display = ""; hintEl.textContent = "↔️ Não consegui ler — aproxime ou afaste um pouco e segure firme"; }
+        });
+      }, 1000);
+    }
     galBtn.addEventListener("click", function () { galInput.click(); });
     galInput.addEventListener("change", function () {
       var f = galInput.files[0]; galInput.value = "";

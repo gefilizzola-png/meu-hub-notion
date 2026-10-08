@@ -9015,3 +9015,4 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 /* Captura QR — câmera mais baixa pra mensagem de sucesso caber na tela */
 .qr-viewfinder { max-width: 340px; }
 .qr-viewfinder .qr-video { max-height: 210px; object-fit: cover; }
+.qr-viewfinder .qr-video { max-height: 170px; }
