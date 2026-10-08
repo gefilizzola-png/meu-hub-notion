@@ -9037,3 +9037,7 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .qr-viewfinder { max-width: 100%; width: 100%; margin: 0; }
 .qr-viewfinder .qr-video { max-width: 100%; width: 100%; max-height: 380px; object-fit: cover; }
 .qr-hint, .qr-mass-counter { margin: 0; }
+/* Captura QR: nada pode "pular" de lugar enquanto a câmera roda */
+.qr-hint { min-height: 2.6em; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.qr-viewfinder { contain: layout paint; transform: translateZ(0); }
+.qr-viewfinder .qr-video { display: block; width: 100%; height: auto; }

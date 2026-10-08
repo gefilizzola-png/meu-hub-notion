@@ -22366,8 +22366,8 @@
       else if (s < 8) msg = "🔍 Aproxime o papel (cerca de 20–30 cm) e segure firme";
       else if (s < 12) msg = "💡 Melhore a luz e evite reflexo no papel";
       else msg = "📸 Difícil de ler? Segure o papel parado e firme";
-      if (!assisting) hintEl.textContent = msg;
-      if (s >= 10 && !assisting) assist();
+      if (!assisting && hintEl.textContent !== msg) hintEl.textContent = msg;
+      if (s >= 12 && !assisting && Date.now() - lastAssist > 20000) assist();
     }
     var nfBtn = document.createElement("button"); nfBtn.type = "button"; nfBtn.className = "odo-btn"; nfBtn.style.display = "none"; nfBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar este QR mesmo assim';
     massCounter.parentNode ? massCounter.parentNode.insertBefore(nfBtn, massCounter.nextSibling) : null;
@@ -22436,7 +22436,7 @@
       unlockAudio(); // precisa nascer dentro do toque do usuário, senão o celular deixa o bip mudo
       scanMsg.textContent = "Abrindo câmera…";
       if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); galBtn.classList.remove("primary"); massCounter.style.display = ""; massCounter.textContent = ""; }
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function (st) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(function (st) {
         stream = st; video.srcObject = st; video.style.display = ""; vf.classList.add("on"); stopBtn.style.display = "";
         return video.play();
       }).then(function () {
@@ -22456,7 +22456,7 @@
     // Assistente (pedido do Georges — vale para captura normal E massiva, sem botão/modo
     // próprio): se nada foi lido por ~10s, mostra "Segure parado 3…2…1" e tenta uma
     // leitura em resolução cheia da imagem parada.
-    var assisting = false;
+    var assisting = false, lastAssist = 0;
     function handleRead(r) {
       if (massive) {
         var now = Date.now();
@@ -22466,7 +22466,7 @@
     function assist() {
       // leitura de apoio em resolução total, sem contagem (sem overlay)
       if (assisting || !stream || !(video.readyState >= 2) || !video.videoWidth) return;
-      assisting = true;
+      assisting = true; lastAssist = Date.now();
       var c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
       c.getContext("2d").drawImage(video, 0, 0);
       qrDecode(c, c.width, c.height, true).then(function (r) {
