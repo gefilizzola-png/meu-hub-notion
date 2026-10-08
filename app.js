@@ -22319,7 +22319,7 @@
     var capSec = buildCollapsibleSection("Capturar QR Code", true);
     wrap.appendChild(capSec.section);
     var form = document.createElement("div"); form.className = "odo-form";
-    var scanBtn = document.createElement("button"); scanBtn.type = "button"; scanBtn.className = "odo-btn primary"; scanBtn.innerHTML = '<i class="ti ti-qrcode"></i> Escanear com a câmera';
+    var scanBtn = document.createElement("button"); scanBtn.type = "button"; scanBtn.className = "odo-btn"; scanBtn.innerHTML = '<i class="ti ti-qrcode"></i> Escanear com a câmera';
     var massBtn = document.createElement("button"); massBtn.type = "button"; massBtn.className = "odo-btn"; massBtn.innerHTML = '<i class="ti ti-bolt"></i> Captura massiva';
     var galBtn = document.createElement("button"); galBtn.type = "button"; galBtn.className = "odo-btn"; galBtn.innerHTML = '<i class="ti ti-photo"></i> Imagem da galeria';
     var galInput = document.createElement("input"); galInput.type = "file"; galInput.accept = "image/*"; galInput.style.display = "none";
@@ -22340,13 +22340,13 @@
     var hero = document.createElement("div"); hero.className = "qr-hero";
     hero.innerHTML = '<i class="ti ti-qrcode"></i><div><b>Captura de QR Code</b><span>Aponte a câmera, use o modo massivo para várias notas ou leia de uma imagem. Repetidos são ignorados.</span></div>';
     form.insertBefore(hero, form.firstChild);
-    [btnRow, vf, stopBtn, hintEl, massCounter, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    [btnRow, vf, hintEl, massCounter, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
     btnRow.classList.add("qr-btn-grid");
     capSec.body.appendChild(form);
 
     function stopCam() {
       scanning = false;
-      massive = false; massCounter.style.display = "none"; massBtn.classList.remove("primary");
+      massive = false; massCounter.style.display = "none"; massBtn.classList.remove("primary"); scanBtn.classList.remove("primary");
       if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
       video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); hintEl.style.display = "none"; nfBtn.style.display = "none"; countEl.style.display = "none"; if (countTimer) { clearInterval(countTimer); countTimer = null; } assisting = false; stopBtn.style.display = "none";
     }
@@ -22432,9 +22432,10 @@
     function startCam(isMassive) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scanMsg.textContent = "Este navegador não permite acessar a câmera."; return; }
       stopCam();
+      if (!isMassive) { scanBtn.classList.add("primary"); galBtn.classList.remove("primary"); }
       unlockAudio(); // precisa nascer dentro do toque do usuário, senão o celular deixa o bip mudo
       scanMsg.textContent = "Abrindo câmera…";
-      if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = ""; }
+      if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); galBtn.classList.remove("primary"); massCounter.style.display = ""; massCounter.textContent = ""; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function (st) {
         stream = st; video.srcObject = st; video.style.display = ""; vf.classList.add("on"); stopBtn.style.display = "";
         return video.play();
@@ -22443,14 +22444,15 @@
         scanning = true; scanStartedAt = Date.now(); frameN = 0; hintEl.style.display = ""; updateHint(); loop();
       }).catch(function (e) { stopCam(); scanMsg.textContent = "Não consegui abrir a câmera (" + ((e && e.name) || "erro") + "). Permita o acesso ou use a galeria."; });
     }
-    scanBtn.addEventListener("click", function () { startCam(false); });
-    massBtn.addEventListener("click", function () { startCam(true); });
-    stopBtn.addEventListener("click", function () {
+    // Os 3 botões são "liga/desliga": clicar ativa (fundo azul), clicar de novo desativa e volta ao estado inicial.
+    scanBtn.addEventListener("click", function () { if (scanBtn.classList.contains("primary")) { stopCam(); scanMsg.textContent = ""; } else startCam(false); });
+    massBtn.addEventListener("click", function () { if (massBtn.classList.contains("primary")) stopMassive(); else startCam(true); });
+    function stopMassive() {
       var n = massCount, was = massive;
       stopCam();
       scanMsg.textContent = was ? "Captura massiva encerrada: " + n + " QR(s) salvo(s)" + (massDup ? ", " + massDup + " repetido(s) ignorado(s)." : ".") : "";
       if (was) { rebuildFilter(); renderTable(); }
-    });
+    }
     // Assistente (pedido do Georges — vale para captura normal E massiva, sem botão/modo
     // próprio): se nada foi lido por ~10s, mostra "Segure parado 3…2…1" e tenta uma
     // leitura em resolução cheia da imagem parada.
@@ -22474,10 +22476,15 @@
         else { hintEl.style.display = ""; hintEl.textContent = "↔️ Não consegui ler — aproxime ou afaste um pouco e segure firme"; }
       });
     }
-    galBtn.addEventListener("click", function () { galInput.click(); });
+    galBtn.addEventListener("click", function () {
+      if (galBtn.classList.contains("primary")) { galBtn.classList.remove("primary"); strArea.value = ""; scanMsg.textContent = ""; return; }
+      if (stream) { if (massive) stopMassive(); else stopCam(); }
+      galInput.click();
+    });
     galInput.addEventListener("change", function () {
       var f = galInput.files[0]; galInput.value = "";
       if (!f) return;
+      galBtn.classList.add("primary");
       scanMsg.textContent = "Lendo imagem…";
       var url = URL.createObjectURL(f), img = new Image();
       img.onload = function () {
