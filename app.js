@@ -19787,19 +19787,21 @@
       s.className = "verif-summary-pill";
       s.textContent = "Período: " + (state.start ? transacoesFmtDateBR(state.start) : "início") + " a " + (state.end ? transacoesFmtDateBR(state.end) : "hoje") +
         " · " + data.analyzed + " transações analisadas · " + total + " apontamentos";
-      summaryEl.appendChild(s);
+      var sumRow = document.createElement("div"); sumRow.className = "verif-summary-row";
+      sumRow.appendChild(s);
+      summaryEl.appendChild(sumRow);
       if (data.ajustadosTotal) {
-        var ab = document.createElement("button"); ab.type = "button"; ab.className = "filter-trigger"; ab.style.marginLeft = "8px";
+        var ab = document.createElement("button"); ab.type = "button"; ab.className = "filter-trigger";
         ab.innerHTML = '<i class="ti ti-' + (state.showAdj ? "eye-off" : "eye") + '"></i> ' + (state.showAdj ? "Ocultar ajustados" : "Mostrar ajustados (" + data.ajustadosTotal + ")");
         ab.addEventListener("click", function () { state.showAdj = !state.showAdj; load(); });
-        summaryEl.appendChild(ab);
-        var cb = document.createElement("button"); cb.type = "button"; cb.className = "filter-trigger"; cb.style.marginLeft = "6px";
+        sumRow.appendChild(ab);
+        var cb = document.createElement("button"); cb.type = "button"; cb.className = "filter-trigger";
         cb.innerHTML = '<i class="ti ti-eraser"></i> Limpar marcas (após importar CSV)';
         cb.addEventListener("click", function () {
           authFetch(cfg.templateWorkerUrl + "/verif-ajustado?unlock=" + encodeURIComponent(unlockToken), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clearAll: true }) })
             .then(function () { state.showAdj = false; load(); });
         });
-        summaryEl.appendChild(cb);
+        sumRow.appendChild(cb);
       }
     }
 
@@ -29628,7 +29630,43 @@
       var bOk = document.createElement("button"); bOk.type = "button"; bOk.className = "ajustes-btn"; bOk.innerHTML = '<i class="ti ti-check"></i> Funcionou';
       bOk.addEventListener("click", function () { ajustesSetStatus(it, "feito"); });
       var bNo = document.createElement("button"); bNo.type = "button"; bNo.className = "ajustes-btn"; bNo.innerHTML = '<i class="ti ti-arrow-back-up"></i> Reabrir';
-      bNo.addEventListener("click", function () { ajustesSetStatus(it, "pendente"); });
+      bNo.addEventListener("click", function () {
+        if (ib.querySelector(".ajustes-reopen")) return;
+        var box = document.createElement("div"); box.className = "ajustes-reopen";
+        var rta = document.createElement("textarea"); rta.className = "ajustes-text"; rta.rows = 3; rta.placeholder = "O que você verificou depois do ajuste e por que não foi validado? (opcional)";
+        var rimgs = []; var rthumbs = document.createElement("div"); rthumbs.className = "ajustes-imgs";
+        function addImgFile(f) {
+          if (!f || rimgs.length >= 4) return;
+          ajustesShrinkImage(f).then(function (src) {
+            rimgs.push(src);
+            var im = document.createElement("img"); im.src = src; im.className = "ajustes-img"; rthumbs.appendChild(im);
+          }).catch(function () {});
+        }
+        rta.addEventListener("paste", function (e) {
+          var items = (e.clipboardData && e.clipboardData.items) || [];
+          for (var i = 0; i < items.length; i++) if (items[i].type && items[i].type.indexOf("image/") === 0) { addImgFile(items[i].getAsFile()); e.preventDefault(); }
+        });
+        var fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; fi.multiple = true; fi.style.display = "none";
+        fi.addEventListener("change", function () { Array.prototype.forEach.call(fi.files, addImgFile); fi.value = ""; });
+        var bAdd = document.createElement("button"); bAdd.type = "button"; bAdd.className = "ajustes-btn"; bAdd.innerHTML = '<i class="ti ti-photo-plus"></i> Imagem';
+        bAdd.addEventListener("click", function () { fi.click(); });
+        var bGo2 = document.createElement("button"); bGo2.type = "button"; bGo2.className = "ajustes-add"; bGo2.textContent = "Reabrir";
+        var bCancel = document.createElement("button"); bCancel.type = "button"; bCancel.className = "ajustes-btn"; bCancel.textContent = "Cancelar";
+        bCancel.addEventListener("click", function () { box.parentNode.removeChild(box); });
+        bGo2.addEventListener("click", function () {
+          bGo2.disabled = true;
+          var c = rta.value.trim();
+          var body = { status: "pendente" };
+          if (c) { var d = new Date(); body.texto = it.texto + "\n↩️ Reaberto em " + pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + ": " + c; }
+          if (rimgs.length) body.imagens = (it.imagens || []).concat(rimgs).slice(-4);
+          ajustesApi("/ajustes?id=" + encodeURIComponent(it.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+            .then(function (dd) { if (dd && dd.item) Object.assign(it, dd.item); ajustesRenderList(); ajustesUpdateBadge(); })
+            .catch(function () { bGo2.disabled = false; });
+        });
+        var rrow = document.createElement("div"); rrow.className = "ajustes-row"; rrow.appendChild(bAdd); rrow.appendChild(bGo2); rrow.appendChild(bCancel);
+        box.appendChild(rta); box.appendChild(rthumbs); box.appendChild(rrow); box.appendChild(fi);
+        ib.appendChild(box); rta.focus();
+      });
       if (it.origem && cfg.pages[it.origem]) {
         var bGo = document.createElement("button"); bGo.type = "button"; bGo.className = "ajustes-btn"; bGo.innerHTML = '<i class="ti ti-arrow-right"></i> Ir para a página';
         bGo.title = "Abrir a página deste ajuste para validar";
