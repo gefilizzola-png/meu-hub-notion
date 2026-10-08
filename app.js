@@ -22255,7 +22255,26 @@
     var first = qrDetector
       ? qrDetector.detect(source).then(function (r) { return r && r.length ? r[0].rawValue : null; }).catch(function () { return null; })
       : Promise.resolve(null);
-    return first.then(function (val) {
+    // Nova abordagem p/ tinta fraca/pontilhada: o detector nativo (o mesmo motor da câmera do celular)
+    // costuma ler quando a imagem é REDUZIDA — reduzir funde os pontinhos e "fecha" os módulos do QR.
+    // Tenta em várias escalas (e com leve desfoque) antes de cair no jsQR.
+    var scaled = first.then(function (val) {
+      if (val || deep !== "max" || !qrDetector) return val;
+      var scales = [1600, 1100, 800, 560, 400], variants = ["", "blur(1px) contrast(1.6)", "grayscale(1) contrast(2.2) brightness(1.1)"], jobs = [];
+      scales.forEach(function (mx) { variants.forEach(function (f) { jobs.push([mx, f]); }); });
+      var idx = 0;
+      function next() {
+        if (idx >= jobs.length) return Promise.resolve(null);
+        var j = jobs[idx++], sc = Math.min(1, j[0] / Math.max(w, h)), c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(w * sc)); c.height = Math.max(1, Math.round(h * sc));
+        var ctx = c.getContext("2d");
+        try { if (j[1]) ctx.filter = j[1]; } catch (e) {}
+        try { ctx.drawImage(source, 0, 0, c.width, c.height); } catch (e) { return next(); }
+        return qrDetector.detect(c).then(function (r) { return r && r.length ? r[0].rawValue : null; }).catch(function () { return null; }).then(function (v) { return v || next(); });
+      }
+      return next();
+    });
+    return scaled.then(function (val) {
       if (val) return val;
       return qrLoadJsQR().then(function (jsQR) {
         // deep: true = leve (ao vivo, a cada N quadros); "mid" = + filtros p/ tinta fraca (ao vivo, mais raro);
@@ -22354,7 +22373,7 @@
     var form = document.createElement("div"); form.className = "odo-form";
     var scanBtn = document.createElement("button"); scanBtn.type = "button"; scanBtn.className = "odo-btn"; scanBtn.innerHTML = '<i class="ti ti-qrcode"></i> Escanear com a câmera';
     var massBtn = document.createElement("button"); massBtn.type = "button"; massBtn.className = "odo-btn"; massBtn.innerHTML = '<i class="ti ti-bolt"></i> Captura massiva';
-    var galBtn = document.createElement("button"); galBtn.type = "button"; galBtn.className = "odo-btn"; galBtn.innerHTML = '<i class="ti ti-photo"></i> Imagem da galeria';
+    var galBtn = document.createElement("button"); galBtn.type = "button"; galBtn.className = "odo-btn"; galBtn.innerHTML = '<i class="ti ti-camera"></i> Foto / galeria';
     var galInput = document.createElement("input"); galInput.type = "file"; galInput.accept = "image/*"; galInput.style.display = "none";
     var btnRow = document.createElement("div"); btnRow.className = "odo-row";
     [scanBtn, massBtn, galBtn, galInput].forEach(function (e) { btnRow.appendChild(e); });
