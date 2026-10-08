@@ -22259,8 +22259,8 @@
     // costuma ler quando a imagem é REDUZIDA — reduzir funde os pontinhos e "fecha" os módulos do QR.
     // Tenta em várias escalas (e com leve desfoque) antes de cair no jsQR.
     var scaled = first.then(function (val) {
-      if (val || deep !== "max" || !qrDetector) return val;
-      var scales = [1600, 1100, 800, 560, 400], variants = ["", "blur(1px) contrast(1.6)", "grayscale(1) contrast(2.2) brightness(1.1)"], jobs = [];
+      if (val || (deep !== "max" && deep !== "mid") || !qrDetector) return val;
+      var scales = deep === "max" ? [1600, 1100, 800, 560, 400] : [900, 560], variants = deep === "max" ? ["", "blur(1px) contrast(1.6)", "grayscale(1) contrast(2.2) brightness(1.1)"] : ["", "blur(1px) contrast(1.6)"], jobs = [];
       scales.forEach(function (mx) { variants.forEach(function (f) { jobs.push([mx, f]); }); });
       var idx = 0;
       function next() {
@@ -22282,7 +22282,7 @@
         var tries = deep === "max"
           ? [[1280, false, 0], [1920, true, 0], [1920, true, 0.7], [2200, true, 0.5], [1600, true, 0, "blur"], [1600, true, 0, "adapt"], [1600, true, 0, "blurAdapt"], [2000, true, 0.7, "blurAdapt"], [2000, true, 0.5, "adapt"]]
           : deep === "mid"
-          ? [[1280, false, 0], [1280, true, 0, "adapt"], [1280, true, 0, "blur"]]
+          ? [[1280, false, 0], [1280, true, 0, "adapt"]]
           : deep
           ? [[1280, false, 0], [1920, true, 0], [1920, true, 0.7], [2200, true, 0.5]]
           : [[1100, false, 0]];
@@ -22449,7 +22449,7 @@
       else if (s < 12) msg = "💡 Melhore a luz e evite reflexo no papel";
       else msg = "📸 Difícil de ler? Segure o papel parado e firme";
       if (!assisting && hintEl.textContent !== msg) hintEl.textContent = msg;
-      if (s >= 12 && !assisting && Date.now() - lastAssist > 20000) assist();
+      if (s >= 2 && !assisting && Date.now() - lastAssist > 3000) assist();
     }
     var nfBtn = document.createElement("button"); nfBtn.type = "button"; nfBtn.className = "odo-btn"; nfBtn.style.display = "none"; nfBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar este QR mesmo assim';
     massCounter.parentNode ? massCounter.parentNode.insertBefore(nfBtn, massCounter.nextSibling) : null;
@@ -22493,7 +22493,7 @@
       if (!scanning) return;
       if (video.readyState >= 2 && video.videoWidth) {
         frameN++;
-        qrDecode(video, video.videoWidth, video.videoHeight, frameN % 12 === 0 ? "mid" : frameN % 4 === 0).then(function (r) {
+        qrDecode(video, video.videoWidth, video.videoHeight, frameN % 3 === 0 ? "mid" : frameN % 4 === 0).then(function (r) {
           if (!scanning) return;
           if (!r) { if (massive && Date.now() - massLast.t < 6000) { /* acabou de salvar: sem dica */ } else updateHint(); }
           if (massive) {
