@@ -9032,3 +9032,8 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 /* Captura QR: botões liga/desliga — "primary" = ativo (azul) */
 .qr-btn-grid .odo-btn { background: #fff; color: #1f1f1d; border: 1px solid #dbe4ff; }
 .qr-btn-grid .odo-btn.primary { background: linear-gradient(135deg, #4c6ef5, #7048e8); color: #fff; border: 0; }
+/* Captura QR: câmera na largura toda do card, mensagens coladas nela */
+.qr-modern .odo-form { gap: 6px; max-width: none; }
+.qr-viewfinder { max-width: 100%; width: 100%; margin: 0; }
+.qr-viewfinder .qr-video { max-width: 100%; width: 100%; max-height: 380px; object-fit: cover; }
+.qr-hint, .qr-mass-counter { margin: 0; }
