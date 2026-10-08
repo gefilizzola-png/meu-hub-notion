@@ -22342,7 +22342,7 @@
       scanning = false;
       massive = false; massCounter.style.display = "none"; massBtn.classList.remove("primary");
       if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); hintEl.style.display = "none"; countEl.style.display = "none"; if (countTimer) { clearInterval(countTimer); countTimer = null; } stopBtn.style.display = "none";
+      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); hintEl.style.display = "none"; nfBtn.style.display = "none"; countEl.style.display = "none"; if (countTimer) { clearInterval(countTimer); countTimer = null; } stopBtn.style.display = "none";
     }
     function gotString(s) {
       strArea.value = s;
@@ -22362,10 +22362,20 @@
       else msg = "📸 Difícil de ler? Use “Foto com contagem” e segure o papel parado";
       hintEl.textContent = msg;
     }
-    function massSave(code) {
-      if (!qrIsFiscal(code)) {
+    var nfBtn = document.createElement("button"); nfBtn.type = "button"; nfBtn.className = "odo-btn"; nfBtn.style.display = "none"; nfBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar este QR mesmo assim';
+    massCounter.parentNode ? massCounter.parentNode.insertBefore(nfBtn, massCounter.nextSibling) : null;
+    var nfPending = "";
+    nfBtn.addEventListener("click", function () {
+      var c = nfPending; nfPending = ""; nfBtn.style.display = "none";
+      if (c) { massSave(c, true); }
+    });
+    function massSave(code, force) {
+      if (!force && !qrIsFiscal(code)) {
         nonFiscalSkipped++;
-        massCounter.textContent = "⚠️ QR não fiscal ignorado (" + nonFiscalSkipped + ") — outro QR da nota? ✅ " + massCount + " salvo(s).";
+        nfPending = code;
+        if (!nfBtn.parentNode && massCounter.parentNode) massCounter.parentNode.insertBefore(nfBtn, massCounter.nextSibling);
+        nfBtn.style.display = "";
+        massCounter.textContent = "⚠️ Este QR parece NÃO ser fiscal (pode ser outro QR da nota). Aponte para o correto — ou toque em “Salvar este QR mesmo assim”. ✅ " + massCount + " salvo(s).";
         if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
         return Promise.resolve();
       }
@@ -22396,11 +22406,11 @@
         frameN++;
         qrDecode(video, video.videoWidth, video.videoHeight, frameN % 4 === 0).then(function (r) {
           if (!scanning) return;
-          if (!r && !massive) updateHint();
+          if (!r) { if (massive && Date.now() - massLast.t < 6000) { /* acabou de salvar: sem dica */ } else updateHint(); }
           if (massive) {
             var now = Date.now();
             if (r && !massBusy && !(r === massLast.code && now - massLast.t < 4000)) {
-              massLast = { code: r, t: now };
+              massLast = { code: r, t: now }; scanStartedAt = now;
               massSave(r).then(function () { setTimeout(function () { requestAnimationFrame(loop); }, 500); });
               return;
             }
@@ -29619,6 +29629,12 @@
       bOk.addEventListener("click", function () { ajustesSetStatus(it, "feito"); });
       var bNo = document.createElement("button"); bNo.type = "button"; bNo.className = "ajustes-btn"; bNo.innerHTML = '<i class="ti ti-arrow-back-up"></i> Reabrir';
       bNo.addEventListener("click", function () { ajustesSetStatus(it, "pendente"); });
+      if (it.origem && cfg.pages[it.origem]) {
+        var bGo = document.createElement("button"); bGo.type = "button"; bGo.className = "ajustes-btn"; bGo.innerHTML = '<i class="ti ti-arrow-right"></i> Ir para a página';
+        bGo.title = "Abrir a página deste ajuste para validar";
+        bGo.addEventListener("click", function () { ajustesClose(); navigate(it.origem); });
+        ib.appendChild(bGo);
+      }
       ib.appendChild(bOk); ib.appendChild(bNo); main.appendChild(ib);
     }
     if (it.imagens && it.imagens.length) {
@@ -30786,7 +30802,7 @@
         var due = e.proxima.getTime();
         if (due > now + 86400000) return;
         // 1ª dose recém-criada: o aviso "em andamento" já cobre — evita notificação dupla
-        if (!e.feitas && Math.abs(due - now) <= 15 * 60000) return;
+        if (!e.feitas && (Math.abs(due - now) <= 15 * 60000 || (t.createdAt && now - new Date(t.createdAt).getTime() < 30 * 60000 && due <= now + 15 * 60000))) return;
         var extra = {};
         extra[source.dateProperty] = { start: new Date(due <= now ? now : due).toISOString() };
         out.push({
@@ -33030,9 +33046,25 @@
       // nada por fonte pra isso).
       var main = document.createElement("a");
       main.className = "notif-card-main";
-      main.href = n.url;
-      main.target = "_blank";
-      main.rel = "noopener";
+      // itens do PRÓPRIO app (sem página no Notion: tratamentos, remédios,
+      // etc. — url = "#pagina" sem parâmetros) abrem dentro do app, com os
+      // params do target (aba/tratamento). Antes o <a> abria "#remedios" em
+      // nova aba e perdia aba+tratamento (bug 46155d3c).
+      var ownApp = n.target && n.target.type === "page" && n.url && n.url.indexOf(location.origin + location.pathname) === 0;
+      if (ownApp) {
+        var ownRoute = notifAppRoute(n);
+        main.href = "#" + ownRoute;
+        main.addEventListener("click", function (e) {
+          if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          navigate(ownRoute);
+          closeNotifPanel();
+        });
+      } else {
+        main.href = n.url;
+        main.target = "_blank";
+        main.rel = "noopener";
+      }
       var title = document.createElement("div");
       title.className = "notif-card-title";
       title.textContent = n.title;
