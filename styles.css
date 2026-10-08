@@ -9016,3 +9016,7 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .qr-viewfinder { max-width: 340px; }
 .qr-viewfinder .qr-video { max-height: 210px; object-fit: cover; }
 .qr-viewfinder .qr-video { max-height: 170px; }
+.app-refresh-btn{background:none;border:0;padding:2px 4px;margin-left:6px;color:#8a8a82;cursor:pointer;font-size:14px;line-height:1;vertical-align:middle}
+.app-refresh-btn:hover{color:#3b5bdb}
+.app-refresh-btn.spin i{display:inline-block;animation:appspin .8s linear infinite}
+@keyframes appspin{to{transform:rotate(360deg)}}

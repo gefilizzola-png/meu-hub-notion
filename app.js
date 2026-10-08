@@ -33637,6 +33637,20 @@
     // de config.js, atualizado a cada entrega).
     var versionEl = document.getElementById("sidebarFooterVersion");
     if (versionEl && cfg.appVersion) versionEl.textContent = cfg.appVersion;
+    // Botão "forçar atualização" (equivale a Ctrl+F5 no celular): derruba o
+    // service worker, apaga os caches e rebaixa index/css/js ignorando o
+    // cache HTTP antes de recarregar.
+    var refreshBtn = document.getElementById("appForceRefreshBtn");
+    if (refreshBtn) refreshBtn.addEventListener("click", function () {
+      refreshBtn.disabled = true; refreshBtn.classList.add("spin");
+      var urls = [location.pathname + location.search];
+      Array.prototype.forEach.call(document.querySelectorAll("script[src], link[rel=stylesheet]"), function (el) { urls.push(el.getAttribute("src") || el.getAttribute("href")); });
+      var tasks = [];
+      try { if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) tasks.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })); } catch (e) {}
+      try { if (window.caches && caches.keys) tasks.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })); } catch (e) {}
+      urls.forEach(function (u) { tasks.push(fetch(u, { cache: "reload" }).catch(function () {})); });
+      Promise.all(tasks).catch(function () {}).then(function () { location.reload(); });
+    });
 
     buildIndex();
     collectSearchInputs();
