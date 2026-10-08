@@ -22336,6 +22336,36 @@
     var hintEl = document.createElement("div"); hintEl.className = "qr-hint"; hintEl.style.display = "none";
     var countEl = document.createElement("div"); countEl.className = "qr-countdown"; countEl.style.display = "none";
     var vf = document.createElement("div"); vf.className = "qr-viewfinder"; vf.appendChild(video); vf.appendChild(countEl);
+    // zoom/foco (a câmera nativa foca ao toque e dá zoom; aqui: toque = refocar; botões +/- = zoom, quando o aparelho suporta)
+    var zoomBox = document.createElement("div"); zoomBox.className = "qr-zoom"; zoomBox.style.display = "none";
+    var zoomOut = document.createElement("button"); zoomOut.type = "button"; zoomOut.textContent = "−";
+    var zoomLbl = document.createElement("span"); zoomLbl.textContent = "1x";
+    var zoomIn = document.createElement("button"); zoomIn.type = "button"; zoomIn.textContent = "+";
+    zoomBox.appendChild(zoomOut); zoomBox.appendChild(zoomLbl); zoomBox.appendChild(zoomIn); vf.appendChild(zoomBox);
+    var zoomCap = null, zoomCur = 1;
+    function camTrack() { return stream && stream.getVideoTracks && stream.getVideoTracks()[0]; }
+    function applyZoom(z) {
+      var t = camTrack(); if (!t || !zoomCap) return;
+      z = Math.max(zoomCap.min || 1, Math.min(zoomCap.max || 1, z)); zoomCur = z;
+      t.applyConstraints({ advanced: [{ zoom: z }] }).catch(function () {});
+      zoomLbl.textContent = (Math.round(z * 10) / 10) + "x";
+    }
+    function refocus() {
+      var t = camTrack(); if (!t || !t.getCapabilities) return;
+      var cap = t.getCapabilities(), modes = cap.focusMode || [];
+      if (modes.indexOf("single-shot") >= 0) t.applyConstraints({ advanced: [{ focusMode: "single-shot" }] }).then(function () { return new Promise(function (r) { setTimeout(r, 900); }); }).then(function () { if (modes.indexOf("continuous") >= 0) t.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(function () {}); }).catch(function () {});
+      else if (modes.indexOf("manual") >= 0 && modes.indexOf("continuous") >= 0) t.applyConstraints({ advanced: [{ focusMode: "manual" }] }).then(function () { t.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(function () {}); }).catch(function () {});
+    }
+    function setupCamControls() {
+      var t = camTrack(); zoomCap = null; zoomBox.style.display = "none";
+      if (!t || !t.getCapabilities) return;
+      var cap = t.getCapabilities();
+      if (cap.focusMode && cap.focusMode.indexOf("continuous") >= 0) t.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(function () {});
+      if (cap.zoom && cap.zoom.max > cap.zoom.min) { zoomCap = cap.zoom; zoomCur = zoomCap.min || 1; zoomLbl.textContent = "1x"; zoomBox.style.display = ""; }
+    }
+    zoomIn.addEventListener("click", function (e) { e.stopPropagation(); applyZoom(zoomCur + Math.max(0.5, ((zoomCap && zoomCap.max) || 2) / 6)); });
+    zoomOut.addEventListener("click", function (e) { e.stopPropagation(); applyZoom(zoomCur - Math.max(0.5, ((zoomCap && zoomCap.max) || 2) / 6)); });
+    vf.addEventListener("click", function () { refocus(); });
     ["tl", "tr", "bl", "br"].forEach(function (k) { var c = document.createElement("span"); c.className = "qr-corner qr-corner-" + k; vf.appendChild(c); });
     var hero = document.createElement("div"); hero.className = "qr-hero";
     hero.innerHTML = '<i class="ti ti-qrcode"></i><div><b>Captura de QR Code</b><span>Aponte a câmera, use o modo massivo para várias notas ou leia de uma imagem. Repetidos são ignorados.</span></div>';
@@ -22348,7 +22378,7 @@
       scanning = false;
       massive = false; massCounter.style.display = "none"; massBtn.classList.remove("primary"); scanBtn.classList.remove("primary");
       if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); hintEl.style.display = "none"; nfBtn.style.display = "none"; countEl.style.display = "none"; if (countTimer) { clearInterval(countTimer); countTimer = null; } assisting = false; stopBtn.style.display = "none";
+      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); zoomBox.style.display = "none"; hintEl.style.display = "none"; nfBtn.style.display = "none"; countEl.style.display = "none"; if (countTimer) { clearInterval(countTimer); countTimer = null; } assisting = false; stopBtn.style.display = "none";
     }
     function gotString(s) {
       strArea.value = s;
@@ -22438,6 +22468,7 @@
       if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); galBtn.classList.remove("primary"); massCounter.style.display = ""; massCounter.textContent = ""; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(function (st) {
         stream = st; video.srcObject = st; video.style.display = ""; vf.classList.add("on"); stopBtn.style.display = "";
+        setupCamControls();
         return video.play();
       }).then(function () {
         scanMsg.textContent = "";

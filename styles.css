@@ -9041,3 +9041,7 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .qr-hint { min-height: 2.6em; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 .qr-viewfinder { contain: layout paint; transform: translateZ(0); }
 .qr-viewfinder .qr-video { display: block; width: 100%; height: auto; }
+/* zoom da câmera (só aparece se o aparelho suportar) */
+.qr-zoom { position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.55); border-radius: 18px; padding: 3px 8px; color: #fff; z-index: 3; }
+.qr-zoom button { background: none; border: 0; color: #fff; font-size: 22px; line-height: 1; width: 30px; height: 30px; cursor: pointer; }
+.qr-zoom span { font-size: 12px; min-width: 28px; text-align: center; }
