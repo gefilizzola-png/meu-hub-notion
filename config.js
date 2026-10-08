@@ -1863,7 +1863,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-07 11:15",
+  appVersion: "2026-10-08 00:10",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -1924,8 +1924,7 @@ const APP_CONFIG = {
     { label: "Calendário", target: "calendario", icon: "calendar-event", color: "#e8590c" },
     { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
     { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
-    { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
-    { label: "Financeiro", target: "financeiro_contas_mensais", icon: "wallet", color: "#0f9b8e" }
+    { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" }
   ],
 
   // Lista mestre dos status de "🧲 Andamento" (id da página no Notion +
@@ -2052,8 +2051,7 @@ const APP_CONFIG = {
         { label: "Calendário", target: "calendario", icon: "calendar-event", color: "#e8590c" },
         { label: "Favoritas", target: "favoritas", icon: "star", color: "#f08c00" },
         { label: "Anotações Rápidas", target: "anotacoes", icon: "notes", color: "#2f9e44" },
-        { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" },
-        { label: "Financeiro", target: "financeiro_contas_mensais", icon: "wallet", color: "#0f9b8e" }
+        { label: "Lista de Prioridades", target: "prioridades", icon: "list-check", color: "#8a63d2" }
       ],
       items: [
         { label: "Painel do Dia", type: "page", target: "inicio", icon: "home", pinnedOnly: true },
@@ -2086,6 +2084,12 @@ const APP_CONFIG = {
     // não ela mesma) — render() em app.js pula trackPageVisit() pra
     // páginas com essa flag, então abrir o próprio ranking nunca conta
     // como "1 visita" nele mesmo nem no "Nunca Visitadas".
+    ajustes_app: {
+      title: "Ajustes do app",
+      ajustesApp: true,
+      noTrackVisit: true
+    },
+
     mais_visitadas: {
       title: "Mais Visitadas",
       mostVisited: true,
@@ -3101,6 +3105,8 @@ const APP_CONFIG = {
         { label: "Recentes (Notion)", type: "notion", url: "https://app.notion.com/library/recents?space=georges-filizzola", icon: "clock" },
         { label: "Mais Visitadas", type: "page", target: "mais_visitadas", icon: "chart-bar" },
         { label: "Recentes (Meu Hub)", type: "page", target: "recentes", icon: "history" },
+        // Ajustes do app como página (aparece na pesquisa e no seletor de origem)
+        { label: "Ajustes do app", type: "page", target: "ajustes_app", icon: "ti-adjustments" },
         // pedido do Georges: dados que moram só no KV (Notas, Prioridades,
         // Supermercado, Remédios, config. de notificações etc. — nada disso
         // tem base Notion equivalente) precisavam de um jeito de exportar

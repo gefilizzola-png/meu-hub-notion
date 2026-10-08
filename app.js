@@ -11894,7 +11894,8 @@
   // coluna Data) quanto no título da notificação.
   function provasRelativoLabel(dias) {
     if (dias === null) return "";
-    if (dias <= 0) return "hoje";
+    if (dias < 0) return dias === -1 ? "ontem" : "há " + (-dias) + " dias";
+    if (dias === 0) return "hoje";
     if (dias === 1) return "amanhã";
     return "em " + dias + " dias";
   }
@@ -19696,6 +19697,19 @@
         chip.textContent = VERIF_SEV_LABEL[sev];
         sc.appendChild(chip); row.appendChild(sc);
         var mt = td(reasonText(it), "verif-col-motivo"); mt.title = reasonText(it);
+        var ajBtn = document.createElement("button");
+        ajBtn.type = "button";
+        ajBtn.className = "verif-copy-btn verif-aj-btn" + (it.ajustado ? " active" : "");
+        ajBtn.title = it.ajustado ? "Desfazer: voltar a mostrar este apontamento" : "Já ajustei no Visor — esconder até a próxima atualização geral (CSV)";
+        ajBtn.innerHTML = it.ajustado ? '<i class="ti ti-eye"></i>' : '<i class="ti ti-check"></i>';
+        ajBtn.addEventListener("click", function () {
+          ajBtn.disabled = true;
+          authFetch(cfg.templateWorkerUrl + "/verif-ajustado?unlock=" + encodeURIComponent(unlockToken), { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: it.id, ajustado: !it.ajustado, desc: it.description || "", cat: it.category_name || "" }) })
+            .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); load(); })
+            .catch(function () { ajBtn.disabled = false; });
+        });
+        mt.appendChild(ajBtn);
         tbody.appendChild(row);
         var panelRow = null;
         autoBtn.addEventListener("click", function () {
@@ -19763,6 +19777,19 @@
       s.textContent = "Período: " + (state.start ? transacoesFmtDateBR(state.start) : "início") + " a " + (state.end ? transacoesFmtDateBR(state.end) : "hoje") +
         " · " + data.analyzed + " transações analisadas · " + total + " apontamentos";
       summaryEl.appendChild(s);
+      if (data.ajustadosTotal) {
+        var ab = document.createElement("button"); ab.type = "button"; ab.className = "filter-trigger"; ab.style.marginLeft = "8px";
+        ab.innerHTML = '<i class="ti ti-' + (state.showAdj ? "eye-off" : "eye") + '"></i> ' + (state.showAdj ? "Ocultar ajustados" : "Mostrar ajustados (" + data.ajustadosTotal + ")");
+        ab.addEventListener("click", function () { state.showAdj = !state.showAdj; load(); });
+        summaryEl.appendChild(ab);
+        var cb = document.createElement("button"); cb.type = "button"; cb.className = "filter-trigger"; cb.style.marginLeft = "6px";
+        cb.innerHTML = '<i class="ti ti-eraser"></i> Limpar marcas (após importar CSV)';
+        cb.addEventListener("click", function () {
+          authFetch(cfg.templateWorkerUrl + "/verif-ajustado?unlock=" + encodeURIComponent(unlockToken), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clearAll: true }) })
+            .then(function () { state.showAdj = false; load(); });
+        });
+        summaryEl.appendChild(cb);
+      }
     }
 
     function load() {
@@ -19772,6 +19799,7 @@
       if (state.start) qs.push("start=" + encodeURIComponent(state.start));
       if (state.end) qs.push("end=" + encodeURIComponent(state.end));
       qs.push("unlock=" + encodeURIComponent(unlockToken));
+      if (state.showAdj) qs.push("showAdjusted=1");
       authFetch(cfg.templateWorkerUrl + "/transacoes-verificacoes?" + qs.join("&"))
         .then(function (res) {
           if (res.status === 423) { transacoesClearUnlock(); renderTransacoesLockScreen(wrap, function (token) { renderTransacoesVerificacoesUnlocked(wrap, token); }, "🧹 Transações — Verificações"); return null; }
@@ -22211,9 +22239,20 @@
       else window.prompt("Copie:", t);
     }
 
-    var state = { items: [], search: "", fTipo: [], fDe: "", fAte: "" };
+    var state = { items: [], search: "", fTipo: [], fModo: [], fDe: "", fAte: "" };
     var sortState = { col: 0, dir: -1 };
     var stream = null, scanning = false;
+    var massive = false, massCount = 0, massLote = "", massLast = { code: "", t: 0 }, massBusy = false;
+    var audioCtx = null;
+    function beep() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = 1000; g.gain.value = 0.08;
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(); o.stop(audioCtx.currentTime + 0.09);
+      } catch (e) { /* sem áudio: ignora */ }
+    }
 
     var statusEl = document.createElement("p"); statusEl.className = "empty"; statusEl.textContent = "Carregando…";
     container.appendChild(statusEl);
@@ -22225,10 +22264,12 @@
     wrap.appendChild(capSec.section);
     var form = document.createElement("div"); form.className = "odo-form";
     var scanBtn = document.createElement("button"); scanBtn.type = "button"; scanBtn.className = "odo-btn primary"; scanBtn.innerHTML = '<i class="ti ti-qrcode"></i> Escanear com a câmera';
+    var massBtn = document.createElement("button"); massBtn.type = "button"; massBtn.className = "odo-btn"; massBtn.innerHTML = '<i class="ti ti-bolt"></i> Captura massiva';
     var galBtn = document.createElement("button"); galBtn.type = "button"; galBtn.className = "odo-btn"; galBtn.innerHTML = '<i class="ti ti-photo"></i> Imagem da galeria';
     var galInput = document.createElement("input"); galInput.type = "file"; galInput.accept = "image/*"; galInput.style.display = "none";
     var btnRow = document.createElement("div"); btnRow.className = "odo-row";
-    [scanBtn, galBtn, galInput].forEach(function (e) { btnRow.appendChild(e); });
+    [scanBtn, massBtn, galBtn, galInput].forEach(function (e) { btnRow.appendChild(e); });
+    var massCounter = document.createElement("div"); massCounter.className = "qr-mass-counter"; massCounter.style.display = "none";
     var video = document.createElement("video"); video.className = "odo-preview qr-video"; video.setAttribute("playsinline", ""); video.muted = true; video.style.display = "none";
     var stopBtn = document.createElement("button"); stopBtn.type = "button"; stopBtn.className = "odo-btn"; stopBtn.innerHTML = '<i class="ti ti-player-stop"></i> Parar câmera'; stopBtn.style.display = "none";
     var scanMsg = document.createElement("div"); scanMsg.className = "odo-ocr-status";
@@ -22236,11 +22277,12 @@
     var noteInput = document.createElement("input"); noteInput.type = "text"; noteInput.className = "odo-input"; noteInput.placeholder = "Observação (opcional)";
     var saveBtn = document.createElement("button"); saveBtn.type = "button"; saveBtn.className = "odo-btn primary"; saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar captura';
     var msgEl = document.createElement("div"); msgEl.className = "odo-ocr-status";
-    [btnRow, video, stopBtn, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    [btnRow, video, massCounter, stopBtn, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
     capSec.body.appendChild(form);
 
     function stopCam() {
       scanning = false;
+      massive = false; massCounter.style.display = "none"; massBtn.classList.remove("primary");
       if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
       video.srcObject = null; video.style.display = "none"; stopBtn.style.display = "none";
     }
@@ -22250,28 +22292,61 @@
       scanMsg.textContent = "✅ QR lido" + (ch ? " — chave de acesso " + ch : "") + ". Confira e salve.";
       if (navigator.vibrate) navigator.vibrate(80);
     }
+    function massSave(code) {
+      massBusy = true;
+      return call("/qrcapturas", "POST", { conteudo: code, nota: "", modo: "massiva", lote: massLote }).then(function (d) {
+        state.items.unshift(d.item);
+        massCount++;
+        massCounter.textContent = "✅ " + massCount + " capturado(s) — último: " + (code.length > 40 ? code.slice(0, 37) + "…" : code);
+        massCounter.classList.add("flash");
+        setTimeout(function () { massCounter.classList.remove("flash"); }, 350);
+        beep(); if (navigator.vibrate) navigator.vibrate(60);
+        renderTable();
+      }).catch(function (e) {
+        massCounter.textContent = "⚠️ Falha ao salvar (" + e.message + ") — tentando o próximo…";
+      }).then(function () { massBusy = false; });
+    }
     function loop() {
       if (!scanning) return;
       if (video.readyState >= 2 && video.videoWidth) {
         qrDecode(video, video.videoWidth, video.videoHeight).then(function (r) {
           if (!scanning) return;
+          if (massive) {
+            var now = Date.now();
+            if (r && !massBusy && !(r === massLast.code && now - massLast.t < 4000)) {
+              massLast = { code: r, t: now };
+              massSave(r).then(function () { setTimeout(function () { requestAnimationFrame(loop); }, 500); });
+              return;
+            }
+            if (r && r === massLast.code) massLast.t = now; // ainda enquadrado: mantém a trava anti-duplicata
+            setTimeout(function () { requestAnimationFrame(loop); }, 120);
+            return;
+          }
           if (r) { stopCam(); gotString(r); } else setTimeout(function () { requestAnimationFrame(loop); }, 150);
         });
       } else requestAnimationFrame(loop);
     }
-    scanBtn.addEventListener("click", function () {
+    function startCam(isMassive) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scanMsg.textContent = "Este navegador não permite acessar a câmera."; return; }
       stopCam();
       scanMsg.textContent = "Abrindo câmera…";
+      if (isMassive) { massive = true; massCount = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = "Captura massiva ativa — aponte para cada QR."; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function (st) {
         stream = st; video.srcObject = st; video.style.display = ""; stopBtn.style.display = "";
         return video.play();
       }).then(function () {
-        scanMsg.textContent = "Aponte para o QR Code…";
+        scanMsg.textContent = isMassive ? "Cada QR lido é salvo sozinho. Toque em “Parar câmera” ao terminar." : "Aponte para o QR Code…";
         scanning = true; loop();
       }).catch(function (e) { stopCam(); scanMsg.textContent = "Não consegui abrir a câmera (" + ((e && e.name) || "erro") + "). Permita o acesso ou use a galeria."; });
+    }
+    scanBtn.addEventListener("click", function () { startCam(false); });
+    massBtn.addEventListener("click", function () { startCam(true); });
+    stopBtn.addEventListener("click", function () {
+      var n = massCount, was = massive;
+      stopCam();
+      scanMsg.textContent = was ? "Captura massiva encerrada: " + n + " QR(s) salvo(s)." : "";
+      if (was) { rebuildFilter(); renderTable(); }
     });
-    stopBtn.addEventListener("click", function () { stopCam(); scanMsg.textContent = ""; });
     galBtn.addEventListener("click", function () { galInput.click(); });
     galInput.addEventListener("change", function () {
       var f = galInput.files[0]; galInput.value = "";
@@ -22314,13 +22389,18 @@
       deInput.value = ""; ateInput.value = ""; searchInput.value = "";
       rebuildFilter(); renderTable();
     });
+    function modoOf(it) { return it.modo === "massiva" ? "Massiva" : "Individual"; }
     function tipoOf(it) { return qrChaveAcesso(it.conteudo) ? "NF-e/NFC-e" : (/^https?:\/\//i.test(it.conteudo) ? "Link" : "Texto"); }
     function rebuildFilter() {
-      filterBar.innerHTML = ""; state.fTipo = [];
+      filterBar.innerHTML = ""; state.fTipo = []; state.fModo = [];
       filterBar.appendChild(buildIconDropdown({
         label: "Tipo", icon: "ti-tag",
         options: ["NF-e/NFC-e", "Link", "Texto"].map(function (t) { return { label: t, pageId: t }; })
       }, function (opts) { state.fTipo = opts.map(function (o) { return o.pageId; }); renderTable(); }));
+      filterBar.appendChild(buildIconDropdown({
+        label: "Captura", icon: "ti-bolt",
+        options: ["Individual", "Massiva"].map(function (t) { return { label: t, pageId: t }; })
+      }, function (opts) { state.fModo = opts.map(function (o) { return o.pageId; }); renderTable(); }));
       var l1 = document.createElement("label"); l1.className = "odo-lbl"; l1.textContent = "De "; l1.appendChild(deInput);
       var l2 = document.createElement("label"); l2.className = "odo-lbl"; l2.textContent = "Até "; l2.appendChild(ateInput);
       filterBar.appendChild(l1); filterBar.appendChild(l2); filterBar.appendChild(clearBtn);
@@ -22334,6 +22414,7 @@
       var q = normalize(state.search);
       return state.items.filter(function (it) {
         if (state.fTipo.length && state.fTipo.indexOf(tipoOf(it)) < 0) return false;
+        if (state.fModo.length && state.fModo.indexOf(modoOf(it)) < 0) return false;
         if (state.fDe && localDay(it.quando) < state.fDe) return false;
         if (state.fAte && localDay(it.quando) > state.fAte) return false;
         if (q && normalize(it.conteudo + " " + (it.nota || "")).indexOf(q) < 0) return false;
@@ -22346,6 +22427,12 @@
       var cols = [
         { label: "Data/hora", sort: function (r) { return r.quando; }, node: function (r, td) { td.appendChild(mkChip(fmtDT(r.quando), "odo-chip-data", "ti-calendar")); } },
         { label: "Tipo", sort: function (r) { return tipoOf(r); }, node: function (r, td) { var t = tipoOf(r); td.appendChild(mkChip(t, t === "NF-e/NFC-e" ? "odo-chip-km" : (t === "Link" ? "odo-chip-delta" : "odo-chip-vazio"), t === "Link" ? "ti-link" : "ti-file-text")); } },
+        { label: "Captura", sort: function (r) { return r.modo === "massiva" ? "Massiva" : "Individual"; }, node: function (r, td) {
+            var m = r.modo === "massiva";
+            var ch = mkChip(m ? "Massiva" : "Individual", m ? "qr-chip-massiva" : "odo-chip-vazio", m ? "ti-bolt" : "ti-hand-click");
+            if (m) ch.title = "Capturada em lote (sem observação/detalhes)" + (r.lote ? " — lote " + fmtDT(r.lote) : "");
+            td.appendChild(ch);
+          } },
         { label: "Conteúdo", sort: function (r) { return r.conteudo; }, node: function (r, td) {
             var ch = qrChaveAcesso(r.conteudo);
             var txt = ch ? ch : r.conteudo;
@@ -22717,7 +22804,8 @@
     // Pedido do Georges (2026-10-06): Tratamentos como aba (não no topo),
     // botões de expandir/recolher em cada divisória, registro de remédio
     // tomado avulso (com dosagem, nº de comprimidos e pessoa) pesquisável.
-    var remTab = "estoque";
+    var remRoute = pendingRouteParams || {};
+    var remTab = (remRoute.tab === "tratamentos" || remRoute.tab === "consumo") ? remRoute.tab : "estoque";
     var remPanels = {};
     var remSecs = { estoque: [], tratamentos: [], consumo: [] };
     var remTabBtns = {};
@@ -22990,18 +23078,49 @@
         tratListEl.appendChild(p);
       }
       ativos.forEach(function (x) { tratListEl.appendChild(tratBuildCard(x.t, x.e, now)); });
+      if (remRoute.trat && !tratState.routeDone) {
+        tratState.routeDone = true;
+        tratListSec.expand();
+        var hit = tratListEl.querySelector('[data-trat-id="' + remRoute.trat + '"]');
+        if (hit) {
+          hit.classList.add("trat-card-highlight");
+          setTimeout(function () { hit.scrollIntoView({ behavior: "smooth", block: "center" }); }, 150);
+        }
+      }
       if (outros.length) {
-        var tg = document.createElement("button");
-        tg.type = "button";
-        tg.className = "trat-toggle-done";
-        tg.textContent = (tratState.showDone ? "Ocultar" : "Mostrar") + " concluídos/encerrados (" + outros.length + ")";
-        tg.addEventListener("click", function () { tratState.showDone = !tratState.showDone; tratRender(); });
-        tratListEl.appendChild(tg);
-        if (tratState.showDone) outros.forEach(function (x) { tratListEl.appendChild(tratBuildCard(x.t, x.e, now)); });
+        var doneSec = buildCollapsibleSection("Concluídos / encerrados (" + outros.length + ")", !!tratState.doneOpen, function (collapsed) { tratState.doneOpen = !collapsed; });
+        tratListEl.appendChild(doneSec.section);
+        var rows = outros.map(function (x) {
+          var ini = new Date(x.t.inicio);
+          var fim = new Date(ini.getTime() + (Number(x.t.dias) || 1) * 86400000);
+          return { t: x.t, e: x.e, ini: ini, fim: fim };
+        });
+        tratState.doneSort = tratState.doneSort || { col: 3, dir: -1 };
+        var cols = [
+          { label: "Pessoa", sort: function (r) { return r.t.pessoa || "Georges"; }, node: function (r, td) { var c = document.createElement("span"); c.className = "trat-pessoa-chip"; c.textContent = r.t.pessoa || "Georges"; td.appendChild(c); } },
+          { label: "Remédio", sort: function (r) { return r.t.nome || ""; }, text: function (r) { return r.t.nome + (r.t.dose ? " — " + r.t.dose : ""); } },
+          { label: "Tratamento", sort: function (r) { return r.t.descricao || ""; }, text: function (r) { return r.t.descricao || "—"; } },
+          { label: "Início", num: true, sort: function (r) { return r.ini.getTime(); }, text: function (r) { return tratFmtDT(r.ini); } },
+          { label: "Término", num: true, sort: function (r) { return r.fim.getTime(); }, text: function (r) { return tratFmtDT(r.fim); } },
+          { label: "Doses", num: true, sort: function (r) { return r.e.total ? r.e.feitas / r.e.total : 0; }, text: function (r) { return r.e.feitas + "/" + r.e.total; } },
+          { label: "Status", sort: function (r) { return r.e.status; }, text: function (r) { return r.e.status === "concluido" ? "✅ Concluído" : "⏹ Encerrado"; } },
+          { label: "", node: function (r, td) {
+            if (r.e.status === "encerrado") {
+              var b = document.createElement("button"); b.type = "button"; b.className = "trat-btn"; b.innerHTML = '<i class="ti ti-player-play"></i>'; b.title = "Reabrir";
+              b.addEventListener("click", function () { b.disabled = true; tratCall("/tratamentos?id=" + encodeURIComponent(r.t.id), "PUT", { encerrado: false }).then(function () { tratLoad(); consumoLoad(); }).catch(function () { b.disabled = false; }); });
+              td.appendChild(b);
+            }
+            var d = document.createElement("button"); d.type = "button"; d.className = "trat-btn danger"; d.innerHTML = '<i class="ti ti-trash"></i>'; d.title = "Excluir tratamento (o histórico de consumo é mantido)";
+            d.addEventListener("click", function () { if (!confirm("Excluir este tratamento?")) return; tratCall("/tratamentos?id=" + encodeURIComponent(r.t.id), "DELETE").then(tratLoad).catch(function () {}); });
+            td.appendChild(d);
+          } }
+        ];
+        finSortTable(doneSec.body, cols, rows, tratState.doneSort, function () { tratRender(); }, { onRow: null });
       }
     }
     function tratBuildCard(t, e, now) {
       var card = document.createElement("div");
+      card.dataset.tratId = t.id;
       card.className = "trat-card" + (e.status !== "andamento" ? " trat-card-done" : "");
       var top = document.createElement("div");
       top.className = "trat-card-top";
@@ -27299,7 +27418,7 @@
         render();
       });
       header.appendChild(editToggle);
-      wrap.appendChild(header);
+      // botão "Editar atalhos" fica ABAIXO da lista (Ajustes 2026-10-08)
 
       var cardsWrap = document.createElement("div");
       cardsWrap.className = "folder-shortcuts-groups";
@@ -27407,6 +27526,7 @@
         cardsWrap.appendChild(card);
       });
       wrap.appendChild(cardsWrap);
+      wrap.appendChild(header);
 
       if (editMode) {
         var addBtn = document.createElement("button");
@@ -28043,8 +28163,14 @@
     var grpHost = document.createElement("div");     // editor de grupos (só refeito em mudança estrutural)
     grpHost.style.display = "none";
     filterBody.appendChild(chipsHost);
-    filterBody.appendChild(grpHost);
     root.appendChild(filterSec.section);
+
+    // Grupos SEMPRE visíveis, logo abaixo de "Filtrar" e acima do aviso de
+    // filtros/calendário (Ajustes 2026-10-07). O editor de grupos abre aqui também.
+    var groupsHost = document.createElement("div");
+    groupsHost.className = "cal-groups-bar";
+    root.appendChild(groupsHost);
+    groupsHost.appendChild(grpHost);
 
     // aviso de filtro ativo (visível mesmo com "Filtrar" recolhido)
     var filterWarn = document.createElement("div");
@@ -28219,8 +28345,26 @@
           buildGroupEditor();
           buildFilterBar();
         });
+        function mkMove(dir, glyph, title) {
+          var mb = document.createElement("button");
+          mb.type = "button";
+          mb.className = "cal-grp-del";
+          mb.title = title;
+          mb.textContent = glyph;
+          mb.disabled = (dir < 0 && gi === 0) || (dir > 0 && gi === st.groups.length - 1);
+          mb.addEventListener("click", function () {
+            var other = gi + dir;
+            var tmp = st.groups[gi]; st.groups[gi] = st.groups[other]; st.groups[other] = tmp;
+            commitGroups();
+            buildGroupEditor();
+            buildFilterBar();
+          });
+          return mb;
+        }
         top.appendChild(icon);
         top.appendChild(name);
+        top.appendChild(mkMove(-1, "▲", "Mover para antes"));
+        top.appendChild(mkMove(1, "▼", "Mover para depois"));
         top.appendChild(del);
         card.appendChild(top);
 
@@ -28291,6 +28435,7 @@
     // ---------- filtros (grupos + chips por fonte + ocultar concluídos) ----------
     function buildFilterBar() {
       chipsHost.innerHTML = "";
+      while (groupsHost.firstChild && groupsHost.firstChild !== grpHost) groupsHost.removeChild(groupsHost.firstChild);
 
       // linha de grupos
       var gRow = document.createElement("div");
@@ -28324,7 +28469,7 @@
         if (!open) buildGroupEditor();
       });
       gRow.appendChild(editBtn);
-      chipsHost.appendChild(gRow);
+      groupsHost.insertBefore(gRow, grpHost);
 
       // linha de chips individuais
       var row = document.createElement("div");
@@ -28980,7 +29125,7 @@
   // Dados: KV via /ajustes (worker.js, prefixo "ajuste:").
   // AJ_PURE_START
   function ajustesMarkdown(items, onlyPending) {
-    var list = (items || []).filter(function (i) { return !onlyPending || i.status !== "feito"; });
+    var list = (items || []).filter(function (i) { return !onlyPending || (i.status || "pendente") === "pendente"; });
     var groups = {};
     list.forEach(function (i) { var k = i.origemLabel || i.origem || "Sem origem"; (groups[k] = groups[k] || []).push(i); });
     var PR = ["alta", "media", "baixa"];
@@ -28993,7 +29138,7 @@
       groups[n].slice().sort(function (a, b) { return (rk(a.prioridade) - rk(b.prioridade)) || String(a.createdAt).localeCompare(String(b.createdAt)); }).forEach(function (i) {
         var tag = (i.prioridade ? "[prioridade " + i.prioridade + "] " : "") + (i.tipo ? "[" + i.tipo + "] " : "");
         var d = String(i.createdAt || "").slice(0, 10);
-        out.push("- " + (i.status === "feito" ? "[x] " : "[ ] ") + tag + String(i.texto || "").replace(/\n+/g, " / ") + (d ? " (" + d + ")" : ""));
+        out.push("- " + (i.status === "feito" ? "[x] " : i.status === "implantado" ? "[~] (implantado, aguardando confirmação) " : "[ ] ") + tag + String(i.texto || "").replace(/\n+/g, " / ") + (d ? " (" + d + ")" : ""));
       });
       out.push("");
     });
@@ -29039,8 +29184,9 @@
   function ajustesUpdateBadge() {
     var b = document.getElementById("ajustesBtn"); if (!b) return;
     var n = ajustes.items.filter(function (i) { return i.status !== "feito"; }).length;
+    var nImp = ajustes.items.filter(function (i) { return i.status === "implantado"; }).length;
     b.classList.toggle("has-pending", n > 0);
-    b.title = n ? "Ajustes (" + n + " pendente" + (n > 1 ? "s" : "") + ")" : "Ajustes — anotar algo pra melhorar no app";
+    b.title = n ? "Ajustes (" + n + " em aberto" + (nImp ? ", " + nImp + " aguardando sua confirmação" : "") + ")" : "Ajustes — anotar algo pra melhorar no app";
   }
   function ajustesDownloadMd(text) {
     var url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
@@ -29075,16 +29221,43 @@
     var selP = document.createElement("select"); selP.className = "ajustes-select"; selP.title = "Prioridade";
     AJUSTE_PRIO_UI.forEach(function (t) { var o = document.createElement("option"); o.value = t.k; o.textContent = t.t; selP.appendChild(o); });
     var add = document.createElement("button"); add.type = "button"; add.className = "ajustes-add"; add.innerHTML = '<i class="ti ti-plus"></i> Anotar';
-    row.appendChild(selO); row.appendChild(selT); row.appendChild(selP); row.appendChild(add);
+    var pendImgs = [];
+    var fileIn = document.createElement("input"); fileIn.type = "file"; fileIn.accept = "image/*"; fileIn.multiple = true; fileIn.style.display = "none";
+    var bImg = document.createElement("button"); bImg.type = "button"; bImg.className = "ajustes-btn"; bImg.innerHTML = '<i class="ti ti-photo-plus"></i>'; bImg.title = "Anexar imagem (baixa resolução; apagada quando marcar como feito)";
+    var thumbs = document.createElement("div"); thumbs.className = "ajustes-imgs";
+    function paintThumbs() {
+      thumbs.innerHTML = "";
+      pendImgs.forEach(function (src, ix) {
+        var im = document.createElement("img"); im.src = src; im.className = "ajustes-img"; im.title = "Clique para remover";
+        im.addEventListener("click", function () { pendImgs.splice(ix, 1); paintThumbs(); });
+        thumbs.appendChild(im);
+      });
+    }
+    bImg.addEventListener("click", function () { fileIn.click(); });
+    fileIn.addEventListener("change", function () {
+      Array.prototype.slice.call(fileIn.files).slice(0, 4 - pendImgs.length).forEach(function (f) {
+        ajustesShrinkImage(f).then(function (d) { if (pendImgs.length < 4) { pendImgs.push(d); paintThumbs(); } }).catch(function () {});
+      });
+      fileIn.value = "";
+    });
+    ta.addEventListener("paste", function (e) {
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      Array.prototype.forEach.call(items, function (itm) {
+        if (itm.type && itm.type.indexOf("image/") === 0 && pendImgs.length < 4) {
+          var f = itm.getAsFile(); if (f) ajustesShrinkImage(f).then(function (d) { pendImgs.push(d); paintThumbs(); }).catch(function () {});
+        }
+      });
+    });
+    row.appendChild(selO); row.appendChild(selT); row.appendChild(selP); row.appendChild(bImg); row.appendChild(add);
     var err = document.createElement("div"); err.className = "ajustes-err"; err.style.display = "none";
-    form.appendChild(ta); form.appendChild(row); form.appendChild(err);
+    form.appendChild(ta); form.appendChild(row); form.appendChild(thumbs); form.appendChild(fileIn); form.appendChild(err);
     panel.appendChild(form);
     function save() {
       var texto = ta.value.trim(); if (!texto) { ta.focus(); return; }
       add.disabled = true; err.style.display = "none";
       ajustesApi("/ajustes", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: texto, origem: selO.value, origemLabel: ajustesOrigemLabel(selO.value), tipo: selT.value, prioridade: selP.value }) })
-        .then(function (d) { ta.value = ""; selT.value = ""; selP.value = ""; if (d && d.item) ajustes.items.unshift(d.item); ajustes.filter = ajustes.filter === "feito" ? "pendente" : ajustes.filter; ajustesRenderList(); ajustesUpdateBadge(); ta.focus(); })
+        body: JSON.stringify({ texto: texto, origem: selO.value, origemLabel: ajustesOrigemLabel(selO.value), tipo: selT.value, prioridade: selP.value, imagens: pendImgs }) })
+        .then(function (d) { ta.value = ""; pendImgs = []; paintThumbs(); selT.value = ""; selP.value = ""; if (d && d.item) ajustes.items.unshift(d.item); ajustes.filter = (ajustes.filter === "feito" || ajustes.filter === "implantado") ? "pendente" : ajustes.filter; ajustesRenderList(); ajustesUpdateBadge(); ta.focus(); })
         .catch(function (e) { err.textContent = "Não consegui salvar (" + e.message + "). O texto continua aqui — tente de novo."; err.style.display = ""; })
         .then(function () { add.disabled = false; });
     }
@@ -29101,7 +29274,7 @@
       var md = ajustesMarkdown(ajustes.items, true);
       financeiroCopyToClipboard(md); ajustesFlash(bCopy, '<i class="ti ti-check"></i> Copiado');
     });
-    bDown.addEventListener("click", function () { ajustesDownloadMd(ajustesMarkdown(ajustes.items, ajustes.filter !== "todos" && ajustes.filter !== "feito")); });
+    bDown.addEventListener("click", function () { ajustesDownloadMd(ajustesMarkdown(ajustes.items, ajustes.filter !== "todos" && ajustes.filter !== "feito" && ajustes.filter !== "implantado")); });
     exp.appendChild(bCopy); exp.appendChild(bDown);
     bar.appendChild(pills); bar.appendChild(exp);
     panel.appendChild(bar);
@@ -29140,9 +29313,9 @@
     if (!ajustes.built) return;
     var E = ajustes.el;
     E.pills.innerHTML = "";
-    var counts = { pendente: 0, feito: 0, todos: ajustes.items.length };
-    ajustes.items.forEach(function (i) { if (i.status === "feito") counts.feito++; else counts.pendente++; });
-    [["pendente", "Pendentes"], ["feito", "Feitos"], ["todos", "Todos"]].forEach(function (p) {
+    var counts = { pendente: 0, implantado: 0, feito: 0, todos: ajustes.items.length };
+    ajustes.items.forEach(function (i) { if (i.status === "feito") counts.feito++; else if (i.status === "implantado") counts.implantado++; else counts.pendente++; });
+    [["pendente", "Pendentes"], ["implantado", "Aguardando confirmação"], ["feito", "Feitos"], ["todos", "Todos"]].forEach(function (p) {
       var b = document.createElement("button"); b.type = "button"; b.className = "ajustes-pill" + (ajustes.filter === p[0] ? " active" : "");
       b.textContent = p[1] + " (" + counts[p[0]] + ")";
       b.addEventListener("click", function () { ajustes.filter = p[0]; ajustesRenderList(); });
@@ -29152,7 +29325,7 @@
     if (ajustes.loading && !ajustes.loaded) { var l = document.createElement("p"); l.className = "ajustes-empty"; l.textContent = "Carregando…"; E.list.appendChild(l); return; }
     if (ajustes.error && !ajustes.loaded) { var er = document.createElement("p"); er.className = "ajustes-empty"; er.textContent = "Erro ao carregar: " + ajustes.error + " (o Worker já foi republicado?)"; E.list.appendChild(er); return; }
     function pagLabel(i) { return i.origem ? (ajustesOrigemLabel(i.origem) || i.origemLabel || i.origem) : "🌐 Geral"; }
-    var base = ajustes.items.filter(function (i) { return ajustes.filter === "todos" || (ajustes.filter === "feito" ? i.status === "feito" : i.status !== "feito"); });
+    var base = ajustes.items.filter(function (i) { return ajustes.filter === "todos" || (ajustes.filter === "feito" ? i.status === "feito" : ajustes.filter === "implantado" ? i.status === "implantado" : (i.status !== "feito" && i.status !== "implantado")); });
     // opções do filtro de página (a partir dos itens do status atual)
     var pagNames = {}; base.forEach(function (i) { pagNames[pagLabel(i)] = 1; });
     var fG = E.fG; if (fG) {
@@ -29196,8 +29369,31 @@
     }
   }
 
+  function ajustesSetStatus(it, st) {
+    ajustesApi("/ajustes?id=" + encodeURIComponent(it.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: st }) })
+      .then(function (d) { if (d && d.item) Object.assign(it, d.item); ajustesRenderList(); ajustesUpdateBadge(); });
+  }
+  // reduz a imagem (lado maior 900px, JPEG 0.55) → ~50–150KB
+  function ajustesShrinkImage(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onerror = function () { reject(new Error("leitura")); };
+      fr.onload = function () {
+        var img = new Image();
+        img.onerror = function () { reject(new Error("imagem")); };
+        img.onload = function () {
+          var k = Math.min(1, 900 / Math.max(img.width, img.height));
+          var c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL("image/jpeg", 0.55));
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
   function ajustesItemEl(it) {
-    var el = document.createElement("div"); el.className = "ajustes-item" + (it.status === "feito" ? " done" : "");
+    var el = document.createElement("div"); el.className = "ajustes-item" + (it.status === "feito" ? " done" : "") + (it.status === "implantado" ? " implantado" : "");
     var chk = document.createElement("input"); chk.type = "checkbox"; chk.checked = it.status === "feito"; chk.title = "Marcar como feito";
     chk.addEventListener("change", function () {
       var st = chk.checked ? "feito" : "pendente";
@@ -29234,6 +29430,24 @@
     if (it.tipo) { var tt = AJUSTE_TIPOS_UI.filter(function (t) { return t.k === it.tipo; })[0]; if (tt) parts.push(tt.t); }
     if (it.createdAt) parts.push(financeiroFormatDate(String(it.createdAt).slice(0, 10)));
     meta.textContent = parts.join(" · "); main.appendChild(meta);
+    if (it.status === "implantado") {
+      var ib = document.createElement("div"); ib.className = "ajustes-impl";
+      var il = document.createElement("span"); il.textContent = "🚀 Implantado — aguardando sua confirmação"; ib.appendChild(il);
+      var bOk = document.createElement("button"); bOk.type = "button"; bOk.className = "ajustes-btn"; bOk.innerHTML = '<i class="ti ti-check"></i> Funcionou';
+      bOk.addEventListener("click", function () { ajustesSetStatus(it, "feito"); });
+      var bNo = document.createElement("button"); bNo.type = "button"; bNo.className = "ajustes-btn"; bNo.innerHTML = '<i class="ti ti-arrow-back-up"></i> Reabrir';
+      bNo.addEventListener("click", function () { ajustesSetStatus(it, "pendente"); });
+      ib.appendChild(bOk); ib.appendChild(bNo); main.appendChild(ib);
+    }
+    if (it.imagens && it.imagens.length) {
+      var gal = document.createElement("div"); gal.className = "ajustes-imgs";
+      it.imagens.forEach(function (src) {
+        var im = document.createElement("img"); im.src = src; im.className = "ajustes-img"; im.title = "Clique para ampliar";
+        im.addEventListener("click", function () { var w = window.open(); if (w) { w.document.write('<img src="' + src + '" style="max-width:100%">'); w.document.close(); } });
+        gal.appendChild(im);
+      });
+      main.appendChild(gal);
+    }
     var acts = document.createElement("div"); acts.className = "ajustes-acts";
     var be = document.createElement("button"); be.type = "button"; be.className = "ajustes-icon"; be.title = "Editar"; be.innerHTML = '<i class="ti ti-pencil"></i>';
     be.addEventListener("click", function () { ajustes.editingId = it.id; ajustesRenderList(); });
@@ -29244,6 +29458,11 @@
         ajustes.items = ajustes.items.filter(function (x) { return x.id !== it.id; }); ajustesRenderList(); ajustesUpdateBadge();
       });
     });
+    if (it.status === "pendente" || !it.status) {
+      var bi = document.createElement("button"); bi.type = "button"; bi.className = "ajustes-icon"; bi.title = "Marcar como implantado (aguarda sua confirmação)"; bi.innerHTML = '<i class="ti ti-rocket"></i>';
+      bi.addEventListener("click", function () { ajustesSetStatus(it, "implantado"); });
+      acts.appendChild(bi);
+    }
     acts.appendChild(be); acts.appendChild(bx); el.appendChild(acts);
     return el;
   }
@@ -29370,6 +29589,21 @@
 
     if (page.dynamicQuery) {
       renderDynamicQuery(page, pageId, container);
+      return;
+    }
+
+    // "Ajustes do app" como página (pesquisável / escolhível como origem).
+    if (page.ajustesApp) {
+      var apBox = document.createElement("div");
+      apBox.className = "odo-form";
+      var apP = document.createElement("p");
+      apP.textContent = "Registre e acompanhe os ajustes pendentes do Meu Hub.";
+      var apBtn = document.createElement("button");
+      apBtn.type = "button"; apBtn.className = "odo-btn primary";
+      apBtn.innerHTML = '<i class="ti ti-adjustments"></i> Abrir Ajustes do app';
+      apBtn.addEventListener("click", function () { ajustesOpen(); });
+      apBox.appendChild(apP); apBox.appendChild(apBtn);
+      container.appendChild(apBox);
       return;
     }
 
@@ -30373,6 +30607,7 @@
         extra[source.dateProperty] = { start: new Date(due <= now ? now : due).toISOString() };
         out.push({
           id: "tratamento::" + t.id + "::" + e.feitas,
+          target: { type: "page", target: "remedios", params: { tab: "tratamentos", trat: t.id } },
           title: "Hora do remédio" + (t.pessoa && t.pessoa !== "Georges" ? " de " + t.pessoa : "") + ": " + t.nome + (t.dose ? " (" + t.dose + ")" : "") + " — dose " + (e.feitas + 1) + "/" + e.total,
           url: location.origin + location.pathname + "#remedios",
           extra: extra
@@ -30406,6 +30641,8 @@
             (x.t.descricao ? " (" + x.t.descricao + ")" : "") +
             (x.e.proxima ? " - próxima dose " + tratFmtDT(x.e.proxima) : ""),
           url: location.origin + location.pathname + "#remedios",
+          // abre direto na aba Tratamentos, com este tratamento destacado
+          target: { type: "page", target: "remedios", params: { tab: "tratamentos", trat: x.t.id } },
           extra: extra
         };
       });
@@ -30787,7 +31024,7 @@
             sourceIcon: p.icon || source.icon || "",
             title: p.title,
             url: p.url,
-            target: source.target,
+            target: p.target || source.target,
             eventTime: eventTime,
             hasTime: hasTime,
             leadLabel: lt.label,
@@ -30823,7 +31060,7 @@
           sourceIcon: p.icon || source.icon || "",
           title: p.title,
           url: p.url,
-          target: source.target,
+          target: p.target || source.target,
           eventTime: eventTime,
           hasTime: hasTime,
           leadLabel: lt.label,
@@ -31458,9 +31695,18 @@
     setTimeout(function () { if (card.parentNode) card.parentNode.removeChild(card); }, 250);
   }
 
+  // rota interna de uma notificação: página + ?view= e/ou ?params (ex.:
+  // Remédios abre direto na aba Tratamentos com o tratamento destacado).
+  function notifAppRoute(n) {
+    var qs = [];
+    if (n.target.view) qs.push("view=" + encodeURIComponent(n.target.view));
+    if (n.target.params) Object.keys(n.target.params).forEach(function (k) { qs.push(encodeURIComponent(k) + "=" + encodeURIComponent(n.target.params[k])); });
+    return n.target.target + (qs.length ? "?" + qs.join("&") : "");
+  }
+
   function goToNotifTarget(n) {
     if (n.target && n.target.type === "page") {
-      var appRoute = n.target.target + (n.target.view ? "?view=" + encodeURIComponent(n.target.view) : "");
+      var appRoute = notifAppRoute(n);
       navigate(appRoute);
     } else if (n.url) {
       window.open(n.url, "_blank", "noopener");
@@ -32622,7 +32868,7 @@
         // (ver comentário grande lá em cima); Ctrl/Cmd+clique continua
         // funcionando igual (abre em nova aba com a MESMA query, pois é
         // um <a href> de verdade).
-        var appRoute = n.target.target + (n.target.view ? "?view=" + encodeURIComponent(n.target.view) : "");
+        var appRoute = notifAppRoute(n);
         var appBtn = document.createElement("a");
         appBtn.className = "notif-card-app-btn";
         appBtn.href = "#" + appRoute;
@@ -33038,7 +33284,15 @@
       row.innerHTML =
         '<span class="sr-label"><i class="ti ' + m.icon + '"></i>' + escapeHtml(m.label) + "</span>" +
         '<span class="sr-path">' + escapeHtml(m.pathTitles.join(" / ")) + "</span>";
-      row.addEventListener("mouseenter", function () { selectedResult = i; paintResults(); });
+      // NÃO repinta no mouseenter: no celular o toque dispara mouseenter
+      // antes do click e refazer a lista trocava o elemento sob o dedo — o
+      // click se perdia e "clicar no resultado não fazia nada" (Ajustes
+      // 2026-10-07). Só troca a classe "sel".
+      row.addEventListener("mouseenter", function () {
+        selectedResult = i;
+        Array.prototype.forEach.call(resultsBox.children, function (el, k) { el.classList.toggle("sel", k === i); });
+      });
+      row.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
       row.addEventListener("click", function () { activateMatch(m); });
       resultsBox.appendChild(row);
     });
