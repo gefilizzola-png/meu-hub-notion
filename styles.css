@@ -1526,7 +1526,7 @@ html, body {
 /* search dropdown */
 .search-results {
   position: fixed;
-  z-index: 30;
+  z-index: 120; /* acima do menu lateral no celular (z 50) — antes ficava escondido atrás dele */
   background: #fff;
   border: 0.5px solid #ececea;
   border-radius: 10px;
@@ -8994,3 +8994,15 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .qr-corner-br { bottom: 14px; right: 14px; border-left: 0; border-top: 0; border-bottom-right-radius: 10px; }
 .qr-modern .qr-string, .qr-modern .odo-input { border-radius: 10px; }
 .qr-modern .qr-mass-counter { border-radius: 12px; }
+
+.qr-hint { text-align: center; font-weight: 600; color: #364fc7; background: #edf2ff; border-radius: 10px; padding: 8px 10px; margin: 6px 0; font-size: 14px; }
+.qr-countdown { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 96px; font-weight: 800; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); background: rgba(0,0,0,.25); }
+
+/* Verificações — coluna Ações organizada (3 botões quadrados alinhados) */
+.verif-table .verif-th-auto { width: 1%; white-space: nowrap; text-align: center; }
+.verif-table td.verif-col-actions { width: 1%; padding: 4px 8px; vertical-align: middle; }
+.verif-actions { display: inline-flex; flex-wrap: nowrap; gap: 6px; align-items: center; justify-content: center; }
+.verif-actions .verif-copy-btn { margin: 0; width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #f1f4f9; font-size: 16px; flex: 0 0 auto; }
+.verif-actions .verif-copy-btn:hover, .verif-actions .verif-copy-btn.active { background: #dbe8f8; }
+.verif-actions .verif-aj-btn.active { background: #d3f9d8; color: #2f9e44; }
+.verif-actions .verif-man-btn-hot { background: #fff4e6; }

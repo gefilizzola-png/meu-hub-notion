@@ -296,6 +296,7 @@
     parentOf = {};
     flatIndex = [];
     var visited = {};
+    var indexedPageTargets = {};
 
     // "Favoritas" só tem atalhos: é varrida por ÚLTIMO, pra nenhuma página
     // ganhar Favoritas como pai (breadcrumb) quando também existe na árvore real.
@@ -307,7 +308,12 @@
       var page = cfg.pages[pageId];
       if (!page) return;
       pageItems(page, true).forEach(function (item) {
-        flatIndex.push({
+        // Pesquisa: página interna já indexada na árvore real não reaparece via
+        // atalho (Favoritas é varrida por último) — evita resultado duplicado.
+        if (item.type === "page" && cfg.pages[item.target]) {
+          if (indexedPageTargets[item.target]) { /* só segue a árvore, sem duplicar o resultado */ }
+        }
+        if (!(item.type === "page" && indexedPageTargets[item.target])) flatIndex.push({
           label: item.label,
           type: item.type,
           url: item.url,
@@ -319,6 +325,7 @@
           ownerPageId: pageId,
           pathTitles: pathTitles.concat([page.title])
         });
+        if (item.type === "page") indexedPageTargets[item.target] = true;
         if (item.type === "page" && cfg.pages[item.target]) {
           if (!(item.target in parentOf)) parentOf[item.target] = pageId;
           walk(item.target, pathIds.concat([item.target]), pathTitles.concat([page.title]));
@@ -22192,23 +22199,52 @@
   }
   // Decodifica um frame (video/img/canvas) -> string | null
   var qrDetector = null;
-  function qrDecode(source, w, h) {
+  // tenta: BarcodeDetector (rápido) -> jsQR em 1280px -> (deep) jsQR em alta resolução com
+  // contraste ampliado e recortes. "deep" = foto parada / galeria / a cada N quadros.
+  function qrJsPass(jsQR, source, w, h, maxDim, stretch, crop) {
+    var sx = 0, sy = 0, sw = w, sh = h;
+    if (crop) { sw = Math.round(w * crop); sh = Math.round(h * crop); sx = Math.round((w - sw) / 2); sy = Math.round((h - sh) / 2); }
+    var sc = Math.min(maxDim / Math.max(sw, sh), 2.5);
+    var c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(sw * sc)); c.height = Math.max(1, Math.round(sh * sc));
+    var ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(source, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    var d = ctx.getImageData(0, 0, c.width, c.height), p = d.data, i, g;
+    if (stretch) {
+      var lo = 255, hi = 0;
+      for (i = 0; i < p.length; i += 4) { g = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; if (g < lo) lo = g; if (g > hi) hi = g; }
+      var rng = Math.max(1, hi - lo);
+      for (i = 0; i < p.length; i += 4) { g = (0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2] - lo) * 255 / rng; p[i] = p[i + 1] = p[i + 2] = g; }
+    }
+    var r = jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" });
+    return r ? r.data : null;
+  }
+  function qrDecode(source, w, h, deep) {
     if (qrDetector === null) {
       try { qrDetector = ("BarcodeDetector" in window) ? new window.BarcodeDetector({ formats: ["qr_code"] }) : false; } catch (e) { qrDetector = false; }
     }
-    if (qrDetector) {
-      return qrDetector.detect(source).then(function (r) { return r && r.length ? r[0].rawValue : null; }).catch(function () { return null; });
-    }
-    return qrLoadJsQR().then(function (jsQR) {
-      var c = document.createElement("canvas");
-      var sc = Math.min(1, 900 / Math.max(w, h));
-      c.width = Math.round(w * sc); c.height = Math.round(h * sc);
-      var ctx = c.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(source, 0, 0, c.width, c.height);
-      var d = ctx.getImageData(0, 0, c.width, c.height);
-      var r = jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" });
-      return r ? r.data : null;
-    }).catch(function () { return null; });
+    var first = qrDetector
+      ? qrDetector.detect(source).then(function (r) { return r && r.length ? r[0].rawValue : null; }).catch(function () { return null; })
+      : Promise.resolve(null);
+    return first.then(function (val) {
+      if (val) return val;
+      return qrLoadJsQR().then(function (jsQR) {
+        var tries = deep
+          ? [[1280, false, 0], [1920, true, 0], [1920, true, 0.7], [2200, true, 0.5]]
+          : [[1100, false, 0]];
+        for (var k = 0; k < tries.length; k++) {
+          var out = null;
+          try { out = qrJsPass(jsQR, source, w, h, tries[k][0], tries[k][1], tries[k][2]); } catch (e) { out = null; }
+          if (out) return out;
+        }
+        return null;
+      }).catch(function () { return null; });
+    });
+  }
+  // QR de natureza fiscal? (chave de acesso de 44 dígitos ou URL de portal SEFAZ/NFC-e)
+  function qrIsFiscal(str) {
+    var s = String(str || "");
+    return !!qrChaveAcesso(s) || /nfce|nfe|sefaz|fazenda|dfe|nota ?fiscal|qrcode\?p=|chNFe/i.test(s);
   }
   function qrChaveAcesso(str) {
     var m = /(?:chNFe=|[?&]p=|\b)(\d{44})(?!\d)/.exec(String(str || "").replace(/\s/g, ""));
@@ -22289,12 +22325,16 @@
     var noteInput = document.createElement("input"); noteInput.type = "text"; noteInput.className = "odo-input"; noteInput.placeholder = "Observação (opcional)";
     var saveBtn = document.createElement("button"); saveBtn.type = "button"; saveBtn.className = "odo-btn primary"; saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar captura';
     var msgEl = document.createElement("div"); msgEl.className = "odo-ocr-status";
-    var vf = document.createElement("div"); vf.className = "qr-viewfinder"; vf.appendChild(video);
+    var hintEl = document.createElement("div"); hintEl.className = "qr-hint"; hintEl.style.display = "none";
+    var countEl = document.createElement("div"); countEl.className = "qr-countdown"; countEl.style.display = "none";
+    var vf = document.createElement("div"); vf.className = "qr-viewfinder"; vf.appendChild(video); vf.appendChild(countEl);
     ["tl", "tr", "bl", "br"].forEach(function (k) { var c = document.createElement("span"); c.className = "qr-corner qr-corner-" + k; vf.appendChild(c); });
     var hero = document.createElement("div"); hero.className = "qr-hero";
     hero.innerHTML = '<i class="ti ti-qrcode"></i><div><b>Captura de QR Code</b><span>Aponte a câmera, use o modo massivo para várias notas ou leia de uma imagem. Repetidos são ignorados.</span></div>';
     form.insertBefore(hero, form.firstChild);
-    [btnRow, vf, massCounter, stopBtn, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    var timerBtn = document.createElement("button"); timerBtn.type = "button"; timerBtn.className = "odo-btn"; timerBtn.innerHTML = '<i class="ti ti-camera"></i> Foto com contagem (3s)';
+    btnRow.insertBefore(timerBtn, galBtn);
+    [btnRow, vf, hintEl, massCounter, stopBtn, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
     btnRow.classList.add("qr-btn-grid");
     capSec.body.appendChild(form);
 
@@ -22302,17 +22342,33 @@
       scanning = false;
       massive = false; massCounter.style.display = "none"; massBtn.classList.remove("primary");
       if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); stopBtn.style.display = "none";
+      video.srcObject = null; video.style.display = "none"; vf.classList.remove("on"); hintEl.style.display = "none"; countEl.style.display = "none"; if (countTimer) { clearInterval(countTimer); countTimer = null; } stopBtn.style.display = "none";
     }
     function gotString(s) {
       strArea.value = s;
       var ch = qrChaveAcesso(s);
       var dup = findDup(s);
+      if (!dup && !qrIsFiscal(s)) { scanMsg.textContent = "⚠️ Este QR não parece fiscal (a nota pode ter mais de um QR). Confira se é o QR certo — ou salve mesmo assim, se quiser guardar este conteúdo."; return; }
       scanMsg.textContent = dup ? "↩️ Este QR já foi capturado em " + fmtDT(dup.quando) + " — não será salvo de novo." : "✅ QR lido" + (ch ? " — chave de acesso " + ch : "") + ". Confira e salve.";
       if (navigator.vibrate) navigator.vibrate(80);
     }
-    var massDup = 0;
+    var countTimer = null;
+    var massDup = 0, frameN = 0, scanStartedAt = 0, nonFiscalSkipped = 0;
+    function updateHint() {
+      var s = (Date.now() - scanStartedAt) / 1000, msg;
+      if (s < 4) msg = "📐 Enquadre o QR no centro da moldura";
+      else if (s < 8) msg = "🔍 Aproxime o papel (cerca de 20–30 cm) e segure firme";
+      else if (s < 12) msg = "💡 Melhore a luz e evite reflexo no papel";
+      else msg = "📸 Difícil de ler? Use “Foto com contagem” e segure o papel parado";
+      hintEl.textContent = msg;
+    }
     function massSave(code) {
+      if (!qrIsFiscal(code)) {
+        nonFiscalSkipped++;
+        massCounter.textContent = "⚠️ QR não fiscal ignorado (" + nonFiscalSkipped + ") — outro QR da nota? ✅ " + massCount + " salvo(s).";
+        if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+        return Promise.resolve();
+      }
       var dup = findDup(code);
       if (dup) {
         massDup++;
@@ -22337,8 +22393,10 @@
     function loop() {
       if (!scanning) return;
       if (video.readyState >= 2 && video.videoWidth) {
-        qrDecode(video, video.videoWidth, video.videoHeight).then(function (r) {
+        frameN++;
+        qrDecode(video, video.videoWidth, video.videoHeight, frameN % 4 === 0).then(function (r) {
           if (!scanning) return;
+          if (!r && !massive) updateHint();
           if (massive) {
             var now = Date.now();
             if (r && !massBusy && !(r === massLast.code && now - massLast.t < 4000)) {
@@ -22358,13 +22416,13 @@
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scanMsg.textContent = "Este navegador não permite acessar a câmera."; return; }
       stopCam();
       scanMsg.textContent = "Abrindo câmera…";
-      if (isMassive) { massive = true; massCount = 0; massDup = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = "Captura massiva ativa — aponte para cada QR."; }
+      if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = "Captura massiva ativa — aponte para cada QR."; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function (st) {
         stream = st; video.srcObject = st; video.style.display = ""; vf.classList.add("on"); stopBtn.style.display = "";
         return video.play();
       }).then(function () {
         scanMsg.textContent = isMassive ? "Cada QR lido é salvo sozinho. Toque em “Parar câmera” ao terminar." : "Aponte para o QR Code…";
-        scanning = true; loop();
+        scanning = true; scanStartedAt = Date.now(); frameN = 0; hintEl.style.display = ""; updateHint(); loop();
       }).catch(function (e) { stopCam(); scanMsg.textContent = "Não consegui abrir a câmera (" + ((e && e.name) || "erro") + "). Permita o acesso ou use a galeria."; });
     }
     scanBtn.addEventListener("click", function () { startCam(false); });
@@ -22375,6 +22433,32 @@
       scanMsg.textContent = was ? "Captura massiva encerrada: " + n + " QR(s) salvo(s)" + (massDup ? ", " + massDup + " repetido(s) ignorado(s)." : ".") : "";
       if (was) { rebuildFilter(); renderTable(); }
     });
+    function snapAndDecode() {
+      scanMsg.textContent = "Lendo a foto…";
+      var c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
+      c.getContext("2d").drawImage(video, 0, 0);
+      qrDecode(c, c.width, c.height, true).then(function (r) {
+        if (r) { stopCam(); gotString(r); }
+        else { scanMsg.textContent = "Não achei o QR nessa foto. Ajuste a distância/luz e toque em “Foto com contagem” de novo."; hintEl.style.display = ""; hintEl.textContent = "↔️ Tente aproximar ou afastar um pouco"; }
+      });
+    }
+    timerBtn.addEventListener("click", function () {
+      var go = function () {
+        if (countTimer) clearInterval(countTimer);
+        var n = 3;
+        hintEl.style.display = ""; hintEl.textContent = "🤚 Segure o papel parado…";
+        countEl.style.display = ""; countEl.textContent = String(n);
+        countTimer = setInterval(function () {
+          n--;
+          if (n <= 0) { clearInterval(countTimer); countTimer = null; countEl.style.display = "none"; snapAndDecode(); }
+          else countEl.textContent = String(n);
+        }, 1000);
+      };
+      if (stream && video.readyState >= 2) { scanning = false; go(); return; }
+      startCam(false);
+      var wait = setInterval(function () { if (stream && video.readyState >= 2) { clearInterval(wait); scanning = false; go(); } }, 200);
+      setTimeout(function () { clearInterval(wait); }, 8000);
+    });
     galBtn.addEventListener("click", function () { galInput.click(); });
     galInput.addEventListener("change", function () {
       var f = galInput.files[0]; galInput.value = "";
@@ -22382,7 +22466,7 @@
       scanMsg.textContent = "Lendo imagem…";
       var url = URL.createObjectURL(f), img = new Image();
       img.onload = function () {
-        qrDecode(img, img.width, img.height).then(function (r) {
+        qrDecode(img, img.width, img.height, true).then(function (r) {
           if (r) gotString(r); else scanMsg.textContent = "Não encontrei QR Code nessa imagem.";
         });
       };
@@ -22391,6 +22475,7 @@
     saveBtn.addEventListener("click", function () {
       var s = strArea.value.trim();
       if (!s) { msgEl.textContent = "Nada para salvar."; return; }
+      if (!qrIsFiscal(s) && !window.confirm("Este conteúdo não parece um QR fiscal (NF-e/NFC-e). A nota pode ter mais de um QR code.\n\nSalvar mesmo assim?")) return;
       var dupS = findDup(s);
       if (dupS) { msgEl.textContent = "↩️ Já existe uma captura igual (" + fmtDT(dupS.quando) + ") — desconsiderada."; strArea.value = ""; noteInput.value = ""; return; }
       saveBtn.disabled = true;
@@ -29215,7 +29300,7 @@
       groups[n].slice().sort(function (a, b) { return (rk(a.prioridade) - rk(b.prioridade)) || String(a.createdAt).localeCompare(String(b.createdAt)); }).forEach(function (i) {
         var tag = (i.prioridade ? "[prioridade " + i.prioridade + "] " : "") + (i.tipo ? "[" + i.tipo + "] " : "");
         var d = String(i.createdAt || "").slice(0, 10);
-        out.push("- `" + String(i.id || "").slice(0, 8) + "` " + (i.status === "feito" ? "[x] " : i.status === "implantado" ? "[~] (implantado, aguardando confirmação) " : "[ ] ") + tag + String(i.texto || "").replace(/\n+/g, " / ") + (d ? " (" + d + ")" : ""));
+        out.push("- `" + String(i.id || "").slice(0, 8) + "` " + (i.status === "feito" ? "[x] " : i.status === "implantado" ? "[~] (implantado, aguardando confirmação) " : "[ ] ") + tag + String(i.texto || "").replace(/\n+/g, " / ") + (i.imagens && i.imagens.length ? " 📷" + i.imagens.length + " (arquivos " + String(i.id || "").slice(0, 8) + "-N.jpg)" : "") + (d ? " (" + d + ")" : ""));
       });
       out.push("");
     });
@@ -29361,7 +29446,17 @@
       Promise.all(alvo.map(function (it) { return ajustesApi("/ajustes?id=" + encodeURIComponent(it.id), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "implantado" }) }).then(function (d) { if (d && d.item) Object.assign(it, d.item); }); }))
         .then(function () { ajustesRenderList(); ajustesUpdateBadge(); ajustesFlash(bImpl, '<i class="ti ti-check"></i> ' + alvo.length + ' marcado(s)'); });
     });
-    exp.appendChild(bCopy); exp.appendChild(bDown); exp.appendChild(bImpl);
+    var bImgs = document.createElement("button"); bImgs.type = "button"; bImgs.className = "ajustes-btn"; bImgs.innerHTML = '<i class="ti ti-photo-down"></i> Baixar imagens'; bImgs.title = "Baixa as imagens dos ajustes em aberto (nome = id-N.jpg) para anexar no chat";
+    bImgs.addEventListener("click", function () {
+      var files = [];
+      ajustes.items.forEach(function (it) { if (it.status !== "feito") (it.imagens || []).forEach(function (src, ix) { files.push({ name: String(it.id).slice(0, 8) + "-" + (ix + 1) + ".jpg", src: src }); }); });
+      if (!files.length) { ajustesFlash(bImgs, 'Nenhuma imagem'); return; }
+      files.forEach(function (f, k) {
+        setTimeout(function () { var l = document.createElement("a"); l.href = f.src; l.download = f.name; document.body.appendChild(l); l.click(); l.remove(); }, k * 350);
+      });
+      ajustesFlash(bImgs, '<i class="ti ti-check"></i> ' + files.length + ' arquivo(s)');
+    });
+    exp.appendChild(bCopy); exp.appendChild(bDown); exp.appendChild(bImgs); exp.appendChild(bImpl);
     bar.appendChild(pills); bar.appendChild(exp);
     panel.appendChild(bar);
 
@@ -30690,6 +30785,8 @@
         if (e.status !== "andamento" || !e.proxima) return;
         var due = e.proxima.getTime();
         if (due > now + 86400000) return;
+        // 1ª dose recém-criada: o aviso "em andamento" já cobre — evita notificação dupla
+        if (!e.feitas && Math.abs(due - now) <= 15 * 60000) return;
         var extra = {};
         extra[source.dateProperty] = { start: new Date(due <= now ? now : due).toISOString() };
         out.push({
@@ -31977,7 +32074,7 @@
     navigator.serviceWorker.register("sw.js").catch(function () {});
     navigator.serviceWorker.addEventListener("message", function (event) {
       if (event.data && event.data.type === "notif-navigate" && event.data.route) {
-        navigate(event.data.route);
+        navigate(String(event.data.route).replace(/^#/, ""));
         closeNotifPanel();
       }
     });
@@ -32034,7 +32131,7 @@
     if (!nativePermissionSupported() || Notification.permission !== "granted") return;
     var body = (n.sourceLabel || "") + (n.leadLabel ? " · " + n.leadLabel : "");
     var appRoute = (n.target && n.target.type === "page")
-      ? ("#" + n.target.target + (n.target.view ? "?view=" + encodeURIComponent(n.target.view) : ""))
+      ? ("#" + notifAppRoute(n))
       : "";
     var options = { body: body, icon: "icon-192.png", tag: n.id, data: { route: appRoute } };
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
@@ -33237,6 +33334,12 @@
     var isHome = currentId === homePageId;
     btn.classList.toggle("active", isHome);
     btn.title = isHome ? "Você está na página inicial (Pastas)" : "Ir para a página inicial (Pastas)";
+    // atalho de leitura de QR: só aparece na página inicial
+    var qb = document.getElementById("qrShortcutBtn");
+    if (qb) {
+      qb.style.display = (isHome && cfg.pages.financeiro_fiscal_qr) ? "" : "none";
+      if (!qb.dataset.wired) { qb.dataset.wired = "1"; qb.addEventListener("click", function () { navigate("financeiro_fiscal_qr"); }); }
+    }
   }
 
   function setCurrentAsHomePage() {
