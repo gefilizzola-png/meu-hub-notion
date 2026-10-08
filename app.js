@@ -22462,25 +22462,17 @@
       } else { beep(); if (navigator.vibrate) navigator.vibrate(60); stopCam(); gotString(r); }
     }
     function assist() {
-      if (assisting || !stream || !(video.readyState >= 2)) return;
+      // leitura de apoio em resolução total, sem contagem (sem overlay)
+      if (assisting || !stream || !(video.readyState >= 2) || !video.videoWidth) return;
       assisting = true;
-      var n = 3;
-      hintEl.style.display = ""; hintEl.textContent = "🤚 Segure o papel parado…";
-      countEl.style.display = ""; countEl.textContent = String(n);
-      countTimer = setInterval(function () {
-        n--;
-        if (n > 0) { countEl.textContent = String(n); return; }
-        clearInterval(countTimer); countTimer = null; countEl.style.display = "none";
-        if (!stream || !video.videoWidth) { assisting = false; return; }
-        var c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
-        c.getContext("2d").drawImage(video, 0, 0);
-        qrDecode(c, c.width, c.height, true).then(function (r) {
-          assisting = false; scanStartedAt = Date.now();
-          if (!stream) return;
-          if (r) handleRead(r);
-          else { hintEl.style.display = ""; hintEl.textContent = "↔️ Não consegui ler — aproxime ou afaste um pouco e segure firme"; }
-        });
-      }, 1000);
+      var c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
+      c.getContext("2d").drawImage(video, 0, 0);
+      qrDecode(c, c.width, c.height, true).then(function (r) {
+        assisting = false; scanStartedAt = Date.now();
+        if (!stream) return;
+        if (r) handleRead(r);
+        else { hintEl.style.display = ""; hintEl.textContent = "↔️ Não consegui ler — aproxime ou afaste um pouco e segure firme"; }
+      });
     }
     galBtn.addEventListener("click", function () { galInput.click(); });
     galInput.addEventListener("change", function () {

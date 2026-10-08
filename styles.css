@@ -9012,11 +9012,19 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .verif-summary-row .verif-summary-pill, .verif-summary-row .filter-trigger { margin: 0; }
 /* Reabrir ajuste com considerações */
 .ajustes-reopen { flex-basis: 100%; width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-/* Captura QR — câmera mais baixa pra mensagem de sucesso caber na tela */
-.qr-viewfinder { max-width: 340px; }
-.qr-viewfinder .qr-video { max-height: 210px; object-fit: cover; }
-.qr-viewfinder .qr-video { max-height: 170px; }
 .app-refresh-btn{background:none;border:0;padding:2px 4px;margin-left:6px;color:#8a8a82;cursor:pointer;font-size:14px;line-height:1;vertical-align:middle}
 .app-refresh-btn:hover{color:#3b5bdb}
 .app-refresh-btn.spin i{display:inline-block;animation:appspin .8s linear infinite}
 @keyframes appspin{to{transform:rotate(360deg)}}
+/* rodapé do menu em 2 linhas: e-mail + Sair em cima; versão + ↻ embaixo (sem rolagem lateral) */
+.sidebar-footer { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; overflow: hidden; }
+.sidebar-footer .auth-user { width: 100%; max-width: 100%; justify-content: space-between; }
+.sidebar-footer .auth-user #authUserLabel { max-width: none; flex: 1 1 auto; min-width: 0; }
+.sidebar-footer-ver { display: flex; align-items: center; gap: 2px; }
+.sidebar-footer-ver .app-refresh-btn { margin-left: 4px; }
+
+/* Captura QR: câmera grande (como no início) e botões menores */
+.qr-viewfinder { max-width: 460px; }
+.qr-viewfinder .qr-video { max-height: 340px; }
+.qr-btn-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; }
+.qr-btn-grid .odo-btn { padding: 6px 8px; font-size: 13px; font-weight: 600; border-radius: 10px; line-height: 1.2; }

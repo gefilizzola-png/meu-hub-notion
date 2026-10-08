@@ -21,7 +21,7 @@
      appVersion em config.js) pra forçar buscar os arquivos novos sempre
      que mudar algo — sem isso, SÓ Ctrl+F5 garantia pegar a versão certa.
      Ver CACHE_BUST_VERSION. -->
-<link rel="stylesheet" href="styles.css?v=202610080300">
+<link rel="stylesheet" href="styles.css?v=202610080415">
 </head>
 <body>
 <!-- tela de login — escondida por padrão via CSS (#loginGate), auth.js
@@ -74,8 +74,10 @@
         <span id="authUserLabel"></span>
         <button type="button" id="authSignOutBtn">Sair</button>
       </div>
-      <span class="app-version" id="sidebarFooterVersion"></span>
+      <div class="sidebar-footer-ver">
+        <span class="app-version" id="sidebarFooterVersion"></span>
       <button type="button" class="app-refresh-btn" id="appForceRefreshBtn" title="Forçar atualização (como Ctrl+F5)" aria-label="Forçar atualização"><i class="ti ti-refresh"></i></button>
+      </div>
     </div>
   </aside>
 
@@ -166,8 +168,8 @@
 <div class="search-results" id="searchResults"></div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="auth.js?v=202610080300"></script>
-<script src="config.js?v=202610080300"></script>
-<script src="app.js?v=202610080300"></script>
+<script src="auth.js?v=202610080415"></script>
+<script src="config.js?v=202610080415"></script>
+<script src="app.js?v=202610080415"></script>
 </body>
 </html>
