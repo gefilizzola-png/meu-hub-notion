@@ -22340,7 +22340,7 @@
     var hero = document.createElement("div"); hero.className = "qr-hero";
     hero.innerHTML = '<i class="ti ti-qrcode"></i><div><b>Captura de QR Code</b><span>Aponte a câmera, use o modo massivo para várias notas ou leia de uma imagem. Repetidos são ignorados.</span></div>';
     form.insertBefore(hero, form.firstChild);
-    [btnRow, hintEl, massCounter, scanMsg, vf, stopBtn, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
+    [btnRow, vf, stopBtn, hintEl, massCounter, scanMsg, strArea, noteInput, saveBtn, msgEl].forEach(function (e) { form.appendChild(e); });
     btnRow.classList.add("qr-btn-grid");
     capSec.body.appendChild(form);
 
@@ -22434,12 +22434,12 @@
       stopCam();
       unlockAudio(); // precisa nascer dentro do toque do usuário, senão o celular deixa o bip mudo
       scanMsg.textContent = "Abrindo câmera…";
-      if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = "Captura massiva ativa — aponte para cada QR."; }
+      if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); massCounter.style.display = ""; massCounter.textContent = ""; }
       navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function (st) {
         stream = st; video.srcObject = st; video.style.display = ""; vf.classList.add("on"); stopBtn.style.display = "";
         return video.play();
       }).then(function () {
-        scanMsg.textContent = isMassive ? "Cada QR lido é salvo sozinho. Toque em “Parar câmera” ao terminar." : "Aponte para o QR Code…";
+        scanMsg.textContent = "";
         scanning = true; scanStartedAt = Date.now(); frameN = 0; hintEl.style.display = ""; updateHint(); loop();
       }).catch(function (e) { stopCam(); scanMsg.textContent = "Não consegui abrir a câmera (" + ((e && e.name) || "erro") + "). Permita o acesso ou use a galeria."; });
     }

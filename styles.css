@@ -9028,3 +9028,4 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .qr-viewfinder .qr-video { max-height: 340px; }
 .qr-btn-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; }
 .qr-btn-grid .odo-btn { padding: 6px 8px; font-size: 13px; font-weight: 600; border-radius: 10px; line-height: 1.2; }
+.qr-mass-counter:empty, .odo-ocr-status:empty { display: none; }
