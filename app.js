@@ -16931,7 +16931,6 @@
     { key: "valor", label: "Valor Total", sortKey: "valor_total" },
     { key: "itens", label: "Itens", sortKey: "_nItens" },
     { key: "tx", label: "Transação", sortKey: "_tx" },
-    { key: "mkt", label: "Marketplace", sortKey: "_mkt" },
     { key: "natureza", label: "Natureza", sortKey: "natureza" },
     { key: "serie", label: "Série", sortKey: "serie" },
     { key: "uf", label: "UF", sortKey: "uf" },
@@ -16976,11 +16975,6 @@
     if (!iso) return "—";
     var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? (m[3] + "/" + m[2] + "/" + m[1]) : String(iso);
-  }
-  // Marketplace (inferido): o app não guarda o "intermediador" da NF — só o nº do
-  // pedido. Pedidos de 16 dígitos começando em 2000 são do padrão do Mercado Livre.
-  function nfMarketplace(n) {
-    return (n && /^2000\d{12}$/.test(String(n.pedido || "").trim())) ? "Mercado Livre" : "";
   }
   function nfFmtMoney(n) {
     return (typeof n === "number") ? financeiroFormatBRL(n) : "—";
@@ -17034,7 +17028,7 @@
       dateRange: null,
       sortKey: "data_emissao", sortDir: -1,
       expanded: {},
-      mktSel: [], cfgOpen: false, chipOn: { notas: {}, itens: {} },
+      matchHidden: false, cfgOpen: false, chipOn: { notas: {}, itens: {} },
       colCfg: { notas: null, itens: null },   // null = padrão do app; array = chaves que viram chip
       view: "notas",               // "notas" | "itens"
       iSortKey: "data", iSortDir: -1, iExpanded: {},
@@ -17049,7 +17043,6 @@
         var temTx = state.match[n.id] ? "com" : "sem";
         if (state.matchSel.indexOf(temTx) === -1) return false;
       }
-      if (state.mktSel.length && state.mktSel.indexOf(nfMarketplace(n) || "-") === -1) return false;
       if (state.emitenteSel.length && state.emitenteSel.indexOf(n.emitente) === -1) return false;
       if (state.tipoSel.length && state.tipoSel.indexOf(n.tipo) === -1) return false;
       if (state.statusSel.length && state.statusSel.indexOf(n.status) === -1) return false;
@@ -17068,7 +17061,7 @@
       }
       if (state.search && !skipSearch) {
         var s = normalize(state.search);
-        var parts = [n.nota, n.emitente, n.razao_social, n.cnpj_cpf, n.numero, n.chave_acesso, n.tipo, n.municipio, n.natureza, n.pedido, nfMarketplace(n)];
+        var parts = [n.nota, n.emitente, n.razao_social, n.cnpj_cpf, n.numero, n.chave_acesso, n.tipo, n.municipio, n.natureza];
         (state.itensByNota[n.id] || []).forEach(function (i) { parts.push(i.produto, i.item, i.ean, i.ncm, i.categoria); });
         if (normalize(parts.filter(Boolean).join(" ")).indexOf(s) === -1) return false;
       }
@@ -17077,7 +17070,6 @@
     function sortValue(n, key) {
       if (key === "_nItens") return (state.itensByNota[n.id] || []).length;
       if (key === "_tx") return state.match[n.id] ? 1 : 0;
-      if (key === "_mkt") return nfMarketplace(n);
       var v = n[key];
       return (v === null || v === undefined) ? "" : v;
     }
@@ -17117,7 +17109,7 @@
     }
 
     var wraps = {};
-    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "mkt", "data"].forEach(function (k) {
+    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "data"].forEach(function (k) {
       wraps[k] = document.createElement("div");
     });
     function dd(wrapKey, def, setter) {
@@ -17137,7 +17129,6 @@
       dd("anoMes", { property: "ano_mes", type: "select", label: "Mês", emoji: "🗓️", icon: "ti-calendar", searchable: true, options: anoMesOpts }, "anoMesSel");
       dd("categoria", { property: "categoria", type: "select", label: "Categoria do item", emoji: "🛒", icon: "ti-category", searchable: true, options: categoriaOptions() }, "categoriaSel");
       dd("tx", { property: "tx", type: "select", label: "Transação", emoji: "💳", icon: "ti-credit-card", options: [{ label: "Com transação", pageId: "com" }, { label: "Sem transação", pageId: "sem" }] }, "matchSel");
-      dd("mkt", { property: "mkt", type: "select", label: "Marketplace", emoji: "🛍️", icon: "ti-shopping-bag", options: [{ label: "Mercado Livre", pageId: "Mercado Livre" }, { label: "Sem marketplace", pageId: "-" }] }, "mktSel");
     }
     function buildDateFilter() {
       wraps.data.innerHTML = "";
@@ -17156,7 +17147,7 @@
 
     var filterBar = document.createElement("div");
     filterBar.className = "legislacoes-filterbar";
-    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "mkt", "data"].forEach(function (k) { filterBar.appendChild(wraps[k]); });
+    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "data"].forEach(function (k) { filterBar.appendChild(wraps[k]); });
     var clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "search-clear-btn holerite-filterbar-clear-btn";
@@ -17164,7 +17155,7 @@
     clearBtn.addEventListener("click", function () {
       state.search = ""; searchInput.value = "";
       state.emitenteSel = []; state.tipoSel = []; state.statusSel = []; state.naturezaSel = [];
-      state.ufSel = []; state.anoMesSel = []; state.categoriaSel = []; state.matchSel = []; state.mktSel = []; state.dateRange = null;
+      state.ufSel = []; state.anoMesSel = []; state.categoriaSel = []; state.matchSel = []; state.dateRange = null;
       buildDateFilter();
       buildFiltersBar();
       renderBody();
@@ -17192,14 +17183,30 @@
     var matchBtn = document.createElement("button");
     matchBtn.type = "button";
     matchBtn.className = "search-clear-btn nf-sync-btn";
-    matchBtn.addEventListener("click", startMatch);
+    matchBtn.addEventListener("click", function () {
+      if (state.matchState === "ok") {
+        state.matchHidden = !state.matchHidden;
+        if (state.matchHidden && state.matchSel.length) { state.matchSel = []; buildFiltersBar(); }
+        updateMatchBtn(); renderBody();
+      } else startMatch();
+    });
     toolbar.appendChild(matchBtn);
-    [["Expandir tudo", "ti-arrows-maximize", true], ["Recolher tudo", "ti-arrows-minimize", false]].forEach(function (d) {
+    var rematchBtn = document.createElement("button");
+    rematchBtn.type = "button";
+    rematchBtn.className = "toolbar-icon-btn";
+    rematchBtn.title = "Refazer o cruzamento com Transações";
+    rematchBtn.setAttribute("aria-label", "Refazer o cruzamento com Transações");
+    rematchBtn.innerHTML = '<i class="ti ti-refresh"></i>';
+    rematchBtn.style.display = "none";
+    rematchBtn.addEventListener("click", function () { state.matchHidden = false; startMatch(); });
+    toolbar.appendChild(rematchBtn);
+    [["Recolher tudo", "ti-arrows-minimize", false], ["Expandir tudo", "ti-arrows-maximize", true]].forEach(function (d) {
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "search-clear-btn nf-exp-btn";
-      b.title = d[0] + " (itens de cada nota / linhas da visão por item)";
-      b.innerHTML = '<i class="ti ' + d[1] + '"></i> ' + d[0];
+      b.className = "toolbar-icon-btn";
+      b.title = d[0];
+      b.setAttribute("aria-label", d[0]);
+      b.innerHTML = '<i class="ti ' + d[1] + '"></i>';
       b.addEventListener("click", function () {
         state.expanded = {}; state.iExpanded = {};
         if (d[2]) {
@@ -17292,7 +17299,7 @@
     }
     // bloco "Pagamento (Transação)" de uma nota
     function matchBlock(n) {
-      if (state.matchState === "idle" || state.matchState === "error") return null;
+      if (state.matchState === "idle" || state.matchState === "error" || state.matchHidden) return null;
       var m = state.match[n.id];
       var box = document.createElement("div");
       if (m) {
@@ -17335,7 +17342,6 @@
         case "valor": td.textContent = nfFmtMoney(n.valor_total); break;
         case "itens": td.textContent = String((state.itensByNota[n.id] || []).length); break;
         case "tx": td.appendChild(txChip(state.match[n.id])); break;
-        case "mkt": var mk = nfMarketplace(n); td.appendChild(chip(mk || "—", mk ? "nf-chip-mkt" : "")); if (mk) td.title = "Inferido do nº do pedido (2000…, 16 dígitos)"; break;
         case "natureza": td.textContent = n.natureza || "—"; break;
         case "serie": td.textContent = n.serie || "—"; break;
         case "uf": td.textContent = n.uf || "—"; break;
@@ -17525,8 +17531,6 @@
       { k: "tx", label: "Transação", t: "x", get: function (i, n) { return n && state.match[n.id] ? 1 : 0; } },
       { k: "nota_num", label: "Nota nº", t: "t", extra: true, get: function (i, n) { return n && n.numero; } },
       { k: "tipo", label: "Tipo da nota", t: "t", extra: true, get: function (i, n) { return n && n.tipo; } },
-      { k: "mkt", label: "Marketplace", t: "t", extra: true, get: function (i, n) { return n && nfMarketplace(n); } },
-      { k: "pedido", label: "Pedido", t: "t", extra: true, get: function (i, n) { return n && n.pedido; } },
       { k: "num_item", label: "Nº item", t: "n", extra: true, get: function (i) { return i.num_item; } },
       { k: "valor_bruto", label: "Valor bruto", t: "m", extra: true, get: function (i) { return i.valor_bruto; } },
       { k: "desconto", label: "Desconto", t: "m", extra: true, get: function (i) { return i.desconto; } },
@@ -17571,8 +17575,8 @@
     function colVisible(view, key) {
       return chipsFor(view).indexOf(key) === -1 || !!state.chipOn[view][key];
     }
-    function visibleNotasCols() { return NF_COLS.filter(function (c) { return colVisible("notas", c.key); }); }
-    function visibleItemCols() { return IT_COLS.filter(function (c) { return colVisible("itens", c.k); }); }
+    function visibleNotasCols() { return NF_COLS.filter(function (c) { return !(c.key === "tx" && state.matchHidden) && colVisible("notas", c.key); }); }
+    function visibleItemCols() { return IT_COLS.filter(function (c) { return !(c.k === "tx" && state.matchHidden) && colVisible("itens", c.k); }); }
     function loadColCfgLocal() {
       try {
         var raw = localStorage.getItem(NF_CFG_LS);
@@ -17633,7 +17637,7 @@
       if (!chips.length) {
         var none = document.createElement("span"); none.className = "nf-chipbar-none"; none.textContent = "nenhuma (todas as colunas são padrão)"; top.appendChild(none);
       } else {
-        [["Todas", true], ["Nenhuma", false]].forEach(function (d) {
+        [["Marcar todas", true], ["Desmarcar todas", false]].forEach(function (d) {
           var b = document.createElement("button");
           b.type = "button"; b.className = "nf-colchip nf-colchip-ctl"; b.textContent = d[0];
           b.addEventListener("click", function () {
@@ -17680,6 +17684,16 @@
       panel.appendChild(grid);
       var acts = document.createElement("div");
       acts.className = "nf-colcfg-actions";
+      [["Marcar todas (todas padrão)", "ti-checks", []], ["Desmarcar todas (todas viram chip)", "ti-square", null]].forEach(function (d) {
+        var b = document.createElement("button");
+        b.type = "button"; b.className = "search-clear-btn nf-exp-btn";
+        b.innerHTML = '<i class="ti ' + d[1] + '"></i> ' + d[0];
+        b.addEventListener("click", function () {
+          state.colCfg[view] = d[2] === null ? cols.map(function (c) { return colKey(view, c); }) : [];
+          saveColCfg(); renderBody();
+        });
+        acts.appendChild(b);
+      });
       var rst = document.createElement("button");
       rst.type = "button"; rst.className = "search-clear-btn nf-exp-btn";
       rst.innerHTML = '<i class="ti ti-restore"></i> Restaurar padrão do app';
@@ -17861,14 +17875,18 @@
 
     // ---------------- cruzamento com Transações (D1) ----------------
     function updateMatchBtn() {
-      if (state.matchState === "loading") matchBtn.innerHTML = '<i class="ti ti-loader"></i> Cruzando…';
+      rematchBtn.style.display = state.matchState === "ok" ? "" : "none";
+      if (state.matchState === "ok" && state.matchHidden) {
+        matchBtn.innerHTML = '<i class="ti ti-eye"></i> Exibir transações';
+        matchBtn.title = "Mostra de novo a coluna e os dados de pagamento (Transação) cruzados";
+      } else if (state.matchState === "loading") matchBtn.innerHTML = '<i class="ti ti-loader"></i> Cruzando…';
       else if (state.matchState === "ok") {
         var tot = 0, desde = (state.matchInfo && state.matchInfo.tx_desde) || "";
         state.notas.forEach(function (n) {
           if (n.status === "Autorizada" && n.natureza === "Compra" && String(n.data_emissao || "").slice(0, 10) >= desde) tot++;
         });
-        matchBtn.innerHTML = '<i class="ti ti-link"></i> Transações: ' + (state.matchInfo ? state.matchInfo.matched : 0) + "/" + tot + " notas cruzadas";
-        matchBtn.title = "Cruza por valor igual e data até " + ((state.matchInfo && state.matchInfo.dias) || 7) + " dias da emissão (notas de compra autorizadas desde " + nfFmtDate(desde) + "). Clique para refazer.";
+        matchBtn.innerHTML = '<i class="ti ti-eye-off"></i> Ocultar transações (' + (state.matchInfo ? state.matchInfo.matched : 0) + "/" + tot + " cruzadas)";
+        matchBtn.title = "Esconde a coluna e os dados de pagamento. Cruzamento por valor igual e data até " + ((state.matchInfo && state.matchInfo.dias) || 7) + " dias da emissão (notas de compra autorizadas desde " + nfFmtDate(desde) + ").";
       } else if (state.matchState === "error") matchBtn.innerHTML = '<i class="ti ti-alert-triangle"></i> Cruzar com Transações (erro — tentar de novo)';
       else matchBtn.innerHTML = '<i class="ti ti-link"></i> Cruzar com Transações';
     }

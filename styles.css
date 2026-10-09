@@ -9140,7 +9140,7 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 /* ---- Notas Fiscais: rolagem, chips de colunas, configurar colunas, marketplace ---- */
 .nf-table-scroll { overflow: auto; max-height: 72vh; border: 1px solid #e6e4de; border-radius: 8px; }
 .nf-table-scroll .nf-table thead th { position: sticky; top: 0; z-index: 3; background: #f3f2ee; }
-.nf-chip-mkt { background: #fff3c4; color: #7a5a00; }
+
 .nf-exp-btn { width: auto; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; }
 .nf-chipbar { margin: 6px 0 8px; }
 .nf-chipbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
