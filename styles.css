@@ -9080,3 +9080,35 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .nf-table.hide-desconto .nf-col-desconto, .nf-table.hide-desconto .nf-th-desconto,
 .nf-table.hide-frete .nf-col-frete, .nf-table.hide-frete .nf-th-frete,
 .nf-table.hide-trib .nf-col-trib, .nf-table.hide-trib .nf-th-trib { display: none; }
+
+/* Notas Fiscais — colunas extras (ocultas por padrão) */
+.nf-table.hide-razao .nf-col-razao, .nf-table.hide-razao .nf-th-razao,
+.nf-table.hide-chave .nf-col-chave, .nf-table.hide-chave .nf-th-chave,
+.nf-table.hide-codver .nf-col-codver, .nf-table.hide-codver .nf-th-codver,
+.nf-table.hide-pedido .nf-col-pedido, .nf-table.hide-pedido .nf-th-pedido,
+.nf-table.hide-outras .nf-col-outras, .nf-table.hide-outras .nf-th-outras,
+.nf-table.hide-seguro .nf-col-seguro, .nf-table.hide-seguro .nf-th-seguro,
+.nf-table.hide-tribf .nf-col-tribf, .nf-table.hide-tribf .nf-th-tribf,
+.nf-table.hide-tribe .nf-col-tribe, .nf-table.hide-tribe .nf-th-tribe,
+.nf-table.hide-tribm .nf-col-tribm, .nf-table.hide-tribm .nf-th-tribm,
+.nf-table.hide-origtrib .nf-col-origtrib, .nf-table.hide-origtrib .nf-th-origtrib,
+.nf-table.hide-origdados .nf-col-origdados, .nf-table.hide-origdados .nf-th-origdados,
+.nf-table.hide-icms .nf-col-icms, .nf-table.hide-icms .nf-th-icms,
+.nf-table.hide-pis .nf-col-pis, .nf-table.hide-pis .nf-th-pis,
+.nf-table.hide-cofins .nf-col-cofins, .nf-table.hide-cofins .nf-th-cofins,
+.nf-table.hide-ipi .nf-col-ipi, .nf-table.hide-ipi .nf-th-ipi,
+.nf-table.hide-ii .nf-col-ii, .nf-table.hide-ii .nf-th-ii,
+.nf-table.hide-iss .nf-col-iss, .nf-table.hide-iss .nf-th-iss,
+.nf-table.hide-ibs .nf-col-ibs, .nf-table.hide-ibs .nf-th-ibs,
+.nf-table.hide-cbs .nf-col-cbs, .nf-table.hide-cbs .nf-th-cbs,
+.nf-table.hide-isimp .nf-col-isimp, .nf-table.hide-isimp .nf-th-isimp,
+.nf-table.hide-irret .nf-col-irret, .nf-table.hide-irret .nf-th-irret,
+.nf-table.hide-csll .nf-col-csll, .nf-table.hide-csll .nf-th-csll,
+.nf-table.hide-inss .nf-col-inss, .nf-table.hide-inss .nf-th-inss,
+.nf-table.hide-criado .nf-col-criado, .nf-table.hide-criado .nf-th-criado { display: none; }
+.nf-col-outras,.nf-col-seguro,.nf-col-tribf,.nf-col-tribe,.nf-col-tribm,.nf-col-icms,.nf-col-pis,.nf-col-cofins,.nf-col-ipi,.nf-col-ii,.nf-col-iss,.nf-col-ibs,.nf-col-cbs,.nf-col-isimp,.nf-col-irret,.nf-col-csll,.nf-col-inss { text-align: right; font-variant-numeric: tabular-nums; }
+.nf-col-chave, .nf-col-codver { font-size: 11px; word-break: break-all; min-width: 200px; }
+.nf-col-razao { min-width: 160px; white-space: normal; }
+.nf-items-scroll { overflow-x: auto; max-width: 100%; }
+.nf-items-table td.nf-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nf-items-table td, .nf-items-table th { white-space: nowrap; }

@@ -16939,9 +16939,37 @@
     { key: "produtos", label: "Valor Produtos", sortKey: "valor_produtos" },
     { key: "desconto", label: "Desconto", sortKey: "desconto" },
     { key: "frete", label: "Frete", sortKey: "frete" },
-    { key: "trib", label: "Trib. Aprox.", sortKey: "trib_aprox_total" }
+    { key: "trib", label: "Trib. Aprox.", sortKey: "trib_aprox_total" },
+    // colunas extras (todas as propriedades do Notion), ocultas por padrão.
+    // field = coluna do D1; money = formata em R$; os demais são texto.
+    { key: "razao", label: "Razão Social", sortKey: "razao_social", field: "razao_social" },
+    { key: "chave", label: "Chave de Acesso", sortKey: "chave_acesso", field: "chave_acesso" },
+    { key: "codver", label: "Cód. Verificação", sortKey: "codigo_verificacao", field: "codigo_verificacao" },
+    { key: "pedido", label: "Pedido", sortKey: "pedido", field: "pedido" },
+    { key: "outras", label: "Outras Despesas", sortKey: "outras_despesas", field: "outras_despesas", money: true },
+    { key: "seguro", label: "Seguro", sortKey: "seguro", field: "seguro", money: true },
+    { key: "tribf", label: "Trib. Federal", sortKey: "trib_aprox_federal", field: "trib_aprox_federal", money: true },
+    { key: "tribe", label: "Trib. Estadual", sortKey: "trib_aprox_estadual", field: "trib_aprox_estadual", money: true },
+    { key: "tribm", label: "Trib. Municipal", sortKey: "trib_aprox_municipal", field: "trib_aprox_municipal", money: true },
+    { key: "origtrib", label: "Origem Trib.", sortKey: "origem_trib_aprox", field: "origem_trib_aprox" },
+    { key: "origdados", label: "Origem dos Dados", sortKey: "origem_dados", field: "origem_dados" },
+    { key: "icms", label: "ICMS", sortKey: "icms", field: "icms", money: true },
+    { key: "pis", label: "PIS", sortKey: "pis", field: "pis", money: true },
+    { key: "cofins", label: "COFINS", sortKey: "cofins", field: "cofins", money: true },
+    { key: "ipi", label: "IPI", sortKey: "ipi", field: "ipi", money: true },
+    { key: "ii", label: "II", sortKey: "ii", field: "ii", money: true },
+    { key: "iss", label: "ISS", sortKey: "iss", field: "iss", money: true },
+    { key: "ibs", label: "IBS", sortKey: "ibs", field: "ibs", money: true },
+    { key: "cbs", label: "CBS", sortKey: "cbs", field: "cbs", money: true },
+    { key: "isimp", label: "IS", sortKey: "is_imposto", field: "is_imposto", money: true },
+    { key: "irret", label: "IR Retido", sortKey: "ir_retido", field: "ir_retido", money: true },
+    { key: "csll", label: "CSLL Retida", sortKey: "csll_retida", field: "csll_retida", money: true },
+    { key: "inss", label: "INSS Retido", sortKey: "inss_retido", field: "inss_retido", money: true },
+    { key: "criado", label: "Criado no Notion", sortKey: "created_time", field: "created_time", date: true }
   ];
-  var NF_DEFAULT_HIDDEN = ["natureza", "serie", "uf", "municipio", "regime", "cnpj", "produtos", "desconto", "frete", "trib"];
+  var NF_DEFAULT_HIDDEN = NF_COLS.map(function (c) { return c.key; }).filter(function (k) {
+    return ["data", "emitente", "tipo", "numero", "status", "valor", "itens"].indexOf(k) === -1;
+  });
   function nfFmtDate(iso) {
     if (!iso) return "—";
     var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -17203,6 +17231,14 @@
         case "desconto": td.textContent = nfFmtMoney(n.desconto); break;
         case "frete": td.textContent = nfFmtMoney(n.frete); break;
         case "trib": td.textContent = nfFmtMoney(n.trib_aprox_total); break;
+        default:
+          if (col.field) {
+            var fv = n[col.field];
+            if (col.money) td.textContent = nfFmtMoney(fv);
+            else if (col.date) td.textContent = nfFmtDate(fv);
+            else td.textContent = (fv === null || fv === undefined || fv === "") ? "—" : String(fv);
+            if (!col.money && !col.date) td.title = td.textContent;
+          }
       }
       return td;
     }
@@ -17219,34 +17255,48 @@
       t.className = "financeiro-table nf-items-table";
       var th = document.createElement("thead");
       var hr = document.createElement("tr");
-      ["#", "Produto", "Categoria", "Qtd", "Un", "Valor unit.", "Valor líquido", "NCM", "CFOP"].forEach(function (h) {
-        var c = document.createElement("th"); c.className = "financeiro-th"; c.textContent = h; hr.appendChild(c);
+      // [rótulo, campo D1, tipo] — tipo: n=número, m=R$, b=sim/não, c=categoria, t=texto
+      var icols = [
+        ["#", "num_item", "n"], ["Produto", "_produto", "t"], ["Categoria", "categoria", "c"],
+        ["Qtd", "quantidade", "n"], ["Un", "unidade", "t"], ["Valor unit.", "valor_unitario", "m"],
+        ["Valor bruto", "valor_bruto", "m"], ["Desconto", "desconto", "m"], ["Frete", "frete", "m"],
+        ["Valor líquido", "valor_liquido", "m"], ["Não é mercadoria", "nao_mercadoria", "b"],
+        ["Código", "codigo", "t"], ["EAN", "ean", "t"], ["NCM", "ncm", "t"], ["CEST", "cest", "t"], ["CFOP", "cfop", "t"],
+        ["CST ICMS", "cst_icms", "t"], ["CST IBS/CBS", "cst_ibs_cbs", "t"], ["cClassTrib", "cclass_trib", "t"],
+        ["Benefício fiscal", "beneficio_fiscal", "t"], ["Cód. serviço/NBS", "cod_servico_nbs", "t"],
+        ["ICMS", "icms", "m"], ["PIS", "pis", "m"], ["COFINS", "cofins", "m"], ["IPI", "ipi", "m"], ["II", "ii", "m"],
+        ["ISS", "iss", "m"], ["IBS", "ibs", "m"], ["CBS", "cbs", "m"], ["IS", "is_imposto", "m"],
+        ["IR retido", "ir_retido", "m"], ["CSLL retida", "csll_retida", "m"], ["INSS retido", "inss_retido", "m"],
+        ["Trib. aprox.", "trib_aprox", "m"], ["Origem trib.", "origem_trib_aprox", "t"], ["Emitente", "emitente", "t"],
+        ["Data", "data", "d"]
+      ];
+      icols.forEach(function (ic) {
+        var c = document.createElement("th"); c.className = "financeiro-th"; c.textContent = ic[0]; hr.appendChild(c);
       });
       th.appendChild(hr); t.appendChild(th);
       var tb = document.createElement("tbody");
       its.forEach(function (i) {
         var r = document.createElement("tr");
         r.className = "financeiro-row";
-        var vals = [
-          (typeof i.num_item === "number") ? String(i.num_item) : "—",
-          i.produto || i.item || "—",
-          null,
-          (typeof i.quantidade === "number") ? String(i.quantidade).replace(".", ",") : "—",
-          i.unidade || "—",
-          nfFmtMoney(i.valor_unitario),
-          nfFmtMoney(i.valor_liquido),
-          i.ncm || "—",
-          i.cfop || "—"
-        ];
-        vals.forEach(function (v, idx) {
+        icols.forEach(function (ic) {
           var c = document.createElement("td");
-          if (idx === 2) c.appendChild(chip(i.categoria, "nf-chip-cat")); else c.textContent = v;
+          var v = ic[1] === "_produto" ? (i.produto || i.item) : i[ic[1]];
+          var empty = (v === null || v === undefined || v === "");
+          if (ic[2] === "c") c.appendChild(chip(v, "nf-chip-cat"));
+          else if (ic[2] === "m") { c.textContent = nfFmtMoney(v); c.className = "nf-num"; }
+          else if (ic[2] === "n") { c.textContent = empty ? "—" : String(v).replace(".", ","); c.className = "nf-num"; }
+          else if (ic[2] === "b") c.textContent = (v === 1 || v === true || v === "1") ? "Sim" : "Não";
+          else if (ic[2] === "d") c.textContent = nfFmtDate(v);
+          else c.textContent = empty ? "—" : String(v);
           r.appendChild(c);
         });
         tb.appendChild(r);
       });
       t.appendChild(tb);
-      return t;
+      var iw = document.createElement("div");
+      iw.className = "nf-items-scroll";
+      iw.appendChild(t);
+      return iw;
     }
 
     function renderBody() {
