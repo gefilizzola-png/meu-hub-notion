@@ -22449,21 +22449,6 @@
       else if (s < 12) msg = "💡 Melhore a luz e evite reflexo no papel";
       else msg = "📸 Difícil de ler? Segure o papel parado e firme";
       if (!assisting && hintEl.textContent !== msg) hintEl.textContent = msg;
-      autoZoomSweep(s);
-    }
-    // "Aproxima e afasta" sozinho (como o app nativo): sem leitura há ~2,5 s, varre o zoom óptico
-    // (1x → 1,5x → 2x → 3x → volta) e refoca a cada passo, até o QR ficar nítido o bastante.
-    var azIdx = 0, azLast = 0;
-    function autoZoomSweep(s) {
-      if (!zoomCap) return;
-      var mn = zoomCap.min || 1, mx = zoomCap.max || 1;
-      if (s < 2.5) { if (azIdx !== 0) { azIdx = 0; applyZoom(mn); } return; }
-      if (Date.now() - azLast < 1600) return;
-      azLast = Date.now();
-      var lv = [mn, mn * 1.5, mn * 2, mn * 3, mn * 2, mn * 1.5].map(function (z) { return Math.min(mx, z); });
-      azIdx = (azIdx + 1) % lv.length;
-      applyZoom(lv[azIdx]);
-      setTimeout(refocus, 250);
     }
     var nfBtn = document.createElement("button"); nfBtn.type = "button"; nfBtn.className = "odo-btn"; nfBtn.style.display = "none"; nfBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar este QR mesmo assim';
     massCounter.parentNode ? massCounter.parentNode.insertBefore(nfBtn, massCounter.nextSibling) : null;
