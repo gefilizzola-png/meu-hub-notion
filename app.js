@@ -23732,6 +23732,7 @@
       var ids = pend.map(function (it) { return it.id; });
       // marca em lotes PEQUENOS (o Worker limita as operações por chamada); o que falhar é
       // tentado de novo em lotes ainda menores antes de avisar.
+      var lastErr = "";
       function markIds(list, size) {
         var left = [], i = 0;
         function next() {
@@ -23739,9 +23740,10 @@
           var chunk = list.slice(i, i + size); i += size;
           return call("/qrcapturas-export", "POST", { ids: chunk, exportadoEm: iso }).then(function (d) {
             var set = {}; (d.updated || []).forEach(function (x) { set[x] = 1; });
+            Object.keys(d.falhas || {}).forEach(function (k) { lastErr = d.falhas[k]; });
             state.items.forEach(function (it) { if (set[it.id]) it.exportadoEm = d.exportadoEm; });
             renderTable();
-          }).catch(function () { /* confere abaixo quais ficaram sem marca */ }).then(next);
+          }).catch(function (e) { lastErr = (e && e.message) || String(e); }).then(next);
         }
         return next().then(function () {
           return list.filter(function (id) { return state.items.some(function (it) { return it.id === id && !it.exportadoEm; }); });
@@ -23749,7 +23751,7 @@
       }
       markIds(ids, 10).then(function (rest) { return rest.length ? markIds(rest, 3) : rest; }).then(function (rest) {
         exporting = false;
-        msgEl.textContent = rest.length ? "⚠️ Arquivo baixado, mas " + rest.length + " item(ns) não puderam ser marcados como exportados (continuam em Pendentes). Clique em Exportar de novo para tentar marcar." : "✅ " + pend.length + " string(s) exportada(s) em " + fmtExp(iso) + ".";
+        msgEl.textContent = rest.length ? "⚠️ Arquivo baixado, mas " + rest.length + " item(ns) não puderam ser marcados como exportados (continuam em Pendentes)." + (lastErr ? " Motivo: " + lastErr + "." : "") + " Clique em Exportar de novo para tentar marcar." : "✅ " + pend.length + " string(s) exportada(s) em " + fmtExp(iso) + ".";
         renderTable();
       });
     }
