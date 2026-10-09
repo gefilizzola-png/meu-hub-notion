@@ -22276,6 +22276,7 @@
     });
     return scaled.then(function (val) {
       if (val) return val;
+      if (qrDetector && !deep) return null; // ao vivo (como na 1ª versão): só o detector nativo, leve, sem jsQR a cada quadro
       return qrLoadJsQR().then(function (jsQR) {
         // deep: true = leve (ao vivo, a cada N quadros); "mid" = + filtros p/ tinta fraca (ao vivo, mais raro);
         // "max" = tudo (foto parada, galeria, leitura de apoio)
@@ -22412,7 +22413,6 @@
       var t = camTrack(); zoomCap = null; zoomBox.style.display = "none";
       if (!t || !t.getCapabilities) return;
       var cap = t.getCapabilities();
-      if (cap.focusMode && cap.focusMode.indexOf("continuous") >= 0) t.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(function () {});
       if (cap.zoom && cap.zoom.max > cap.zoom.min) { zoomCap = cap.zoom; zoomCur = zoomCap.min || 1; zoomLbl.textContent = "1x"; zoomBox.style.display = ""; }
     }
     zoomIn.addEventListener("click", function (e) { e.stopPropagation(); applyZoom(zoomCur + Math.max(0.5, ((zoomCap && zoomCap.max) || 2) / 6)); });
@@ -22492,7 +22492,7 @@
       if (!scanning) return;
       if (video.readyState >= 2 && video.videoWidth) {
         frameN++;
-        qrDecode(video, video.videoWidth, video.videoHeight, frameN % 4 === 0).then(function (r) {
+        qrDecode(video, video.videoWidth, video.videoHeight).then(function (r) {
           if (!scanning) return;
           if (!r) { if (massive && Date.now() - massLast.t < 6000) { /* acabou de salvar: sem dica */ } else updateHint(); }
           if (massive) {
@@ -22510,32 +22510,6 @@
         });
       } else requestAnimationFrame(loop);
     }
-    // Fotos de verdade (ImageCapture.takePhoto): resolução cheia do sensor + foco/tratamento do próprio celular,
-    // como o app nativo da câmera. Roda em paralelo ao vídeo; cada foto vai pro decodificador.
-    var photoBusy = false;
-    function startPhotoLoop() {
-      if (typeof ImageCapture === "undefined" || !stream) return;
-      var t = camTrack(); if (!t) return;
-      var ic, myStream = stream;
-      try { ic = new ImageCapture(t); } catch (e) { return; }
-      function tick() {
-        if (!scanning || stream !== myStream) return;
-        if (photoBusy || (massive && massBusy)) { setTimeout(tick, 400); return; }
-        photoBusy = true;
-        ic.takePhoto().then(function (blob) {
-          if (!scanning || stream !== myStream) return null;
-          return (window.createImageBitmap ? createImageBitmap(blob) : Promise.reject(new Error("sem bitmap")));
-        }).then(function (bmp) {
-          if (!bmp) return null;
-          return qrDecode(bmp, bmp.width, bmp.height, true).then(function (r) { if (bmp.close) bmp.close(); return r; });
-        }).then(function (r) {
-          photoBusy = false;
-          if (r && scanning && stream === myStream) handleRead(r);
-          setTimeout(tick, 1200);
-        }).catch(function () { photoBusy = false; /* aparelho não suporta takePhoto: segue só com o vídeo */ });
-      }
-      setTimeout(tick, 1500);
-    }
     function startCam(isMassive) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scanMsg.textContent = "Este navegador não permite acessar a câmera."; return; }
       stopCam();
@@ -22543,13 +22517,13 @@
       unlockAudio(); // precisa nascer dentro do toque do usuário, senão o celular deixa o bip mudo
       scanMsg.textContent = "Abrindo câmera…";
       if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); galBtn.classList.remove("primary"); massCounter.style.display = ""; massCounter.textContent = ""; }
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(function (st) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" },  }, audio: false }).then(function (st) {
         stream = st; video.srcObject = st; video.style.display = ""; vf.classList.add("on"); stopBtn.style.display = "";
         setupCamControls();
         return video.play();
       }).then(function () {
         scanMsg.textContent = "";
-        scanning = true; scanStartedAt = Date.now(); frameN = 0; hintEl.style.display = ""; updateHint(); loop(); startPhotoLoop();
+        scanning = true; scanStartedAt = Date.now(); frameN = 0; hintEl.style.display = ""; updateHint(); loop();
       }).catch(function (e) { stopCam(); scanMsg.textContent = "Não consegui abrir a câmera (" + ((e && e.name) || "erro") + "). Permita o acesso ou use a galeria."; });
     }
     // Os 3 botões são "liga/desliga": clicar ativa (fundo azul), clicar de novo desativa e volta ao estado inicial.
