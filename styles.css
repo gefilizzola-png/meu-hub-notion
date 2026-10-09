@@ -9045,3 +9045,38 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .qr-zoom { position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.55); border-radius: 18px; padding: 3px 8px; color: #fff; z-index: 3; }
 .qr-zoom button { background: none; border: 0; color: #fff; font-size: 22px; line-height: 1; width: 30px; height: 30px; cursor: pointer; }
 .qr-zoom span { font-size: 12px; min-width: 28px; text-align: center; }
+
+/* ---------- Notas Fiscais (page.notasFiscais) ---------- */
+.nf-summary { margin: 10px 0 6px; }
+.nf-sync-btn { margin-left: auto; width: auto; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; }
+.nf-table-scroll { overflow-x: auto; }
+.nf-table { width: 100%; }
+/* largura estável (regra #14): colunas curtas 1% + nowrap; só Emitente absorve o resto */
+.nf-table th, .nf-table td { white-space: nowrap; }
+.nf-table .nf-th { width: 1%; }
+.nf-table .nf-th-emitente { width: auto; }
+.nf-table td.nf-col-emitente { white-space: normal; min-width: 160px; }
+.nf-th-toggle, .nf-col-toggle, .nf-th-actions, .nf-col-actions { width: 1%; }
+.nf-col-toggle { color: #888; }
+.nf-col-valor, .nf-col-produtos, .nf-col-desconto, .nf-col-frete, .nf-col-trib { text-align: right; font-variant-numeric: tabular-nums; }
+.nf-row-open { background: #f7f6f2; }
+.nf-action-link { color: #666; margin-left: 6px; font-size: 16px; text-decoration: none; }
+.nf-action-link:hover { color: #111; }
+.nf-detail-row > td { background: #fafaf8; padding: 8px 12px 12px 28px; }
+.nf-items-table { width: 100%; font-size: 12.5px; }
+.nf-items-table td, .nf-items-table th { white-space: nowrap; padding: 3px 8px; }
+.nf-items-table td:nth-child(2) { white-space: normal; }
+.nf-chip { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #eeede9; color: #444; }
+.nf-chip-ok { background: #e3f3e6; color: #1f6b34; }
+.nf-chip-bad { background: #fbe4e1; color: #a02a1c; }
+.nf-chip-cat { background: #e8eefb; color: #2b4a8f; }
+.nf-table.hide-natureza .nf-col-natureza, .nf-table.hide-natureza .nf-th-natureza,
+.nf-table.hide-serie .nf-col-serie, .nf-table.hide-serie .nf-th-serie,
+.nf-table.hide-uf .nf-col-uf, .nf-table.hide-uf .nf-th-uf,
+.nf-table.hide-municipio .nf-col-municipio, .nf-table.hide-municipio .nf-th-municipio,
+.nf-table.hide-regime .nf-col-regime, .nf-table.hide-regime .nf-th-regime,
+.nf-table.hide-cnpj .nf-col-cnpj, .nf-table.hide-cnpj .nf-th-cnpj,
+.nf-table.hide-produtos .nf-col-produtos, .nf-table.hide-produtos .nf-th-produtos,
+.nf-table.hide-desconto .nf-col-desconto, .nf-table.hide-desconto .nf-th-desconto,
+.nf-table.hide-frete .nf-col-frete, .nf-table.hide-frete .nf-th-frete,
+.nf-table.hide-trib .nf-col-trib, .nf-table.hide-trib .nf-th-trib { display: none; }

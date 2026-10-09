@@ -16913,6 +16913,504 @@
     });
   }
 
+  // ---------------- "page.notasFiscais" — Notas Fiscais (Financeiro->Fiscal->Notas Fiscais, espelho em D1) ----------------
+  // Pedido do Georges: subir as bases Notion "Notas Fiscais" (431) e "Notas
+  // Fiscais - Itens" (678) pro D1 (tabelas nf_notas / nf_itens, banco
+  // "meu-hub-visor") pra o app mostrar como tabela e, depois, como
+  // relatórios/dashboard (BI — rodada futura). Leitura via GET /nf-notas e
+  // GET /nf-itens; o botão "Sincronizar do Notion" chama POST /nf-sync em
+  // fatias de 100 linhas (upsert idempotente por id da página Notion). O
+  // Notion segue somente leitura aqui. Sem Painel do Dia/Calendário; fonte na
+  // Central de Notificações existe mas nasce desligada e vazia (kind "nf_notas").
+  var NF_COLS = [
+    { key: "data", label: "Data", sortKey: "data_emissao" },
+    { key: "emitente", label: "Emitente", sortKey: "emitente" },
+    { key: "tipo", label: "Tipo", sortKey: "tipo" },
+    { key: "numero", label: "Número", sortKey: "numero" },
+    { key: "status", label: "Status", sortKey: "status" },
+    { key: "valor", label: "Valor Total", sortKey: "valor_total" },
+    { key: "itens", label: "Itens", sortKey: "_nItens" },
+    { key: "natureza", label: "Natureza", sortKey: "natureza" },
+    { key: "serie", label: "Série", sortKey: "serie" },
+    { key: "uf", label: "UF", sortKey: "uf" },
+    { key: "municipio", label: "Município", sortKey: "municipio" },
+    { key: "regime", label: "Regime", sortKey: "regime" },
+    { key: "cnpj", label: "CNPJ/CPF", sortKey: "cnpj_cpf" },
+    { key: "produtos", label: "Valor Produtos", sortKey: "valor_produtos" },
+    { key: "desconto", label: "Desconto", sortKey: "desconto" },
+    { key: "frete", label: "Frete", sortKey: "frete" },
+    { key: "trib", label: "Trib. Aprox.", sortKey: "trib_aprox_total" }
+  ];
+  var NF_DEFAULT_HIDDEN = ["natureza", "serie", "uf", "municipio", "regime", "cnpj", "produtos", "desconto", "frete", "trib"];
+  function nfFmtDate(iso) {
+    if (!iso) return "—";
+    var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[3] + "/" + m[2] + "/" + m[1]) : String(iso);
+  }
+  function nfFmtMoney(n) {
+    return (typeof n === "number") ? financeiroFormatBRL(n) : "—";
+  }
+  function renderNotasFiscaisPage(container, page) {
+    var cfg = window.APP_CONFIG || {};
+    var wrap = document.createElement("div");
+    wrap.className = "holerite-block nf-block";
+    container.appendChild(wrap);
+
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "🧾 Notas Fiscais";
+    wrap.appendChild(title);
+
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty";
+    statusEl.textContent = "Carregando notas fiscais…";
+    wrap.appendChild(statusEl);
+
+    var searchSection = buildCollapsibleSection("Pesquisar");
+    var filterSection = buildCollapsibleSection("Filtrar");
+    var controls = document.createElement("div");
+    controls.className = "holerite-controls";
+    controls.appendChild(searchSection.section);
+    controls.appendChild(filterSection.section);
+    wrap.appendChild(controls);
+
+    var summaryEl = document.createElement("div");
+    summaryEl.className = "holerite-totals-row nf-summary";
+    wrap.appendChild(summaryEl);
+
+    var toolbar = document.createElement("div");
+    toolbar.className = "priorities-columns-toolbar";
+    wrap.appendChild(toolbar);
+
+    var body = document.createElement("div");
+    wrap.appendChild(body);
+
+    var state = {
+      notas: [], itens: [], itensByNota: {},
+      search: "",
+      emitenteSel: [], tipoSel: [], statusSel: [], naturezaSel: [], ufSel: [], anoMesSel: [], categoriaSel: [],
+      dateRange: null,
+      sortKey: "data_emissao", sortDir: -1,
+      expanded: {},
+      columnsExpanded: window.innerWidth > 900
+    };
+
+    function categoriasDaNota(n) {
+      return (state.itensByNota[n.id] || []).map(function (i) { return i.categoria; });
+    }
+    function passesFilters(n) {
+      if (state.emitenteSel.length && state.emitenteSel.indexOf(n.emitente) === -1) return false;
+      if (state.tipoSel.length && state.tipoSel.indexOf(n.tipo) === -1) return false;
+      if (state.statusSel.length && state.statusSel.indexOf(n.status) === -1) return false;
+      if (state.naturezaSel.length && state.naturezaSel.indexOf(n.natureza) === -1) return false;
+      if (state.ufSel.length && state.ufSel.indexOf(n.uf) === -1) return false;
+      if (state.anoMesSel.length && state.anoMesSel.indexOf(n.ano_mes) === -1) return false;
+      if (state.categoriaSel.length) {
+        var cats = categoriasDaNota(n);
+        if (!cats.some(function (c) { return state.categoriaSel.indexOf(c) !== -1; })) return false;
+      }
+      if (state.dateRange) {
+        var d = (n.data_emissao || "").slice(0, 10);
+        if (!d) return false;
+        if (state.dateRange.from && d < state.dateRange.from) return false;
+        if (state.dateRange.to && d > state.dateRange.to) return false;
+      }
+      if (state.search) {
+        var s = normalize(state.search);
+        var parts = [n.nota, n.emitente, n.razao_social, n.cnpj_cpf, n.numero, n.chave_acesso, n.tipo, n.municipio, n.natureza];
+        (state.itensByNota[n.id] || []).forEach(function (i) { parts.push(i.produto, i.item, i.ean, i.ncm, i.categoria); });
+        if (normalize(parts.filter(Boolean).join(" ")).indexOf(s) === -1) return false;
+      }
+      return true;
+    }
+    function sortValue(n, key) {
+      if (key === "_nItens") return (state.itensByNota[n.id] || []).length;
+      var v = n[key];
+      return (v === null || v === undefined) ? "" : v;
+    }
+    function sortedFiltered() {
+      var arr = state.notas.filter(passesFilters);
+      var key = state.sortKey, dir = state.sortDir;
+      arr.sort(function (a, b) {
+        var av = sortValue(a, key), bv = sortValue(b, key);
+        if (typeof av === "number" && typeof bv === "number") return dir * (av - bv);
+        if (av === "" && bv !== "") return 1;
+        if (bv === "" && av !== "") return -1;
+        return dir * String(av).localeCompare(String(bv), "pt-BR", { numeric: true });
+      });
+      return arr;
+    }
+
+    function optionsFor(key, labelFn) {
+      var seen = {}, out = [];
+      state.notas.forEach(function (n) {
+        var v = n[key];
+        if (!v || seen[v]) return;
+        seen[v] = true;
+        out.push({ label: labelFn ? labelFn(v) : v, pageId: v });
+      });
+      out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+      return out;
+    }
+    function categoriaOptions() {
+      var seen = {}, out = [];
+      state.itens.forEach(function (i) {
+        if (!i.categoria || seen[i.categoria]) return;
+        seen[i.categoria] = true;
+        out.push({ label: i.categoria, pageId: i.categoria });
+      });
+      out.sort(function (a, b) { return a.label.localeCompare(b.label, "pt-BR"); });
+      return out;
+    }
+
+    var wraps = {};
+    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "data"].forEach(function (k) {
+      wraps[k] = document.createElement("div");
+    });
+    function dd(wrapKey, def, setter) {
+      wraps[wrapKey].innerHTML = "";
+      wraps[wrapKey].appendChild(buildIconDropdown(def, function (opts) {
+        state[setter] = opts.map(function (o) { return o.pageId; });
+        renderBody();
+      }));
+    }
+    function buildFiltersBar() {
+      dd("emitente", { property: "emitente", type: "select", label: "Emitente", emoji: "🏪", icon: "ti-building-store", searchable: true, options: optionsFor("emitente") }, "emitenteSel");
+      dd("tipo", { property: "tipo", type: "select", label: "Tipo", emoji: "🏷️", icon: "ti-tag", options: optionsFor("tipo") }, "tipoSel");
+      dd("status", { property: "status", type: "select", label: "Status", emoji: "✅", icon: "ti-circle-check", options: optionsFor("status") }, "statusSel");
+      dd("natureza", { property: "natureza", type: "select", label: "Natureza", emoji: "📑", icon: "ti-file-description", searchable: true, options: optionsFor("natureza") }, "naturezaSel");
+      dd("uf", { property: "uf", type: "select", label: "UF", emoji: "📍", icon: "ti-map-pin", options: optionsFor("uf") }, "ufSel");
+      var anoMesOpts = optionsFor("ano_mes", holeriteCompetenciaLabel).sort(function (a, b) { return a.pageId < b.pageId ? 1 : -1; });
+      dd("anoMes", { property: "ano_mes", type: "select", label: "Mês", emoji: "🗓️", icon: "ti-calendar", searchable: true, options: anoMesOpts }, "anoMesSel");
+      dd("categoria", { property: "categoria", type: "select", label: "Categoria do item", emoji: "🛒", icon: "ti-category", searchable: true, options: categoriaOptions() }, "categoriaSel");
+    }
+    function buildDateFilter() {
+      wraps.data.innerHTML = "";
+      wraps.data.appendChild(buildLocalDateRangeFilter(
+        { label: "Data de emissão", emoji: "📅" },
+        function (range) { state.dateRange = range; renderBody(); }
+      ));
+    }
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Buscar por emitente, número, produto, chave, CNPJ…";
+    searchInput.className = "aniversarios-search-input";
+    searchInput.addEventListener("input", function () { state.search = searchInput.value.trim(); renderBody(); });
+    searchSection.body.appendChild(withSearchClear(searchInput));
+
+    var filterBar = document.createElement("div");
+    filterBar.className = "legislacoes-filterbar";
+    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "data"].forEach(function (k) { filterBar.appendChild(wraps[k]); });
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "search-clear-btn holerite-filterbar-clear-btn";
+    clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearBtn.addEventListener("click", function () {
+      state.search = ""; searchInput.value = "";
+      state.emitenteSel = []; state.tipoSel = []; state.statusSel = []; state.naturezaSel = [];
+      state.ufSel = []; state.anoMesSel = []; state.categoriaSel = []; state.dateRange = null;
+      buildDateFilter();
+      buildFiltersBar();
+      renderBody();
+    });
+    filterBar.appendChild(clearBtn);
+    filterSection.body.appendChild(filterBar);
+
+    // ---- barra: colunas + expandir/recolher itens + sincronizar ----
+    var colsBtn = document.createElement("button");
+    colsBtn.type = "button";
+    colsBtn.className = "priorities-columns-toggle-btn";
+    function updateColsLabel() {
+      colsBtn.innerHTML = state.columnsExpanded
+        ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
+        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+' + NF_DEFAULT_HIDDEN.length + ')';
+    }
+    colsBtn.addEventListener("click", function () { state.columnsExpanded = !state.columnsExpanded; updateColsLabel(); renderBody(); });
+    updateColsLabel();
+    toolbar.appendChild(colsBtn);
+    [["Recolher itens", "ti-arrows-minimize", false], ["Expandir itens", "ti-arrows-maximize", true]].forEach(function (d) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "toolbar-icon-btn";
+      b.title = d[0];
+      b.setAttribute("aria-label", d[0]);
+      b.innerHTML = '<i class="ti ' + d[1] + '"></i>';
+      b.addEventListener("click", function () {
+        state.expanded = {};
+        if (d[2]) sortedFiltered().forEach(function (n) { state.expanded[n.id] = true; });
+        renderBody();
+      });
+      toolbar.appendChild(b);
+    });
+    var syncBtn = document.createElement("button");
+    syncBtn.type = "button";
+    syncBtn.className = "search-clear-btn nf-sync-btn";
+    syncBtn.title = "Atualiza o D1 a partir das bases do Notion (somente leitura no Notion)";
+    syncBtn.innerHTML = '<i class="ti ti-refresh"></i> Sincronizar do Notion';
+    toolbar.appendChild(syncBtn);
+
+    function summaryBox(label, value, cls) {
+      var box = document.createElement("div");
+      box.className = "holerite-total-box " + cls;
+      var l = document.createElement("div"); l.className = "holerite-total-label"; l.textContent = label;
+      var v = document.createElement("div"); v.className = "holerite-total-value"; v.textContent = value;
+      box.appendChild(l); box.appendChild(v);
+      return box;
+    }
+    function renderSummary(rows) {
+      summaryEl.innerHTML = "";
+      var total = 0, trib = 0, nIt = 0, itSum = 0;
+      rows.forEach(function (n) {
+        total += n.valor_total || 0;
+        trib += n.trib_aprox_total || 0;
+        var its = state.itensByNota[n.id] || [];
+        nIt += its.length;
+        its.forEach(function (i) {
+          if (!state.categoriaSel.length || state.categoriaSel.indexOf(i.categoria) !== -1) itSum += i.valor_liquido || 0;
+        });
+      });
+      summaryEl.appendChild(summaryBox("Notas", String(rows.length), "holerite-total-paydate"));
+      summaryEl.appendChild(summaryBox("Valor total", financeiroFormatBRL(total), "holerite-total-liquido"));
+      if (state.categoriaSel.length) summaryEl.appendChild(summaryBox("Itens das categorias", financeiroFormatBRL(itSum), "holerite-total-proventos"));
+      summaryEl.appendChild(summaryBox("Itens", String(nIt), "holerite-total-paydate"));
+      summaryEl.appendChild(summaryBox("Trib. aprox.", financeiroFormatBRL(trib), "holerite-total-descontos"));
+    }
+
+    function chip(text, cls) {
+      var c = document.createElement("span");
+      c.className = "nf-chip " + (cls || "");
+      c.textContent = text || "—";
+      return c;
+    }
+    function cellFor(col, n) {
+      var td = document.createElement("td");
+      td.className = "nf-col nf-col-" + col.key;
+      switch (col.key) {
+        case "data": td.textContent = nfFmtDate(n.data_emissao); break;
+        case "emitente": td.textContent = n.emitente || n.razao_social || n.nota || "—"; td.title = n.razao_social || ""; break;
+        case "tipo": td.appendChild(chip(n.tipo, "nf-chip-tipo")); break;
+        case "numero": td.textContent = n.numero || "—"; break;
+        case "status": td.appendChild(chip(n.status, /cancel|deneg|inutil/i.test(n.status || "") ? "nf-chip-bad" : "nf-chip-ok")); break;
+        case "valor": td.textContent = nfFmtMoney(n.valor_total); break;
+        case "itens": td.textContent = String((state.itensByNota[n.id] || []).length); break;
+        case "natureza": td.textContent = n.natureza || "—"; break;
+        case "serie": td.textContent = n.serie || "—"; break;
+        case "uf": td.textContent = n.uf || "—"; break;
+        case "municipio": td.textContent = n.municipio || "—"; break;
+        case "regime": td.textContent = n.regime || "—"; break;
+        case "cnpj": td.textContent = n.cnpj_cpf || "—"; break;
+        case "produtos": td.textContent = nfFmtMoney(n.valor_produtos); break;
+        case "desconto": td.textContent = nfFmtMoney(n.desconto); break;
+        case "frete": td.textContent = nfFmtMoney(n.frete); break;
+        case "trib": td.textContent = nfFmtMoney(n.trib_aprox_total); break;
+      }
+      return td;
+    }
+
+    function buildItensTable(n) {
+      var its = (state.itensByNota[n.id] || []).slice().sort(function (a, b) { return (a.num_item || 0) - (b.num_item || 0); });
+      if (!its.length) {
+        var p = document.createElement("p");
+        p.className = "empty";
+        p.textContent = "Esta nota não tem itens cadastrados.";
+        return p;
+      }
+      var t = document.createElement("table");
+      t.className = "financeiro-table nf-items-table";
+      var th = document.createElement("thead");
+      var hr = document.createElement("tr");
+      ["#", "Produto", "Categoria", "Qtd", "Un", "Valor unit.", "Valor líquido", "NCM", "CFOP"].forEach(function (h) {
+        var c = document.createElement("th"); c.className = "financeiro-th"; c.textContent = h; hr.appendChild(c);
+      });
+      th.appendChild(hr); t.appendChild(th);
+      var tb = document.createElement("tbody");
+      its.forEach(function (i) {
+        var r = document.createElement("tr");
+        r.className = "financeiro-row";
+        var vals = [
+          (typeof i.num_item === "number") ? String(i.num_item) : "—",
+          i.produto || i.item || "—",
+          null,
+          (typeof i.quantidade === "number") ? String(i.quantidade).replace(".", ",") : "—",
+          i.unidade || "—",
+          nfFmtMoney(i.valor_unitario),
+          nfFmtMoney(i.valor_liquido),
+          i.ncm || "—",
+          i.cfop || "—"
+        ];
+        vals.forEach(function (v, idx) {
+          var c = document.createElement("td");
+          if (idx === 2) c.appendChild(chip(i.categoria, "nf-chip-cat")); else c.textContent = v;
+          r.appendChild(c);
+        });
+        tb.appendChild(r);
+      });
+      t.appendChild(tb);
+      return t;
+    }
+
+    function renderBody() {
+      body.innerHTML = "";
+      var rows = sortedFiltered();
+      renderSummary(rows);
+      if (!rows.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = state.notas.length ? "Nenhuma nota bate com os filtros." : "Nenhuma nota no D1 ainda — use \"Sincronizar do Notion\".";
+        body.appendChild(empty);
+        return;
+      }
+      var table = document.createElement("table");
+      table.className = "financeiro-table nf-table";
+      NF_COLS.forEach(function (col) {
+        table.classList.toggle("hide-" + col.key, !state.columnsExpanded && NF_DEFAULT_HIDDEN.indexOf(col.key) !== -1);
+      });
+      var thead = document.createElement("thead");
+      var hr = document.createElement("tr");
+      var thToggle = document.createElement("th");
+      thToggle.className = "financeiro-th nf-th-toggle";
+      hr.appendChild(thToggle);
+      NF_COLS.forEach(function (col) {
+        var th = document.createElement("th");
+        th.className = "financeiro-th financeiro-th-sortable nf-th nf-th-" + col.key;
+        var lbl = document.createElement("span");
+        lbl.className = "financeiro-th-label";
+        lbl.textContent = col.label;
+        th.appendChild(lbl);
+        var arrow = document.createElement("span");
+        arrow.className = "financeiro-th-arrow";
+        if (state.sortKey === col.sortKey) { th.classList.add("active"); arrow.textContent = state.sortDir === 1 ? "▲" : "▼"; }
+        th.appendChild(arrow);
+        th.title = "Clique para classificar por " + col.label;
+        th.addEventListener("click", function () {
+          if (state.sortKey === col.sortKey) state.sortDir = state.sortDir * -1;
+          else { state.sortKey = col.sortKey; state.sortDir = (col.key === "valor" || col.key === "data" || col.key === "itens") ? -1 : 1; }
+          renderBody();
+        });
+        hr.appendChild(th);
+      });
+      var thAct = document.createElement("th");
+      thAct.className = "financeiro-th nf-th-actions";
+      hr.appendChild(thAct);
+      thead.appendChild(hr);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      rows.forEach(function (n) {
+        var open = !!state.expanded[n.id];
+        var tr = document.createElement("tr");
+        tr.className = "financeiro-row provas-row-clickable nf-row" + (open ? " nf-row-open" : "");
+        tr.addEventListener("click", function () { state.expanded[n.id] = !state.expanded[n.id]; renderBody(); });
+        var tdT = document.createElement("td");
+        tdT.className = "nf-col-toggle";
+        tdT.innerHTML = '<i class="ti ' + (open ? "ti-chevron-down" : "ti-chevron-right") + '"></i>';
+        tr.appendChild(tdT);
+        NF_COLS.forEach(function (col) { tr.appendChild(cellFor(col, n)); });
+        var tdA = document.createElement("td");
+        tdA.className = "nf-col-actions";
+        if (n.notion_url) {
+          var a = document.createElement("a");
+          a.href = n.notion_url; a.target = "_blank"; a.rel = "noopener";
+          a.className = "nf-action-link"; a.title = "Abrir no Notion";
+          a.innerHTML = '<i class="ti ti-external-link"></i>';
+          a.addEventListener("click", function (e) { e.stopPropagation(); });
+          tdA.appendChild(a);
+        }
+        if (n.arquivo && /^https?:/i.test(n.arquivo)) {
+          var f = document.createElement("a");
+          f.href = n.arquivo; f.target = "_blank"; f.rel = "noopener";
+          f.className = "nf-action-link"; f.title = "Abrir arquivo da nota";
+          f.innerHTML = '<i class="ti ti-file-download"></i>';
+          f.addEventListener("click", function (e) { e.stopPropagation(); });
+          tdA.appendChild(f);
+        }
+        tr.appendChild(tdA);
+        tbody.appendChild(tr);
+        if (open) {
+          var trD = document.createElement("tr");
+          trD.className = "nf-detail-row";
+          var tdD = document.createElement("td");
+          tdD.colSpan = 99;
+          tdD.appendChild(buildItensTable(n));
+          trD.appendChild(tdD);
+          tbody.appendChild(trD);
+        }
+      });
+      table.appendChild(tbody);
+      var scroller = document.createElement("div");
+      scroller.className = "nf-table-scroll";
+      scroller.appendChild(table);
+      body.appendChild(scroller);
+    }
+
+    function indexItens() {
+      state.itensByNota = {};
+      state.itens.forEach(function (i) {
+        if (!i || !i.nota_id) return;
+        (state.itensByNota[i.nota_id] = state.itensByNota[i.nota_id] || []).push(i);
+      });
+    }
+    function fetchJson(path) {
+      return authFetch(cfg.templateWorkerUrl + path).then(function (res) {
+        if (res.status === 401 && window.Auth) { Auth.signOut(); return { items: [] }; }
+        return res.ok ? res.json() : { items: [], _erro: res.status };
+      }).catch(function () { return { items: [], _erro: "rede" }; });
+    }
+    function load() {
+      statusEl.style.display = "";
+      statusEl.textContent = "Carregando notas fiscais…";
+      Promise.all([fetchJson("/nf-notas"), fetchJson("/nf-itens")]).then(function (r) {
+        if (r[0]._erro) {
+          statusEl.textContent = /404/.test(String(r[0]._erro))
+            ? "O Worker ainda não foi atualizado — faça o redeploy do worker.js."
+            : "Não foi possível carregar as notas (erro " + r[0]._erro + ").";
+          return;
+        }
+        state.notas = r[0].items || [];
+        state.itens = r[1].items || [];
+        indexItens();
+        buildFiltersBar();
+        buildDateFilter();
+        statusEl.style.display = "none";
+        renderBody();
+      });
+    }
+
+    syncBtn.addEventListener("click", function () {
+      if (syncBtn.disabled) return;
+      syncBtn.disabled = true;
+      statusEl.style.display = "";
+      var bases = ["notas", "itens"], total = 0, missing = {};
+      function step(bi, cursor) {
+        if (bi >= bases.length) return Promise.resolve();
+        statusEl.textContent = "Sincronizando " + bases[bi] + "… (" + total + " registros até agora)";
+        var u = cfg.templateWorkerUrl + "/nf-sync?base=" + bases[bi] + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
+        return authFetch(u, { method: "POST" }).then(function (res) {
+          return res.json().then(function (d) { return { ok: res.ok, d: d }; });
+        }).then(function (x) {
+          if (!x.ok) throw new Error((x.d && x.d.error) || "erro na sincronização");
+          total += x.d.upserted || 0;
+          (x.d.missing_props || []).forEach(function (p) { missing[bases[bi] + ": " + p] = true; });
+          return x.d.done ? step(bi + 1, null) : step(bi, x.d.next_cursor);
+        });
+      }
+      step(0, null).then(function () {
+        var miss = Object.keys(missing);
+        load();
+        setTimeout(function () {
+          if (miss.length) { statusEl.style.display = ""; statusEl.textContent = "Sincronizado (" + total + " registros). Propriedades não encontradas no Notion: " + miss.join("; "); }
+        }, 800);
+      }).catch(function (e) {
+        statusEl.textContent = "Falha ao sincronizar: " + (e && e.message ? e.message : e);
+      }).then(function () { syncBtn.disabled = false; });
+    });
+
+    buildFiltersBar();
+    buildDateFilter();
+    load();
+  }
+
   // ---------------- "page.holerite" — PMF - Folha de Pagamento (Financeiro->PMF - Folha de Pagamento, espelho em D1, 100% leitura) ----------------
   // Pedido do Georges: migrar a base Notion "PMF" (linhas de holerite) pra
   // uma tabela D1 ("holerite", banco "meu-hub-visor" — ver GET /holerite e
@@ -29313,7 +29811,7 @@
 
   function pageHasValues(page) {
     return !!(page && (page.financeiroContasMensais || page.transacoes || page.financeiroBI || page.holerite ||
-      page.holeriteBI || page.rpc || page.irpf || page.emprestimos));
+      page.holeriteBI || page.rpc || page.irpf || page.emprestimos || page.notasFiscais));
   }
   // divide um texto em pedaços [{t, sv}] — sv=true quando é valor monetário
   function privacySplit(text) {
@@ -30425,6 +30923,16 @@
       renderHoleritePage(container, page);
     }
 
+    // "page.notasFiscais" — Notas Fiscais (Financeiro->Fiscal, D1). Ver renderNotasFiscaisPage.
+    if (page.notasFiscais) {
+      if (renderedSomething) {
+        var dividerNF = document.createElement("hr");
+        dividerNF.className = "content-divider";
+        container.appendChild(dividerNF);
+      }
+      renderNotasFiscaisPage(container, page);
+    }
+
     // "page.holeriteBI" — BI da PMF - Folha de Pagamento. Ver renderHoleriteBIPage.
     if (page.holeriteBI) {
       if (renderedSomething) {
@@ -31279,6 +31787,9 @@
     if (source.kind === "loans") return fetchLoansNotificationItems(source);
     if (source.kind === "transacoes_valor_minimo") return fetchTransacoesValorMinimoNotificationItems(source);
     if (source.kind === "holerite_competencia") return fetchHoleriteCompetenciaNotificationItems(source);
+    // Notas Fiscais: fonte "esqueleto" (nasce desligada e sem antecedências —
+    // regra do Georges pra toda página nova); sem itens por enquanto.
+    if (source.kind === "nf_notas") return Promise.resolve([]);
     return fetchNotionNotificationSourceItems(source);
   }
 

@@ -1519,6 +1519,20 @@ var NOTIFICATION_SOURCES = [
     defaultLeadTimes: [
       { id: "imediata", amount: 0, unit: "hours", label: "Imediata" }
     ]
+  },
+  // Notas Fiscais — fonte "esqueleto" (regra permanente do Georges: toda página
+  // nova entra na Central de Notificações já registrada, mas desligada e sem
+  // nenhuma antecedência/gatilho criado — ele configura depois, se precisar).
+  // kind "nf_notas" ainda não gera itens (ver fetchNotificationSourceItems).
+  {
+    id: "nf_notas",
+    label: "Notas Fiscais",
+    icon: "🧾",
+    kind: "nf_notas",
+    dateProperty: "data_emissao",
+    target: { type: "page", target: "financeiro_fiscal_notas" },
+    defaultEnabled: false,
+    defaultLeadTimes: []
   }
 ];
 
@@ -1863,7 +1877,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-08 22:15",
+  appVersion: "2026-10-08 23:33",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3567,8 +3581,29 @@ const APP_CONFIG = {
       title: "Fiscal",
       items: [
         { label: "Captura via QR Code", type: "page", target: "financeiro_fiscal_qr", icon: "ti-qrcode" },
-        { label: "IRPF", type: "page", target: "financeiro_fiscal_irpf", icon: "receipt-tax" }
+        { label: "IRPF", type: "page", target: "financeiro_fiscal_irpf", icon: "receipt-tax" },
+        { label: "Notas Fiscais", type: "page", target: "financeiro_fiscal_notas", icon: "file-invoice" }
       ]
+    },
+
+    // "page.notasFiscais" — Notas Fiscais (pedido do Georges: subir as bases
+    // Notion "Notas Fiscais" + "Notas Fiscais - Itens" pro D1 e exibir como
+    // tabela; relatórios/dashboard (BI) numa rodada futura). Lê GET /nf-notas
+    // e GET /nf-itens (D1 nf_notas / nf_itens); botão "Sincronizar do Notion"
+    // chama POST /nf-sync. Sem Painel do Dia/Calendário; fonte de notificação
+    // "nf_notas" registrada desligada e vazia (regra: toda página nova entra
+    // na Central de Notificações sem nada configurado).
+    financeiro_fiscal_notas: {
+      title: "Notas Fiscais",
+      notasFiscais: true,
+      itemsCompact: true,
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "Fiscal no Notion", type: "notion", icon: "notion", url: "https://app.notion.com/p/3f10481486dd8037927ee391e857aac1" },
+          { label: "Captura via QR Code", type: "page", target: "financeiro_fiscal_qr", icon: "meuhub" }
+        ] }
+      ],
+      items: []
     },
 
     // "Captura via QR Code" (pedido do Georges) — lê QR Code com a câmera
