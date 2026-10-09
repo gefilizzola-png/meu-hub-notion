@@ -9160,3 +9160,8 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .nf-colcfg-opt { border: 0; background: #fff; padding: 2px 9px; font-size: 12px; cursor: pointer; color: #555; }
 .nf-colcfg-opt.active { background: #2b4a8f; color: #fff; }
 .nf-colcfg-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ---- Captura via QR Code: abas Pendentes/Exportados + exportação ---- */
+.qr-tabsbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0 6px; }
+.qr-export-btn { margin-left: auto; width: auto; display: inline-flex; align-items: center; gap: 6px; }
+.qr-chip-exportado { background: #e3f3e6; color: #1f6b34; }

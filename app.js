@@ -23412,8 +23412,12 @@
       else window.prompt("Copie:", t);
     }
 
-    var state = { items: [], search: "", fTipo: [], fModo: [], fDe: "", fAte: "" };
+    var state = { items: [], search: "", fTipo: [], fModo: [], fDe: "", fAte: "", view: "pend" };   // view: "pend" (pendentes de exportação) | "exp" (exportados)
     var sortState = { col: 0, dir: -1 };
+    function fmtExp(iso) {
+      var d = new Date(iso);
+      return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear() + " - " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
     var stream = null, scanning = false;
     var massive = false, massCount = 0, massLote = "", massLast = { code: "", t: 0 }, massBusy = false;
     var audioCtx = null;
@@ -23649,7 +23653,7 @@
       if (dupS) { msgEl.textContent = "↩️ Já existe uma captura igual (" + fmtDT(dupS.quando) + ") — desconsiderada."; strArea.value = ""; noteInput.value = ""; return; }
       saveBtn.disabled = true;
       call("/qrcapturas", "POST", { conteudo: s, nota: noteInput.value.trim() }).then(function (d) {
-        state.items.unshift(d.item);
+        state.items.unshift(d.item); state.view = "pend";
         strArea.value = ""; noteInput.value = ""; scanMsg.textContent = ""; msgEl.textContent = "✅ Captura salva.";
         rebuildFilter(); renderTable();
       }).catch(function (e) { msgEl.textContent = "Erro: " + e.message; }).then(function () { saveBtn.disabled = false; });
@@ -23692,11 +23696,13 @@
     filterSec.body.appendChild(filterBar);
 
     // ---- Tabela ----
+    var tabsHost = document.createElement("div"); tabsHost.className = "qr-tabsbar"; wrap.appendChild(tabsHost);
     var tableHost = document.createElement("div"); wrap.appendChild(tableHost);
     function localDay(iso) { var d = new Date(iso); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
     function visibleItems() {
       var q = normalize(state.search);
       return state.items.filter(function (it) {
+        if (state.view === "exp" ? !it.exportadoEm : !!it.exportadoEm) return false;
         if (state.fTipo.length && state.fTipo.indexOf(tipoOf(it)) < 0) return false;
         if (state.fModo.length && state.fModo.indexOf(modoOf(it)) < 0) return false;
         if (state.fDe && localDay(it.quando) < state.fDe) return false;
@@ -23705,7 +23711,72 @@
         return true;
       });
     }
+    // ---- exportação: baixa as strings (1 por linha, .txt) e marca como exportadas ----
+    function stampName(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "_" + pad2(d.getHours()) + "-" + pad2(d.getMinutes()); }
+    function downloadTxt(list, name) {
+      var txt = list.slice().sort(function (a, b) { return (a.quando || "").localeCompare(b.quando || ""); })
+        .map(function (it) { return String(it.conteudo || "").replace(/\s+/g, " ").trim(); }).join("\n") + "\n";
+      var blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    }
+    var exporting = false;
+    function exportPending(btn) {
+      var pend = state.items.filter(function (it) { return !it.exportadoEm; });
+      if (!pend.length || exporting) return;
+      exporting = true; btn.disabled = true;
+      var now = new Date(), iso = now.toISOString();
+      downloadTxt(pend, "qr-capturas_" + stampName(now) + ".txt");   // baixa primeiro; só depois marca (se falhar, continuam pendentes)
+      var ids = pend.map(function (it) { return it.id; }), failed = 0, i = 0;
+      function next() {
+        if (i >= ids.length) return Promise.resolve();
+        var chunk = ids.slice(i, i + 25); i += 25;
+        return call("/qrcapturas-export", "POST", { ids: chunk, exportadoEm: iso }).then(function (d) {
+          var set = {}; (d.updated || []).forEach(function (x) { set[x] = 1; });
+          state.items.forEach(function (it) { if (set[it.id]) it.exportadoEm = d.exportadoEm; });
+          renderTable();
+        }).catch(function () { failed += chunk.length; }).then(next);
+      }
+      next().then(function () {
+        exporting = false;
+        msgEl.textContent = failed ? "⚠️ Arquivo baixado, mas " + failed + " item(ns) não puderam ser marcados como exportados (continuam em Pendentes). Tente exportar de novo só se precisar." : "✅ " + pend.length + " string(s) exportada(s) em " + fmtExp(iso) + ".";
+        renderTable();
+      });
+    }
+    function renderTabs() {
+      tabsHost.innerHTML = "";
+      var nPend = state.items.filter(function (it) { return !it.exportadoEm; }).length;
+      var nExp = state.items.length - nPend;
+      var tg = document.createElement("div"); tg.className = "nf-view-toggle";
+      [["pend", "ti-clock", "Pendentes (" + nPend + ")"], ["exp", "ti-package-export", "Exportados (" + nExp + ")"]].forEach(function (v) {
+        var b = document.createElement("button"); b.type = "button";
+        b.className = "nf-view-btn" + (state.view === v[0] ? " active" : "");
+        b.innerHTML = '<i class="ti ' + v[1] + '"></i> ' + v[2];
+        b.addEventListener("click", function () { state.view = v[0]; renderTable(); });
+        tg.appendChild(b);
+      });
+      tabsHost.appendChild(tg);
+      var eb = document.createElement("button"); eb.type = "button"; eb.className = "odo-btn primary qr-export-btn";
+      if (state.view === "pend") {
+        eb.innerHTML = '<i class="ti ti-download"></i> Exportar pendentes (' + nPend + ')';
+        eb.title = "Baixa todas as strings pendentes (.txt, uma por linha) e marca como exportadas";
+        eb.disabled = !nPend || exporting;
+        eb.addEventListener("click", function () { exportPending(eb); });
+      } else {
+        eb.className = "odo-btn qr-export-btn";
+        eb.innerHTML = '<i class="ti ti-download"></i> Baixar exportados de novo (' + nExp + ')';
+        eb.title = "Baixa de novo todas as já exportadas (não altera as marcações)";
+        eb.disabled = !nExp;
+        eb.addEventListener("click", function () {
+          downloadTxt(state.items.filter(function (it) { return !!it.exportadoEm; }), "qr-capturas-exportados_" + stampName(new Date()) + ".txt");
+        });
+      }
+      tabsHost.appendChild(eb);
+    }
     function renderTable() {
+      renderTabs();
       tableHost.innerHTML = "";
       var rows = visibleItems();
       var cols = [
@@ -23723,7 +23794,10 @@
             var s = mkChip(txt.length > 60 ? txt.slice(0, 57) + "…" : txt, "odo-chip-veic qr-content");
             s.title = r.conteudo; td.appendChild(s);
           } },
-        { label: "Observação", sort: function (r) { return r.nota || ""; }, node: function (r, td) { td.appendChild(mkChip(r.nota || "—", r.nota ? "" : "odo-chip-vazio")); } },
+        { label: "Observação", sort: function (r) { return r.nota || ""; }, node: function (r, td) { td.appendChild(mkChip(r.nota || "—", r.nota ? "" : "odo-chip-vazio")); } }
+      ];
+      if (state.view === "exp") cols.push({ label: "Exportado em", sort: function (r) { return r.exportadoEm || ""; }, node: function (r, td) { td.appendChild(mkChip("Exportado em " + fmtExp(r.exportadoEm), "qr-chip-exportado", "ti-package-export")); } });
+      cols.push(
         { label: "", node: function (r, td) {
             var c = document.createElement("button"); c.type = "button"; c.className = "odo-icon-btn"; c.title = "Copiar string"; c.innerHTML = '<i class="ti ti-copy"></i>';
             c.addEventListener("click", function () { copyText(r.conteudo, c); });
@@ -23739,8 +23813,8 @@
             });
             td.appendChild(d);
           } }
-      ];
-      var info = document.createElement("div"); info.className = "odo-count"; info.textContent = rows.length + " captura(s)";
+      );
+      var info = document.createElement("div"); info.className = "odo-count"; info.textContent = rows.length + (state.view === "exp" ? " exportada(s)" : " pendente(s) de exportação");
       tableHost.appendChild(info);
       finSortTable(tableHost, cols, rows, sortState, renderTable);
     }
@@ -31726,6 +31800,20 @@
     return lt.amount * (lt.unit === "minutes" ? 60000 : lt.unit === "hours" ? 3600000 : 86400000);
   }
 
+  // Sentido de cada alerta (pedido do Georges: "1 dia antes" OU "1 dia depois" da
+  // data do evento, escolhido POR alerta). Valor salvo em lt.direction ("before" |
+  // "after"); alertas antigos sem o campo herdam o padrão da fonte (fontes com
+  // notifyAfterEvent:true — ex. Empréstimos — eram "depois" desde sempre).
+  function ltDirection(lt, source) {
+    if (lt && lt.direction === "after") return "after";
+    if (lt && lt.direction === "before") return "before";
+    return (source && source.notifyAfterEvent) ? "after" : "before";
+  }
+  function notifLeadLabel(amount, unit, direction) {
+    var w = unit === "minutes" ? (amount === 1 ? "minuto" : "minutos") : unit === "hours" ? (amount === 1 ? "hora" : "horas") : (amount === 1 ? "dia" : "dias");
+    return amount + " " + w + (direction === "after" ? " depois" : " antes");
+  }
+
   // mesmo padrão defensivo de normalizeDateRollup (Legislações) — "extra"
   // de uma propriedade "date" normalmente vem como {start,end}, mas se
   // algum dia uma fonte precisar de um rollup de data (em vez de campo
@@ -31748,8 +31836,20 @@
   // dados).
   function notifSourceMaxDays(source) {
     var maxMs = 0;
-    source.leadTimes.forEach(function (lt) { maxMs = Math.max(maxMs, leadTimeMs(lt)); });
+    source.leadTimes.forEach(function (lt) {
+      if (ltDirection(lt, source) === "before") maxMs = Math.max(maxMs, leadTimeMs(lt));
+    });
     return Math.max(1, Math.ceil(maxMs / 86400000) + 1);
+  }
+  // maior atraso ("depois") configurado, em dias — estende a janela de busca
+  // PARA TRÁS além dos 2 dias de folga padrão (NOTIF_GRACE_MS), senão um evento
+  // de 3 dias atrás nunca chegaria pra disparar um "2 dias depois".
+  function notifSourceMaxAfterDays(source) {
+    var maxMs = 0;
+    source.leadTimes.forEach(function (lt) {
+      if (ltDirection(lt, source) === "after") maxMs = Math.max(maxMs, leadTimeMs(lt));
+    });
+    return Math.ceil(maxMs / 86400000);
   }
 
   // fontes normais (kind "notion", que é o default — ver
@@ -31758,8 +31858,9 @@
   // "2 dias atrás" (NOTIF_GRACE_MS) até "daqui a N dias" (notifSourceMaxDays).
   function fetchNotionNotificationSourceItems(source) {
     var maxDays = notifSourceMaxDays(source);
+    var pastDays = 2 + notifSourceMaxAfterDays(source);
     var filters = source.baseFilters.concat([
-      { property: source.dateProperty, type: "date", condition: "on_or_after", value: "past_2_days" },
+      { property: source.dateProperty, type: "date", condition: "on_or_after", value: "past_" + pastDays + "_days" },
       { property: source.dateProperty, type: "date", condition: "before", value: "next_" + maxDays + "_days" }
     ]);
     var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(source.database_id) +
@@ -31832,7 +31933,7 @@
   function fetchFinanceiroNotificationItems(source) {
     var maxDays = notifSourceMaxDays(source);
     var now = new Date();
-    var startWindow = new Date(now.getTime() - NOTIF_GRACE_MS);
+    var startWindow = new Date(now.getTime() - NOTIF_GRACE_MS - notifSourceMaxAfterDays(source) * 86400000);
     var endWindow = new Date(now.getTime() + maxDays * 86400000);
     var months = financeiroMonthsInRange(startWindow, endWindow);
 
@@ -32160,8 +32261,9 @@
   // da fonte.
   function fetchProvasNotificationItems(source) {
     var maxDays = notifSourceMaxDays(source);
+    var pastDays = 2 + notifSourceMaxAfterDays(source);
     var filters = [
-      { property: source.dateProperty, type: "date", condition: "on_or_after", value: "past_2_days" },
+      { property: source.dateProperty, type: "date", condition: "on_or_after", value: "past_" + pastDays + "_days" },
       { property: source.dateProperty, type: "date", condition: "before", value: "next_" + maxDays + "_days" }
     ];
     var url = cfg.templateWorkerUrl + "/query?database_id=" + encodeURIComponent(source.database_id) +
@@ -32409,62 +32511,36 @@
         eventTime = Date.UTC(dateParts[0], (dateParts[1] || 1) - 1, dateParts[2] || 1, 11, 0, 0);
       }
       if (isNaN(eventTime)) return;
-      // "notifyAfterEvent" (pedido do Georges, Empréstimos — "a Notificação
-      // não seria por antecedência, mas posterior à data prevista"): gatilho
-      // INVERTIDO — em vez de disparar X antes do evento e descartar depois
-      // de NOTIF_GRACE_MS (2 dias) de atraso, aqui o evento já estar no
-      // passado é o requisito, e "leadTimes" vira "X depois". Ignora o
-      // descarte por atraso de propósito (um empréstimo vencido há semanas
-      // sem pagamento identificado deve CONTINUAR avisando, não sumir da
-      // Central sozinho).
-      if (source.notifyAfterEvent) {
-        if (eventTime > now) return; // ainda não venceu, nada a checar
-        source.leadTimes.forEach(function (lt) {
-          var triggerTime = eventTime + leadTimeMs(lt);
-          if (now < triggerTime) return; // ainda não passou o atraso configurado
-          list.push({
-            id: source.id + "::" + lt.id + "::" + p.id,
-            sourceId: source.id,
-            itemId: p.id,
-            leadMs: leadTimeMs(lt),
-            leadTimeId: lt.id,
-            sourceLabel: source.label,
-            sourceIcon: p.icon || source.icon || "",
-            title: p.title,
-            url: p.url,
-            target: p.target || source.target,
-            eventTime: eventTime,
-            hasTime: hasTime,
-            leadLabel: lt.label,
-            overdue: true
-          });
-        });
-        return;
-      }
-      if (eventTime < now - NOTIF_GRACE_MS) return;
+      // Sentido POR alerta (lt.direction, ver ltDirection): "before" = X antes do
+      // evento (descarta depois de NOTIF_GRACE_MS de atraso); "after" = X depois
+      // do evento (exige o evento já no passado; fontes notifyAfterEvent, como
+      // Empréstimos, nunca descartam por atraso — um empréstimo vencido há
+      // semanas sem pagamento deve CONTINUAR avisando).
       source.leadTimes.forEach(function (lt) {
-        var triggerTime = eventTime - leadTimeMs(lt);
-        if (now < triggerTime) return; // ainda não chegou a hora de avisar
+        var dir = ltDirection(lt, source);
+        var ms = leadTimeMs(lt);
+        if (dir === "after") {
+          if (eventTime > now) return; // ainda não aconteceu
+          if (now < eventTime + ms) return; // ainda não passou o atraso configurado
+          if (!source.notifyAfterEvent && eventTime + ms < now - NOTIF_GRACE_MS) return; // aviso antigo demais
+        } else {
+          if (eventTime < now - NOTIF_GRACE_MS) return;
+          if (now < eventTime - ms) return; // ainda não chegou a hora de avisar
+        }
         list.push({
           id: source.id + "::" + lt.id + "::" + p.id,
           sourceId: source.id,
-          // "itemId" (pedido do Georges — não duplicar notificação do MESMO
-          // item quando 2+ antecedências da mesma fonte batem juntas) +
-          // "leadMs" (quão perto do evento essa antecedência dispara) —
-          // usados só por mergeNotifItems, ver comentário grande lá.
+          // "itemId" (não duplicar notificação do MESMO item quando 2+
+          // antecedências da mesma fonte batem juntas) + "leadMs" — usados só
+          // por mergeNotifItems.
           itemId: p.id,
-          leadMs: leadTimeMs(lt),
-          // pedido do Georges (Aniversários): canais/repetir agora são POR
-          // antecedência, não por fonte — processNotifTriggers/
-          // applyRepeatWhilePending usam isso pra achar a leadTime certa
-          // dentro de source.leadTimes (ver resolvedNotifSources).
+          leadMs: ms,
+          dir: dir,
+          // canais/repetir são POR alerta — processNotifTriggers/
+          // applyRepeatWhilePending acham a leadTime certa por este id.
           leadTimeId: lt.id,
           sourceLabel: source.label,
-          // "p.icon" (opcional, por ITEM — pedido do Georges em Provas do
-          // Vitor: "ícone condizente com o tema" de CADA prova, não
-          // sempre o mesmo emoji da fonte) sobrepõe o ícone fixo da fonte
-          // quando presente; toda fonte anterior a "provas" nunca setava
-          // isso, então continua caindo no source.icon de sempre.
+          // "p.icon" (por ITEM, ex. Provas do Vitor) sobrepõe o ícone da fonte.
           sourceIcon: p.icon || source.icon || "",
           title: p.title,
           url: p.url,
@@ -32472,7 +32548,7 @@
           eventTime: eventTime,
           hasTime: hasTime,
           leadLabel: lt.label,
-          overdue: eventTime < now
+          overdue: dir === "after" ? true : eventTime < now
         });
       });
     });
@@ -32501,7 +32577,10 @@
     return order.map(function (key) {
       var group = groups[key];
       var sorted = group.length > 1
-        ? group.slice().sort(function (a, b) { return a.leadMs - b.leadMs; })
+        ? group.slice().sort(function (a, b) {
+            if (a.dir !== b.dir) return a.dir === "after" ? -1 : 1; // "depois" = o aviso mais recente
+            return a.leadMs - b.leadMs;
+          })
         : group;
       var primary = sorted[0];
       var ids = sorted.map(function (n) { return n.id; });
@@ -32616,13 +32695,10 @@
   // ainda disser "antes" — mesma lógica de sufixo usada em addNotifLeadTime.
   function notifLeadTimeLabelFor(lt, source) {
     var label = lt.label;
-    if (source && source.notifyAfterEvent && typeof label === "string" && label.indexOf("antes") !== -1 && lt.amount) {
-      var sufixo = lt.unit === "minutes"
-        ? (lt.amount === 1 ? "minuto depois" : "minutos depois")
-        : lt.unit === "hours"
-        ? (lt.amount === 1 ? "hora depois" : "horas depois")
-        : (lt.amount === 1 ? "dia depois" : "dias depois");
-      label = lt.amount + " " + sufixo;
+    var dir = ltDirection(lt, source);
+    if (typeof label === "string" && lt.amount) {
+      var wrong = dir === "after" ? label.indexOf("antes") !== -1 : label.indexOf("depois") !== -1;
+      if (wrong) label = notifLeadLabel(lt.amount, lt.unit, dir);
     }
     return label;
   }
@@ -32632,6 +32708,7 @@
       id: lt.id,
       amount: lt.amount,
       unit: lt.unit,
+      direction: ltDirection(lt, source),
       label: notifLeadTimeLabelFor(lt, source),
       channels: Array.isArray(lt.channels) ? lt.channels : [],
       repeatWhilePending: !!lt.repeatWhilePending,
@@ -33002,7 +33079,7 @@
       // (eventTime já passou — ver buildNotificationsFromSource). Não
       // precisa de status nenhum no Notion pra isso.
       var isEventKind = NOTIF_EVENT_KINDS[(src && src.kind) || "notion"];
-      if (isEventKind && n.overdue) return;
+      if (isEventKind && n.overdue && n.dir !== "after") return;
       repeatIds[n.id] = true;
     });
     if (!Object.keys(repeatIds).length) return { readIds: readIds, everReadIds: everReadIds };
@@ -33533,17 +33610,17 @@
     applyNotifSettingsChange();
   }
 
-  function addNotifLeadTime(sourceId, amount, unit) {
+  function addNotifLeadTime(sourceId, amount, unit, direction) {
     var s = findNotifSource(sourceId);
     if (!s || !amount || amount <= 0) return;
-    var id = amount + (unit === "minutes" ? "m" : unit === "hours" ? "h" : "d");
-    if (s.leadTimes.some(function (lt) { return lt.id === id; })) return; // já existe, ignora silenciosamente
-    // "notifyAfterEvent" (Empréstimos) inverte o sentido pra "depois" em vez
-    // de "antes" — só rótulo, o cálculo em si já é feito pelo flag em
-    // buildNotificationsFromSource.
-    var uWord = unit === "minutes" ? (amount === 1 ? "minuto" : "minutos") : unit === "hours" ? (amount === 1 ? "hora" : "horas") : (amount === 1 ? "dia" : "dias");
-    var sufixo = uWord + (s.notifyAfterEvent ? " depois" : " antes");
-    var label = amount + " " + sufixo;
+    var dir = direction === "after" ? "after" : direction === "before" ? "before" : ltDirection(null, s);
+    // já existe um alerta igual (mesma quantidade, unidade e sentido)? ignora
+    if (s.leadTimes.some(function (lt) { return lt.amount === amount && lt.unit === unit && ltDirection(lt, s) === dir; })) return;
+    // id único: sufixo "a" marca "depois"; se ainda colidir com um id antigo
+    // (alertas salvos antes desta opção), acrescenta "x".
+    var id = amount + (unit === "minutes" ? "m" : unit === "hours" ? "h" : "d") + (dir === "after" ? "a" : "");
+    while (s.leadTimes.some(function (lt) { return lt.id === id; })) id += "x";
+    var label = notifLeadLabel(amount, unit, dir);
     // channels:[]/repeatWhilePending:false/smartSchedule explícitos — SEM
     // isso o objeto fica com esses campos undefined, e renderNotifSettings
     // (que lê lt.channels.length pra decidir se a pílula tem "has-config")
@@ -33551,8 +33628,13 @@
     // reportado pelo Georges: clicar em "+" em qualquer fonte fazia sumir
     // todas as fontes seguintes na lista, inclusive o texto do banner de
     // permissão).
-    s.leadTimes = s.leadTimes.concat([{ id: id, amount: amount, unit: unit, label: label, channels: [], repeatWhilePending: false, smartSchedule: normalizeNotifSmartSchedule(null) }]);
-    s.leadTimes.sort(function (a, b) { return leadTimeMs(b) - leadTimeMs(a); }); // maior antecedência primeiro
+    s.leadTimes = s.leadTimes.concat([{ id: id, amount: amount, unit: unit, direction: dir, label: label, channels: [], repeatWhilePending: false, smartSchedule: normalizeNotifSmartSchedule(null) }]);
+    // "antes" primeiro (maior antecedência primeiro), depois os "depois" (menor atraso primeiro)
+    s.leadTimes.sort(function (a, b) {
+      var da = ltDirection(a, s), db = ltDirection(b, s);
+      if (da !== db) return da === "before" ? -1 : 1;
+      return da === "before" ? leadTimeMs(b) - leadTimeMs(a) : leadTimeMs(a) - leadTimeMs(b);
+    });
     applyNotifSettingsChange();
   }
 
@@ -33880,6 +33962,16 @@
           unitSelect.appendChild(o);
         });
         addInline.appendChild(unitSelect);
+        var dirSelect = document.createElement("select");
+        dirSelect.className = "notif-settings-add-unit";
+        [["before", "antes"], ["after", "depois"]].forEach(function (opt) {
+          var o = document.createElement("option");
+          o.value = opt[0];
+          o.textContent = opt[1] + " do evento";
+          dirSelect.appendChild(o);
+        });
+        dirSelect.value = ltDirection(null, s);
+        addInline.appendChild(dirSelect);
         var addBtn = document.createElement("button");
         addBtn.type = "button";
         addBtn.className = "notif-settings-add-btn";
@@ -33892,7 +33984,7 @@
           // que applyNotifSettingsChange() re-renderiza de forma síncrona
           // (ver comentário na declaração de notifAddLeadTimeExpandedKeys)
           notifAddLeadTimeExpandedKeys[s.id] = false;
-          addNotifLeadTime(s.id, amount, unitSelect.value);
+          addNotifLeadTime(s.id, amount, unitSelect.value, dirSelect.value);
         });
         addInline.appendChild(addBtn);
         var addCancelBtn = document.createElement("button");
