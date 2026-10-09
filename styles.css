@@ -9112,3 +9112,27 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .nf-items-scroll { overflow-x: auto; max-width: 100%; }
 .nf-items-table td.nf-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .nf-items-table td, .nf-items-table th { white-space: nowrap; }
+
+/* Notas Fiscais — visão por item, cruzamento com Transações e detalhes */
+.nf-view-toggle { display: inline-flex; border: 1px solid #d8d6cf; border-radius: 8px; overflow: hidden; }
+.nf-view-btn { background: #fff; border: 0; padding: 6px 12px; font-size: 13px; cursor: pointer; color: #555; display: inline-flex; align-items: center; gap: 5px; }
+.nf-view-btn + .nf-view-btn { border-left: 1px solid #d8d6cf; }
+.nf-view-btn.active { background: #2b4a8f; color: #fff; }
+.nf-sync-btn + .nf-sync-btn { margin-left: 0; }
+.nf-toolbar-spacer { flex: 1; }
+.nf-chip-warn { background: #fdf1d6; color: #8a5a00; }
+.nf-col-tx, .nf-icol-tx { white-space: nowrap; }
+.nf-items-view.nf-hide-extra .nf-extra { display: none; }
+.nf-items-view td.nf-icol-produto { white-space: normal; min-width: 200px; max-width: 360px; }
+.nf-items-view td.nf-icol-emitente { white-space: normal; min-width: 130px; max-width: 220px; }
+.nf-items-view td.nf-num { text-align: right; font-variant-numeric: tabular-nums; }
+.nf-item-detail { display: flex; flex-direction: column; gap: 10px; }
+.nf-detail-section { border: 1px solid #e5e3dc; border-radius: 8px; padding: 8px 10px; background: #fff; }
+.nf-detail-title { font-size: 12px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
+.nf-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 14px; }
+.nf-kv-cell { display: flex; flex-direction: column; min-width: 0; }
+.nf-kv-label { font-size: 11px; color: #888; }
+.nf-kv-value { font-size: 13px; color: #222; word-break: break-word; }
+.nf-detail-links { display: flex; gap: 12px; flex-wrap: wrap; }
+.nf-detail-links .nf-action-link { margin-left: 0; font-size: 13px; }
+.nf-detail-row .nf-detail-section + .nf-items-scroll, .nf-detail-row .nf-detail-section + .empty { margin-top: 8px; }

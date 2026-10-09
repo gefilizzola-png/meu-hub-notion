@@ -16930,6 +16930,7 @@
     { key: "status", label: "Status", sortKey: "status" },
     { key: "valor", label: "Valor Total", sortKey: "valor_total" },
     { key: "itens", label: "Itens", sortKey: "_nItens" },
+    { key: "tx", label: "Transação", sortKey: "_tx" },
     { key: "natureza", label: "Natureza", sortKey: "natureza" },
     { key: "serie", label: "Série", sortKey: "serie" },
     { key: "uf", label: "UF", sortKey: "uf" },
@@ -16968,7 +16969,7 @@
     { key: "criado", label: "Criado no Notion", sortKey: "created_time", field: "created_time", date: true }
   ];
   var NF_DEFAULT_HIDDEN = NF_COLS.map(function (c) { return c.key; }).filter(function (k) {
-    return ["data", "emitente", "tipo", "numero", "status", "valor", "itens"].indexOf(k) === -1;
+    return ["data", "emitente", "tipo", "numero", "status", "valor", "itens", "tx"].indexOf(k) === -1;
   });
   function nfFmtDate(iso) {
     if (!iso) return "—";
@@ -17005,6 +17006,10 @@
     summaryEl.className = "holerite-totals-row nf-summary";
     wrap.appendChild(summaryEl);
 
+    var matchPanel = document.createElement("div");
+    matchPanel.style.display = "none";
+    wrap.appendChild(matchPanel);
+
     var toolbar = document.createElement("div");
     toolbar.className = "priorities-columns-toolbar";
     wrap.appendChild(toolbar);
@@ -17013,19 +17018,26 @@
     wrap.appendChild(body);
 
     var state = {
-      notas: [], itens: [], itensByNota: {},
+      notas: [], itens: [], itensByNota: {}, notaById: {},
       search: "",
-      emitenteSel: [], tipoSel: [], statusSel: [], naturezaSel: [], ufSel: [], anoMesSel: [], categoriaSel: [],
+      emitenteSel: [], tipoSel: [], statusSel: [], naturezaSel: [], ufSel: [], anoMesSel: [], categoriaSel: [], matchSel: [],
       dateRange: null,
       sortKey: "data_emissao", sortDir: -1,
       expanded: {},
-      columnsExpanded: window.innerWidth > 900
+      columnsExpanded: window.innerWidth > 900,
+      view: "notas",               // "notas" | "itens"
+      iSortKey: "data", iSortDir: -1, iExpanded: {},
+      match: {}, matchInfo: null, matchState: "idle"   // idle | loading | ok | error
     };
 
     function categoriasDaNota(n) {
       return (state.itensByNota[n.id] || []).map(function (i) { return i.categoria; });
     }
-    function passesFilters(n) {
+    function passesFilters(n, skipSearch) {
+      if (state.matchSel.length) {
+        var temTx = state.match[n.id] ? "com" : "sem";
+        if (state.matchSel.indexOf(temTx) === -1) return false;
+      }
       if (state.emitenteSel.length && state.emitenteSel.indexOf(n.emitente) === -1) return false;
       if (state.tipoSel.length && state.tipoSel.indexOf(n.tipo) === -1) return false;
       if (state.statusSel.length && state.statusSel.indexOf(n.status) === -1) return false;
@@ -17042,7 +17054,7 @@
         if (state.dateRange.from && d < state.dateRange.from) return false;
         if (state.dateRange.to && d > state.dateRange.to) return false;
       }
-      if (state.search) {
+      if (state.search && !skipSearch) {
         var s = normalize(state.search);
         var parts = [n.nota, n.emitente, n.razao_social, n.cnpj_cpf, n.numero, n.chave_acesso, n.tipo, n.municipio, n.natureza];
         (state.itensByNota[n.id] || []).forEach(function (i) { parts.push(i.produto, i.item, i.ean, i.ncm, i.categoria); });
@@ -17052,6 +17064,7 @@
     }
     function sortValue(n, key) {
       if (key === "_nItens") return (state.itensByNota[n.id] || []).length;
+      if (key === "_tx") return state.match[n.id] ? 1 : 0;
       var v = n[key];
       return (v === null || v === undefined) ? "" : v;
     }
@@ -17091,7 +17104,7 @@
     }
 
     var wraps = {};
-    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "data"].forEach(function (k) {
+    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "data"].forEach(function (k) {
       wraps[k] = document.createElement("div");
     });
     function dd(wrapKey, def, setter) {
@@ -17110,6 +17123,7 @@
       var anoMesOpts = optionsFor("ano_mes", holeriteCompetenciaLabel).sort(function (a, b) { return a.pageId < b.pageId ? 1 : -1; });
       dd("anoMes", { property: "ano_mes", type: "select", label: "Mês", emoji: "🗓️", icon: "ti-calendar", searchable: true, options: anoMesOpts }, "anoMesSel");
       dd("categoria", { property: "categoria", type: "select", label: "Categoria do item", emoji: "🛒", icon: "ti-category", searchable: true, options: categoriaOptions() }, "categoriaSel");
+      dd("tx", { property: "tx", type: "select", label: "Transação", emoji: "💳", icon: "ti-credit-card", options: [{ label: "Com transação", pageId: "com" }, { label: "Sem transação", pageId: "sem" }] }, "matchSel");
     }
     function buildDateFilter() {
       wraps.data.innerHTML = "";
@@ -17128,7 +17142,7 @@
 
     var filterBar = document.createElement("div");
     filterBar.className = "legislacoes-filterbar";
-    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "data"].forEach(function (k) { filterBar.appendChild(wraps[k]); });
+    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "data"].forEach(function (k) { filterBar.appendChild(wraps[k]); });
     var clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "search-clear-btn holerite-filterbar-clear-btn";
@@ -17136,7 +17150,7 @@
     clearBtn.addEventListener("click", function () {
       state.search = ""; searchInput.value = "";
       state.emitenteSel = []; state.tipoSel = []; state.statusSel = []; state.naturezaSel = [];
-      state.ufSel = []; state.anoMesSel = []; state.categoriaSel = []; state.dateRange = null;
+      state.ufSel = []; state.anoMesSel = []; state.categoriaSel = []; state.matchSel = []; state.dateRange = null;
       buildDateFilter();
       buildFiltersBar();
       renderBody();
@@ -17155,6 +17169,27 @@
     }
     colsBtn.addEventListener("click", function () { state.columnsExpanded = !state.columnsExpanded; updateColsLabel(); renderBody(); });
     updateColsLabel();
+    // alternância Por nota / Por item + botão de cruzamento com Transações
+    var viewWrap = document.createElement("div");
+    viewWrap.className = "nf-view-toggle";
+    [["notas", "ti-receipt", "Por nota"], ["itens", "ti-list-details", "Por item"]].forEach(function (v) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "nf-view-btn" + (state.view === v[0] ? " active" : "");
+      b.innerHTML = '<i class="ti ' + v[1] + '"></i> ' + v[2];
+      b.addEventListener("click", function () {
+        state.view = v[0];
+        Array.prototype.forEach.call(viewWrap.children, function (c) { c.classList.toggle("active", c === b); });
+        renderBody();
+      });
+      viewWrap.appendChild(b);
+    });
+    toolbar.appendChild(viewWrap);
+    var matchBtn = document.createElement("button");
+    matchBtn.type = "button";
+    matchBtn.className = "search-clear-btn nf-sync-btn";
+    matchBtn.addEventListener("click", startMatch);
+    toolbar.appendChild(matchBtn);
     toolbar.appendChild(colsBtn);
     [["Recolher itens", "ti-arrows-minimize", false], ["Expandir itens", "ti-arrows-maximize", true]].forEach(function (d) {
       var b = document.createElement("button");
@@ -17164,8 +17199,11 @@
       b.setAttribute("aria-label", d[0]);
       b.innerHTML = '<i class="ti ' + d[1] + '"></i>';
       b.addEventListener("click", function () {
-        state.expanded = {};
-        if (d[2]) sortedFiltered().forEach(function (n) { state.expanded[n.id] = true; });
+        state.expanded = {}; state.iExpanded = {};
+        if (d[2]) {
+          if (state.view === "itens") itemRows().forEach(function (r) { state.iExpanded[r.i.id] = true; });
+          else sortedFiltered().forEach(function (n) { state.expanded[n.id] = true; });
+        }
         renderBody();
       });
       toolbar.appendChild(b);
@@ -17210,6 +17248,79 @@
       c.textContent = text || "—";
       return c;
     }
+    // chip da transação cruzada: "✓ 05/10 · descrição" (verde = ≤2 dias, amarelo = mais distante
+    // ou ambígua). m = { tx, dd, cands }. Sem m: "—" (ou "…" enquanto carrega).
+    function txChip(m) {
+      if (!m) return chip(state.matchState === "loading" ? "…" : "—", "");
+      var d = nfFmtDate(m.tx.date).slice(0, 5);
+      var desc = String(m.tx.description || "");
+      var c = chip("✓ " + d + " · " + (desc.length > 26 ? desc.slice(0, 25) + "…" : desc) + (m.cands > 1 ? " ?" : ""),
+        (m.dd <= 2 && m.cands <= 1) ? "nf-chip-ok" : "nf-chip-warn");
+      c.title = nfTxTitle(m);
+      return c;
+    }
+    function nfTxTitle(m) {
+      return nfFmtDate(m.tx.date) + " · " + (m.tx.description || "") + " · " + nfFmtMoney(m.tx.amount) +
+        (m.tx.category ? " · " + m.tx.category : "") + (m.tx.account ? " · " + m.tx.account : "") +
+        " · " + (m.dd === 0 ? "mesmo dia da emissão" : m.dd + " dia(s) de diferença") +
+        (m.cands > 1 ? " · " + m.cands + " transações candidatas (ambíguo)" : "");
+    }
+    // grade rótulo/valor (ignora vazios)
+    function kvGrid(pairs) {
+      var g = document.createElement("div");
+      g.className = "nf-kv";
+      pairs.forEach(function (p) {
+        var v = p[1];
+        if (v === null || v === undefined || v === "") return;
+        var cell = document.createElement("div");
+        cell.className = "nf-kv-cell";
+        var l = document.createElement("span"); l.className = "nf-kv-label"; l.textContent = p[0];
+        var val = document.createElement("span"); val.className = "nf-kv-value"; val.textContent = String(v);
+        cell.appendChild(l); cell.appendChild(val);
+        g.appendChild(cell);
+      });
+      return g;
+    }
+    function kvSection(title, node) {
+      var s = document.createElement("div");
+      s.className = "nf-detail-section";
+      var h = document.createElement("div"); h.className = "nf-detail-title"; h.textContent = title;
+      s.appendChild(h); s.appendChild(node);
+      return s;
+    }
+    // bloco "Pagamento (Transação)" de uma nota
+    function matchBlock(n) {
+      if (state.matchState === "idle" || state.matchState === "error") return null;
+      var m = state.match[n.id];
+      var box = document.createElement("div");
+      if (m) {
+        box.appendChild(kvGrid([
+          ["Data", nfFmtDate(m.tx.date)], ["Descrição", m.tx.description], ["Valor", nfFmtMoney(m.tx.amount)],
+          ["Categoria", m.tx.category], ["Conta", m.tx.account],
+          ["Diferença da emissão", m.dd === 0 ? "mesmo dia" : m.dd + " dia(s)"],
+          ["Candidatas", m.cands > 1 ? m.cands + " (ambíguo)" : "1 (única)"]
+        ]));
+      } else {
+        var p = document.createElement("p");
+        p.className = "empty";
+        p.textContent = state.matchState === "loading" ? "Cruzando…" :
+          "Nenhuma transação de saída com o mesmo valor (" + nfFmtMoney(n.valor_total) + ") em até " + ((state.matchInfo && state.matchInfo.dias) || 7) + " dias da emissão.";
+        box.appendChild(p);
+      }
+      return kvSection("Pagamento (Transação)", box);
+    }
+    function notaPairs(n) {
+      return [
+        ["Emitente", n.emitente], ["Razão social", n.razao_social], ["CNPJ/CPF", n.cnpj_cpf],
+        ["Tipo", n.tipo], ["Número / Série", [n.numero, n.serie].filter(Boolean).join(" / ")], ["Data de emissão", nfFmtDate(n.data_emissao)],
+        ["Status", n.status], ["Natureza", n.natureza], ["Município / UF", [n.municipio, n.uf].filter(Boolean).join(" / ")],
+        ["Regime", n.regime], ["Pedido", n.pedido], ["Chave de acesso", n.chave_acesso], ["Cód. verificação", n.codigo_verificacao],
+        ["Valor produtos", nfFmtMoney(n.valor_produtos)], ["Desconto", n.desconto ? nfFmtMoney(n.desconto) : ""],
+        ["Frete", n.frete ? nfFmtMoney(n.frete) : ""], ["Outras despesas", n.outras_despesas ? nfFmtMoney(n.outras_despesas) : ""],
+        ["Valor total", nfFmtMoney(n.valor_total)], ["Trib. aprox. total", n.trib_aprox_total ? nfFmtMoney(n.trib_aprox_total) : ""],
+        ["Origem dos dados", n.origem_dados]
+      ];
+    }
     function cellFor(col, n) {
       var td = document.createElement("td");
       td.className = "nf-col nf-col-" + col.key;
@@ -17221,6 +17332,7 @@
         case "status": td.appendChild(chip(n.status, /cancel|deneg|inutil/i.test(n.status || "") ? "nf-chip-bad" : "nf-chip-ok")); break;
         case "valor": td.textContent = nfFmtMoney(n.valor_total); break;
         case "itens": td.textContent = String((state.itensByNota[n.id] || []).length); break;
+        case "tx": td.appendChild(txChip(state.match[n.id])); break;
         case "natureza": td.textContent = n.natureza || "—"; break;
         case "serie": td.textContent = n.serie || "—"; break;
         case "uf": td.textContent = n.uf || "—"; break;
@@ -17300,6 +17412,7 @@
     }
 
     function renderBody() {
+      if (state.view === "itens") { renderItensBody(); return; }
       body.innerHTML = "";
       var rows = sortedFiltered();
       renderSummary(rows);
@@ -17381,6 +17494,8 @@
           trD.className = "nf-detail-row";
           var tdD = document.createElement("td");
           tdD.colSpan = 99;
+          var mb = matchBlock(n);
+          if (mb) tdD.appendChild(mb);
           tdD.appendChild(buildItensTable(n));
           trD.appendChild(tdD);
           tbody.appendChild(trD);
@@ -17393,8 +17508,258 @@
       body.appendChild(scroller);
     }
 
+
+    // ---------------- visão "por item" ----------------
+    // tipo: d=data, t=texto, c=categoria(chip), n=número, m=R$, b=sim/não, x=transação da nota
+    var IT_COLS = [
+      { k: "data", label: "Data", t: "d", get: function (i, n) { return n ? n.data_emissao : i.data; } },
+      { k: "produto", label: "Produto", t: "t", get: function (i) { return i.produto || i.item; } },
+      { k: "categoria", label: "Categoria", t: "c", get: function (i) { return i.categoria; } },
+      { k: "emitente", label: "Emitente", t: "t", get: function (i, n) { return (n && (n.emitente || n.razao_social)) || i.emitente; } },
+      { k: "quantidade", label: "Qtd", t: "n", get: function (i) { return i.quantidade; } },
+      { k: "unidade", label: "Un", t: "t", get: function (i) { return i.unidade; } },
+      { k: "valor_unitario", label: "Valor unit.", t: "m", get: function (i) { return i.valor_unitario; } },
+      { k: "valor_liquido", label: "Valor líquido", t: "m", get: function (i) { return i.valor_liquido; } },
+      { k: "tx", label: "Transação", t: "x", get: function (i, n) { return n && state.match[n.id] ? 1 : 0; } },
+      { k: "nota_num", label: "Nota nº", t: "t", extra: true, get: function (i, n) { return n && n.numero; } },
+      { k: "tipo", label: "Tipo da nota", t: "t", extra: true, get: function (i, n) { return n && n.tipo; } },
+      { k: "num_item", label: "Nº item", t: "n", extra: true, get: function (i) { return i.num_item; } },
+      { k: "valor_bruto", label: "Valor bruto", t: "m", extra: true, get: function (i) { return i.valor_bruto; } },
+      { k: "desconto", label: "Desconto", t: "m", extra: true, get: function (i) { return i.desconto; } },
+      { k: "frete", label: "Frete", t: "m", extra: true, get: function (i) { return i.frete; } },
+      { k: "nao_mercadoria", label: "Não é mercadoria", t: "b", extra: true, get: function (i) { return i.nao_mercadoria; } },
+      { k: "codigo", label: "Código", t: "t", extra: true, get: function (i) { return i.codigo; } },
+      { k: "ean", label: "EAN", t: "t", extra: true, get: function (i) { return i.ean; } },
+      { k: "ncm", label: "NCM", t: "t", extra: true, get: function (i) { return i.ncm; } },
+      { k: "cest", label: "CEST", t: "t", extra: true, get: function (i) { return i.cest; } },
+      { k: "cfop", label: "CFOP", t: "t", extra: true, get: function (i) { return i.cfop; } },
+      { k: "cst_icms", label: "CST ICMS", t: "t", extra: true, get: function (i) { return i.cst_icms; } },
+      { k: "cst_ibs_cbs", label: "CST IBS/CBS", t: "t", extra: true, get: function (i) { return i.cst_ibs_cbs; } },
+      { k: "cclass_trib", label: "cClassTrib", t: "t", extra: true, get: function (i) { return i.cclass_trib; } },
+      { k: "beneficio_fiscal", label: "Benefício fiscal", t: "t", extra: true, get: function (i) { return i.beneficio_fiscal; } },
+      { k: "cod_servico_nbs", label: "Cód. serviço/NBS", t: "t", extra: true, get: function (i) { return i.cod_servico_nbs; } },
+      { k: "icms", label: "ICMS", t: "m", extra: true, get: function (i) { return i.icms; } },
+      { k: "pis", label: "PIS", t: "m", extra: true, get: function (i) { return i.pis; } },
+      { k: "cofins", label: "COFINS", t: "m", extra: true, get: function (i) { return i.cofins; } },
+      { k: "ipi", label: "IPI", t: "m", extra: true, get: function (i) { return i.ipi; } },
+      { k: "ii", label: "II", t: "m", extra: true, get: function (i) { return i.ii; } },
+      { k: "iss", label: "ISS", t: "m", extra: true, get: function (i) { return i.iss; } },
+      { k: "ibs", label: "IBS", t: "m", extra: true, get: function (i) { return i.ibs; } },
+      { k: "cbs", label: "CBS", t: "m", extra: true, get: function (i) { return i.cbs; } },
+      { k: "is_imposto", label: "IS", t: "m", extra: true, get: function (i) { return i.is_imposto; } },
+      { k: "ir_retido", label: "IR retido", t: "m", extra: true, get: function (i) { return i.ir_retido; } },
+      { k: "csll_retida", label: "CSLL retida", t: "m", extra: true, get: function (i) { return i.csll_retida; } },
+      { k: "inss_retido", label: "INSS retido", t: "m", extra: true, get: function (i) { return i.inss_retido; } },
+      { k: "trib_aprox", label: "Trib. aprox.", t: "m", extra: true, get: function (i) { return i.trib_aprox; } },
+      { k: "origem_trib_aprox", label: "Origem trib.", t: "t", extra: true, get: function (i) { return i.origem_trib_aprox; } }
+    ];
+    function itemRows() {
+      var out = [];
+      var s = state.search ? normalize(state.search) : "";
+      state.notas.forEach(function (n) {
+        if (!passesFilters(n, true)) return;
+        (state.itensByNota[n.id] || []).forEach(function (i) {
+          if (state.categoriaSel.length && state.categoriaSel.indexOf(i.categoria) === -1) return;
+          if (s) {
+            var parts = [i.produto, i.item, i.ean, i.ncm, i.categoria, i.codigo, n.nota, n.emitente, n.razao_social, n.cnpj_cpf, n.numero, n.chave_acesso, n.pedido];
+            if (normalize(parts.filter(Boolean).join(" ")).indexOf(s) === -1) return;
+          }
+          out.push({ i: i, n: n });
+        });
+      });
+      var col = IT_COLS.filter(function (c) { return c.k === state.iSortKey; })[0] || IT_COLS[0];
+      var dir = state.iSortDir;
+      out.sort(function (a, b) {
+        var av = col.get(a.i, a.n), bv = col.get(b.i, b.n);
+        var ae = (av === null || av === undefined || av === ""), be = (bv === null || bv === undefined || bv === "");
+        if (ae && !be) return 1;
+        if (be && !ae) return -1;
+        if (typeof av === "number" && typeof bv === "number") return dir * (av - bv);
+        return dir * String(av).localeCompare(String(bv), "pt-BR", { numeric: true });
+      });
+      return out;
+    }
+    function itemCell(col, i, n) {
+      var td = document.createElement("td");
+      td.className = "nf-icol nf-icol-" + col.k + (col.extra ? " nf-extra" : "") + ((col.t === "m" || col.t === "n") ? " nf-num" : "");
+      var v = col.get(i, n);
+      var empty = (v === null || v === undefined || v === "");
+      if (col.t === "c") td.appendChild(chip(v, "nf-chip-cat"));
+      else if (col.t === "x") td.appendChild(txChip(n ? state.match[n.id] : null));
+      else if (col.t === "m") td.textContent = nfFmtMoney(v);
+      else if (col.t === "n") td.textContent = empty ? "—" : String(v).replace(".", ",");
+      else if (col.t === "b") td.textContent = (v === 1 || v === true || v === "1") ? "Sim" : "Não";
+      else if (col.t === "d") td.textContent = nfFmtDate(v);
+      else td.textContent = empty ? "—" : String(v);
+      if (col.k === "produto" || col.k === "emitente") td.title = empty ? "" : String(v);
+      return td;
+    }
+    function itemDetail(i, n) {
+      var box = document.createElement("div");
+      box.className = "nf-item-detail";
+      if (n) {
+        box.appendChild(kvSection("Nota fiscal", kvGrid(notaPairs(n))));
+        var mb = matchBlock(n);
+        if (mb) box.appendChild(mb);
+      }
+      var extras = [];
+      IT_COLS.forEach(function (c) {
+        if (!c.extra) return;
+        var v = c.get(i, n);
+        if (v === null || v === undefined || v === "" || v === 0) return;
+        extras.push([c.label, c.t === "m" ? nfFmtMoney(v) : c.t === "b" ? ((v === 1 || v === true || v === "1") ? "Sim" : "Não") : (c.t === "n" ? String(v).replace(".", ",") : v)]);
+      });
+      if (extras.length) box.appendChild(kvSection("Mais dados do item", kvGrid(extras)));
+      var outros = (n ? (state.itensByNota[n.id] || []) : []).filter(function (o) { return o.id !== i.id; });
+      if (outros.length) {
+        var ul = document.createElement("div");
+        ul.className = "nf-kv";
+        outros.slice().sort(function (a, b) { return (a.num_item || 0) - (b.num_item || 0); }).forEach(function (o) {
+          var cell = document.createElement("div");
+          cell.className = "nf-kv-cell";
+          var l = document.createElement("span"); l.className = "nf-kv-label"; l.textContent = o.categoria || "—";
+          var val = document.createElement("span"); val.className = "nf-kv-value";
+          val.textContent = (o.produto || o.item || "—") + " · " + nfFmtMoney(o.valor_liquido);
+          cell.appendChild(l); cell.appendChild(val); ul.appendChild(cell);
+        });
+        box.appendChild(kvSection("Outros itens desta nota (" + outros.length + ")", ul));
+      }
+      var links = document.createElement("div");
+      links.className = "nf-detail-links";
+      if (n && n.notion_url) {
+        var a = document.createElement("a"); a.href = n.notion_url; a.target = "_blank"; a.rel = "noopener";
+        a.className = "nf-action-link"; a.innerHTML = '<i class="ti ti-external-link"></i> Nota no Notion'; links.appendChild(a);
+      }
+      if (i.notion_url) {
+        var a2 = document.createElement("a"); a2.href = i.notion_url; a2.target = "_blank"; a2.rel = "noopener";
+        a2.className = "nf-action-link"; a2.innerHTML = '<i class="ti ti-external-link"></i> Item no Notion'; links.appendChild(a2);
+      }
+      if (n && n.arquivo && /^https?:/i.test(n.arquivo)) {
+        var a3 = document.createElement("a"); a3.href = n.arquivo; a3.target = "_blank"; a3.rel = "noopener";
+        a3.className = "nf-action-link"; a3.innerHTML = '<i class="ti ti-file-download"></i> Arquivo da nota'; links.appendChild(a3);
+      }
+      if (links.childNodes.length) box.appendChild(links);
+      return box;
+    }
+    function renderItensBody() {
+      body.innerHTML = "";
+      var rows = itemRows();
+      // resumo da visão por item
+      summaryEl.innerHTML = "";
+      var sum = 0, notasSet = {}, comTx = 0;
+      rows.forEach(function (r) { sum += r.i.valor_liquido || 0; notasSet[r.n.id] = true; });
+      Object.keys(notasSet).forEach(function (id) { if (state.match[id]) comTx++; });
+      summaryEl.appendChild(summaryBox("Itens", String(rows.length), "holerite-total-paydate"));
+      summaryEl.appendChild(summaryBox("Valor líquido dos itens", financeiroFormatBRL(sum), "holerite-total-liquido"));
+      summaryEl.appendChild(summaryBox("Notas", String(Object.keys(notasSet).length), "holerite-total-paydate"));
+      if (state.matchState === "ok") summaryEl.appendChild(summaryBox("Notas com transação", String(comTx), "holerite-total-proventos"));
+      if (!rows.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = state.itens.length ? "Nenhum item bate com os filtros." : "Nenhum item no D1 ainda — use \"Sincronizar do Notion\".";
+        body.appendChild(empty);
+        return;
+      }
+      var table = document.createElement("table");
+      table.className = "financeiro-table nf-table nf-items-view" + (state.columnsExpanded ? "" : " nf-hide-extra");
+      var thead = document.createElement("thead");
+      var hr = document.createElement("tr");
+      hr.appendChild(document.createElement("th"));
+      IT_COLS.forEach(function (col) {
+        var th = document.createElement("th");
+        th.className = "financeiro-th financeiro-th-sortable nf-ith nf-icol-" + col.k + (col.extra ? " nf-extra" : "");
+        var lbl = document.createElement("span"); lbl.className = "financeiro-th-label"; lbl.textContent = col.label;
+        th.appendChild(lbl);
+        var arrow = document.createElement("span"); arrow.className = "financeiro-th-arrow";
+        if (state.iSortKey === col.k) { th.classList.add("active"); arrow.textContent = state.iSortDir === 1 ? "▲" : "▼"; }
+        th.appendChild(arrow);
+        th.title = "Clique para classificar por " + col.label;
+        th.addEventListener("click", function () {
+          if (state.iSortKey === col.k) state.iSortDir = state.iSortDir * -1;
+          else { state.iSortKey = col.k; state.iSortDir = (col.t === "m" || col.t === "n" || col.t === "d" || col.t === "x") ? -1 : 1; }
+          renderBody();
+        });
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr); table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      var LIMIT = 600;   // evita travar o navegador com milhares de linhas; filtros/busca reduzem
+      rows.slice(0, LIMIT).forEach(function (r) {
+        var open = !!state.iExpanded[r.i.id];
+        var tr = document.createElement("tr");
+        tr.className = "financeiro-row provas-row-clickable nf-row" + (open ? " nf-row-open" : "");
+        tr.addEventListener("click", function () { state.iExpanded[r.i.id] = !state.iExpanded[r.i.id]; renderBody(); });
+        var tdT = document.createElement("td");
+        tdT.className = "nf-col-toggle";
+        tdT.innerHTML = '<i class="ti ' + (open ? "ti-chevron-down" : "ti-chevron-right") + '"></i>';
+        tr.appendChild(tdT);
+        IT_COLS.forEach(function (col) { tr.appendChild(itemCell(col, r.i, r.n)); });
+        tbody.appendChild(tr);
+        if (open) {
+          var trD = document.createElement("tr");
+          trD.className = "nf-detail-row";
+          var tdD = document.createElement("td");
+          tdD.colSpan = 99;
+          tdD.appendChild(itemDetail(r.i, r.n));
+          trD.appendChild(tdD);
+          tbody.appendChild(trD);
+        }
+      });
+      table.appendChild(tbody);
+      var scroller = document.createElement("div");
+      scroller.className = "nf-table-scroll";
+      scroller.appendChild(table);
+      body.appendChild(scroller);
+      if (rows.length > LIMIT) {
+        var more = document.createElement("p");
+        more.className = "empty";
+        more.textContent = "Mostrando os primeiros " + LIMIT + " de " + rows.length + " itens — use busca/filtros para refinar.";
+        body.appendChild(more);
+      }
+    }
+
+    // ---------------- cruzamento com Transações (D1) ----------------
+    function updateMatchBtn() {
+      if (state.matchState === "loading") matchBtn.innerHTML = '<i class="ti ti-loader"></i> Cruzando…';
+      else if (state.matchState === "ok") {
+        var tot = 0, desde = (state.matchInfo && state.matchInfo.tx_desde) || "";
+        state.notas.forEach(function (n) {
+          if (n.status === "Autorizada" && n.natureza === "Compra" && String(n.data_emissao || "").slice(0, 10) >= desde) tot++;
+        });
+        matchBtn.innerHTML = '<i class="ti ti-link"></i> Transações: ' + (state.matchInfo ? state.matchInfo.matched : 0) + "/" + tot + " notas cruzadas";
+        matchBtn.title = "Cruza por valor igual e data até " + ((state.matchInfo && state.matchInfo.dias) || 7) + " dias da emissão (notas de compra autorizadas desde " + nfFmtDate(desde) + "). Clique para refazer.";
+      } else if (state.matchState === "error") matchBtn.innerHTML = '<i class="ti ti-alert-triangle"></i> Cruzar com Transações (erro — tentar de novo)';
+      else matchBtn.innerHTML = '<i class="ti ti-link"></i> Cruzar com Transações';
+    }
+    function showMatchLock() {
+      matchPanel.style.display = "";
+      renderTransacoesLockScreen(matchPanel, function (token) {
+        matchPanel.innerHTML = ""; matchPanel.style.display = "none";
+        doMatch(token);
+      }, "🔒 Cruzar com Transações (PIN)");
+    }
+    function doMatch(token) {
+      state.matchState = "loading"; updateMatchBtn(); renderBody();
+      authFetch(cfg.templateWorkerUrl + "/nf-match?unlock=" + encodeURIComponent(token)).then(function (res) {
+        if (res.status === 423) { transacoesClearUnlock(); state.matchState = "idle"; updateMatchBtn(); renderBody(); showMatchLock(); return null; }
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      }).then(function (d) {
+        if (!d) return;
+        state.match = d.matches || {}; state.matchInfo = d; state.matchState = "ok";
+        updateMatchBtn(); renderBody();
+      }).catch(function () { state.matchState = "error"; updateMatchBtn(); renderBody(); });
+    }
+    function startMatch() {
+      var st = transacoesGetStoredUnlock();
+      if (!st) { showMatchLock(); return; }
+      doMatch(st.token);
+    }
+
     function indexItens() {
       state.itensByNota = {};
+      state.notaById = {};
+      state.notas.forEach(function (n) { state.notaById[n.id] = n; });
       state.itens.forEach(function (i) {
         if (!i || !i.nota_id) return;
         (state.itensByNota[i.nota_id] = state.itensByNota[i.nota_id] || []).push(i);
@@ -17422,7 +17787,9 @@
         buildFiltersBar();
         buildDateFilter();
         statusEl.style.display = "none";
+        updateMatchBtn();
         renderBody();
+        if (state.matchState === "idle" && transacoesGetStoredUnlock()) startMatch();
       });
     }
 
