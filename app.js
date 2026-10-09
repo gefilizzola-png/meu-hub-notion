@@ -23715,7 +23715,9 @@
     function stampName(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "_" + pad2(d.getHours()) + "-" + pad2(d.getMinutes()); }
     function downloadTxt(list, name) {
       var txt = list.slice().sort(function (a, b) { return (a.quando || "").localeCompare(b.quando || ""); })
-        .map(function (it) { return String(it.conteudo || "").replace(/\s+/g, " ").trim(); }).join("\n") + "\n";
+        .map(function (it) { return String(it.conteudo || "").replace(/\s+/g, " ").trim(); })
+        .filter(function (s, i, arr) { return s && arr.indexOf(s) === i; })   // ignora repetidas (mantém a mais antiga)
+        .join("\n") + "\n";
       var blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
       var a = document.createElement("a");
       a.href = URL.createObjectURL(blob); a.download = name;
