@@ -29185,6 +29185,24 @@
     }
     return out;
   }
+  // IPCA: só em outubro (IPCA de setembro, base do IPTU do ano seguinte). Data conhecida: 09/10/2026;
+  // demais anos: 1º dia útil a partir do dia 10 (aprox., confirmar no calendário do IBGE).
+  var IPCA_DIVULGACAO = { "2026-10": "2026-10-09" };
+  function calIpcaEvents(src, fromISO, toISO) {
+    var out = [];
+    var y0 = +fromISO.slice(0, 4), y1 = +toISO.slice(0, 4);
+    for (var y = y0; y <= y1; y++) {
+      var iso = IPCA_DIVULGACAO[y + "-10"];
+      if (!iso) {
+        iso = y + "-10-10";
+        while (calDow(iso) === 0 || calDow(iso) === 6) iso = calAddDays(iso, 1);
+      }
+      if (iso < fromISO || iso > toISO) continue;
+      out.push(calMakeEvent(src, { id: "ipca-" + y, title: "IPCA de setembro/" + y + " (IBGE) — base do IPTU " + (y + 1), date: iso, time: "09:00",
+        meta: ["Atualizar a tabela IPCA (devido x utilizado) em PMF › Indexadores"] }));
+    }
+    return out;
+  }
   function calPontoEvents(src, fromISO, toISO, diaDoMes) {
     var out = [];
     var dia = Math.min(Math.max(1, diaDoMes || 1), 31);
@@ -29461,6 +29479,8 @@
         }));
       } else if (s.kind === "backup") {
         jobs.push(Promise.resolve(calBackupEvents(s, from, to)));
+      } else if (s.kind === "ipca") {
+        jobs.push(Promise.resolve(calIpcaEvents(s, from, to)));
       } else if (s.kind === "ponto_mes") {
         jobs.push(Promise.resolve(calPontoEvents(s, from, to, s.defaultDiaDoMes || 2)));
       } else if (s.kind === "custom") {
@@ -29988,6 +30008,7 @@
     function calKindLabel(s) {
       if (s.kind === "aniversarios") return "repete todo ano (a partir do nascimento)";
       if (s.kind === "backup") return "lembrete: domingos 20h";
+      if (s.kind === "ipca") return "só em outubro (divulgação do IPCA de setembro)";
       if (s.kind === "ponto_mes") return "lembrete: dia " + (s.defaultDiaDoMes || 2) + " de cada mês";
       if (s.kind === "custom") return "criar/editar: em breve";
       if (s.kind === "financeiro") return "1 evento por conta";
@@ -31628,6 +31649,638 @@
       }
       renderIrpfPage(container, page);
     }
+
+    // "page.ipca" / "page.ipcaGraficos" — PMF > Indexadores > IPCA. Ver renderIpcaPage.
+    if (page.ipca || page.ipcaGraficos) {
+      if (renderedSomething) {
+        var dividerIpca = document.createElement("hr");
+        dividerIpca.className = "content-divider";
+        container.appendChild(dividerIpca);
+      }
+      if (page.ipca) renderIpcaPage(container, page);
+      else renderIpcaGraficosPage(container, page);
+    }
+  }
+
+  // ---------------- "page.ipca" / "page.ipcaGraficos" — PMF > Indexadores > IPCA ----------------
+  // Pedido do Georges: tabela do IPCA UTILIZADO no IPTU de cada exercício × o que DEVERIA ter sido
+  // utilizado conforme a lei (Art. 3º, §1º, LC 230/2006 — redação original até 2023: 12 meses
+  // "antecedentes ao mês de dezembro"; a partir de 2024, LC 749/2023: "antecedentes ao mês de outubro"),
+  // e uma página de gráficos. Dados: GET /ipca (série mensal IBGE/SIDRA + "utilizado" editável no KV);
+  // PUT /ipca-utilizado. As funções ipca* entre os marcadores são PURAS (sem DOM) — copiadas
+  // verbatim pro teste isolado. Leitura da lei é configurável: "literal" (antecedentes = termina no mês
+  // ANTERIOR ao citado: nov até 2023, set de 2024 em diante) ou "inclusivo" (termina no mês citado:
+  // dez / out). Preferência guardada no navegador (localStorage).
+  // <IPCA_PURE>
+  var IPCA_MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  function ipcaYM(y, m) { return String(y) + (m < 10 ? "0" : "") + m; }
+  function ipcaYMLabel(ym) { ym = String(ym || ""); if (!/^\d{6}$/.test(ym)) return "—"; return IPCA_MESES[+ym.slice(4, 6) - 1] + "/" + ym.slice(2, 4); }
+  function ipcaR2(v) { return Math.round(v * 100) / 100; }
+  // redação vigente da lei no exercício E: "antigo" (até 2023) ou "novo" (LC 749/2023, de 2024 em diante)
+  function ipcaRegra(ex) { return ex >= 2024 ? "novo" : "antigo"; }
+  // mês final do acumulado de 12 meses (sempre do ANO ANTERIOR ao exercício)
+  function ipcaMesBase(ex, modo) {
+    var inclusivo = modo === "inclusivo";
+    var m = ex >= 2024 ? (inclusivo ? 10 : 9) : (inclusivo ? 12 : 11);
+    return ipcaYM(ex - 1, m);
+  }
+  function ipcaDevido(serie, ex, modo) {
+    var ym = ipcaMesBase(ex, modo), v = serie ? serie[ym] : undefined;
+    return { ym: ym, valor: (v === undefined || v === null || isNaN(Number(v))) ? null : Number(v) };
+  }
+  // ---- janela efetivamente usada (a partir da variação MENSAL do IBGE) ----
+  function ipcaIdx(ym) { return (+String(ym).slice(0, 4)) * 12 + (+String(ym).slice(4, 6)) - 1; }
+  function ipcaFromIdx(i) { return ipcaYM(Math.floor(i / 12), (i % 12) + 1); }
+  // acumulado composto (%) de ini..fim (inclusive); null se faltar algum mês na série mensal
+  function ipcaComposto(mensal, iniYM, fimYM) {
+    var p = 1, a = ipcaIdx(iniYM), b = ipcaIdx(fimYM);
+    if (b < a) return null;
+    for (var i = a; i <= b; i++) {
+      var v = mensal ? mensal[ipcaFromIdx(i)] : undefined;
+      if (v === undefined || v === null || isNaN(Number(v))) return null;
+      p *= 1 + Number(v) / 100;
+    }
+    return (p - 1) * 100;
+  }
+  // "out/25" -> "202510"; "prev/16" ou vazio -> null
+  function ipcaBaseYM(label) {
+    var m = /^\s*([a-zç]{3})\s*\/\s*(\d{2})\s*$/i.exec(String(label || ""));
+    if (!m) return null;
+    var mi = IPCA_MESES.indexOf(m[1].toLowerCase());
+    if (mi < 0) return null;
+    return ipcaYM(2000 + (+m[2]), mi + 1);
+  }
+  // Procura, entre as janelas que terminam no ano anterior ao exercício (1 a 14 meses), as que reproduzem
+  // o IPCA utilizado (tolerância 0,02 p.p. = arredondamento dos índices mensais). Desempate:
+  // 1) termina no mês declarado como "Base"; 2) tem 12 meses; 3) menor diferença.
+  function ipcaMelhorJanela(mensal, ex, valor, baseYM) {
+    var cands = [];
+    for (var em = 1; em <= 12; em++) {
+      var fim = ipcaYM(ex - 1, em), fi = ipcaIdx(fim);
+      for (var n = 1; n <= 14; n++) {
+        var ini = ipcaFromIdx(fi - n + 1);
+        var c = ipcaComposto(mensal, ini, fim);
+        if (c === null) continue;
+        var d = Math.abs(c - valor);
+        if (d <= 0.02) cands.push({ ini: ini, fim: fim, n: n, comp: c, diff: d, decl: baseYM === fim });
+      }
+    }
+    if (!cands.length) return null;
+    cands.sort(function (x, y) {
+      if (x.decl !== y.decl) return x.decl ? -1 : 1;
+      if ((x.n === 12) !== (y.n === 12)) return x.n === 12 ? -1 : 1;
+      return x.diff - y.diff;
+    });
+    var best = cands[0];
+    best.outras = cands.length - 1;
+    return best;
+  }
+  // linhas da tabela: 1 por exercício do "utilizado" + 1 linha pro exercício seguinte (ainda sem valor aplicado)
+  function ipcaLinhas(serie, mensal, utilizado, modo) {
+    var list = (utilizado || []).slice().sort(function (a, b) { return a.exercicio - b.exercicio; });
+    var rows = list.map(function (u) { return { ex: u.exercicio, base: u.base || "", util: Number(u.valor), previsto: !!u.previsto }; });
+    if (list.length) rows.push({ ex: list[list.length - 1].exercicio + 1, base: "", util: null, previsto: false });
+    var prevFim = null;
+    return rows.map(function (r) {
+      var d = ipcaDevido(serie, r.ex, modo);
+      var out = { ex: r.ex, base: r.base, baseYM: ipcaBaseYM(r.base), util: r.util, previsto: r.previsto, regra: ipcaRegra(r.ex), refYM: d.ym,
+        legIni: ipcaFromIdx(ipcaIdx(d.ym) - 11), devido: d.valor, dif: null, efeito: null, situacao: "",
+        jan: null, janIni: null, janFim: null, janN: null, baseConfere: null, desloc: null, encad: null, encadN: null };
+      var temUtil = r.util !== null && !isNaN(r.util);
+      if (temUtil && !r.previsto) {
+        var j = ipcaMelhorJanela(mensal, r.ex, r.util, out.baseYM);
+        if (j) {
+          out.jan = j; out.janIni = j.ini; out.janFim = j.fim; out.janN = j.n;
+          out.desloc = ipcaIdx(j.fim) - ipcaIdx(out.refYM);
+          if (out.baseYM) out.baseConfere = out.baseYM === j.fim;
+          if (prevFim) {
+            var gap = ipcaIdx(j.ini) - ipcaIdx(prevFim) - 1;
+            out.encadN = gap;
+            out.encad = gap === 0 ? "ok" : (gap < 0 ? "sobrepoe" : "lacuna");
+          }
+          prevFim = j.fim;
+        } else prevFim = null;
+      } else prevFim = null;
+      if (!temUtil) out.situacao = d.valor === null ? "aguardando" : "pendente";
+      else if (d.valor === null) out.situacao = "aguardando";
+      else {
+        out.dif = ipcaR2(r.util - d.valor);
+        out.efeito = ipcaR2(((1 + r.util / 100) / (1 + d.valor / 100) - 1) * 100);
+        out.situacao = Math.abs(out.dif) < 0.005 ? "igual" : (out.dif > 0 ? "acima" : "abaixo");
+      }
+      return out;
+    });
+  }
+  // acumulado composto (1º exercício = base) só com exercícios que têm utilizado E devido
+  function ipcaAcumulado(linhas) {
+    var accU = 1, accD = 1, out = [];
+    linhas.forEach(function (r) {
+      if (r.util === null || r.devido === null || isNaN(r.util)) return;
+      accU *= 1 + r.util / 100; accD *= 1 + r.devido / 100;
+      out.push({ ex: r.ex, accU: (accU - 1) * 100, accD: (accD - 1) * 100, gap: (accU / accD - 1) * 100 });
+    });
+    return out;
+  }
+  function ipcaResumo(linhas) {
+    var res = { n: 0, acima: 0, abaixo: 0, igual: 0, baseDiverge: 0 };
+    linhas.forEach(function (r) {
+      if (r.baseConfere === false) res.baseDiverge++;
+      if (r.situacao === "acima") res.acima++;
+      else if (r.situacao === "abaixo") res.abaixo++;
+      else if (r.situacao === "igual") res.igual++;
+      else return;
+      res.n++;
+    });
+    return res;
+  }
+  // </IPCA_PURE>
+
+  var IPCA_MODO_KEY = "meuhub_ipca_modo_v1";
+  function ipcaGetModo() { try { return localStorage.getItem(IPCA_MODO_KEY) === "inclusivo" ? "inclusivo" : "literal"; } catch (e) { return "literal"; } }
+  function ipcaSetModo(m) { try { localStorage.setItem(IPCA_MODO_KEY, m); } catch (e) {} }
+  var ipcaCache = null;
+  function ipcaLoad(force) {
+    if (ipcaCache && !force) return ipcaCache;
+    var p = authFetch(cfg.templateWorkerUrl + "/ipca" + (force ? "?refresh=1" : "")).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+    ipcaCache = p;
+    p.catch(function () { if (ipcaCache === p) ipcaCache = null; });
+    return p;
+  }
+  function ipcaFmtPct(v) { return v === null || v === undefined || isNaN(v) ? "—" : Number(v).toFixed(2).replace(".", ",") + "%"; }
+  function ipcaFmtPP(v) { return v === null || v === undefined || isNaN(v) ? "—" : (v > 0 ? "+" : "") + Number(v).toFixed(2).replace(".", ",") + " p.p."; }
+  function ipcaFmtDataHora(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso); if (isNaN(d.getTime())) return "—";
+    return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear() + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
+  var IPCA_SITUACAO = {
+    acima: { label: "Acima do devido", cls: "ipca-chip-acima" },
+    abaixo: { label: "Abaixo do devido", cls: "ipca-chip-abaixo" },
+    igual: { label: "Igual ao devido", cls: "ipca-chip-igual" },
+    pendente: { label: "Ainda não aplicado", cls: "ipca-chip-aguard" },
+    aguardando: { label: "Aguardando IBGE", cls: "ipca-chip-aguard" }
+  };
+  var IPCA_LEI_TEXTO = [
+    { t: "Art. 3º Os valores constantes da legislação tributária municipal, expressos em reais, serão atualizados anualmente com base na variação nominal do Índice de Preços ao Consumidor Ampliado (IPCA), publicado pelo Instituto Brasileiro de Geografia e Estatística (IBGE)." },
+    { t: "Até 2023 — § 1º A atualização a que se refere este artigo será realizada com base na variação nominal do IPCA verificada nos últimos 12 (doze) meses antecedentes ao mês de dezembro de cada ano calendário. (redação original)", cls: "ipca-lei-rev" },
+    { t: "A partir de 2024 — § 1º A atualização a que se refere este artigo será realizada com base na variação nominal do IPCA verificada nos últimos doze meses antecedentes ao mês de outubro de cada ano calendário. (Redação dada pela Lei Complementar nº 749/2023)" }
+  ];
+
+  // barra comum às duas páginas: leitura da lei + atualizar série
+  function ipcaBuildTopBar(wrap, state, onChange, onRefresh) {
+    var bar = document.createElement("div");
+    bar.className = "ipca-topbar";
+    var tog = document.createElement("div");
+    tog.className = "holerite-bi-toggle-row";
+    [{ v: "literal", l: "Leitura literal da lei", tip: "'Antecedentes' = termina no mês ANTERIOR ao citado: até 2023, 12 meses até novembro; de 2024 em diante, até setembro." },
+     { v: "inclusivo", l: "Mês citado inclusive", tip: "Termina no próprio mês citado: até 2023, 12 meses até dezembro; de 2024 em diante, até outubro." }].forEach(function (o) {
+      var b = document.createElement("button");
+      b.type = "button"; b.title = o.tip;
+      b.className = "holerite-bi-toggle" + (state.modo === o.v ? " active" : "");
+      b.textContent = o.l;
+      b.addEventListener("click", function () {
+        if (state.modo === o.v) return;
+        state.modo = o.v; ipcaSetModo(o.v);
+        Array.prototype.forEach.call(tog.children, function (x, i) { x.classList.toggle("active", (i === 0 ? "literal" : "inclusivo") === state.modo); });
+        onChange();
+      });
+      tog.appendChild(b);
+    });
+    bar.appendChild(tog);
+    var info = document.createElement("span");
+    info.className = "ipca-fonte";
+    bar.appendChild(info);
+    var rf = document.createElement("button");
+    rf.type = "button"; rf.className = "toolbar-icon-btn"; rf.title = "Buscar a série atualizada no IBGE agora";
+    rf.setAttribute("aria-label", rf.title);
+    rf.innerHTML = '<i class="ti ti-refresh"></i>';
+    rf.addEventListener("click", function () { onRefresh(rf); });
+    bar.appendChild(rf);
+    wrap.appendChild(bar);
+    return {
+      setInfo: function (d) {
+        var ult = Object.keys(d.serie || {}).sort().pop();
+        info.textContent = "Série IBGE até " + ipcaYMLabel(ult) + " · " + (d.fonte || "") + (d.atualizadoEm ? " · atualizada em " + ipcaFmtDataHora(d.atualizadoEm) : "") + (d.erro ? " · ⚠️ falha ao atualizar agora (" + d.erro + ")" : "");
+      }
+    };
+  }
+
+  function renderIpcaPage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "holerite-bi-block financeiro-bi-block";
+    container.appendChild(wrap);
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "📈 IPCA — utilizado × devido no IPTU";
+    wrap.appendChild(title);
+
+    var state = { data: null, modo: ipcaGetModo(), linhas: [], q: "", sit: {}, sort: { col: 0, dir: -1 }, edit: false };
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty"; statusEl.textContent = "Carregando IPCA…";
+    wrap.appendChild(statusEl);
+
+    var topBar = ipcaBuildTopBar(wrap, state, function () { if (state.data) renderAll(); }, function (btn) {
+      btn.disabled = true;
+      ipcaLoad(true).then(function (d) { state.data = d; topBar.setInfo(d); renderAll(); }).catch(function (e) {
+        statusEl.style.display = ""; statusEl.textContent = "Erro ao atualizar: " + (e && e.message ? e.message : "falha");
+      }).then(function () { btn.disabled = false; });
+    });
+    wrap.querySelector(".ipca-topbar").style.display = "none";
+
+    // texto da lei
+    var leiSec = buildCollapsibleSection("Texto da lei", false);
+    IPCA_LEI_TEXTO.forEach(function (p) {
+      var el = document.createElement("p");
+      el.className = "ipca-lei" + (p.cls ? " " + p.cls : "");
+      el.textContent = p.t;
+      leiSec.body.appendChild(el);
+    });
+    var leiNote = document.createElement("p");
+    leiNote.className = "holerite-bi-note";
+    leiNote.textContent = "Cada exercício usa o acumulado de 12 meses do ano ANTERIOR. 'Devido' = o IPCA do IBGE no mês-base da leitura escolhida acima; 'Utilizado' = o que a Prefeitura aplicou (tabela do Notion, editável aqui).";
+    leiSec.body.appendChild(leiNote);
+    wrap.appendChild(leiSec.section);
+
+    // pesquisar / filtrar
+    var searchSec = buildCollapsibleSection("Pesquisar");
+    var searchInput = document.createElement("input");
+    searchInput.type = "search"; searchInput.className = "search-input"; searchInput.placeholder = "Pesquisar exercício, base, mês, situação…";
+    searchSec.body.appendChild(withSearchClear(searchInput));
+    var filterSec = buildCollapsibleSection("Filtrar");
+    var chipsRow = document.createElement("div");
+    chipsRow.className = "holerite-bi-toggle-row";
+    filterSec.body.appendChild(chipsRow);
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button"; clearBtn.className = "holerite-bi-toggle";
+    clearBtn.innerHTML = '<i class="ti ti-filter-off"></i> Limpar filtros';
+    clearBtn.addEventListener("click", function () { state.q = ""; searchInput.value = ""; searchInput.dispatchEvent(new Event("input")); state.sit = {}; buildChips(); renderTable(); });
+    filterSec.body.appendChild(clearBtn);
+    var ctrl = document.createElement("div");
+    ctrl.className = "holerite-controls";
+    ctrl.appendChild(searchSec.section); ctrl.appendChild(filterSec.section);
+    ctrl.style.display = "none";
+    wrap.appendChild(ctrl);
+    searchInput.addEventListener("input", function () { state.q = searchInput.value; renderTable(); });
+    function buildChips() {
+      chipsRow.innerHTML = "";
+      var chipKeys = Object.keys(IPCA_SITUACAO).filter(function (k) { return k !== "aguardando"; }).concat(["divergente"]);
+      chipKeys.forEach(function (k) {
+        var b = document.createElement("button");
+        b.type = "button"; b.className = "holerite-bi-toggle" + (state.sit[k] ? " active" : "");
+        b.textContent = k === "divergente" ? "⚠ Base diverge da janela usada" : IPCA_SITUACAO[k].label;
+        b.addEventListener("click", function () { state.sit[k] = !state.sit[k]; b.classList.toggle("active", !!state.sit[k]); renderTable(); });
+        chipsRow.appendChild(b);
+      });
+    }
+    buildChips();
+
+    var kpiWrap = document.createElement("div");
+    kpiWrap.className = "financeiro-bi-kpi-grid"; kpiWrap.style.display = "none";
+    wrap.appendChild(kpiWrap);
+    var editBar = document.createElement("div");
+    editBar.className = "ipca-editbar"; editBar.style.display = "none";
+    wrap.appendChild(editBar);
+    var tableHost = document.createElement("div");
+    wrap.appendChild(tableHost);
+    var noteEl = document.createElement("p");
+    noteEl.className = "holerite-bi-note"; noteEl.style.display = "none";
+    wrap.appendChild(noteEl);
+
+    function renderKpis() {
+      kpiWrap.innerHTML = ""; kpiWrap.style.display = "grid";
+      var res = ipcaResumo(state.linhas), ac = ipcaAcumulado(state.linhas), last = ac.length ? ac[ac.length - 1] : null;
+      var defs = [
+        { label: "📚 Exercícios comparados", value: String(res.n), sub: ac.length ? "de " + ac[0].ex + " a " + last.ex : "" },
+        { label: "🔼 Utilizado acima do devido", value: String(res.acima), cls: "kpi-saida" },
+        { label: "🔽 Utilizado abaixo do devido", value: String(res.abaixo) },
+        { label: "🟰 Iguais", value: String(res.igual), cls: "kpi-entrada" },
+        { label: "⚠ Base declarada ≠ janela usada", value: String(res.baseDiverge), sub: "exercícios (ver coluna 'Base × janela usada')" },
+        { label: "🧮 Acumulado utilizado", value: last ? ipcaFmtPct(ipcaR2(last.accU)) : "—", sub: last ? "composto, " + ac[0].ex + "–" + last.ex : "" },
+        { label: "⚖️ Acumulado devido", value: last ? ipcaFmtPct(ipcaR2(last.accD)) : "—" },
+        { label: "📏 Diferença acumulada", value: last ? ipcaFmtPct(ipcaR2(last.gap)) : "—", sub: "utilizado ÷ devido − 1" }
+      ];
+      defs.forEach(function (d) {
+        var el = document.createElement("div");
+        el.className = "financeiro-bi-kpi" + (d.cls ? " " + d.cls : "");
+        var lab = document.createElement("span"); lab.className = "financeiro-bi-kpi-label"; lab.textContent = d.label;
+        var val = document.createElement("span"); val.className = "financeiro-bi-kpi-value"; val.textContent = d.value;
+        el.appendChild(lab); el.appendChild(val);
+        if (d.sub) { var sb = document.createElement("span"); sb.className = "holerite-bi-kpi-sub"; sb.textContent = d.sub; el.appendChild(sb); }
+        kpiWrap.appendChild(el);
+      });
+    }
+
+    function renderTable() {
+      tableHost.innerHTML = "";
+      if (state.edit) { renderEdit(); return; }
+      editBar.style.display = "none";
+      var q = normalize(state.q || "");
+      var anySit = Object.keys(state.sit).some(function (k) { return state.sit[k]; });
+      var rows = state.linhas.filter(function (r) {
+        if (anySit) {
+          var okSit = !!state.sit[r.situacao] || (!!state.sit.divergente && r.baseConfere === false);
+          if (!okSit) return false;
+        }
+        if (!q) return true;
+        var hay = normalize([r.ex, r.base, ipcaYMLabel(r.refYM), r.janFim ? ipcaYMLabel(r.janIni) + " " + ipcaYMLabel(r.janFim) : "", (IPCA_SITUACAO[r.situacao] || {}).label, r.baseConfere === false ? "base diverge divergente" : (r.baseConfere ? "base confere" : ""), r.encad === "sobrepoe" ? "sobrepoe sobreposicao" : "", r.regra === "novo" ? "lc 749 2024" : "redacao original", r.previsto ? "previsto" : ""].join(" "));
+        return hay.indexOf(q) !== -1;
+      });
+      var cols = [
+        { label: "Exercício", num: true, get: function (r) { return r.ex; }, text: function (r) { return String(r.ex); } },
+        { label: "Base declarada", get: function (r) { return r.baseYM || ""; }, text: function (r) { return (r.base || "—") + (r.previsto ? " (previsto)" : ""); } },
+        { label: "Janela efetivamente usada (IBGE)", get: function (r) { return r.janIni || ""; }, text: function (r) { return ipcaJanelaTxt(r); } },
+        { label: "Base × janela usada", get: function (r) { return r.baseConfere === null ? 2 : (r.baseConfere ? 1 : 0); }, text: function (r) { return ipcaBaseTxt(r); }, cls: function (r) { return r.baseConfere === false ? "ipca-cell-warn" : (r.baseConfere ? "ipca-cell-ok" : ""); } },
+        { label: "IPCA utilizado", num: true, get: function (r) { return r.util; }, text: function (r) { return ipcaFmtPct(r.util); } },
+        { label: "Janela da lei", get: function (r) { return r.legIni || ""; }, text: function (r) { return ipcaYMLabel(r.legIni) + " → " + ipcaYMLabel(r.refYM) + " (12m)"; } },
+        { label: "IPCA devido", num: true, get: function (r) { return r.devido; }, text: function (r) { return ipcaFmtPct(r.devido); } },
+        { label: "Diferença", num: true, get: function (r) { return r.dif; }, text: function (r) { return ipcaFmtPP(r.dif); }, cls: function (r) { return r.dif > 0 ? "ipca-cell-acima" : (r.dif < 0 ? "ipca-cell-abaixo" : ""); } },
+        { label: "Efeito no IPTU", num: true, get: function (r) { return r.efeito; }, text: function (r) { return r.efeito === null ? "—" : (r.efeito > 0 ? "+" : "") + String(r.efeito.toFixed(2)).replace(".", ",") + "%"; } },
+        { label: "Mês final vs lei", num: true, get: function (r) { return r.desloc; }, text: function (r) { return r.desloc === null ? "—" : (r.desloc === 0 ? "igual" : (r.desloc > 0 ? "+" : "") + r.desloc + (Math.abs(r.desloc) === 1 ? " mês" : " meses")); }, cls: function (r) { return r.desloc ? "ipca-cell-warn" : ""; } },
+        { label: "Encadeamento", get: function (r) { return r.encad === null ? "" : r.encad; }, text: function (r) { return ipcaEncadTxt(r); }, cls: function (r) { return r.encad && r.encad !== "ok" ? "ipca-cell-warn" : ""; } },
+        { label: "Situação", get: function (r) { return (IPCA_SITUACAO[r.situacao] || {}).label || ""; }, text: function (r) { return (IPCA_SITUACAO[r.situacao] || {}).label || ""; }, cls: function (r) { return "ipca-sit " + ((IPCA_SITUACAO[r.situacao] || {}).cls || ""); } },
+        { label: "Redação da lei", get: function (r) { return r.regra; }, text: function (r) { return r.regra === "novo" ? "LC 749/2023 (out)" : "Original (dez)"; } }
+      ];
+      irpfSortableTable(tableHost, cols, rows, state.sort, renderTable, function (r) { return "ipca-row ipca-row-" + r.situacao; });
+      noteEl.style.display = "";
+      var pend = state.linhas.filter(function (r) { return r.situacao === "aguardando" || r.situacao === "pendente"; })[0];
+      noteEl.textContent = "Janela efetivamente usada = período de meses do IBGE cuja variação composta reproduz o IPCA aplicado (tolerância de arredondamento 0,02 p.p.). " +
+        "'Base × janela usada' compara o mês declarado como Base com o mês final dessa janela; 'Mês final vs lei' = diferença entre o mês final usado e o mês-base da lei na leitura escolhida; " +
+        "'Encadeamento' mostra se a janela começa logo após a do exercício anterior (sem sobrepor nem pular meses). Diferença = utilizado − devido (p.p.); Efeito no IPTU = (1+utilizado)/(1+devido) − 1." +
+        (pend ? " Exercício " + pend.ex + ": " + (pend.devido === null ? "aguardando o IPCA de " + ipcaYMLabel(pend.refYM) + " do IBGE." : "devido pela lei = " + ipcaFmtPct(pend.devido) + " (ainda não há valor aplicado).") : "");
+    }
+    function ipcaJanelaTxt(r) {
+      if (r.util === null || isNaN(r.util)) return "—";
+      if (!r.jan) return r.previsto ? "— (valor previsto/estimado)" : "não identificada";
+      return ipcaYMLabel(r.janIni) + " → " + ipcaYMLabel(r.janFim) + " (" + r.janN + (r.janN === 1 ? " mês" : " meses") + ")";
+    }
+    function ipcaBaseTxt(r) {
+      if (r.baseConfere === null) return r.jan ? "sem base declarada" : "—";
+      if (r.baseConfere) return "✓ confere";
+      return "⚠ declarou " + r.base + " · usou " + ipcaYMLabel(r.janFim);
+    }
+    function ipcaEncadTxt(r) {
+      if (r.encad === null) return "—";
+      if (r.encad === "ok") return "✓ continua a anterior";
+      if (r.encad === "sobrepoe") return "⚠ sobrepõe " + (-r.encadN) + (r.encadN === -1 ? " mês" : " meses") + " da anterior";
+      return "⚠ pula " + r.encadN + (r.encadN === 1 ? " mês" : " meses");
+    }
+
+    // edição do "utilizado" (KV) — adicionar o exercício novo quando a Prefeitura definir
+    function renderEdit() {
+      editBar.style.display = "";
+      editBar.innerHTML = "";
+      var draft = state.draft;
+      var tbl = document.createElement("table");
+      tbl.className = "holerite-bi-table ipca-edit-table";
+      var thead = document.createElement("thead"), hr = document.createElement("tr");
+      ["Exercício", "Base (ex.: out/25 ou prev/16)", "IPCA utilizado (%)", "Previsto?", ""].forEach(function (h) { var th = document.createElement("th"); th.textContent = h; hr.appendChild(th); });
+      thead.appendChild(hr); tbl.appendChild(thead);
+      var tb = document.createElement("tbody");
+      draft.forEach(function (r, i) {
+        var tr = document.createElement("tr");
+        function cell(el) { var td = document.createElement("td"); td.appendChild(el); tr.appendChild(td); }
+        var ex = document.createElement("input"); ex.type = "number"; ex.className = "ipca-input ipca-input-ex"; ex.value = r.exercicio; ex.addEventListener("input", function () { r.exercicio = parseInt(ex.value, 10); });
+        var bs = document.createElement("input"); bs.type = "text"; bs.className = "ipca-input"; bs.maxLength = 20; bs.value = r.base || ""; bs.addEventListener("input", function () { r.base = bs.value; });
+        var vl = document.createElement("input"); vl.type = "text"; vl.inputMode = "decimal"; vl.className = "ipca-input ipca-input-val"; vl.value = r.valor === "" || r.valor === undefined ? "" : String(r.valor).replace(".", ","); vl.addEventListener("input", function () { r.valor = vl.value; });
+        var pv = document.createElement("input"); pv.type = "checkbox"; pv.checked = !!r.previsto; pv.addEventListener("change", function () { r.previsto = pv.checked; });
+        var rm = document.createElement("button"); rm.type = "button"; rm.className = "toolbar-icon-btn"; rm.title = "Remover exercício"; rm.innerHTML = '<i class="ti ti-trash"></i>';
+        rm.addEventListener("click", function () { draft.splice(i, 1); renderTable(); });
+        cell(ex); cell(bs); cell(vl); cell(pv); cell(rm);
+        tb.appendChild(tr);
+      });
+      tbl.appendChild(tb);
+      var wrapT = document.createElement("div"); wrapT.className = "holerite-bi-table-wrap"; wrapT.appendChild(tbl);
+      tableHost.appendChild(wrapT);
+      var actions = document.createElement("div"); actions.className = "holerite-bi-toggle-row";
+      function btn(label, icon, fn, primary) {
+        var b = document.createElement("button"); b.type = "button"; b.className = "holerite-bi-toggle" + (primary ? " active" : "");
+        b.innerHTML = '<i class="ti ti-' + icon + '"></i> ' + label; b.addEventListener("click", fn); actions.appendChild(b); return b;
+      }
+      btn("Adicionar exercício", "plus", function () {
+        var maxEx = draft.reduce(function (m, r) { return Math.max(m, parseInt(r.exercicio, 10) || 0); }, 0);
+        draft.push({ exercicio: maxEx ? maxEx + 1 : new Date().getFullYear() + 1, base: "", valor: "", previsto: false }); renderTable();
+      });
+      var saveB = btn("Salvar", "device-floppy", function () {
+        saveB.disabled = true;
+        authFetch(cfg.templateWorkerUrl + "/ipca-utilizado", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ utilizado: draft }) })
+          .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+          .then(function (d) { state.data.utilizado = d.utilizado; ipcaCache = Promise.resolve(state.data); state.edit = false; renderAll(); })
+          .catch(function (e) { saveB.disabled = false; alert("Não foi possível salvar: " + (e && e.message ? e.message : "falha")); });
+      }, true);
+      btn("Cancelar", "x", function () { state.edit = false; renderAll(); });
+      tableHost.appendChild(actions);
+    }
+
+    function renderAll() {
+      state.linhas = ipcaLinhas(state.data.serie, state.data.mensal, state.data.utilizado, state.modo);
+      renderKpis();
+      renderTable();
+    }
+
+    // botão "Editar valores utilizados" na barra
+    var editBtn = document.createElement("button");
+    editBtn.type = "button"; editBtn.className = "toolbar-icon-btn"; editBtn.title = "Editar o IPCA utilizado (adicionar exercício novo)";
+    editBtn.setAttribute("aria-label", editBtn.title);
+    editBtn.innerHTML = '<i class="ti ti-edit"></i>';
+    editBtn.addEventListener("click", function () {
+      if (!state.data) return;
+      state.edit = !state.edit;
+      state.draft = state.data.utilizado.map(function (u) { return { exercicio: u.exercicio, base: u.base || "", valor: u.valor, previsto: !!u.previsto }; });
+      renderTable();
+    });
+    wrap.querySelector(".ipca-topbar").appendChild(editBtn);
+
+    ipcaLoad(false).then(function (d) {
+      state.data = d;
+      statusEl.style.display = "none";
+      wrap.querySelector(".ipca-topbar").style.display = "";
+      ctrl.style.display = "";
+      topBar.setInfo(d);
+      renderAll();
+    }).catch(function (e) {
+      statusEl.textContent = "Erro ao carregar o IPCA: " + (e && e.message ? e.message : "falha na consulta ao Worker");
+    });
+  }
+
+  function renderIpcaGraficosPage(container, page) {
+    var wrap = document.createElement("div");
+    wrap.className = "holerite-bi-block financeiro-bi-block";
+    container.appendChild(wrap);
+    var title = document.createElement("h3");
+    title.className = "group-title";
+    title.textContent = "📊 IPCA — gráficos (utilizado × devido)";
+    wrap.appendChild(title);
+    var state = { data: null, modo: ipcaGetModo(), linhas: [], de: null, ate: null };
+    var statusEl = document.createElement("p");
+    statusEl.className = "empty"; statusEl.textContent = "Carregando IPCA e gráficos…";
+    wrap.appendChild(statusEl);
+    var topBar = ipcaBuildTopBar(wrap, state, function () { if (state.data) renderAll(); }, function (btn) {
+      btn.disabled = true;
+      ipcaLoad(true).then(function (d) { state.data = d; topBar.setInfo(d); renderAll(); }).catch(function (e) {
+        statusEl.style.display = ""; statusEl.textContent = "Erro ao atualizar: " + (e && e.message ? e.message : "falha");
+      }).then(function () { btn.disabled = false; });
+    });
+    var topEl = wrap.querySelector(".ipca-topbar"); topEl.style.display = "none";
+
+    var rangeRow = document.createElement("div");
+    rangeRow.className = "ipca-range"; rangeRow.style.display = "none";
+    var selDe = document.createElement("select"), selAte = document.createElement("select");
+    selDe.className = "ipca-select"; selAte.className = "ipca-select";
+    function lbl(t, el) { var l = document.createElement("label"); l.className = "ipca-range-lbl"; l.appendChild(document.createTextNode(t + " ")); l.appendChild(el); rangeRow.appendChild(l); }
+    lbl("De exercício", selDe); lbl("até", selAte);
+    wrap.appendChild(rangeRow);
+    selDe.addEventListener("change", function () { state.de = +selDe.value; if (state.ate < state.de) { state.ate = state.de; selAte.value = String(state.ate); } renderCharts(); });
+    selAte.addEventListener("change", function () { state.ate = +selAte.value; if (state.de > state.ate) { state.de = state.ate; selDe.value = String(state.de); } renderCharts(); });
+
+    var kpiWrap = document.createElement("div");
+    kpiWrap.className = "financeiro-bi-kpi-grid"; kpiWrap.style.display = "none";
+    wrap.appendChild(kpiWrap);
+    function mkSection() { var s = document.createElement("div"); s.className = "financeiro-bi-section"; s.style.display = "none"; wrap.appendChild(s); return s; }
+    var secAnual = mkSection(), secDif = mkSection(), secAcum = mkSection(), secMensal = mkSection();
+    var collapsed = {}, reg = {};
+    wrap.insertBefore(biCollapseToolbar(collapsed, reg), statusEl);
+    var charts = {};
+    function destroy(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+    function mkNote(parent, text) { var p = document.createElement("p"); p.className = "holerite-bi-note"; p.textContent = text; parent.appendChild(p); }
+    function mkChartBox(parent, id) {
+      var box = document.createElement("div"); box.className = "financeiro-bi-chart-box holerite-bi-chart-box";
+      var cw = document.createElement("div"); cw.className = "financeiro-bi-canvas-wrap financeiro-bi-canvas-wide";
+      var canvas = document.createElement("canvas"); canvas.id = id;
+      cw.appendChild(canvas); box.appendChild(cw); parent.appendChild(box); return canvas;
+    }
+    var C_UTIL = "#d9480f", C_DEV = "#1c7ed6", C_POS = "#e8590c", C_NEG = "#228be6", C_GAP = "#7048e8";
+    var pctTick = function (v) { return v + "%"; };
+
+    function renderAll() { state.linhas = ipcaLinhas(state.data.serie, state.data.mensal, state.data.utilizado, state.modo); renderRange(); renderCharts(); }
+    function renderRange() {
+      var exs = state.linhas.map(function (r) { return r.ex; });
+      var comparaveis = state.linhas.filter(function (r) { return r.util !== null && r.devido !== null; }).map(function (r) { return r.ex; });
+      var min = comparaveis.length ? comparaveis[0] : exs[0], max = comparaveis.length ? comparaveis[comparaveis.length - 1] : exs[exs.length - 1];
+      [selDe, selAte].forEach(function (s) { s.innerHTML = ""; });
+      comparaveis.forEach(function (e) {
+        [selDe, selAte].forEach(function (s) { var o = document.createElement("option"); o.value = String(e); o.textContent = String(e); s.appendChild(o); });
+      });
+      if (state.de === null || comparaveis.indexOf(state.de) === -1) state.de = min;
+      if (state.ate === null || comparaveis.indexOf(state.ate) === -1) state.ate = max;
+      selDe.value = String(state.de); selAte.value = String(state.ate);
+      rangeRow.style.display = "";
+    }
+    function renderKpis(sel) {
+      kpiWrap.innerHTML = ""; kpiWrap.style.display = "grid";
+      var res = ipcaResumo(sel), ac = ipcaAcumulado(sel), last = ac.length ? ac[ac.length - 1] : null;
+      var maior = null, menor = null;
+      sel.forEach(function (r) { if (r.dif === null) return; if (!maior || r.dif > maior.dif) maior = r; if (!menor || r.dif < menor.dif) menor = r; });
+      var defs = [
+        { label: "📚 Exercícios no período", value: String(res.n) },
+        { label: "🔼 Acima / 🔽 abaixo / 🟰 igual", value: res.acima + " / " + res.abaixo + " / " + res.igual },
+        { label: "🧮 Acumulado utilizado", value: last ? ipcaFmtPct(ipcaR2(last.accU)) : "—" },
+        { label: "⚖️ Acumulado devido", value: last ? ipcaFmtPct(ipcaR2(last.accD)) : "—" },
+        { label: "📏 Diferença acumulada", value: last ? ipcaFmtPct(ipcaR2(last.gap)) : "—", sub: "utilizado ÷ devido − 1" },
+        { label: "⬆️ Maior diferença", value: maior ? ipcaFmtPP(maior.dif) : "—", sub: maior ? "exercício " + maior.ex : "" },
+        { label: "⬇️ Menor diferença", value: menor ? ipcaFmtPP(menor.dif) : "—", sub: menor ? "exercício " + menor.ex : "" }
+      ];
+      defs.forEach(function (d) {
+        var el = document.createElement("div"); el.className = "financeiro-bi-kpi";
+        var lab = document.createElement("span"); lab.className = "financeiro-bi-kpi-label"; lab.textContent = d.label;
+        var val = document.createElement("span"); val.className = "financeiro-bi-kpi-value"; val.textContent = d.value;
+        el.appendChild(lab); el.appendChild(val);
+        if (d.sub) { var sb = document.createElement("span"); sb.className = "holerite-bi-kpi-sub"; sb.textContent = d.sub; el.appendChild(sb); }
+        kpiWrap.appendChild(el);
+      });
+    }
+    function renderCharts() {
+      var sel = state.linhas.filter(function (r) { return r.util !== null && r.devido !== null && r.ex >= state.de && r.ex <= state.ate; });
+      renderKpis(sel);
+      var labels = sel.map(function (r) { return String(r.ex); });
+      var common = { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false } };
+
+      destroy("anual"); secAnual.innerHTML = ""; secAnual.style.display = "";
+      biToggleTitle(secAnual, "📊 IPCA por exercício: utilizado × devido", collapsed, reg);
+      var c1 = mkChartBox(secAnual, "ipcaAnual");
+      charts.anual = new window.Chart(c1.getContext("2d"), {
+        type: "bar",
+        data: { labels: labels, datasets: [
+          { label: "Utilizado (Prefeitura)", data: sel.map(function (r) { return r.util; }), backgroundColor: C_UTIL, borderRadius: 4 },
+          { label: "Devido (lei — " + (state.modo === "literal" ? "leitura literal" : "mês citado inclusive") + ")", data: sel.map(function (r) { return r.devido; }), backgroundColor: C_DEV, borderRadius: 4 }
+        ] },
+        options: Object.assign({}, common, {
+          plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ipcaFmtPct(ctx.parsed.y); } } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: pctTick }, grid: { color: "rgba(0,0,0,0.06)" } }, x: { grid: { display: false } } }
+        })
+      });
+      mkNote(secAnual, "Cada exercício usa o acumulado de 12 meses do ano anterior (mês-base conforme a leitura da lei escolhida no topo).");
+
+      destroy("dif"); secDif.innerHTML = ""; secDif.style.display = "";
+      biToggleTitle(secDif, "↕️ Diferença por exercício (utilizado − devido, em p.p.)", collapsed, reg);
+      var c2 = mkChartBox(secDif, "ipcaDif");
+      charts.dif = new window.Chart(c2.getContext("2d"), {
+        type: "bar",
+        data: { labels: labels, datasets: [
+          { label: "Diferença (p.p.)", data: sel.map(function (r) { return r.dif; }), backgroundColor: sel.map(function (r) { return r.dif > 0 ? C_POS : (r.dif < 0 ? C_NEG : "#adb5bd"); }), borderRadius: 4, yAxisID: "y" },
+          { type: "line", label: "Efeito no IPTU (%)", data: sel.map(function (r) { return r.efeito; }), borderColor: C_GAP, backgroundColor: C_GAP, borderWidth: 2, pointRadius: 3, tension: 0.2, yAxisID: "y1" }
+        ] },
+        options: Object.assign({}, common, {
+          plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + (ctx.datasetIndex === 0 ? ipcaFmtPP(ctx.parsed.y) : ipcaFmtPct(ctx.parsed.y)); } } } },
+          scales: { y: { ticks: { callback: function (v) { return v + " p.p."; } }, grid: { color: "rgba(0,0,0,0.06)" } }, y1: { position: "right", grid: { display: false }, ticks: { callback: pctTick } }, x: { grid: { display: false } } }
+        })
+      });
+      mkNote(secDif, "Laranja = Prefeitura usou índice ACIMA do devido; azul = ABAIXO. A linha mostra o efeito proporcional no valor atualizado: (1+utilizado)/(1+devido) − 1.");
+
+      destroy("acum"); secAcum.innerHTML = ""; secAcum.style.display = "";
+      biToggleTitle(secAcum, "📈 Acumulado composto no período", collapsed, reg);
+      var ac = ipcaAcumulado(sel);
+      var c3 = mkChartBox(secAcum, "ipcaAcum");
+      charts.acum = new window.Chart(c3.getContext("2d"), {
+        data: { labels: ac.map(function (r) { return String(r.ex); }), datasets: [
+          { type: "line", label: "Acumulado utilizado (%)", data: ac.map(function (r) { return ipcaR2(r.accU); }), borderColor: C_UTIL, backgroundColor: C_UTIL, borderWidth: 2, pointRadius: 3, tension: 0.2, yAxisID: "y" },
+          { type: "line", label: "Acumulado devido (%)", data: ac.map(function (r) { return ipcaR2(r.accD); }), borderColor: C_DEV, backgroundColor: C_DEV, borderWidth: 2, pointRadius: 3, tension: 0.2, yAxisID: "y" },
+          { type: "bar", label: "Diferença acumulada (%)", data: ac.map(function (r) { return ipcaR2(r.gap); }), backgroundColor: "rgba(112,72,232,0.35)", borderRadius: 3, yAxisID: "y1" }
+        ] },
+        options: Object.assign({}, common, {
+          plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ipcaFmtPct(ctx.parsed.y); } } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: pctTick }, grid: { color: "rgba(0,0,0,0.06)" } }, y1: { position: "right", grid: { display: false }, ticks: { callback: pctTick } }, x: { grid: { display: false } } }
+        })
+      });
+      mkNote(secAcum, "Composto exercício a exercício a partir do primeiro do período escolhido: quanto o valor atualizado cresceria com o índice utilizado × com o devido. A barra roxa é a distância entre as duas curvas.");
+
+      destroy("mensal"); secMensal.innerHTML = ""; secMensal.style.display = "";
+      biToggleTitle(secMensal, "🗓️ IPCA 12 meses (série mensal do IBGE) e meses-base", collapsed, reg);
+      var serie = state.data.serie || {};
+      var firstYM = ipcaYM(state.de - 1, 1);
+      var yms = Object.keys(serie).filter(function (k) { return k >= firstYM; }).sort();
+      var idx = {}; yms.forEach(function (k, i) { idx[k] = i; });
+      var ptsLei = yms.map(function () { return null; }), ptsUsado = yms.map(function () { return null; });
+      sel.forEach(function (r) {
+        if (idx[r.refYM] !== undefined) ptsLei[idx[r.refYM]] = r.devido;
+        if (r.janFim && idx[r.janFim] !== undefined) ptsUsado[idx[r.janFim]] = r.util;
+      });
+      var c4 = mkChartBox(secMensal, "ipcaMensal");
+      charts.mensal = new window.Chart(c4.getContext("2d"), {
+        data: { labels: yms.map(ipcaYMLabel), datasets: [
+          { type: "line", label: "IPCA acumulado em 12 meses", data: yms.map(function (k) { return serie[k]; }), borderColor: "#868e96", backgroundColor: "#868e96", borderWidth: 1.5, pointRadius: 0, tension: 0.2, order: 3 },
+          { type: "line", label: "Mês-base pela lei", data: ptsLei, showLine: false, borderColor: C_DEV, backgroundColor: C_DEV, pointRadius: 6, pointStyle: "rectRot", order: 1 },
+          { type: "line", label: "Mês que a Prefeitura efetivamente usou", data: ptsUsado, showLine: false, borderColor: C_UTIL, backgroundColor: C_UTIL, pointRadius: 5, order: 2 }
+        ] },
+        options: Object.assign({}, common, {
+          plugins: { tooltip: { callbacks: { label: function (ctx) { return ctx.parsed.y === null ? "" : ctx.dataset.label + ": " + ipcaFmtPct(ctx.parsed.y); } } } },
+          scales: { y: { ticks: { callback: pctTick }, grid: { color: "rgba(0,0,0,0.06)" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 16 } } }
+        })
+      });
+      mkNote(secMensal, "Losango azul = mês-base que a lei manda usar; círculo laranja = mês do IBGE cujo valor bate com o IPCA que a Prefeitura aplicou (quando identificável).");
+    }
+
+    Promise.all([ipcaLoad(false), loadChartJs()]).then(function (r) {
+      state.data = r[0];
+      statusEl.style.display = "none";
+      topEl.style.display = "";
+      topBar.setInfo(r[0]);
+      renderAll();
+    }).catch(function (e) {
+      statusEl.textContent = "Erro ao carregar os gráficos: " + (e && e.message ? e.message : "falha ao carregar dados/gráficos");
+    });
   }
 
   // ---------------- painel retrátil do lado direito ----------------

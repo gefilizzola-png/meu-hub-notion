@@ -1565,7 +1565,7 @@ var CALENDAR_DONE_ANDAMENTO_IDS = ["d228224dee1d43dabb72744097f10028", "24104814
 // ("Editar grupos" em Filtrar); o que ele salvar (KV, /calendar-settings → groups)
 // substitui este padrão. "sources" = ids de CALENDAR_SOURCES.
 var CALENDAR_DEFAULT_GROUPS = [
-  { id: "pmf", label: "PMF", icon: "🏛️", color: "#4a90d9", sources: ["reunioes", "sessoes", "processos_tat_jart", "tarefas"] },
+  { id: "pmf", label: "PMF", icon: "🏛️", color: "#4a90d9", sources: ["reunioes", "sessoes", "processos_tat_jart", "tarefas", "ipca_divulgacao"] },
   { id: "familia", label: "Família", icon: "👨‍👩‍👦", color: "#e64980", sources: ["aniversarios", "saude", "provas_vitor", "eventos_festas"] },
   { id: "financeiro", label: "Financeiro", icon: "💰", color: "#2f9e44", sources: ["financeiro", "emprestimos"] },
   { id: "viagens", label: "Viagens", icon: "✈️", color: "#1c7ed6", sources: ["passagens"] },
@@ -1612,6 +1612,8 @@ var CALENDAR_SOURCES = [
     target: { type: "page", target: "backup" }, defaultEnabled: false },
   { id: "ponto_ajuste_mes", label: "Ponto — ajustar mês anterior", icon: "⏰", color: "#495057", kind: "ponto_mes",
     defaultDiaDoMes: 2, target: { type: "page", target: "ponto_eletronico" }, defaultEnabled: false },
+  { id: "ipca_divulgacao", label: "IPCA – divulgação IBGE (out)", icon: "📈", color: "#d9480f", kind: "ipca",
+    target: { type: "page", target: "pmf_indexadores_ipca" }, defaultEnabled: true },
   { id: "meus_eventos", label: "Meus eventos", icon: "⭐", color: "#e8590c", kind: "custom",
     target: null, defaultEnabled: true }
 ];
@@ -1877,7 +1879,7 @@ const APP_CONFIG = {
   // de "Meu hub" no topo do menu, só pra dar pra conferir rapidinho se o
   // GitHub Pages já está servindo a versão mais recente depois de um push
   // (às vezes o cache do navegador/GitHub demora um pouco pra atualizar).
-  appVersion: "2026-10-09 01:28",
+  appVersion: "2026-10-09 01:51",
   // valor inicial da seção "Recentes" do menu ANTES do fetch de
   // /recent-settings responder (evita a seção "pular" de tamanho
   // quando o Worker devolver o valor salvo) — espelha
@@ -3872,6 +3874,7 @@ const APP_CONFIG = {
         { label: "Cadastros", type: "page", target: "pmf_cadastros" },
         { label: "Controles", type: "page", target: "pmf_controles" },
         { label: "Funcional", type: "page", target: "pmf_funcional" },
+        { label: "Indexadores", type: "page", target: "pmf_indexadores" },
         { label: "Tributos", type: "page", target: "pmf_tributos" }
       ]
     },
@@ -4661,6 +4664,40 @@ const APP_CONFIG = {
       }
     },
     pmf_ctrl_timesheet: { title: "Time Sheet", items: [] },
+
+    // "Indexadores" — pasta (pedido do Georges). 1º item: IPCA (utilizado x devido no IPTU) + página de gráficos.
+    pmf_indexadores: {
+      title: "Indexadores",
+      items: [
+        { label: "IPCA", type: "page", target: "pmf_indexadores_ipca", icon: "meuhub" },
+        { label: "IPCA – Gráficos", type: "page", target: "pmf_indexadores_ipca_graficos", icon: "meuhub" }
+      ]
+    },
+
+    // "page.ipca" — tabela IPCA utilizado no IPTU x devido pela lei (Art. 3º LC 230/2006; LC 749/2023).
+    // Série IBGE vem do Worker (GET /ipca, KV); "utilizado" editável (PUT /ipca-utilizado). Ver renderIpcaPage.
+    // Calendário: só em outubro (divulgação do IPCA de setembro); sem notificação nem Painel do Dia.
+    pmf_indexadores_ipca: {
+      title: "IPCA",
+      ipca: true,
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "IPCA (Notion)", type: "notion", url: "https://app.notion.com/p/8df0849b030d402e9b1cf507043b3093", icon: "notion" },
+          { label: "IPCA – Gráficos", type: "page", target: "pmf_indexadores_ipca_graficos", icon: "meuhub" }
+        ] }
+      ],
+      items: []
+    },
+    pmf_indexadores_ipca_graficos: {
+      title: "IPCA – Gráficos",
+      ipcaGraficos: true,
+      itemGroups: [
+        { title: "Abrir", items: [
+          { label: "IPCA (tabela)", type: "page", target: "pmf_indexadores_ipca", icon: "meuhub" }
+        ] }
+      ],
+      items: []
+    },
 
     pmf_funcional: {
       title: "Funcional",

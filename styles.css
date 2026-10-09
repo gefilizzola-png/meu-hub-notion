@@ -9165,3 +9165,30 @@ body.privacy-on .privacy-scope canvas { filter: blur(12px); }
 .qr-tabsbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0 6px; }
 .qr-export-btn { margin-left: auto; width: auto; display: inline-flex; align-items: center; gap: 6px; }
 .qr-chip-exportado { background: #e3f3e6; color: #1f6b34; }
+
+/* ---------- IPCA (PMF > Indexadores) ---------- */
+.ipca-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 12px; }
+.ipca-fonte { font-size: 12px; color: var(--muted, #6b7280); flex: 1 1 220px; }
+.ipca-lei { font-size: 13px; line-height: 1.5; margin: 6px 0; }
+.ipca-lei-rev { text-decoration: line-through; opacity: 0.7; }
+.ipca-row-acima td { background: rgba(232, 89, 12, 0.07); }
+.ipca-row-abaixo td { background: rgba(34, 139, 230, 0.07); }
+.ipca-row-igual td { background: rgba(47, 158, 68, 0.07); }
+.ipca-row-aguardando td, .ipca-row-pendente td { background: rgba(134, 142, 150, 0.09); }
+.ipca-cell-acima { color: #d9480f; font-weight: 600; }
+.ipca-cell-abaixo { color: #1c7ed6; font-weight: 600; }
+.ipca-cell-warn { color: #e67700; font-weight: 600; }
+.ipca-sit { white-space: nowrap; font-weight: 600; }
+.ipca-chip-acima { color: #d9480f; }
+.ipca-chip-abaixo { color: #1c7ed6; }
+.ipca-chip-igual { color: #2f9e44; }
+.ipca-chip-aguard { color: #868e96; }
+.ipca-range { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 12px; }
+.ipca-range-lbl { font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.ipca-select, .ipca-input { padding: 4px 8px; border: 1px solid rgba(128,128,128,0.35); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+.ipca-input-ex { width: 84px; }
+.ipca-input-val { width: 90px; }
+.ipca-editbar { display: none; }
+.ipca-edit-table td { padding: 4px 6px; }
+.ipca-cell-ok { color: #2f9e44; font-weight: 600; white-space: nowrap; }
+.ipca-cell-warn { white-space: nowrap; }
