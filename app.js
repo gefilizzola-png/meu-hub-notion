@@ -17387,7 +17387,10 @@
         statusEl.textContent = "Sincronizando " + bases[bi] + "… (" + total + " registros até agora)";
         var u = cfg.templateWorkerUrl + "/nf-sync?base=" + bases[bi] + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
         return authFetch(u, { method: "POST" }).then(function (res) {
-          return res.json().then(function (d) { return { ok: res.ok, d: d }; });
+          return res.text().then(function (t) {
+            var d; try { d = JSON.parse(t); } catch (e) { d = { error: "resposta não-JSON (HTTP " + res.status + "): " + t.slice(0, 80).replace(/\s+/g, " ") }; }
+            return { ok: res.ok && !d.error, d: d };
+          });
         }).then(function (x) {
           if (!x.ok) throw new Error((x.d && x.d.error) || "erro na sincronização");
           total += x.d.upserted || 0;
