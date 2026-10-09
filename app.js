@@ -23729,19 +23729,27 @@
       exporting = true; btn.disabled = true;
       var now = new Date(), iso = now.toISOString();
       downloadTxt(pend, "qr-capturas_" + stampName(now) + ".txt");   // baixa primeiro; só depois marca (se falhar, continuam pendentes)
-      var ids = pend.map(function (it) { return it.id; }), failed = 0, i = 0;
-      function next() {
-        if (i >= ids.length) return Promise.resolve();
-        var chunk = ids.slice(i, i + 25); i += 25;
-        return call("/qrcapturas-export", "POST", { ids: chunk, exportadoEm: iso }).then(function (d) {
-          var set = {}; (d.updated || []).forEach(function (x) { set[x] = 1; });
-          state.items.forEach(function (it) { if (set[it.id]) it.exportadoEm = d.exportadoEm; });
-          renderTable();
-        }).catch(function () { failed += chunk.length; }).then(next);
+      var ids = pend.map(function (it) { return it.id; });
+      // marca em lotes PEQUENOS (o Worker limita as operações por chamada); o que falhar é
+      // tentado de novo em lotes ainda menores antes de avisar.
+      function markIds(list, size) {
+        var left = [], i = 0;
+        function next() {
+          if (i >= list.length) return Promise.resolve(left);
+          var chunk = list.slice(i, i + size); i += size;
+          return call("/qrcapturas-export", "POST", { ids: chunk, exportadoEm: iso }).then(function (d) {
+            var set = {}; (d.updated || []).forEach(function (x) { set[x] = 1; });
+            state.items.forEach(function (it) { if (set[it.id]) it.exportadoEm = d.exportadoEm; });
+            renderTable();
+          }).catch(function () { /* confere abaixo quais ficaram sem marca */ }).then(next);
+        }
+        return next().then(function () {
+          return list.filter(function (id) { return state.items.some(function (it) { return it.id === id && !it.exportadoEm; }); });
+        });
       }
-      next().then(function () {
+      markIds(ids, 10).then(function (rest) { return rest.length ? markIds(rest, 3) : rest; }).then(function (rest) {
         exporting = false;
-        msgEl.textContent = failed ? "⚠️ Arquivo baixado, mas " + failed + " item(ns) não puderam ser marcados como exportados (continuam em Pendentes). Tente exportar de novo só se precisar." : "✅ " + pend.length + " string(s) exportada(s) em " + fmtExp(iso) + ".";
+        msgEl.textContent = rest.length ? "⚠️ Arquivo baixado, mas " + rest.length + " item(ns) não puderam ser marcados como exportados (continuam em Pendentes). Clique em Exportar de novo para tentar marcar." : "✅ " + pend.length + " string(s) exportada(s) em " + fmtExp(iso) + ".";
         renderTable();
       });
     }
