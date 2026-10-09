@@ -16931,6 +16931,7 @@
     { key: "valor", label: "Valor Total", sortKey: "valor_total" },
     { key: "itens", label: "Itens", sortKey: "_nItens" },
     { key: "tx", label: "Transação", sortKey: "_tx" },
+    { key: "mkt", label: "Marketplace", sortKey: "_mkt" },
     { key: "natureza", label: "Natureza", sortKey: "natureza" },
     { key: "serie", label: "Série", sortKey: "serie" },
     { key: "uf", label: "UF", sortKey: "uf" },
@@ -16976,6 +16977,11 @@
     var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? (m[3] + "/" + m[2] + "/" + m[1]) : String(iso);
   }
+  // Marketplace (inferido): o app não guarda o "intermediador" da NF — só o nº do
+  // pedido. Pedidos de 16 dígitos começando em 2000 são do padrão do Mercado Livre.
+  function nfMarketplace(n) {
+    return (n && /^2000\d{12}$/.test(String(n.pedido || "").trim())) ? "Mercado Livre" : "";
+  }
   function nfFmtMoney(n) {
     return (typeof n === "number") ? financeiroFormatBRL(n) : "—";
   }
@@ -17014,6 +17020,10 @@
     toolbar.className = "priorities-columns-toolbar";
     wrap.appendChild(toolbar);
 
+    var chipBar = document.createElement("div");
+    chipBar.className = "nf-chipbar";
+    wrap.appendChild(chipBar);
+
     var body = document.createElement("div");
     wrap.appendChild(body);
 
@@ -17024,7 +17034,8 @@
       dateRange: null,
       sortKey: "data_emissao", sortDir: -1,
       expanded: {},
-      columnsExpanded: window.innerWidth > 900,
+      mktSel: [], cfgOpen: false, chipOn: { notas: {}, itens: {} },
+      colCfg: { notas: null, itens: null },   // null = padrão do app; array = chaves que viram chip
       view: "notas",               // "notas" | "itens"
       iSortKey: "data", iSortDir: -1, iExpanded: {},
       match: {}, matchInfo: null, matchState: "idle"   // idle | loading | ok | error
@@ -17038,6 +17049,7 @@
         var temTx = state.match[n.id] ? "com" : "sem";
         if (state.matchSel.indexOf(temTx) === -1) return false;
       }
+      if (state.mktSel.length && state.mktSel.indexOf(nfMarketplace(n) || "-") === -1) return false;
       if (state.emitenteSel.length && state.emitenteSel.indexOf(n.emitente) === -1) return false;
       if (state.tipoSel.length && state.tipoSel.indexOf(n.tipo) === -1) return false;
       if (state.statusSel.length && state.statusSel.indexOf(n.status) === -1) return false;
@@ -17056,7 +17068,7 @@
       }
       if (state.search && !skipSearch) {
         var s = normalize(state.search);
-        var parts = [n.nota, n.emitente, n.razao_social, n.cnpj_cpf, n.numero, n.chave_acesso, n.tipo, n.municipio, n.natureza];
+        var parts = [n.nota, n.emitente, n.razao_social, n.cnpj_cpf, n.numero, n.chave_acesso, n.tipo, n.municipio, n.natureza, n.pedido, nfMarketplace(n)];
         (state.itensByNota[n.id] || []).forEach(function (i) { parts.push(i.produto, i.item, i.ean, i.ncm, i.categoria); });
         if (normalize(parts.filter(Boolean).join(" ")).indexOf(s) === -1) return false;
       }
@@ -17065,6 +17077,7 @@
     function sortValue(n, key) {
       if (key === "_nItens") return (state.itensByNota[n.id] || []).length;
       if (key === "_tx") return state.match[n.id] ? 1 : 0;
+      if (key === "_mkt") return nfMarketplace(n);
       var v = n[key];
       return (v === null || v === undefined) ? "" : v;
     }
@@ -17104,7 +17117,7 @@
     }
 
     var wraps = {};
-    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "data"].forEach(function (k) {
+    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "mkt", "data"].forEach(function (k) {
       wraps[k] = document.createElement("div");
     });
     function dd(wrapKey, def, setter) {
@@ -17124,6 +17137,7 @@
       dd("anoMes", { property: "ano_mes", type: "select", label: "Mês", emoji: "🗓️", icon: "ti-calendar", searchable: true, options: anoMesOpts }, "anoMesSel");
       dd("categoria", { property: "categoria", type: "select", label: "Categoria do item", emoji: "🛒", icon: "ti-category", searchable: true, options: categoriaOptions() }, "categoriaSel");
       dd("tx", { property: "tx", type: "select", label: "Transação", emoji: "💳", icon: "ti-credit-card", options: [{ label: "Com transação", pageId: "com" }, { label: "Sem transação", pageId: "sem" }] }, "matchSel");
+      dd("mkt", { property: "mkt", type: "select", label: "Marketplace", emoji: "🛍️", icon: "ti-shopping-bag", options: [{ label: "Mercado Livre", pageId: "Mercado Livre" }, { label: "Sem marketplace", pageId: "-" }] }, "mktSel");
     }
     function buildDateFilter() {
       wraps.data.innerHTML = "";
@@ -17142,7 +17156,7 @@
 
     var filterBar = document.createElement("div");
     filterBar.className = "legislacoes-filterbar";
-    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "data"].forEach(function (k) { filterBar.appendChild(wraps[k]); });
+    ["emitente", "tipo", "status", "natureza", "uf", "anoMes", "categoria", "tx", "mkt", "data"].forEach(function (k) { filterBar.appendChild(wraps[k]); });
     var clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "search-clear-btn holerite-filterbar-clear-btn";
@@ -17150,7 +17164,7 @@
     clearBtn.addEventListener("click", function () {
       state.search = ""; searchInput.value = "";
       state.emitenteSel = []; state.tipoSel = []; state.statusSel = []; state.naturezaSel = [];
-      state.ufSel = []; state.anoMesSel = []; state.categoriaSel = []; state.matchSel = []; state.dateRange = null;
+      state.ufSel = []; state.anoMesSel = []; state.categoriaSel = []; state.matchSel = []; state.mktSel = []; state.dateRange = null;
       buildDateFilter();
       buildFiltersBar();
       renderBody();
@@ -17158,17 +17172,7 @@
     filterBar.appendChild(clearBtn);
     filterSection.body.appendChild(filterBar);
 
-    // ---- barra: colunas + expandir/recolher itens + sincronizar ----
-    var colsBtn = document.createElement("button");
-    colsBtn.type = "button";
-    colsBtn.className = "priorities-columns-toggle-btn";
-    function updateColsLabel() {
-      colsBtn.innerHTML = state.columnsExpanded
-        ? '<i class="ti ti-chevron-up"></i> Mostrar menos colunas'
-        : '<i class="ti ti-chevron-down"></i> Mostrar todas as colunas (+' + NF_DEFAULT_HIDDEN.length + ')';
-    }
-    colsBtn.addEventListener("click", function () { state.columnsExpanded = !state.columnsExpanded; updateColsLabel(); renderBody(); });
-    updateColsLabel();
+    // ---- barra: visão + expandir/recolher + cruzamento + sincronizar ----
     // alternância Por nota / Por item + botão de cruzamento com Transações
     var viewWrap = document.createElement("div");
     viewWrap.className = "nf-view-toggle";
@@ -17190,14 +17194,12 @@
     matchBtn.className = "search-clear-btn nf-sync-btn";
     matchBtn.addEventListener("click", startMatch);
     toolbar.appendChild(matchBtn);
-    toolbar.appendChild(colsBtn);
-    [["Recolher itens", "ti-arrows-minimize", false], ["Expandir itens", "ti-arrows-maximize", true]].forEach(function (d) {
+    [["Expandir tudo", "ti-arrows-maximize", true], ["Recolher tudo", "ti-arrows-minimize", false]].forEach(function (d) {
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "toolbar-icon-btn";
-      b.title = d[0];
-      b.setAttribute("aria-label", d[0]);
-      b.innerHTML = '<i class="ti ' + d[1] + '"></i>';
+      b.className = "search-clear-btn nf-exp-btn";
+      b.title = d[0] + " (itens de cada nota / linhas da visão por item)";
+      b.innerHTML = '<i class="ti ' + d[1] + '"></i> ' + d[0];
       b.addEventListener("click", function () {
         state.expanded = {}; state.iExpanded = {};
         if (d[2]) {
@@ -17333,6 +17335,7 @@
         case "valor": td.textContent = nfFmtMoney(n.valor_total); break;
         case "itens": td.textContent = String((state.itensByNota[n.id] || []).length); break;
         case "tx": td.appendChild(txChip(state.match[n.id])); break;
+        case "mkt": var mk = nfMarketplace(n); td.appendChild(chip(mk || "—", mk ? "nf-chip-mkt" : "")); if (mk) td.title = "Inferido do nº do pedido (2000…, 16 dígitos)"; break;
         case "natureza": td.textContent = n.natureza || "—"; break;
         case "serie": td.textContent = n.serie || "—"; break;
         case "uf": td.textContent = n.uf || "—"; break;
@@ -17412,6 +17415,7 @@
     }
 
     function renderBody() {
+      renderChipBar();
       if (state.view === "itens") { renderItensBody(); return; }
       body.innerHTML = "";
       var rows = sortedFiltered();
@@ -17425,15 +17429,13 @@
       }
       var table = document.createElement("table");
       table.className = "financeiro-table nf-table";
-      NF_COLS.forEach(function (col) {
-        table.classList.toggle("hide-" + col.key, !state.columnsExpanded && NF_DEFAULT_HIDDEN.indexOf(col.key) !== -1);
-      });
+      var vcols = visibleNotasCols();
       var thead = document.createElement("thead");
       var hr = document.createElement("tr");
       var thToggle = document.createElement("th");
       thToggle.className = "financeiro-th nf-th-toggle";
       hr.appendChild(thToggle);
-      NF_COLS.forEach(function (col) {
+      vcols.forEach(function (col) {
         var th = document.createElement("th");
         th.className = "financeiro-th financeiro-th-sortable nf-th nf-th-" + col.key;
         var lbl = document.createElement("span");
@@ -17468,7 +17470,7 @@
         tdT.className = "nf-col-toggle";
         tdT.innerHTML = '<i class="ti ' + (open ? "ti-chevron-down" : "ti-chevron-right") + '"></i>';
         tr.appendChild(tdT);
-        NF_COLS.forEach(function (col) { tr.appendChild(cellFor(col, n)); });
+        vcols.forEach(function (col) { tr.appendChild(cellFor(col, n)); });
         var tdA = document.createElement("td");
         tdA.className = "nf-col-actions";
         if (n.notion_url) {
@@ -17523,6 +17525,8 @@
       { k: "tx", label: "Transação", t: "x", get: function (i, n) { return n && state.match[n.id] ? 1 : 0; } },
       { k: "nota_num", label: "Nota nº", t: "t", extra: true, get: function (i, n) { return n && n.numero; } },
       { k: "tipo", label: "Tipo da nota", t: "t", extra: true, get: function (i, n) { return n && n.tipo; } },
+      { k: "mkt", label: "Marketplace", t: "t", extra: true, get: function (i, n) { return n && nfMarketplace(n); } },
+      { k: "pedido", label: "Pedido", t: "t", extra: true, get: function (i, n) { return n && n.pedido; } },
       { k: "num_item", label: "Nº item", t: "n", extra: true, get: function (i) { return i.num_item; } },
       { k: "valor_bruto", label: "Valor bruto", t: "m", extra: true, get: function (i) { return i.valor_bruto; } },
       { k: "desconto", label: "Desconto", t: "m", extra: true, get: function (i) { return i.desconto; } },
@@ -17553,6 +17557,142 @@
       { k: "trib_aprox", label: "Trib. aprox.", t: "m", extra: true, get: function (i) { return i.trib_aprox; } },
       { k: "origem_trib_aprox", label: "Origem trib.", t: "t", extra: true, get: function (i) { return i.origem_trib_aprox; } }
     ];
+    // ---------------- colunas: padrão x chip (configurável, salvo em KV /nf-settings) ----------------
+    var NF_CFG_LS = "meuhub_nf_colcfg_v1";
+    function defaultChips(view) {
+      return view === "notas" ? NF_DEFAULT_HIDDEN.slice() : IT_COLS.filter(function (c) { return c.extra; }).map(function (c) { return c.k; });
+    }
+    function chipsFor(view) {
+      var c = state.colCfg[view];
+      return Array.isArray(c) ? c : defaultChips(view);
+    }
+    function colKey(view, c) { return view === "notas" ? c.key : c.k; }
+    function allColsOf(view) { return view === "notas" ? NF_COLS : IT_COLS; }
+    function colVisible(view, key) {
+      return chipsFor(view).indexOf(key) === -1 || !!state.chipOn[view][key];
+    }
+    function visibleNotasCols() { return NF_COLS.filter(function (c) { return colVisible("notas", c.key); }); }
+    function visibleItemCols() { return IT_COLS.filter(function (c) { return colVisible("itens", c.k); }); }
+    function loadColCfgLocal() {
+      try {
+        var raw = localStorage.getItem(NF_CFG_LS);
+        if (!raw) return;
+        var o = JSON.parse(raw);
+        if (o && Array.isArray(o.notas)) state.colCfg.notas = o.notas;
+        if (o && Array.isArray(o.itens)) state.colCfg.itens = o.itens;
+      } catch (e) {}
+    }
+    function saveColCfg() {
+      try { localStorage.setItem(NF_CFG_LS, JSON.stringify(state.colCfg)); } catch (e) {}
+      authFetch(cfg.templateWorkerUrl + "/nf-settings", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notas: state.colCfg.notas, itens: state.colCfg.itens })
+      }).catch(function () {});
+    }
+    function fetchColCfgRemote() {
+      fetchJson("/nf-settings").then(function (d) {
+        if (!d || d._erro) return;
+        var ch = false;
+        if (Array.isArray(d.notas)) { state.colCfg.notas = d.notas; ch = true; }
+        if (Array.isArray(d.itens)) { state.colCfg.itens = d.itens; ch = true; }
+        if (ch) { try { localStorage.setItem(NF_CFG_LS, JSON.stringify(state.colCfg)); } catch (e) {} renderBody(); }
+      });
+    }
+    function setColMode(view, key, asChip) {
+      var cur = chipsFor(view).slice();
+      var idx = cur.indexOf(key);
+      if (asChip && idx === -1) cur.push(key);
+      if (!asChip && idx !== -1) cur.splice(idx, 1);
+      state.colCfg[view] = cur;
+      saveColCfg();
+      renderBody();
+    }
+    function renderChipBar() {
+      chipBar.innerHTML = "";
+      var view = state.view;
+      var cols = allColsOf(view);
+      var chips = chipsFor(view);
+      var top = document.createElement("div");
+      top.className = "nf-chipbar-row";
+      var lab = document.createElement("span");
+      lab.className = "nf-chipbar-label";
+      lab.innerHTML = '<i class="ti ti-columns-3"></i> Colunas extras:';
+      top.appendChild(lab);
+      chips.forEach(function (key) {
+        var col = cols.filter(function (c) { return colKey(view, c) === key; })[0];
+        if (!col) return;
+        var b = document.createElement("button");
+        b.type = "button";
+        var on = !!state.chipOn[view][key];
+        b.className = "nf-colchip" + (on ? " active" : "");
+        b.textContent = col.label;
+        b.title = on ? "Clique para ocultar a coluna" : "Clique para mostrar a coluna";
+        b.addEventListener("click", function () { state.chipOn[view][key] = !state.chipOn[view][key]; renderBody(); });
+        top.appendChild(b);
+      });
+      if (!chips.length) {
+        var none = document.createElement("span"); none.className = "nf-chipbar-none"; none.textContent = "nenhuma (todas as colunas são padrão)"; top.appendChild(none);
+      } else {
+        [["Todas", true], ["Nenhuma", false]].forEach(function (d) {
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "nf-colchip nf-colchip-ctl"; b.textContent = d[0];
+          b.addEventListener("click", function () {
+            chips.forEach(function (k) { state.chipOn[view][k] = d[1]; });
+            renderBody();
+          });
+          top.appendChild(b);
+        });
+      }
+      var gear = document.createElement("button");
+      gear.type = "button";
+      gear.className = "nf-colchip nf-colchip-ctl nf-colchip-gear" + (state.cfgOpen ? " active" : "");
+      gear.innerHTML = '<i class="ti ti-settings"></i> Configurar colunas';
+      gear.addEventListener("click", function () { state.cfgOpen = !state.cfgOpen; renderChipBar(); });
+      top.appendChild(gear);
+      chipBar.appendChild(top);
+      if (!state.cfgOpen) return;
+      var panel = document.createElement("div");
+      panel.className = "nf-colcfg-panel";
+      var hint = document.createElement("p");
+      hint.className = "nf-colcfg-hint";
+      hint.textContent = "Visão \"" + (view === "notas" ? "Por nota" : "Por item") + "\". Padrão = a coluna sempre aparece na tabela. Chip = fica escondida e vira um botão acima para ligar/desligar. Vale para todos os seus aparelhos.";
+      panel.appendChild(hint);
+      var grid = document.createElement("div");
+      grid.className = "nf-colcfg-grid";
+      cols.forEach(function (c) {
+        var key = colKey(view, c);
+        var isChip = chips.indexOf(key) !== -1;
+        var row = document.createElement("div");
+        row.className = "nf-colcfg-row";
+        var nm = document.createElement("span"); nm.className = "nf-colcfg-name"; nm.textContent = c.label; row.appendChild(nm);
+        var seg = document.createElement("span"); seg.className = "nf-colcfg-seg";
+        [["Padrão", false], ["Chip", true]].forEach(function (o) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "nf-colcfg-opt" + (isChip === o[1] ? " active" : "");
+          b.textContent = o[0];
+          b.addEventListener("click", function () { if (isChip !== o[1]) setColMode(view, key, o[1]); });
+          seg.appendChild(b);
+        });
+        row.appendChild(seg);
+        grid.appendChild(row);
+      });
+      panel.appendChild(grid);
+      var acts = document.createElement("div");
+      acts.className = "nf-colcfg-actions";
+      var rst = document.createElement("button");
+      rst.type = "button"; rst.className = "search-clear-btn nf-exp-btn";
+      rst.innerHTML = '<i class="ti ti-restore"></i> Restaurar padrão do app';
+      rst.addEventListener("click", function () { state.colCfg[view] = null; saveColCfg(); renderBody(); });
+      var cls = document.createElement("button");
+      cls.type = "button"; cls.className = "search-clear-btn nf-exp-btn";
+      cls.innerHTML = '<i class="ti ti-x"></i> Fechar';
+      cls.addEventListener("click", function () { state.cfgOpen = false; renderChipBar(); });
+      acts.appendChild(rst); acts.appendChild(cls);
+      panel.appendChild(acts);
+      chipBar.appendChild(panel);
+    }
+
     function itemRows() {
       var out = [];
       var s = state.search ? normalize(state.search) : "";
@@ -17661,11 +17801,12 @@
         return;
       }
       var table = document.createElement("table");
-      table.className = "financeiro-table nf-table nf-items-view" + (state.columnsExpanded ? "" : " nf-hide-extra");
+      table.className = "financeiro-table nf-table nf-items-view";
+      var vicols = visibleItemCols();
       var thead = document.createElement("thead");
       var hr = document.createElement("tr");
       hr.appendChild(document.createElement("th"));
-      IT_COLS.forEach(function (col) {
+      vicols.forEach(function (col) {
         var th = document.createElement("th");
         th.className = "financeiro-th financeiro-th-sortable nf-ith nf-icol-" + col.k + (col.extra ? " nf-extra" : "");
         var lbl = document.createElement("span"); lbl.className = "financeiro-th-label"; lbl.textContent = col.label;
@@ -17693,7 +17834,7 @@
         tdT.className = "nf-col-toggle";
         tdT.innerHTML = '<i class="ti ' + (open ? "ti-chevron-down" : "ti-chevron-right") + '"></i>';
         tr.appendChild(tdT);
-        IT_COLS.forEach(function (col) { tr.appendChild(itemCell(col, r.i, r.n)); });
+        vicols.forEach(function (col) { tr.appendChild(itemCell(col, r.i, r.n)); });
         tbody.appendChild(tr);
         if (open) {
           var trD = document.createElement("tr");
@@ -17788,7 +17929,9 @@
         buildDateFilter();
         statusEl.style.display = "none";
         updateMatchBtn();
+        loadColCfgLocal();
         renderBody();
+        fetchColCfgRemote();
         if (state.matchState === "idle" && transacoesGetStoredUnlock()) startMatch();
       });
     }
