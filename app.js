@@ -22449,7 +22449,6 @@
       else if (s < 12) msg = "💡 Melhore a luz e evite reflexo no papel";
       else msg = "📸 Difícil de ler? Segure o papel parado e firme";
       if (!assisting && hintEl.textContent !== msg) hintEl.textContent = msg;
-      if (s >= 2 && !assisting && Date.now() - lastAssist > 3000) assist();
     }
     var nfBtn = document.createElement("button"); nfBtn.type = "button"; nfBtn.className = "odo-btn"; nfBtn.style.display = "none"; nfBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar este QR mesmo assim';
     massCounter.parentNode ? massCounter.parentNode.insertBefore(nfBtn, massCounter.nextSibling) : null;
@@ -22493,7 +22492,7 @@
       if (!scanning) return;
       if (video.readyState >= 2 && video.videoWidth) {
         frameN++;
-        qrDecode(video, video.videoWidth, video.videoHeight, frameN % 3 === 0 ? "mid" : frameN % 4 === 0).then(function (r) {
+        qrDecode(video, video.videoWidth, video.videoHeight, frameN % 4 === 0).then(function (r) {
           if (!scanning) return;
           if (!r) { if (massive && Date.now() - massLast.t < 6000) { /* acabou de salvar: sem dica */ } else updateHint(); }
           if (massive) {
@@ -22518,7 +22517,7 @@
       unlockAudio(); // precisa nascer dentro do toque do usuário, senão o celular deixa o bip mudo
       scanMsg.textContent = "Abrindo câmera…";
       if (isMassive) { massive = true; massCount = 0; massDup = 0; nonFiscalSkipped = 0; massLote = new Date().toISOString(); massLast = { code: "", t: 0 }; massBtn.classList.add("primary"); galBtn.classList.remove("primary"); massCounter.style.display = ""; massCounter.textContent = ""; }
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(function (st) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(function (st) {
         stream = st; video.srcObject = st; video.style.display = ""; vf.classList.add("on"); stopBtn.style.display = "";
         setupCamControls();
         return video.play();
@@ -22545,19 +22544,6 @@
         var now = Date.now();
         if (!massBusy && !(r === massLast.code && now - massLast.t < 4000)) { massLast = { code: r, t: now }; scanStartedAt = now; massSave(r); }
       } else { beep(); if (navigator.vibrate) navigator.vibrate(60); stopCam(); gotString(r); }
-    }
-    function assist() {
-      // leitura de apoio em resolução total, sem contagem (sem overlay)
-      if (assisting || !stream || !(video.readyState >= 2) || !video.videoWidth) return;
-      assisting = true; lastAssist = Date.now();
-      var c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
-      c.getContext("2d").drawImage(video, 0, 0);
-      qrDecode(c, c.width, c.height, "max").then(function (r) {
-        assisting = false; scanStartedAt = Date.now();
-        if (!stream) return;
-        if (r) handleRead(r);
-        else { hintEl.style.display = ""; hintEl.textContent = "↔️ Não consegui ler — aproxime ou afaste um pouco e segure firme"; }
-      });
     }
     galBtn.addEventListener("click", function () {
       if (galBtn.classList.contains("primary")) { galBtn.classList.remove("primary"); strArea.value = ""; scanMsg.textContent = ""; return; }
