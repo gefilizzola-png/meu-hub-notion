@@ -16951,7 +16951,6 @@
     return (typeof n === "number") ? financeiroFormatBRL(n) : "—";
   }
   function renderNotasFiscaisPage(container, page) {
-    var cfg = window.APP_CONFIG || {};
     var wrap = document.createElement("div");
     wrap.className = "holerite-block nf-block";
     container.appendChild(wrap);
